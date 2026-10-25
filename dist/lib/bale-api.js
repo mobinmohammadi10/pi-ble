@@ -1,9 +1,9 @@
 /**
- * Telegram API transport helpers
- * Zones: telegram transport, filesystem, runtime diagnostics
+ * Bale API transport helpers
+ * Zones: bale transport, filesystem, runtime diagnostics
  *
  * Wraps bot API calls, file uploads/downloads (including voice messages),
- * multipart sending, runtime transport binding, and Telegram temp-file lifecycle.
+ * multipart sending, runtime transport binding, and Bale temp-file lifecycle.
  */
 import { randomUUID } from "node:crypto";
 import { createWriteStream, openAsBlob } from "node:fs";
@@ -12,11 +12,67 @@ import { request as requestHttps } from "node:https";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { resolveTelegramAttachmentsDir } from "./paths.js";
-const TELEGRAM_API_BASE = "https://api.telegram.org";
-export const TELEGRAM_FILE_MAX_BYTES = 50 * 1024 * 1024;
+import { resolveBaleAttachmentsDir } from "./paths.js";
+const BALE_API_BASE = "https://tapi.bale.ai";
+export const BALE_FILE_MAX_BYTES = 50 * 1024 * 1024;
+/** Bale documents classic chats and Markdown, not private topics or Rich Messages. */
+export function prepareBaleRequest(method, input) {
+    const supported = new Set([
+        "getMe", "getUpdates", "deleteWebhook", "getWebhookInfo", "getFile",
+        "sendMessage", "sendRichMessage", "sendPhoto", "sendAudio", "sendDocument",
+        "sendVideo", "sendAnimation", "sendVoice", "sendMediaGroup", "sendChatAction",
+        "answerCallbackQuery", "editMessageText", "editMessageCaption",
+        "editMessageReplyMarkup", "deleteMessage", "getChat", "forwardMessage", "copyMessage",
+    ]);
+    if (!supported.has(method) || input.message_thread_id !== undefined) {
+        throw new Error(`Bale does not support ${method}${input.message_thread_id !== undefined ? " with a Thread target" : ""}`);
+    }
+    const body = { ...input };
+    if (body.rich_message !== undefined) {
+        const rich = body.rich_message;
+        if (!rich || typeof rich !== "object" || rich.media?.length || (!rich.markdown && !rich.html)) {
+            throw new Error("Bale does not support Rich blocks or embedded media; send text and attachments separately");
+        }
+        body.text = rich.markdown ?? baleHtmlToMarkdown(rich.html);
+        delete body.rich_message;
+        if (method === "sendRichMessage")
+            method = "sendMessage";
+    }
+    else {
+        for (const key of ["text", "caption"]) {
+            if (body.parse_mode === "HTML" && typeof body[key] === "string") {
+                body[key] = baleHtmlToMarkdown(body[key]);
+            }
+        }
+    }
+    if (body.reply_parameters !== undefined) {
+        const reply = typeof body.reply_parameters === "string"
+            ? JSON.parse(body.reply_parameters) : body.reply_parameters;
+        if (!reply || typeof reply !== "object" || !Number.isSafeInteger(reply.message_id)) {
+            throw new Error("Invalid Bale reply target");
+        }
+        body.reply_to_message_id = reply.message_id;
+        delete body.reply_parameters;
+    }
+    // ponytail: Bale's documented Markdown subset; richer formatting waits for a documented API.
+    for (const key of ["parse_mode", "entities", "caption_entities", "link_preview_options", "disable_web_page_preview", "allowed_updates"])
+        delete body[key];
+    return { method, body };
+}
+function baleHtmlToMarkdown(html) {
+    return html
+        .replace(/<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/?(?:b|strong)>/gi, "**")
+        .replace(/<\/?(?:i|em)>/gi, "__")
+        .replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_, text) => "\n```\n" + text.replace(/<[^>]*>/g, "") + "\n```\n")
+        .replace(/<\/?code[^>]*>/gi, "`")
+        .replace(/<[^>]*>/g, "")
+        .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, "&");
+}
 /** First positive safe-integer byte limit among ordered env names, else the caller's default. */
-export function getTelegramByteLimitFromEnv(env, names, defaultValue) {
+export function getBaleByteLimitFromEnv(env, names, defaultValue) {
     for (const name of names) {
         const rawValue = env[name]?.trim();
         if (!rawValue)
@@ -27,38 +83,38 @@ export function getTelegramByteLimitFromEnv(env, names, defaultValue) {
     }
     return defaultValue;
 }
-function getTelegramApiTempDir() {
-    return resolveTelegramAttachmentsDir();
+function getBaleApiTempDir() {
+    return resolveBaleAttachmentsDir();
 }
-const TELEGRAM_TEMP_FILE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const TELEGRAM_DOWNLOAD_RENAME_MAX_ATTEMPTS = 6;
-const activeTelegramApiWorkspaceAdmissionOperationIds = new Set();
-const TELEGRAM_INBOUND_FILE_MAX_BYTES = getTelegramByteLimitFromEnv(process.env, ["PI_TELEGRAM_INBOUND_FILE_MAX_BYTES", "TELEGRAM_MAX_FILE_SIZE_BYTES"], TELEGRAM_FILE_MAX_BYTES);
-const TELEGRAM_NETWORK_FAMILY_ENV = "PI_TELEGRAM_NETWORK_FAMILY";
-const TELEGRAM_NETWORK_FAMILY_VALUES = new Set([
+const BALE_TEMP_FILE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const BALE_DOWNLOAD_RENAME_MAX_ATTEMPTS = 6;
+const activeBaleApiWorkspaceAdmissionOperationIds = new Set();
+const BALE_INBOUND_FILE_MAX_BYTES = getBaleByteLimitFromEnv(process.env, ["PI_BALE_INBOUND_FILE_MAX_BYTES", "BALE_MAX_FILE_SIZE_BYTES"], BALE_FILE_MAX_BYTES);
+const BALE_NETWORK_FAMILY_ENV = "PI_BALE_NETWORK_FAMILY";
+const BALE_NETWORK_FAMILY_VALUES = new Set([
     "auto",
     "ipv4",
     "ipv6",
     "ipv4-fallback",
 ]);
-export class TelegramApiAuthorityError extends Error {
+export class BaleApiAuthorityError extends Error {
     requestIssued;
     constructor(requestIssued) {
-        super("Telegram API call authority is unavailable.");
-        this.name = "TelegramApiAuthorityError";
+        super("Bale API call authority is unavailable.");
+        this.name = "BaleApiAuthorityError";
         this.requestIssued = requestIssued;
     }
 }
 /** Recheck caller authority, classifying refusal by whether a Bot API request was already issued. */
-export function assertTelegramApiCallAuthority(assertAuthority, requestIssued) {
+export function assertBaleApiCallAuthority(assertAuthority, requestIssued) {
     try {
         assertAuthority?.();
     }
     catch {
-        throw new TelegramApiAuthorityError(requestIssued);
+        throw new BaleApiAuthorityError(requestIssued);
     }
 }
-function parseTelegramApiTargetInteger(value) {
+function parseBaleApiTargetInteger(value) {
     const parsed = typeof value === "number"
         ? value
         : typeof value === "string" && /^-?\d+$/u.test(value)
@@ -85,7 +141,7 @@ function captureApiDrainObserver(capture) {
         return () => { };
     }
 }
-export function createTelegramApiTargetActivityRuntime(deps = {}) {
+export function createBaleApiTargetActivityRuntime(deps = {}) {
     const pending = new Map();
     const pendingChats = new Map();
     const messageScopedMethods = new Set([
@@ -96,9 +152,9 @@ export function createTelegramApiTargetActivityRuntime(deps = {}) {
     ]);
     return {
         begin(method, body) {
-            const chatId = parseTelegramApiTargetInteger(body.chat_id);
-            const threadId = parseTelegramApiTargetInteger(body.message_thread_id);
-            const messageId = parseTelegramApiTargetInteger(body.message_id);
+            const chatId = parseBaleApiTargetInteger(body.chat_id);
+            const threadId = parseBaleApiTargetInteger(body.message_thread_id);
+            const messageId = parseBaleApiTargetInteger(body.message_id);
             const chatScoped = chatId !== undefined &&
                 threadId === undefined &&
                 messageId !== undefined &&
@@ -158,7 +214,7 @@ export function createTelegramApiTargetActivityRuntime(deps = {}) {
         },
     };
 }
-export function createTelegramApiTargetTrackingClient(client, activity) {
+export function createBaleApiTargetTrackingClient(client, activity) {
     const track = async (method, body, operation) => {
         const end = activity.begin(method, body);
         try {
@@ -178,42 +234,42 @@ export function createTelegramApiTargetTrackingClient(client, activity) {
             : {}),
     };
 }
-export class TelegramApiWorkspaceAdmissionError extends Error {
+export class BaleApiWorkspaceAdmissionError extends Error {
     code;
     constructor(code, message) {
         super(message);
-        this.name = "TelegramApiWorkspaceAdmissionError";
+        this.name = "BaleApiWorkspaceAdmissionError";
         this.code = code;
     }
 }
-export function getTelegramApiWorkspaceAdmissionScope(body) {
+export function getBaleApiWorkspaceAdmissionScope(body) {
     if (!("chat_id" in body))
         return undefined;
-    const chatId = parseTelegramApiTargetInteger(body.chat_id);
+    const chatId = parseBaleApiTargetInteger(body.chat_id);
     if (chatId === undefined || chatId === 0)
         return { kind: "profile" };
     if (!("message_thread_id" in body) || body.message_thread_id === undefined) {
         return { kind: "chat", chatId };
     }
-    const threadId = parseTelegramApiTargetInteger(body.message_thread_id);
+    const threadId = parseBaleApiTargetInteger(body.message_thread_id);
     if (threadId === undefined || threadId <= 0)
         return { kind: "profile" };
     return { kind: "target", target: { chatId, threadId } };
 }
-export function createTelegramApiWorkspaceAdmissionClient(client, admission, options = {}) {
+export function createBaleApiWorkspaceAdmissionClient(client, admission, options = {}) {
     const admit = async (method, body, operation) => {
-        const scope = getTelegramApiWorkspaceAdmissionScope(body);
+        const scope = getBaleApiWorkspaceAdmissionScope(body);
         if (!scope)
             return operation();
         const currentAdmission = typeof admission === "function" ? admission() : admission;
         if (!currentAdmission) {
-            throw new TelegramApiWorkspaceAdmissionError("unavailable", "Telegram API Workspace admission authority is unavailable.");
+            throw new BaleApiWorkspaceAdmissionError("unavailable", "Bale API Workspace admission authority is unavailable.");
         }
         const operationId = `api:${(options.createOperationId ?? randomUUID)()}`;
-        if (activeTelegramApiWorkspaceAdmissionOperationIds.has(operationId)) {
-            throw new TelegramApiWorkspaceAdmissionError("duplicate-operation", "Telegram API Workspace admission operation is already active.");
+        if (activeBaleApiWorkspaceAdmissionOperationIds.has(operationId)) {
+            throw new BaleApiWorkspaceAdmissionError("duplicate-operation", "Bale API Workspace admission operation is already active.");
         }
-        activeTelegramApiWorkspaceAdmissionOperationIds.add(operationId);
+        activeBaleApiWorkspaceAdmissionOperationIds.add(operationId);
         try {
             const acquired = currentAdmission.acquireAdmission({
                 operationId,
@@ -221,7 +277,7 @@ export function createTelegramApiWorkspaceAdmissionClient(client, admission, opt
                 scope,
             });
             if (acquired.kind === "blocked") {
-                throw new TelegramApiWorkspaceAdmissionError("blocked", "Telegram API target is temporarily unavailable during Workspace retirement.");
+                throw new BaleApiWorkspaceAdmissionError("blocked", "Bale API target is temporarily unavailable during Workspace retirement.");
             }
             try {
                 return await operation();
@@ -229,7 +285,7 @@ export function createTelegramApiWorkspaceAdmissionClient(client, admission, opt
             finally {
                 try {
                     if (!currentAdmission.releaseAdmission(acquired.lease)) {
-                        throw new TelegramApiWorkspaceAdmissionError("release-lost", "Telegram API Workspace admission lease disappeared before release.");
+                        throw new BaleApiWorkspaceAdmissionError("release-lost", "Bale API Workspace admission lease disappeared before release.");
                     }
                 }
                 catch (error) {
@@ -243,7 +299,7 @@ export function createTelegramApiWorkspaceAdmissionClient(client, admission, opt
             }
         }
         finally {
-            activeTelegramApiWorkspaceAdmissionOperationIds.delete(operationId);
+            activeBaleApiWorkspaceAdmissionOperationIds.delete(operationId);
         }
     };
     return {
@@ -264,7 +320,7 @@ function sanitizeFileName(name) {
  * `scope` is the bot `@username` (id fallback) in a private chat and the public chat `@username` (id fallback) elsewhere.
  * A negative chat id loses its sign, so the name never contains two adjacent dashes.
  */
-export function createTelegramAttachmentFileName(source, generatedName, botScope) {
+export function createBaleAttachmentFileName(source, generatedName, botScope) {
     const chat = source.chat;
     const clean = (value) => sanitizeFileName(value.replace(/^@/u, "")).replace(/^[-.]+/u, "");
     const scope = source.scope
@@ -289,27 +345,27 @@ export function createTelegramAttachmentFileName(source, generatedName, botScope
         (source.index !== undefined ? `-${source.index}` : "") +
         tail);
 }
-class TelegramApiMalformedSuccessError extends Error {
+class BaleApiMalformedSuccessError extends Error {
     constructor(method, detail) {
-        super(`Telegram API ${method} ${detail}`);
-        this.name = "TelegramApiMalformedSuccessError";
+        super(`Bale API ${method} ${detail}`);
+        this.name = "BaleApiMalformedSuccessError";
     }
 }
-export class TelegramApiCommitUnknownError extends Error {
+export class BaleApiCommitUnknownError extends Error {
     kind = "commit-unknown";
     method;
     cause;
     constructor(method, cause) {
-        super(`Telegram API ${method} may have committed before transport failed.`);
-        this.name = "TelegramApiCommitUnknownError";
+        super(`Bale API ${method} may have committed before transport failed.`);
+        this.name = "BaleApiCommitUnknownError";
         this.method = method;
         this.cause = cause;
     }
 }
-export function isTelegramApiCommitUnknownError(error) {
-    return error instanceof TelegramApiCommitUnknownError;
+export function isBaleApiCommitUnknownError(error) {
+    return error instanceof BaleApiCommitUnknownError;
 }
-class TelegramApiHttpError extends Error {
+class BaleApiHttpError extends Error {
     status;
     retryAfterSeconds;
     rejectedRequestMethod;
@@ -321,8 +377,8 @@ class TelegramApiHttpError extends Error {
         this.rejectedRequestMethod = rejectedRequestMethod;
     }
 }
-function attachTelegramApiRequestTarget(error, body) {
-    if (!(error instanceof TelegramApiHttpError))
+function attachBaleApiRequestTarget(error, body) {
+    if (!(error instanceof BaleApiHttpError))
         return;
     const chatId = Number(body.chat_id);
     const threadId = Number(body.message_thread_id);
@@ -330,48 +386,48 @@ function attachTelegramApiRequestTarget(error, body) {
         return;
     error.requestTarget = { chatId, threadId };
 }
-export class TelegramApiStaleTargetError extends Error {
+export class BaleApiStaleTargetError extends Error {
     requestTarget;
     constructor(message, requestTarget) {
         super(message);
-        this.name = "TelegramApiStaleTargetError";
+        this.name = "BaleApiStaleTargetError";
         this.requestTarget = { ...requestTarget };
     }
 }
 /** A follower API refusal; legacy text alone does not prove the request was rejected before execution. */
-export class TelegramApiFollowerNotAllowedError extends Error {
+export class BaleApiFollowerNotAllowedError extends Error {
     requestTarget;
     /** Present only after a structured pre-execution refusal matches the requested API method. */
     rejectedRequestMethod;
     constructor(message, requestTarget, rejectedRequestMethod) {
         super(message);
-        this.name = "TelegramApiFollowerNotAllowedError";
+        this.name = "BaleApiFollowerNotAllowedError";
         this.requestTarget = requestTarget ? { ...requestTarget } : undefined;
         this.rejectedRequestMethod = rejectedRequestMethod;
     }
 }
-export function getTelegramApiErrorRequestTarget(error) {
-    const target = error instanceof TelegramApiHttpError ||
-        error instanceof TelegramApiStaleTargetError
+export function getBaleApiErrorRequestTarget(error) {
+    const target = error instanceof BaleApiHttpError ||
+        error instanceof BaleApiStaleTargetError
         ? error.requestTarget
         : undefined;
     return target ? { ...target } : undefined;
 }
-export function isTelegramStaleTargetHttpError(error) {
-    if (!(error instanceof TelegramApiHttpError) || error.status !== 400)
+export function isBaleStaleTargetHttpError(error) {
+    if (!(error instanceof BaleApiHttpError) || error.status !== 400)
         return false;
-    return /^Telegram API \w+ failed: HTTP 400: Bad Request: (message thread not found|thread not found|topic not found|topic deleted|topic closed|thread closed|forum topic closed|message thread closed|topic_id_invalid|topic_closed)$/i.test(error.message);
+    return /^Bale API \w+ failed: HTTP 400: Bad Request: (message thread not found|thread not found|topic not found|topic deleted|topic closed|thread closed|forum topic closed|message thread closed|topic_id_invalid|topic_closed)$/i.test(error.message);
 }
-/** Only a parsed Telegram rejection of this method proves a request had no effect. */
-export function isTelegramApiRequestRejected(error, method) {
-    return (error instanceof TelegramApiHttpError &&
+/** Only a parsed Bale rejection of this method proves a request had no effect. */
+export function isBaleApiRequestRejected(error, method) {
+    return (error instanceof BaleApiHttpError &&
         error.rejectedRequestMethod !== undefined &&
         error.rejectedRequestMethod === method);
 }
-export function isTelegramMessageNotModifiedError(error) {
+export function isBaleMessageNotModifiedError(error) {
     return (error instanceof Error && error.message.includes("message is not modified"));
 }
-const TELEGRAM_RETRY_SAFE_METHODS = new Set([
+const BALE_RETRY_SAFE_METHODS = new Set([
     "answerCallbackQuery",
     "closeForumTopic",
     "deleteForumTopic",
@@ -390,42 +446,42 @@ const TELEGRAM_RETRY_SAFE_METHODS = new Set([
     "sendRichMessageDraft",
     "setMyCommands",
 ]);
-export function isTelegramApiMethodRetrySafe(method) {
-    return TELEGRAM_RETRY_SAFE_METHODS.has(method);
+export function isBaleApiMethodRetrySafe(method) {
+    return BALE_RETRY_SAFE_METHODS.has(method);
 }
-export function isRetryableTelegramApiError(error) {
-    return (error instanceof TelegramApiHttpError &&
+export function isRetryableBaleApiError(error) {
+    return (error instanceof BaleApiHttpError &&
         (error.status === 429 ||
             (error.status !== undefined && error.status >= 500)));
 }
-export function getTelegramApiRetryAfterMs(error) {
-    return error instanceof TelegramApiHttpError &&
+export function getBaleApiRetryAfterMs(error) {
+    return error instanceof BaleApiHttpError &&
         error.retryAfterSeconds !== undefined
         ? Math.max(0, error.retryAfterSeconds * 1000)
         : undefined;
 }
-export function isTelegramMessageUnavailableError(error) {
-    return (error instanceof TelegramApiHttpError &&
+export function isBaleMessageUnavailableError(error) {
+    return (error instanceof BaleApiHttpError &&
         error.status === 400 &&
         /Bad Request: (message to edit not found|message not found|message_id_invalid)/iu.test(error.message));
 }
-function getTelegramRetryDelayMs(error, attempt, baseDelayMs) {
-    if (error instanceof TelegramApiHttpError &&
+function getBaleRetryDelayMs(error, attempt, baseDelayMs) {
+    if (error instanceof BaleApiHttpError &&
         error.retryAfterSeconds !== undefined) {
         return Math.max(0, error.retryAfterSeconds * 1000);
     }
     return Math.max(0, baseDelayMs * 2 ** attempt);
 }
-function getTelegramApiAbortReason(signal) {
+function getBaleApiAbortReason(signal) {
     return signal.reason ?? new DOMException("Aborted", "AbortError");
 }
-function throwIfTelegramApiCallAborted(signal) {
+function throwIfBaleApiCallAborted(signal) {
     if (signal?.aborted)
-        throw getTelegramApiAbortReason(signal);
+        throw getBaleApiAbortReason(signal);
 }
-function sleepTelegramRetry(ms, signal) {
+function sleepBaleRetry(ms, signal) {
     if (signal?.aborted)
-        return Promise.reject(getTelegramApiAbortReason(signal));
+        return Promise.reject(getBaleApiAbortReason(signal));
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             signal?.removeEventListener("abort", onAbort);
@@ -433,27 +489,27 @@ function sleepTelegramRetry(ms, signal) {
         }, ms);
         const onAbort = () => {
             clearTimeout(timeout);
-            reject(getTelegramApiAbortReason(signal));
+            reject(getBaleApiAbortReason(signal));
         };
         signal?.addEventListener("abort", onAbort, { once: true });
         if (signal?.aborted)
             onAbort();
     });
 }
-function assertTelegramFileSizeWithinLimit(size, maxFileSizeBytes) {
+function assertBaleFileSizeWithinLimit(size, maxFileSizeBytes) {
     if (size === undefined || maxFileSizeBytes === undefined)
         return;
     if (size <= maxFileSizeBytes)
         return;
-    throw new Error(`Telegram file exceeds size limit (${size} bytes > ${maxFileSizeBytes} bytes)`);
+    throw new Error(`Bale file exceeds size limit (${size} bytes > ${maxFileSizeBytes} bytes)`);
 }
-function createTelegramDownloadLimitTransform(maxFileSizeBytes) {
+function createBaleDownloadLimitTransform(maxFileSizeBytes) {
     let downloadedBytes = 0;
     return new Transform({
         transform(chunk, _encoding, callback) {
             downloadedBytes += chunk.byteLength;
             try {
-                assertTelegramFileSizeWithinLimit(downloadedBytes, maxFileSizeBytes);
+                assertBaleFileSizeWithinLimit(downloadedBytes, maxFileSizeBytes);
                 callback(undefined, chunk);
             }
             catch (error) {
@@ -462,18 +518,18 @@ function createTelegramDownloadLimitTransform(maxFileSizeBytes) {
         },
     });
 }
-async function writeTelegramDownloadResponse(response, targetPath, maxFileSizeBytes) {
+async function writeBaleDownloadResponse(response, targetPath, maxFileSizeBytes) {
     if (!response.body) {
         const buffer = Buffer.from(await response.arrayBuffer());
-        assertTelegramFileSizeWithinLimit(buffer.byteLength, maxFileSizeBytes);
+        assertBaleFileSizeWithinLimit(buffer.byteLength, maxFileSizeBytes);
         await writeFile(targetPath, buffer, { mode: 0o600 });
         return;
     }
-    await pipeline(Readable.from(response.body, { objectMode: false }), createTelegramDownloadLimitTransform(maxFileSizeBytes), createWriteStream(targetPath, { mode: 0o600 }));
+    await pipeline(Readable.from(response.body, { objectMode: false }), createBaleDownloadLimitTransform(maxFileSizeBytes), createWriteStream(targetPath, { mode: 0o600 }));
 }
-async function publishTelegramDownload(partPath, targetPath, signal) {
+async function publishBaleDownload(partPath, targetPath, signal) {
     for (let attempt = 0;; attempt++) {
-        throwIfTelegramApiCallAborted(signal);
+        throwIfBaleApiCallAborted(signal);
         try {
             await rename(partPath, targetPath);
             return;
@@ -483,13 +539,13 @@ async function publishTelegramDownload(partPath, targetPath, signal) {
             // Windows may briefly deny replacement while another publisher/scanner holds the file.
             if (process.platform !== "win32" ||
                 (code !== "EPERM" && code !== "EACCES") ||
-                attempt + 1 >= TELEGRAM_DOWNLOAD_RENAME_MAX_ATTEMPTS)
+                attempt + 1 >= BALE_DOWNLOAD_RENAME_MAX_ATTEMPTS)
                 throw error;
-            await sleepTelegramRetry(50 * 2 ** attempt, signal);
+            await sleepBaleRetry(50 * 2 ** attempt, signal);
         }
     }
 }
-async function removeTelegramPartialDownload(path) {
+async function removeBalePartialDownload(path) {
     try {
         await unlink(path);
     }
@@ -497,7 +553,7 @@ async function removeTelegramPartialDownload(path) {
         // ignore
     }
 }
-async function parseTelegramApiResponse(response, method) {
+async function parseBaleApiResponse(response, method) {
     let data;
     try {
         if (typeof response.text === "function") {
@@ -519,41 +575,41 @@ async function parseTelegramApiResponse(response, method) {
         const retryAfterHeader = response.headers?.get("retry-after");
         const retryAfterSeconds = data?.parameters?.retry_after ??
             (retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : undefined);
-        throw new TelegramApiHttpError(`Telegram API ${method} failed: ${status}${description}`, response.status, Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined, data?.ok === false &&
+        throw new BaleApiHttpError(`Bale API ${method} failed: ${status}${description}`, response.status, Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined, data?.ok === false &&
             data.error_code === response.status &&
             [400, 401, 403, 404, 429].includes(response.status)
             ? method
             : undefined);
     }
     if (!data) {
-        throw new TelegramApiMalformedSuccessError(method, "returned invalid JSON");
+        throw new BaleApiMalformedSuccessError(method, "returned invalid JSON");
     }
     return data;
 }
-function unwrapTelegramApiResult(method, data) {
+function unwrapBaleApiResult(method, data) {
     if (data.ok && data.result === undefined) {
-        throw new TelegramApiMalformedSuccessError(method, "returned no result");
+        throw new BaleApiMalformedSuccessError(method, "returned no result");
     }
     if (!data.ok) {
-        throw new Error(data.description || `Telegram API ${method} failed`);
+        throw new Error(data.description || `Bale API ${method} failed`);
     }
     return data.result;
 }
-function getTelegramNetworkFamilyPolicy(env = process.env) {
-    const value = env[TELEGRAM_NETWORK_FAMILY_ENV]?.trim().toLowerCase();
-    if (TELEGRAM_NETWORK_FAMILY_VALUES.has(value)) {
+function getBaleNetworkFamilyPolicy(env = process.env) {
+    const value = env[BALE_NETWORK_FAMILY_ENV]?.trim().toLowerCase();
+    if (BALE_NETWORK_FAMILY_VALUES.has(value)) {
         return value;
     }
     return "ipv4-fallback";
 }
-function getTelegramNetworkFamily(policy) {
+function getBaleNetworkFamily(policy) {
     if (policy === "ipv4")
         return 4;
     if (policy === "ipv6")
         return 6;
     return undefined;
 }
-function isTelegramTransportFailure(error) {
+function isBaleTransportFailure(error) {
     if (!(error instanceof Error))
         return false;
     if (error.name === "AbortError")
@@ -572,19 +628,19 @@ function isTelegramTransportFailure(error) {
         code === "EAI_AGAIN") {
         return true;
     }
-    return isTelegramTransportFailure(error.cause);
+    return isBaleTransportFailure(error.cause);
 }
-function getTelegramRequestBodyBuffer(body) {
+function getBaleRequestBodyBuffer(body) {
     if (body === undefined || body === null)
         return undefined;
     if (typeof body === "string")
         return Buffer.from(body);
     if (body instanceof Uint8Array)
         return Buffer.from(body);
-    throw new Error("Unsupported Telegram HTTPS request body");
+    throw new Error("Unsupported Bale HTTPS request body");
 }
-async function buildTelegramMultipartBody(fields, fileField, fileBlob, fileName) {
-    const boundary = `pi-telegram-${randomUUID()}`;
+async function buildBaleMultipartBody(fields, fileField, fileBlob, fileName) {
+    const boundary = `pi-bale-${randomUUID()}`;
     const chunks = [];
     for (const [key, value] of Object.entries(fields)) {
         chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`));
@@ -595,9 +651,9 @@ async function buildTelegramMultipartBody(fields, fileField, fileBlob, fileName)
         contentType: `multipart/form-data; boundary=${boundary}`,
     };
 }
-async function telegramHttpsFetch(input, init, family) {
+async function baleHttpsFetch(input, init, family) {
     const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
-    const body = getTelegramRequestBodyBuffer(init.body);
+    const body = getBaleRequestBodyBuffer(init.body);
     const headers = new Headers(init.headers);
     if (body && !headers.has("content-length")) {
         headers.set("content-length", String(body.byteLength));
@@ -632,24 +688,24 @@ async function telegramHttpsFetch(input, init, family) {
         req.end(body);
     });
 }
-let telegramHttpsFetchForTesting;
-export function setTelegramApiHttpsFetchForTesting(fetchImpl) {
-    const previous = telegramHttpsFetchForTesting;
-    telegramHttpsFetchForTesting = fetchImpl;
+let baleHttpsFetchForTesting;
+export function setBaleApiHttpsFetchForTesting(fetchImpl) {
+    const previous = baleHttpsFetchForTesting;
+    baleHttpsFetchForTesting = fetchImpl;
     return () => {
-        telegramHttpsFetchForTesting = previous;
+        baleHttpsFetchForTesting = previous;
     };
 }
-async function telegramFetch(input, init = {}, family) {
+async function baleFetch(input, init = {}, family) {
     if (!family)
         return fetch(input, init);
-    return (telegramHttpsFetchForTesting ?? telegramHttpsFetch)(input, init, family);
+    return (baleHttpsFetchForTesting ?? baleHttpsFetch)(input, init, family);
 }
-async function callTelegramTransportRequest(request, allowFallback = true) {
-    const policy = getTelegramNetworkFamilyPolicy();
+async function callBaleTransportRequest(request, allowFallback = true) {
+    const policy = getBaleNetworkFamilyPolicy();
     if (policy === "auto")
         return request();
-    const family = getTelegramNetworkFamily(policy);
+    const family = getBaleNetworkFamily(policy);
     if (family)
         return request(family);
     if (!allowFallback)
@@ -658,7 +714,7 @@ async function callTelegramTransportRequest(request, allowFallback = true) {
         return await request();
     }
     catch (error) {
-        if (!isTelegramTransportFailure(error))
+        if (!isBaleTransportFailure(error))
             throw error;
         return request(4);
     }
@@ -682,14 +738,14 @@ function getErrorFamily(error) {
     }
     return undefined;
 }
-function describeTelegramErrorSummary(error) {
+function describeBaleErrorSummary(error) {
     return {
         name: error.name,
         message: error.message,
         ...(getErrorCode(error) ? { code: getErrorCode(error) } : {}),
     };
 }
-function describeTelegramTransportAttempt(error) {
+function describeBaleTransportAttempt(error) {
     return {
         name: error.name,
         ...(getErrorCode(error) ? { code: getErrorCode(error) } : {}),
@@ -698,8 +754,8 @@ function describeTelegramTransportAttempt(error) {
         ...(getErrorFamily(error) ? { family: getErrorFamily(error) } : {}),
     };
 }
-function describeTelegramTransportError(error) {
-    if (!isTelegramTransportFailure(error) || !(error instanceof Error)) {
+function describeBaleTransportError(error) {
+    if (!isBaleTransportFailure(error) || !(error instanceof Error)) {
         return undefined;
     }
     const cause = error.cause instanceof Error ? error.cause : undefined;
@@ -710,33 +766,33 @@ function describeTelegramTransportError(error) {
             : undefined;
     const attempts = aggregate?.errors
         .filter((attempt) => attempt instanceof Error)
-        .map(describeTelegramTransportAttempt);
+        .map(describeBaleTransportAttempt);
     return {
-        error: describeTelegramErrorSummary(error),
-        ...(cause ? { cause: describeTelegramErrorSummary(cause) } : {}),
+        error: describeBaleErrorSummary(error),
+        ...(cause ? { cause: describeBaleErrorSummary(cause) } : {}),
         ...(attempts && attempts.length > 0 ? { attempts } : {}),
     };
 }
-function withTelegramTransportDiagnostics(error, details) {
-    const transport = describeTelegramTransportError(error);
+function withBaleTransportDiagnostics(error, details) {
+    const transport = describeBaleTransportError(error);
     return transport ? { ...details, transport } : details;
 }
-async function callTelegramWithRetry(method, request, options) {
+async function callBaleWithRetry(method, request, options) {
     const assertAuthority = options?.assertAuthority;
     let requestIssued = false;
     const beforeRequest = () => {
-        assertTelegramApiCallAuthority(assertAuthority, requestIssued);
+        assertBaleApiCallAuthority(assertAuthority, requestIssued);
         requestIssued = true;
     };
     const retrySafe = options?.retrySafety === "safe" ||
         (options?.retrySafety !== "non-idempotent" &&
-            isTelegramApiMethodRetrySafe(method));
+            isBaleApiMethodRetrySafe(method));
     const maxAttempts = Math.max(1, options?.maxAttempts ?? 3);
     const retryBaseDelayMs = options?.retryBaseDelayMs ?? 500;
     const waitBeforeRetry = async (error, attempt) => {
-        const ms = getTelegramRetryDelayMs(error, attempt, retryBaseDelayMs);
+        const ms = getBaleRetryDelayMs(error, attempt, retryBaseDelayMs);
         if (!options?.signal?.aborted &&
-            error instanceof TelegramApiHttpError &&
+            error instanceof BaleApiHttpError &&
             error.status === 429) {
             options?.onRetryWait?.({
                 method,
@@ -750,39 +806,39 @@ async function callTelegramWithRetry(method, request, options) {
         if (options?.sleep)
             await options.sleep(ms);
         else
-            await sleepTelegramRetry(ms, options?.signal);
-        throwIfTelegramApiCallAborted(options?.signal);
+            await sleepBaleRetry(ms, options?.signal);
+        throwIfBaleApiCallAborted(options?.signal);
     };
     for (let attempt = 0;; attempt += 1) {
-        throwIfTelegramApiCallAborted(options?.signal);
-        assertTelegramApiCallAuthority(assertAuthority, requestIssued);
+        throwIfBaleApiCallAborted(options?.signal);
+        assertBaleApiCallAuthority(assertAuthority, requestIssued);
         try {
-            const result = unwrapTelegramApiResult(method, await parseTelegramApiResponse(await callTelegramTransportRequest((family) => request(family, beforeRequest), retrySafe), method));
-            assertTelegramApiCallAuthority(assertAuthority, requestIssued);
+            const result = unwrapBaleApiResult(method, await parseBaleApiResponse(await callBaleTransportRequest((family) => request(family, beforeRequest), retrySafe), method));
+            assertBaleApiCallAuthority(assertAuthority, requestIssued);
             return result;
         }
         catch (error) {
             // Authority refusal is never a transport failure, retry grant or acknowledged success.
-            if (error instanceof TelegramApiAuthorityError)
+            if (error instanceof BaleApiAuthorityError)
                 throw error;
-            assertTelegramApiCallAuthority(assertAuthority, requestIssued);
-            const retryable = isRetryableTelegramApiError(error) &&
+            assertBaleApiCallAuthority(assertAuthority, requestIssued);
+            const retryable = isRetryableBaleApiError(error) &&
                 !(options?.retryRateLimit === false &&
-                    error instanceof TelegramApiHttpError &&
+                    error instanceof BaleApiHttpError &&
                     error.status === 429);
             if (!retrySafe) {
-                if (error instanceof TelegramApiHttpError && error.status === 429) {
+                if (error instanceof BaleApiHttpError && error.status === 429) {
                     if (attempt >= maxAttempts - 1)
                         throw error;
                     await waitBeforeRetry(error, attempt);
                     continue;
                 }
-                if (error instanceof TelegramApiMalformedSuccessError ||
-                    isTelegramTransportFailure(error) ||
-                    (error instanceof TelegramApiHttpError &&
+                if (error instanceof BaleApiMalformedSuccessError ||
+                    isBaleTransportFailure(error) ||
+                    (error instanceof BaleApiHttpError &&
                         error.status !== undefined &&
                         error.status >= 500)) {
-                    throw new TelegramApiCommitUnknownError(method, error);
+                    throw new BaleApiCommitUnknownError(method, error);
                 }
                 throw error;
             }
@@ -792,7 +848,7 @@ async function callTelegramWithRetry(method, request, options) {
         }
     }
 }
-export async function cleanupTelegramTempFiles(tempDir, maxAgeMs, now = Date.now()) {
+export async function cleanupBaleTempFiles(tempDir, maxAgeMs, now = Date.now()) {
     let removedCount = 0;
     let entries;
     try {
@@ -819,22 +875,23 @@ export async function cleanupTelegramTempFiles(tempDir, maxAgeMs, now = Date.now
     }
     return removedCount;
 }
-export async function prepareTelegramTempDir(tempDir, maxAgeMs) {
+export async function prepareBaleTempDir(tempDir, maxAgeMs) {
     await mkdir(tempDir, { recursive: true, mode: 0o700 });
-    return cleanupTelegramTempFiles(tempDir, maxAgeMs);
+    return cleanupBaleTempFiles(tempDir, maxAgeMs);
 }
-function assertTelegramBotTokenConfigured(botToken) {
+function assertBaleBotTokenConfigured(botToken) {
     if (!botToken)
-        throw new Error("Telegram bot token is not configured");
+        throw new Error("Bale bot token is not configured");
     return botToken;
 }
-export async function callTelegram(botToken, method, body, options) {
-    const configuredBotToken = assertTelegramBotTokenConfigured(botToken);
+export async function callBale(botToken, method, body, options) {
+    const configuredBotToken = assertBaleBotTokenConfigured(botToken);
+    ({ method, body } = prepareBaleRequest(method, body));
     try {
-        return await callTelegramWithRetry(method, async (family, beforeRequest) => {
+        return await callBaleWithRetry(method, async (family, beforeRequest) => {
             const encodedBody = JSON.stringify(body);
             beforeRequest();
-            return telegramFetch(`${TELEGRAM_API_BASE}/bot${configuredBotToken}/${method}`, {
+            return baleFetch(`${BALE_API_BASE}/bot${configuredBotToken}/${method}`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: encodedBody,
@@ -843,32 +900,35 @@ export async function callTelegram(botToken, method, body, options) {
         }, options);
     }
     catch (error) {
-        attachTelegramApiRequestTarget(error, body);
+        attachBaleApiRequestTarget(error, body);
         throw error;
     }
 }
-export async function fetchTelegramBotIdentity(botToken, fetchImpl = fetch) {
-    const url = `${TELEGRAM_API_BASE}/bot${botToken}/getMe`;
-    const response = await callTelegramTransportRequest((family) => fetchImpl === fetch ? telegramFetch(url, {}, family) : fetchImpl(url));
+export async function fetchBaleBotIdentity(botToken, fetchImpl = fetch) {
+    const url = `${BALE_API_BASE}/bot${botToken}/getMe`;
+    const response = await callBaleTransportRequest((family) => fetchImpl === fetch ? baleFetch(url, {}, family) : fetchImpl(url));
     return response.json();
 }
 /**
- * Low-level helper to send a multipart/form-data request to the Telegram Bot API.
+ * Low-level helper to send a multipart/form-data request to the Bale Bot API.
  * This is the core implementation used for uploading voice messages, photos,
  * documents, animations, etc. It handles FormData construction, retry logic
- * (via callTelegramWithRetry), and error recording under the "multipart" category.
+ * (via callBaleWithRetry), and error recording under the "multipart" category.
  */
-export async function callTelegramMultipart(botToken, method, fields, fileField, filePath, fileName, options) {
-    const configuredBotToken = assertTelegramBotTokenConfigured(botToken);
+export async function callBaleMultipart(botToken, method, fields, fileField, filePath, fileName, options) {
+    const configuredBotToken = assertBaleBotTokenConfigured(botToken);
+    const prepared = prepareBaleRequest(method, fields);
+    method = prepared.method;
+    fields = Object.fromEntries(Object.entries(prepared.body).map(([key, value]) => [key, typeof value === "string" ? value : JSON.stringify(value)]));
     options = options && { ...options };
-    assertTelegramApiCallAuthority(options?.assertAuthority, false);
+    assertBaleApiCallAuthority(options?.assertAuthority, false);
     const fileBlob = await openAsBlob(filePath);
     try {
-        return await callTelegramWithRetry(method, async (family, beforeRequest) => {
+        return await callBaleWithRetry(method, async (family, beforeRequest) => {
             if (family) {
-                const multipart = await buildTelegramMultipartBody(fields, fileField, fileBlob, fileName);
+                const multipart = await buildBaleMultipartBody(fields, fileField, fileBlob, fileName);
                 beforeRequest();
-                return telegramFetch(`${TELEGRAM_API_BASE}/bot${configuredBotToken}/${method}`, {
+                return baleFetch(`${BALE_API_BASE}/bot${configuredBotToken}/${method}`, {
                     method: "POST",
                     headers: { "content-type": multipart.contentType },
                     body: multipart.body,
@@ -881,7 +941,7 @@ export async function callTelegramMultipart(botToken, method, fields, fileField,
             }
             form.set(fileField, fileBlob, fileName);
             beforeRequest();
-            return telegramFetch(`${TELEGRAM_API_BASE}/bot${configuredBotToken}/${method}`, {
+            return baleFetch(`${BALE_API_BASE}/bot${configuredBotToken}/${method}`, {
                 method: "POST",
                 body: form,
                 signal: options?.signal,
@@ -889,54 +949,54 @@ export async function callTelegramMultipart(botToken, method, fields, fileField,
         }, options);
     }
     catch (error) {
-        attachTelegramApiRequestTarget(error, fields);
+        attachBaleApiRequestTarget(error, fields);
         throw error;
     }
 }
-export async function downloadTelegramFile(botToken, fileId, suggestedName, tempDir, options) {
-    const configuredBotToken = assertTelegramBotTokenConfigured(botToken);
-    const file = await callTelegram(configuredBotToken, "getFile", { file_id: fileId }, { signal: options?.signal });
-    assertTelegramFileSizeWithinLimit(file.file_size, options?.maxFileSizeBytes);
+export async function downloadBaleFile(botToken, fileId, suggestedName, tempDir, options) {
+    const configuredBotToken = assertBaleBotTokenConfigured(botToken);
+    const file = await callBale(configuredBotToken, "getFile", { file_id: fileId }, { signal: options?.signal });
+    assertBaleFileSizeWithinLimit(file.file_size, options?.maxFileSizeBytes);
     await mkdir(tempDir, { recursive: true, mode: 0o700 });
     // Names carry scope and message id, so the same message maps to the same path; publish by rename.
     const targetPath = join(tempDir, sanitizeFileName(suggestedName));
     const partPath = `${targetPath}.${randomUUID()}.part`;
-    const response = await callTelegramTransportRequest((family) => telegramFetch(`${TELEGRAM_API_BASE}/file/bot${configuredBotToken}/${file.file_path}`, { signal: options?.signal }, family));
+    const response = await callBaleTransportRequest((family) => baleFetch(`${BALE_API_BASE}/file/bot${configuredBotToken}/${file.file_path}`, { signal: options?.signal }, family));
     if (!response.ok) {
-        throw new Error(`Failed to download Telegram file: ${response.status}`);
+        throw new Error(`Failed to download Bale file: ${response.status}`);
     }
     const contentLength = response.headers?.get("content-length");
-    assertTelegramFileSizeWithinLimit(contentLength ? Number.parseInt(contentLength, 10) : undefined, options?.maxFileSizeBytes);
+    assertBaleFileSizeWithinLimit(contentLength ? Number.parseInt(contentLength, 10) : undefined, options?.maxFileSizeBytes);
     try {
-        await writeTelegramDownloadResponse(response, partPath, options?.maxFileSizeBytes);
-        await publishTelegramDownload(partPath, targetPath, options?.signal);
+        await writeBaleDownloadResponse(response, partPath, options?.maxFileSizeBytes);
+        await publishBaleDownload(partPath, targetPath, options?.signal);
     }
     catch (error) {
-        await removeTelegramPartialDownload(partPath);
+        await removeBalePartialDownload(partPath);
         throw error;
     }
     return targetPath;
 }
-export async function answerTelegramCallbackQuery(botToken, callbackQueryId, text, options = {}) {
+export async function answerBaleCallbackQuery(botToken, callbackQueryId, text, options = {}) {
     try {
-        await callTelegram(botToken, "answerCallbackQuery", text
+        await callBale(botToken, "answerCallbackQuery", text
             ? { callback_query_id: callbackQueryId, text }
             : { callback_query_id: callbackQueryId }, options.assertAuthority
             ? { assertAuthority: options.assertAuthority }
             : undefined);
     }
     catch (error) {
-        options.recordRuntimeEvent?.("api", error, withTelegramTransportDiagnostics(error, {
+        options.recordRuntimeEvent?.("api", error, withBaleTransportDiagnostics(error, {
             method: "answerCallbackQuery",
         }));
-        if (error instanceof TelegramApiAuthorityError)
+        if (error instanceof BaleApiAuthorityError)
             throw error;
     }
 }
-export function createTelegramChatActionSender(sendChatAction, action) {
+export function createBaleChatActionSender(sendChatAction, action) {
     return (chatId, options) => sendChatAction(chatId, action, options);
 }
-export function createTelegramNativeMarkdownDraftSender(deps) {
+export function createBaleNativeMarkdownDraftSender(deps) {
     return (chatId, draftId, text, options) => {
         if (text === undefined) {
             return deps.sendMessageDraft(chatId, draftId, text, options);
@@ -951,8 +1011,8 @@ export function createTelegramNativeMarkdownDraftSender(deps) {
         });
     };
 }
-export function createTelegramAssistantDraftSender(deps) {
-    const sendNativeDraft = createTelegramNativeMarkdownDraftSender(deps);
+export function createBaleAssistantDraftSender(deps) {
+    const sendNativeDraft = createBaleNativeMarkdownDraftSender(deps);
     return (chatId, draftId, text, options) => {
         if (text === undefined || deps.getAssistantRenderingMode() === "rich") {
             return sendNativeDraft(chatId, draftId, text, options);
@@ -963,7 +1023,7 @@ export function createTelegramAssistantDraftSender(deps) {
         });
     };
 }
-export function buildTelegramAnswerGuestQueryBody(guestQueryId, text, options) {
+export function buildBaleAnswerGuestQueryBody(guestQueryId, text, options) {
     const body = { guest_query_id: guestQueryId };
     if (options?.result) {
         body.result = options.result;
@@ -984,13 +1044,13 @@ export function buildTelegramAnswerGuestQueryBody(guestQueryId, text, options) {
     }
     return body;
 }
-export function createDefaultTelegramBridgeApiRuntime(deps) {
-    const client = createTelegramApiClient(deps.getBotToken, {
+export function createDefaultBaleBridgeApiRuntime(deps) {
+    const client = createBaleApiClient(deps.getBotToken, {
         recordRuntimeEvent: deps.recordRuntimeEvent,
         isThreadedMode: deps.isThreadedMode,
     });
     const admittedClient = deps.workspaceAdmission
-        ? createTelegramApiWorkspaceAdmissionClient(client, deps.workspaceAdmission, {
+        ? createBaleApiWorkspaceAdmissionClient(client, deps.workspaceAdmission, {
             onReleaseError(error, method) {
                 deps.recordRuntimeEvent("api", error, {
                     phase: "workspace-admission-release",
@@ -999,13 +1059,13 @@ export function createDefaultTelegramBridgeApiRuntime(deps) {
             },
         })
         : client;
-    const runtime = createTelegramBridgeApiRuntime({
+    const runtime = createBaleBridgeApiRuntime({
         client: deps.targetActivity
-            ? createTelegramApiTargetTrackingClient(admittedClient, deps.targetActivity)
+            ? createBaleApiTargetTrackingClient(admittedClient, deps.targetActivity)
             : admittedClient,
-        tempDir: getTelegramApiTempDir(),
-        maxFileSizeBytes: TELEGRAM_INBOUND_FILE_MAX_BYTES,
-        tempFileMaxAgeMs: TELEGRAM_TEMP_FILE_MAX_AGE_MS,
+        tempDir: getBaleApiTempDir(),
+        maxFileSizeBytes: BALE_INBOUND_FILE_MAX_BYTES,
+        tempFileMaxAgeMs: BALE_TEMP_FILE_MAX_AGE_MS,
         ...(deps.getBotScope ? { getBotScope: deps.getBotScope } : {}),
         recordRuntimeEvent: deps.recordRuntimeEvent,
         captureRequestErrorHandler: deps.captureRequestErrorHandler,
@@ -1020,11 +1080,11 @@ export function createDefaultTelegramBridgeApiRuntime(deps) {
                 message_thread_id: target.threadId,
             }, { maxAttempts: 1, retrySafety: "non-idempotent" });
             if (deleted !== true)
-                throw new Error("Telegram Workspace Thread deletion was not confirmed.");
+                throw new Error("Bale Workspace Thread deletion was not confirmed.");
         },
     };
 }
-export function createTelegramBridgeApiRuntime(deps) {
+export function createBaleBridgeApiRuntime(deps) {
     const recoverRequestError = async (handler, error) => {
         try {
             await handler?.(error);
@@ -1108,19 +1168,19 @@ export function createTelegramBridgeApiRuntime(deps) {
             })
                 .catch(async (error) => {
                 await recoverRequestError(recoverError, error);
-                if (error instanceof TelegramApiHttpError && error.status === 429) {
+                if (error instanceof BaleApiHttpError && error.status === 429) {
                     const retryAfterMs = Math.max(chatActionMinIntervalMs, (error.retryAfterSeconds ?? 0) * 1_000);
                     const notBeforeMs = now() + retryAfterMs;
                     gate.notBeforeMs = notBeforeMs;
                     chatGate.notBeforeMs = Math.max(chatGate.notBeforeMs, notBeforeMs);
-                    deps.recordRuntimeEvent("api", error, withTelegramTransportDiagnostics(error, {
+                    deps.recordRuntimeEvent("api", error, withBaleTransportDiagnostics(error, {
                         method,
                         rateLimited: true,
                         retryAfterMs,
                     }));
                     return true;
                 }
-                deps.recordRuntimeEvent("api", error, withTelegramTransportDiagnostics(error, { method }));
+                deps.recordRuntimeEvent("api", error, withBaleTransportDiagnostics(error, { method }));
                 throw error;
             })
                 .finally(() => {
@@ -1138,14 +1198,14 @@ export function createTelegramBridgeApiRuntime(deps) {
         catch (error) {
             await recoverRequestError(recoverError, error);
             if (method === "deleteMessage" &&
-                error instanceof TelegramApiHttpError &&
+                error instanceof BaleApiHttpError &&
                 error.status === 400 &&
                 error.message ===
-                    "Telegram API deleteMessage failed: HTTP 400: Bad Request: message to delete not found") {
+                    "Bale API deleteMessage failed: HTTP 400: Bad Request: message to delete not found") {
                 return true;
             }
             if (!options?.isExpectedError?.(error))
-                deps.recordRuntimeEvent("api", error, withTelegramTransportDiagnostics(error, { method }));
+                deps.recordRuntimeEvent("api", error, withBaleTransportDiagnostics(error, { method }));
             throw error;
         }
     };
@@ -1163,24 +1223,24 @@ export function createTelegramBridgeApiRuntime(deps) {
             }
             catch (error) {
                 await recoverRequestError(recoverError, error);
-                deps.recordRuntimeEvent("multipart", error, withTelegramTransportDiagnostics(error, { method, fileName }));
+                deps.recordRuntimeEvent("multipart", error, withBaleTransportDiagnostics(error, { method, fileName }));
                 throw error;
             }
         },
         /**
-         * Downloads a file from the Telegram servers into the local temp directory.
+         * Downloads a file from the Bale servers into the local temp directory.
          * Used for inbound voice messages, photos, documents, etc.
          */
         downloadFile: async (fileId, suggestedName, source) => {
             try {
                 return await deps.client.downloadFile(fileId, source
-                    ? createTelegramAttachmentFileName(source, suggestedName, deps.getBotScope?.())
+                    ? createBaleAttachmentFileName(source, suggestedName, deps.getBotScope?.())
                     : suggestedName, deps.tempDir, {
                     maxFileSizeBytes: deps.maxFileSizeBytes,
                 });
             }
             catch (error) {
-                deps.recordRuntimeEvent("download", error, withTelegramTransportDiagnostics(error, { suggestedName }));
+                deps.recordRuntimeEvent("download", error, withBaleTransportDiagnostics(error, { suggestedName }));
                 throw error;
             }
         },
@@ -1194,14 +1254,14 @@ export function createTelegramBridgeApiRuntime(deps) {
                 ? { message_thread_id: options.message_thread_id }
                 : {}),
         }),
-        sendTypingAction: createTelegramChatActionSender((chatId, action, options) => callRecorded("sendChatAction", {
+        sendTypingAction: createBaleChatActionSender((chatId, action, options) => callRecorded("sendChatAction", {
             chat_id: chatId,
             action,
             ...(options?.message_thread_id !== undefined
                 ? { message_thread_id: options.message_thread_id }
                 : {}),
         }, { assertAuthority: options?.assertAuthority }), "typing"),
-        sendRecordVoiceAction: createTelegramChatActionSender((chatId, action, options) => callRecorded("sendChatAction", {
+        sendRecordVoiceAction: createBaleChatActionSender((chatId, action, options) => callRecorded("sendChatAction", {
             chat_id: chatId,
             action,
             ...(options?.message_thread_id !== undefined
@@ -1233,10 +1293,10 @@ export function createTelegramBridgeApiRuntime(deps) {
                 return "edited";
             }
             catch (error) {
-                if (isTelegramMessageNotModifiedError(error))
+                if (isBaleMessageNotModifiedError(error))
                     return "unchanged";
                 await recoverRequestError(recoverError, error);
-                deps.recordRuntimeEvent("api", error, withTelegramTransportDiagnostics(error, {
+                deps.recordRuntimeEvent("api", error, withBaleTransportDiagnostics(error, {
                     method: "editMessageText",
                 }));
                 throw error;
@@ -1257,7 +1317,7 @@ export function createTelegramBridgeApiRuntime(deps) {
                         : { callback_query_id: callbackQueryId }, { assertAuthority: options.assertAuthority });
                 }
                 catch (error) {
-                    if (error instanceof TelegramApiAuthorityError)
+                    if (error instanceof BaleApiAuthorityError)
                         throw error;
                 }
                 return;
@@ -1266,16 +1326,16 @@ export function createTelegramBridgeApiRuntime(deps) {
                 await deps.client.answerCallbackQuery(callbackQueryId, text);
             }
             catch (error) {
-                deps.recordRuntimeEvent("api", error, withTelegramTransportDiagnostics(error, {
+                deps.recordRuntimeEvent("api", error, withBaleTransportDiagnostics(error, {
                     method: "answerCallbackQuery",
                 }));
-                if (error instanceof TelegramApiAuthorityError)
+                if (error instanceof BaleApiAuthorityError)
                     throw error;
             }
         },
-        answerGuestQuery: (guestQueryId, text, options) => callRecorded("answerGuestQuery", buildTelegramAnswerGuestQueryBody(guestQueryId, text, options)),
+        answerGuestQuery: (guestQueryId, text, options) => callRecorded("answerGuestQuery", buildBaleAnswerGuestQueryBody(guestQueryId, text, options)),
         answerGuestQueryForInlineMessage: async (guestQueryId, text, options) => {
-            const sent = await callRecorded("answerGuestQuery", buildTelegramAnswerGuestQueryBody(guestQueryId, text, options));
+            const sent = await callRecorded("answerGuestQuery", buildBaleAnswerGuestQueryBody(guestQueryId, text, options));
             return sent?.inline_message_id;
         },
         editGuestInlineMessage: async (inlineMessageId, content, options) => {
@@ -1290,9 +1350,9 @@ export function createTelegramBridgeApiRuntime(deps) {
                 }
                 catch (error) {
                     // Only a parsed rejection permits replacing this attempt with a failure notice.
-                    if (isTelegramApiRequestRejected(error, "editMessageMedia"))
+                    if (isBaleApiRequestRejected(error, "editMessageMedia"))
                         throw error;
-                    throw new TelegramApiCommitUnknownError("editMessageMedia", error);
+                    throw new BaleApiCommitUnknownError("editMessageMedia", error);
                 }
                 return;
             }
@@ -1304,7 +1364,7 @@ export function createTelegramBridgeApiRuntime(deps) {
                 ...(content.parseMode ? { parse_mode: content.parseMode } : {}),
             }, options);
         },
-        prepareTempDir: () => prepareTelegramTempDir(deps.tempDir, deps.tempFileMaxAgeMs),
+        prepareTempDir: () => prepareBaleTempDir(deps.tempDir, deps.tempFileMaxAgeMs),
         deleteMessage: (chatId, messageId) => callRecorded("deleteMessage", {
             chat_id: chatId,
             message_id: messageId,
@@ -1312,11 +1372,11 @@ export function createTelegramBridgeApiRuntime(deps) {
     };
 }
 /**
- * Creates a low-level Telegram Bot API client.
+ * Creates a low-level Bale Bot API client.
  * This is the main entry point for all direct Bot API communication
  * (both JSON calls and multipart uploads for files/voice).
  */
-export function createTelegramApiClient(getBotToken, options = {}) {
+export function createBaleApiClient(getBotToken, options = {}) {
     const now = options.now ?? Date.now;
     const recordRuntimeEvent = options.recordRuntimeEvent;
     const isThreadedMode = options.isThreadedMode;
@@ -1333,7 +1393,7 @@ export function createTelegramApiClient(getBotToken, options = {}) {
             if (isThreadedMode() && chatId !== undefined && Number.isSafeInteger(chatId) && chatId > 0 &&
                 !(typeof body.business_connection_id === "string" && body.business_connection_id.length > 0) &&
                 (threadId === undefined || !Number.isSafeInteger(threadId) || threadId <= 0))
-                throw new Error("Telegram All is input-only in Threaded Mode; an explicit Thread target is required.");
+                throw new Error("Bale All is input-only in Threaded Mode; an explicit Thread target is required.");
             callOptions?.assertAuthority?.();
         };
         assertAuthority();
@@ -1365,7 +1425,7 @@ export function createTelegramApiClient(getBotToken, options = {}) {
                 const retryWaitOptions = recordRuntimeEvent
                     ? {
                         onRetryWait: (wait) => {
-                            recordRuntimeEvent("api", new Error(`Telegram API rate limit: waiting ${wait.delayMs} ms before retrying ${wait.method}`), {
+                            recordRuntimeEvent("api", new Error(`Bale API rate limit: waiting ${wait.delayMs} ms before retrying ${wait.method}`), {
                                 phase: "retry-wait",
                                 method: wait.method,
                                 waitMs: wait.delayMs,
@@ -1377,15 +1437,15 @@ export function createTelegramApiClient(getBotToken, options = {}) {
                         },
                     }
                     : {};
-                return await callTelegram(token, method, body, {
+                return await callBale(token, method, body, {
                     ...(isDraft ? { ...options, maxAttempts: 1 } : options),
                     ...retryWaitOptions,
                 });
             }
             catch (error) {
-                if (draftKey && isRetryableTelegramApiError(error)) {
+                if (draftKey && isRetryableBaleApiError(error)) {
                     draftRetryNotBeforeByTarget.set(draftKey, Math.max(draftRetryNotBeforeByTarget.get(draftKey) ?? 0, now() +
-                        getTelegramRetryDelayMs(error, 0, options?.retryBaseDelayMs ?? 500)));
+                        getBaleRetryDelayMs(error, 0, options?.retryBaseDelayMs ?? 500)));
                 }
                 throw error;
             }
@@ -1393,17 +1453,17 @@ export function createTelegramApiClient(getBotToken, options = {}) {
         callMultipart: async (method, fields, fileField, filePath, fileName, options) => {
             fields = { ...fields };
             options = fenceOutput(method, fields, options);
-            return callTelegramMultipart(getBotToken(), method, fields, fileField, filePath, fileName, options);
+            return callBaleMultipart(getBotToken(), method, fields, fileField, filePath, fileName, options);
         },
         downloadFile: async (fileId, suggestedName, tempDir, options) => {
-            return downloadTelegramFile(getBotToken(), fileId, suggestedName, tempDir, options);
+            return downloadBaleFile(getBotToken(), fileId, suggestedName, tempDir, options);
         },
         answerCallbackQuery: async (callbackQueryId, text, authorityOptions) => {
             const assertAuthority = authorityOptions?.assertAuthority;
             const callbackOptions = assertAuthority
                 ? { ...options, assertAuthority }
                 : options;
-            await answerTelegramCallbackQuery(getBotToken(), callbackQueryId, text, callbackOptions);
+            await answerBaleCallbackQuery(getBotToken(), callbackQueryId, text, callbackOptions);
         },
     };
 }

@@ -1,18 +1,18 @@
-/** Workspace display projection tests; no Telegram or TUI renderer is invoked. */
+/** Workspace display projection tests; no Bale or TUI renderer is invoked. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { homedir } from "node:os";
 import {
-  createTelegramThreadDisplayReconciler,
-  createTelegramThreadDisplaySettingsRuntime,
-  resolveTelegramInitialWorkspaceDisplayName,
-  resolveTelegramWorkspaceDisplayNames,
-  tokenizeTelegramDirectorySegment,
+  createBaleThreadDisplayReconciler,
+  createBaleThreadDisplaySettingsRuntime,
+  resolveBaleInitialWorkspaceDisplayName,
+  resolveBaleWorkspaceDisplayNames,
+  tokenizeBaleDirectorySegment,
 } from "../lib/thread-display.ts";
-import { createTelegramTopicTargetStore, createTelegramWorkspaceBindingIdentity } from "../lib/threads.ts";
-import { normalizeTelegramWorkspacePath } from "../lib/workspace-identity.ts";
-import type { TelegramThreadDisplayMode } from "../lib/config.ts";
-import type { TelegramApiCallOptions } from "../lib/telegram-api.ts";
+import { createBaleTopicTargetStore, createBaleWorkspaceBindingIdentity } from "../lib/threads.ts";
+import { normalizeBaleWorkspacePath } from "../lib/workspace-identity.ts";
+import type { BaleThreadDisplayMode } from "../lib/config.ts";
+import type { BaleApiCallOptions } from "../lib/bale-api.ts";
 
 const bindings = [
   { bindingKey: "one", cwd: "/repo/extensions", slot: "A", threadName: "Anchor" },
@@ -22,33 +22,33 @@ const bindings = [
 
 test("Three modes project the same stable bindings without changing named identity", () => {
   const before = structuredClone(bindings);
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(bindings, "letters").values()],
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(bindings, "letters").values()],
     ["A", "B", "C"]);
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(bindings, "names").values()],
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(bindings, "names").values()],
     ["Anchor", "Briar", "Cedar"]);
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(bindings, "directories").values()],
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(bindings, "directories").values()],
     ["extensions_a", "skills", "extensions_c"]);
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(bindings, "names").values()],
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(bindings, "names").values()],
     ["Anchor", "Briar", "Cedar"]);
   assert.deepEqual(bindings, before);
 });
 
 test("New directory modes share deterministic Unicode-aware tokenization and suffix projection", () => {
-  assert.deepEqual(tokenizeTelegramDirectorySegment("apiPRDServer-42.tools"),
+  assert.deepEqual(tokenizeBaleDirectorySegment("apiPRDServer-42.tools"),
     ["api", "PRD", "Server", "42", "tools"]);
   const peers = [
     { ...bindings[0], cwd: "/repo/frontend/API tools" },
     { ...bindings[1], cwd: "/repo/backend/API tools" },
   ];
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(peers, "directory-snake").values()],
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(peers, "directory-snake").values()],
     ["frontend_api_tools", "backend_api_tools"]);
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(peers, "directory-title").values()],
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(peers, "directory-title").values()],
     ["Frontend / API Tools", "Backend / API Tools"]);
   const sameDirectory = [
     { ...bindings[0], cwd: "/repo/apiPRDServer" },
     { ...bindings[2], cwd: "/repo/apiPRDServer" },
   ];
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(
     sameDirectory, "directory-title", new Set(["one", "three"]),
   ).values()], ["Api PRD Server A", "Api PRD Server C"]);
 });
@@ -60,39 +60,39 @@ for (const platform of ["linux", "darwin", "win32"] as const) {
       // Synchronous policy checks only; restore the host platform before any asynchronous/runtime work.
       Object.defineProperty(process, "platform", { ...descriptor, value: platform });
       try {
-        const home = normalizeTelegramWorkspacePath(homedir())!;
+        const home = normalizeBaleWorkspacePath(homedir())!;
         const owner = { ...bindings[0], cwd: home };
         const expected = platform === "win32"
-          ? resolveTelegramWorkspaceDisplayNames([{ ...owner, cwd: `/unrelated/${home.split("/").at(-1)}` }], mode).get("one")!
+          ? resolveBaleWorkspaceDisplayNames([{ ...owner, cwd: `/unrelated/${home.split("/").at(-1)}` }], mode).get("one")!
           : mode === "directory-title" ? "Home" : "home";
-        assert.equal(resolveTelegramWorkspaceDisplayNames([owner], mode).get("one"), expected);
-        assert.equal(resolveTelegramInitialWorkspaceDisplayName({ bindings: [], binding: owner, mode }), expected);
+        assert.equal(resolveBaleWorkspaceDisplayNames([owner], mode).get("one"), expected);
+        assert.equal(resolveBaleInitialWorkspaceDisplayName({ bindings: [], binding: owner, mode }), expected);
         const suffix = mode === "directory-title" ? " A" : "_a";
         const another = { ...bindings[2], cwd: home };
         const peers = [owner, another];
         const before = structuredClone(peers);
-        assert.equal(resolveTelegramWorkspaceDisplayNames(peers, mode, new Set(["one", "three"])).get("one"), `${expected}${suffix}`);
-        assert.equal(resolveTelegramWorkspaceDisplayNames(peers, mode, new Set(["one"])).get("one"), expected, "Dormant peers do not add suffixes");
-        assert.equal(resolveTelegramInitialWorkspaceDisplayName({ bindings: [owner], binding: another, mode, liveBindingKeys: new Set(["one"]) }),
+        assert.equal(resolveBaleWorkspaceDisplayNames(peers, mode, new Set(["one", "three"])).get("one"), `${expected}${suffix}`);
+        assert.equal(resolveBaleWorkspaceDisplayNames(peers, mode, new Set(["one"])).get("one"), expected, "Dormant peers do not add suffixes");
+        assert.equal(resolveBaleInitialWorkspaceDisplayName({ bindings: [owner], binding: another, mode, liveBindingKeys: new Set(["one"]) }),
           `${expected}${mode === "directory-title" ? " C" : "_c"}`);
         assert.deepEqual(peers, before, "Home is only a display projection, never binding/CWD mutation");
         const manual = { ...owner, manualThreadName: "My Terminal" };
         for (const strategy of ["letters", "names", "directories", "directory-snake", "directory-title"] as const)
-          assert.equal(resolveTelegramWorkspaceDisplayNames([manual], strategy).get("one"), "My Terminal");
-        assert.equal(resolveTelegramWorkspaceDisplayNames([owner], "letters").get("one"), "A");
-        assert.equal(resolveTelegramWorkspaceDisplayNames([owner], "names").get("one"), "Anchor");
-        assert.equal(resolveTelegramWorkspaceDisplayNames([owner], "directories").get("one"), home.split("/").filter(Boolean).at(-1) ?? "/");
+          assert.equal(resolveBaleWorkspaceDisplayNames([manual], strategy).get("one"), "My Terminal");
+        assert.equal(resolveBaleWorkspaceDisplayNames([owner], "letters").get("one"), "A");
+        assert.equal(resolveBaleWorkspaceDisplayNames([owner], "names").get("one"), "Anchor");
+        assert.equal(resolveBaleWorkspaceDisplayNames([owner], "directories").get("one"), home.split("/").filter(Boolean).at(-1) ?? "/");
         for (const cwd of [`${home}/projects`, `${home}-other`, `/someone-else/${home.split("/").at(-1)}`]) {
           const foreign = { ...owner, cwd };
-          const name = resolveTelegramWorkspaceDisplayNames([foreign], mode).get("one");
+          const name = resolveBaleWorkspaceDisplayNames([foreign], mode).get("one");
           const basename = cwd.split("/").filter(Boolean).at(-1)!;
-          const normal = resolveTelegramWorkspaceDisplayNames([{ ...owner, cwd: `/display-reference/${basename}` }], mode).get("one");
+          const normal = resolveBaleWorkspaceDisplayNames([{ ...owner, cwd: `/display-reference/${basename}` }], mode).get("one");
           assert.equal(name, normal, "Children, path prefixes and another user's basename keep ordinary directory formatting");
         }
         if (platform !== "win32") {
           const live = new Set(["one", "two"]);
           const collision = [owner, { ...bindings[1], cwd: "/work/home" }];
-          assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(collision, mode, live).values()],
+          assert.deepEqual([...resolveBaleWorkspaceDisplayNames(collision, mode, live).values()],
             mode === "directory-title" ? ["Home", "Work / Home"] : ["home", "work_home"], "A real folder named home must remain distinguishable");
         }
       } finally { Object.defineProperty(process, "platform", descriptor); }
@@ -102,24 +102,24 @@ for (const platform of ["linux", "darwin", "win32"] as const) {
 
 test("Manual names override every automatic display mode", () => {
   const overridden = { ...bindings[0], manualThreadName: "Navigator" };
-  assert.equal(resolveTelegramWorkspaceDisplayNames(
+  assert.equal(resolveBaleWorkspaceDisplayNames(
     [overridden], "letters",
   ).get("one"), "Navigator");
-  assert.equal(resolveTelegramWorkspaceDisplayNames(
+  assert.equal(resolveBaleWorkspaceDisplayNames(
     [overridden], "names",
   ).get("one"), "Navigator");
-  assert.equal(resolveTelegramWorkspaceDisplayNames(
+  assert.equal(resolveBaleWorkspaceDisplayNames(
     [overridden], "directories",
   ).get("one"), "Navigator");
 });
 
 test("Home initial title and live reconciliation use the same projection without rebinding", async () => {
   if (process.platform !== "linux" && process.platform !== "darwin") return;
-  const home = normalizeTelegramWorkspacePath(homedir())!;
+  const home = normalizeBaleWorkspacePath(homedir())!;
   const f = harness(home);
   f.state.mode = "directory-title";
   const before = structuredClone(f.store.listWorkspaceBindings());
-  assert.equal(resolveTelegramInitialWorkspaceDisplayName({ bindings: [], binding: before[0]!, mode: "directory-title" }), "Home");
+  assert.equal(resolveBaleInitialWorkspaceDisplayName({ bindings: [], binding: before[0]!, mode: "directory-title" }), "Home");
   assert.deepEqual(await f.reconcile(), { changed: 1 });
   assert.deepEqual(f.state.calls, ["Home"]);
   const changed = f.store.listWorkspaceBindings()[0]!;
@@ -130,22 +130,22 @@ test("Home initial title and live reconciliation use the same projection without
   assert.deepEqual(f.store.listWorkspaceBindings()[0], { ...before[0], displayTitle: "home" });
 });
 
-test("Initial titles project the candidate before Telegram creates the Thread", () => {
-  assert.equal(resolveTelegramInitialWorkspaceDisplayName({
+test("Initial titles project the candidate before Bale creates the Thread", () => {
+  assert.equal(resolveBaleInitialWorkspaceDisplayName({
     bindings: [], binding: bindings[0], mode: "directories",
   }), "extensions");
-  assert.equal(resolveTelegramInitialWorkspaceDisplayName({
+  assert.equal(resolveBaleInitialWorkspaceDisplayName({
     bindings: [bindings[0]], binding: bindings[2], mode: "directories",
   }), "extensions_c");
-  assert.equal(resolveTelegramInitialWorkspaceDisplayName({
+  assert.equal(resolveBaleInitialWorkspaceDisplayName({
     bindings: [], binding: bindings[0], mode: "letters",
   }), "A");
-  assert.equal(resolveTelegramInitialWorkspaceDisplayName({
+  assert.equal(resolveBaleInitialWorkspaceDisplayName({
     bindings: [{ ...bindings[0], showSlotSuffix: true }],
     binding: { ...bindings[0], threadName: "Aster" },
     mode: "directories",
   }), "extensions_a");
-  assert.equal(resolveTelegramInitialWorkspaceDisplayName({
+  assert.equal(resolveBaleInitialWorkspaceDisplayName({
     bindings: [{ ...bindings[0], manualThreadName: "wasd_123!?+$@" }],
     binding: { ...bindings[0], threadName: "Aster" },
     mode: "letters",
@@ -153,19 +153,19 @@ test("Initial titles project the candidate before Telegram creates the Thread", 
 });
 
 test("Legacy suffixes remain sticky while new directory modes use only live ownership", () => {
-  assert.equal(resolveTelegramWorkspaceDisplayNames([bindings[0]], "directories").get("one"),
+  assert.equal(resolveBaleWorkspaceDisplayNames([bindings[0]], "directories").get("one"),
     "extensions");
-  assert.equal(resolveTelegramWorkspaceDisplayNames([
+  assert.equal(resolveBaleWorkspaceDisplayNames([
     { ...bindings[0], showSlotSuffix: true },
   ], "directories").get("one"), "extensions_a");
-  assert.equal(resolveTelegramWorkspaceDisplayNames([
+  assert.equal(resolveBaleWorkspaceDisplayNames([
     { ...bindings[0], showSlotSuffix: true },
   ], "directory-title").get("one"), "Extensions");
   const sameDirectory = [bindings[0], bindings[2]];
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(
     sameDirectory, "directory-snake", new Set(["one"]),
   ).values()], ["extensions", "extensions"]);
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(
     sameDirectory, "directory-snake", new Set(["one", "three"]),
   ).values()], ["extensions_a", "extensions_c"]);
 });
@@ -175,7 +175,7 @@ test("Equal basenames from distinct paths use the shortest distinguishing parent
     { ...bindings[0], cwd: "/repo/frontend/extensions" },
     { ...bindings[1], cwd: "/repo/backend/extensions" },
   ];
-  assert.deepEqual([...resolveTelegramWorkspaceDisplayNames(peers, "directories").values()],
+  assert.deepEqual([...resolveBaleWorkspaceDisplayNames(peers, "directories").values()],
     ["frontend/extensions", "backend/extensions"]);
 });
 
@@ -183,7 +183,7 @@ test("Directory labels are bounded without splitting surrogate pairs or losing s
   const peers = bindings.slice(0, 2).map((binding, index) => ({
     ...binding, cwd: `/repo/${"😀".repeat(100)}${index}`,
   }));
-  const labels = [...resolveTelegramWorkspaceDisplayNames(peers, "directories").values()];
+  const labels = [...resolveBaleWorkspaceDisplayNames(peers, "directories").values()];
   assert.equal(labels.length, 2);
   assert.notEqual(labels[0], labels[1]);
   for (const label of labels) {
@@ -195,36 +195,36 @@ test("Directory labels are bounded without splitting surrogate pairs or losing s
 
 test("Slotless bindings use their retained name rather than an obsolete letter or suffix", () => {
   for (const mode of ["letters", "names", "directories", "directory-snake", "directory-title"] as const) {
-    assert.equal(resolveTelegramWorkspaceDisplayNames([
+    assert.equal(resolveBaleWorkspaceDisplayNames([
       { ...bindings[0], slot: undefined, showSlotSuffix: true },
     ], mode).get("one"), "Anchor", mode);
-    assert.equal(resolveTelegramWorkspaceDisplayNames([
+    assert.equal(resolveBaleWorkspaceDisplayNames([
       { ...bindings[0], slot: undefined, manualThreadName: "Custom" },
     ], mode).get("one"), "Custom", mode);
   }
 });
 
 test("Missing display identity and ambiguous names never fabricate a label", () => {
-  assert.equal(resolveTelegramWorkspaceDisplayNames([
+  assert.equal(resolveBaleWorkspaceDisplayNames([
     { ...bindings[0], slot: undefined, threadName: undefined },
   ], "letters").size, 0);
-  assert.equal(resolveTelegramWorkspaceDisplayNames([
+  assert.equal(resolveBaleWorkspaceDisplayNames([
     bindings[0], { ...bindings[1], threadName: "Anchor" },
   ], "names").size, 0);
-  assert.equal(resolveTelegramWorkspaceDisplayNames([
+  assert.equal(resolveBaleWorkspaceDisplayNames([
     { ...bindings[0], threadName: undefined },
   ], "names").get("one"), "A");
 });
 
 function harness(cwd = "/repo/extensions") {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
-  const identity = createTelegramWorkspaceBindingIdentity(cwd)!;
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
+  const identity = createBaleWorkspaceBindingIdentity(cwd)!;
   store.upsertWorkspaceBinding({
     ...identity, target: { chatId: 7, threadId: 42 }, slot: "A",
     threadName: "Anchor", updatedAtMs: 1,
   });
   const state = {
-    mode: "letters" as TelegramThreadDisplayMode,
+    mode: "letters" as BaleThreadDisplayMode,
     profile: "default",
     epoch: 1 as number | undefined,
     active: true,
@@ -235,7 +235,7 @@ function harness(cwd = "/repo/extensions") {
     calls: [] as string[],
     onEdit: undefined as (() => Promise<void>) | undefined,
   };
-  const reconciler = createTelegramThreadDisplayReconciler({
+  const reconciler = createBaleThreadDisplayReconciler({
     store: {
       listWorkspaceBindings: store.listWorkspaceBindings,
       setWorkspaceDisplayTitle: store.setWorkspaceDisplayTitle,
@@ -255,7 +255,7 @@ function harness(cwd = "/repo/extensions") {
       const generation = state.registrationGeneration;
       return () => state.active && state.registrationGeneration === generation;
     },
-    async callApi<TResponse>(method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) {
+    async callApi<TResponse>(method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) {
       assert.equal(method, "editForumTopic");
       assert.equal(body.chat_id, 7);
       assert.equal(body.message_thread_id, 42);
@@ -334,7 +334,7 @@ test("Only a positive title acknowledgement can replace stored display evidence"
   }
 });
 
-test("Failed persistence retries acknowledged metadata without another Telegram edit", async () => {
+test("Failed persistence retries acknowledged metadata without another Bale edit", async () => {
   const fixture = harness();
   fixture.state.persistFailure = true;
   await assert.rejects(fixture.reconcile(), /disk unavailable/);
@@ -364,7 +364,7 @@ test("A targeted slotless reconciliation does not edit unrelated live bindings",
   const fixture = harness();
   const original = fixture.store.listWorkspaceBindings()[0]!;
   fixture.store.upsertWorkspaceBinding({ ...original, slot: undefined, displayTitle: "A" });
-  const other = createTelegramWorkspaceBindingIdentity("/repo/other")!;
+  const other = createBaleWorkspaceBindingIdentity("/repo/other")!;
   fixture.store.upsertWorkspaceBinding({ ...other, target: { chatId: 7, threadId: 43 }, slot: "B", threadName: "Briar", displayTitle: "old", updatedAtMs: 1 });
   assert.deepEqual(await fixture.reconcile(original.bindingKey), { changed: 1 });
   assert.deepEqual(fixture.state.calls, ["Anchor"]);
@@ -376,7 +376,7 @@ test("Thread display settings owner clears a retained manual override after mode
   const target = { chatId: 7, threadId: 42 };
   const calls: string[] = [];
   let manualThreadName: string | undefined = "Custom";
-  const runtime = createTelegramThreadDisplaySettingsRuntime({
+  const runtime = createBaleThreadDisplaySettingsRuntime({
     getTarget: () => target,
     getBinding: () => ({ manualThreadName }),
     apply: async (mode) => { calls.push(`apply:${mode}`); },

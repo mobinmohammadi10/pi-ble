@@ -1,40 +1,40 @@
 /**
- * Regression tests for Telegram model control helpers
+ * Regression tests for Bale model control helpers
  * Exercises model selection state/resolution plus in-flight model-switch orchestration
- * Zones: telegram, pi agent, shared utils
+ * Zones: bale, pi agent, shared utils
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  buildTelegramModelSwitchContinuationText,
-  buildTelegramModelSwitchContinuationTurn,
-  canRestartAgentRunForTelegramModelSwitch,
+  buildBaleModelSwitchContinuationText,
+  buildBaleModelSwitchContinuationTurn,
+  canRestartAgentRunForBaleModelSwitch,
   createCurrentModelRuntime,
   createCurrentModelStore,
   createCurrentModelUpdateRuntime,
-  createTelegramModelSwitchContinuationQueue,
-  createTelegramModelSwitchContinuationQueueRuntime,
-  createTelegramModelSwitchContinuationTurnBuilder,
-  createTelegramModelSwitchController,
-  createTelegramModelSwitchControllerRuntime,
-  createTelegramModelSwitchMachineState,
+  createBaleModelSwitchContinuationQueue,
+  createBaleModelSwitchContinuationQueueRuntime,
+  createBaleModelSwitchContinuationTurnBuilder,
+  createBaleModelSwitchController,
+  createBaleModelSwitchControllerRuntime,
+  createBaleModelSwitchMachineState,
   getCanonicalModelId,
   isThinkingLevel,
   type MenuModel,
   modelsMatch,
-  parseTelegramCliScopedModelPatterns,
-  parseTelegramScopedModelPatternList,
+  parseBaleCliScopedModelPatterns,
+  parseBaleScopedModelPatternList,
   resolveScopedModelPatterns,
-  shouldTriggerPendingTelegramModelSwitchAbort,
+  shouldTriggerPendingBaleModelSwitchAbort,
   sortScopedModels,
-  transitionTelegramModelSwitch,
-  type TelegramModelSwitchEffect,
-  type TelegramModelSwitchEvent,
+  transitionBaleModelSwitch,
+  type BaleModelSwitchEffect,
+  type BaleModelSwitchEvent,
   THINKING_LEVELS,
 } from "../lib/model.ts";
-import type { PendingTelegramTurn } from "../lib/queue.ts";
+import type { PendingBaleTurn } from "../lib/queue.ts";
 import * as Queue from "../lib/queue.ts";
 
 function createModelTestModel(
@@ -53,8 +53,8 @@ function createModelTestSelection(
 }
 
 function createModelTestTurn(
-  overrides: Partial<PendingTelegramTurn> = {},
-): PendingTelegramTurn {
+  overrides: Partial<PendingBaleTurn> = {},
+): PendingBaleTurn {
   return {
     kind: "prompt",
     chatId: 7,
@@ -71,7 +71,7 @@ function createModelTestTurn(
   };
 }
 
-test("Current model store prefers explicit Telegram model over context fallback", () => {
+test("Current model store prefers explicit Bale model over context fallback", () => {
   const fallback = { provider: "fallback", id: "f", name: "Fallback" };
   const selected = { provider: "selected", id: "s", name: "Selected" };
   const store = createCurrentModelStore<
@@ -156,24 +156,24 @@ test("Model helpers match models, detect thinking levels, and expose constants",
 });
 
 test("Model helpers parse scoped model pattern lists and CLI flags", () => {
-  assert.deepEqual(parseTelegramScopedModelPatternList("a, b:high, "), [
+  assert.deepEqual(parseBaleScopedModelPatternList("a, b:high, "), [
     "a",
     "b:high",
   ]);
   assert.deepEqual(
-    parseTelegramCliScopedModelPatterns(["--models", "a,b:high"]),
+    parseBaleCliScopedModelPatterns(["--models", "a,b:high"]),
     ["a", "b:high"],
   );
-  assert.deepEqual(parseTelegramCliScopedModelPatterns(["--models=a, b "]), [
+  assert.deepEqual(parseBaleCliScopedModelPatterns(["--models=a, b "]), [
     "a",
     "b",
   ]);
   assert.equal(
-    parseTelegramCliScopedModelPatterns(["--models", "  "]),
+    parseBaleCliScopedModelPatterns(["--models", "  "]),
     undefined,
   );
   assert.equal(
-    parseTelegramCliScopedModelPatterns(["--other", "a"]),
+    parseBaleCliScopedModelPatterns(["--other", "a"]),
     undefined,
   );
 });
@@ -213,21 +213,21 @@ test("Model helpers resolve scoped model patterns and sort current models first"
 
 test("In-flight model switch is allowed for any interruptible active agent run", () => {
   assert.equal(
-    canRestartAgentRunForTelegramModelSwitch({
+    canRestartAgentRunForBaleModelSwitch({
       isIdle: false,
       hasAbortHandler: true,
     }),
     true,
   );
   assert.equal(
-    canRestartAgentRunForTelegramModelSwitch({
+    canRestartAgentRunForBaleModelSwitch({
       isIdle: true,
       hasAbortHandler: true,
     }),
     false,
   );
   assert.equal(
-    canRestartAgentRunForTelegramModelSwitch({
+    canRestartAgentRunForBaleModelSwitch({
       isIdle: false,
       hasAbortHandler: false,
     }),
@@ -237,7 +237,7 @@ test("In-flight model switch is allowed for any interruptible active agent run",
 
 test("Pending model switch abort waits until no tool executions remain", () => {
   assert.equal(
-    shouldTriggerPendingTelegramModelSwitchAbort({
+    shouldTriggerPendingBaleModelSwitchAbort({
       hasPendingModelSwitch: true,
       hasContinuationTurn: true,
       hasAbortHandler: true,
@@ -246,7 +246,7 @@ test("Pending model switch abort waits until no tool executions remain", () => {
     true,
   );
   assert.equal(
-    shouldTriggerPendingTelegramModelSwitchAbort({
+    shouldTriggerPendingBaleModelSwitchAbort({
       hasPendingModelSwitch: true,
       hasContinuationTurn: true,
       hasAbortHandler: true,
@@ -255,7 +255,7 @@ test("Pending model switch abort waits until no tool executions remain", () => {
     false,
   );
   assert.equal(
-    shouldTriggerPendingTelegramModelSwitchAbort({
+    shouldTriggerPendingBaleModelSwitchAbort({
       hasPendingModelSwitch: false,
       hasContinuationTurn: true,
       hasAbortHandler: true,
@@ -268,12 +268,12 @@ test("Pending model switch abort waits until no tool executions remain", () => {
 type SwitchSelection = { model: { provider: string; id: string } };
 
 /** Folds events through the pure model-switch transition, keeping every effect and the last call result. */
-function runModelSwitchMachine(events: TelegramModelSwitchEvent<SwitchSelection>[]) {
-  let state = createTelegramModelSwitchMachineState<SwitchSelection>();
-  const effects: TelegramModelSwitchEffect<SwitchSelection>[] = [];
+function runModelSwitchMachine(events: BaleModelSwitchEvent<SwitchSelection>[]) {
+  let state = createBaleModelSwitchMachineState<SwitchSelection>();
+  const effects: BaleModelSwitchEffect<SwitchSelection>[] = [];
   let result = false;
   for (const event of events) {
-    const next = transitionTelegramModelSwitch(state, event);
+    const next = transitionBaleModelSwitch(state, event);
     state = next.state;
     effects.push(...next.effects);
     result = next.result;
@@ -335,7 +335,7 @@ test("Model-switch controller centralizes pending abort and continuation queuein
     historyText: "previous",
     statusSummary: "previous",
   });
-  const controller = createTelegramModelSwitchController<
+  const controller = createBaleModelSwitchController<
     object,
     { model: { provider: string; id: string } }
   >({
@@ -365,7 +365,7 @@ test("Model-switch controller centralizes pending abort and continuation queuein
   assert.equal(controller.hasPendingSwitch(), false);
 });
 
-test("Model-switch controller resumes a local run in the exact Telegram menu target", () => {
+test("Model-switch controller resumes a local run in the exact Bale menu target", () => {
   const events: string[] = [];
   let activeToolExecutions = 0;
   const continuationTurn = {
@@ -373,7 +373,7 @@ test("Model-switch controller resumes a local run in the exact Telegram menu tar
     replyToMessageId: 9,
     target: { chatId: 7, threadId: 11 },
   };
-  const controller = createTelegramModelSwitchController<
+  const controller = createBaleModelSwitchController<
     object,
     { model: { provider: string; id: string } }
   >({
@@ -449,7 +449,7 @@ test("Model-switch controller resumes a local run in the exact Telegram menu tar
 test("Model-switch controller: restart-now supersedes a switch staged behind a running tool", () => {
   const events: string[] = [];
   let activeToolExecutions = 1;
-  const controller = createTelegramModelSwitchController<object, SwitchSelection>({
+  const controller = createBaleModelSwitchController<object, SwitchSelection>({
     isIdle: () => false,
     getActiveTurn: () => createModelTestTurn({ replyToMessageId: 5 }),
     getAbortHandler: () => () => events.push("abort"),
@@ -471,7 +471,7 @@ test("Model-switch controller preserves the outer abort handler across synchrono
   const events: string[] = [];
   const outer = { owner: "outer" };
   const nested = { owner: "nested" };
-  const controller = createTelegramModelSwitchController<object, SwitchSelection>({
+  const controller = createBaleModelSwitchController<object, SwitchSelection>({
     isIdle: () => false,
     getActiveTurn: () => createModelTestTurn(),
     getAbortHandler: () => () => events.push("abort"),
@@ -489,10 +489,10 @@ test("Model-switch controller preserves the outer abort handler across synchrono
 });
 
 test("Model-switch controller runtime binds continuation queue construction", () => {
-  const appended: PendingTelegramTurn[] = [];
+  const appended: PendingBaleTurn[] = [];
   let aborted = false;
   const activeTurn = createModelTestTurn();
-  const controller = createTelegramModelSwitchControllerRuntime({
+  const controller = createBaleModelSwitchControllerRuntime({
     isIdle: () => false,
     getActiveTurn: () => activeTurn,
     getAbortHandler: () => {
@@ -502,7 +502,7 @@ test("Model-switch controller runtime binds continuation queue construction", ()
     },
     hasAbortHandler: () => true,
     getActiveToolExecutions: () => 0,
-    telegramPrefix: "[telegram]",
+    balePrefix: "[bale]",
     allocateItemOrder: () => 5,
     allocateControlOrder: () => 6,
     appendQueuedItem: (item) => {
@@ -521,11 +521,11 @@ test("Model-switch controller runtime binds continuation queue construction", ()
 test("Model-switch producer queues Control before abort without retargeting or spending waiting Steer", () => {
   const steer = createModelTestTurn({ queueOrder: 1, laneOrder: 1, queueLane: "steer", target: { chatId: 7, threadId: 42 } });
   const active = createModelTestTurn({ target: steer.target });
-  const store = Queue.createTelegramQueueStore<string>([steer]);
-  const mutation = Queue.createTelegramQueueMutationController({ ...store, updateStatus() {} });
+  const store = Queue.createBaleQueueStore<string>([steer]);
+  const mutation = Queue.createBaleQueueMutationController({ ...store, updateStatus() {} });
   const before = structuredClone(steer);
   let aborts = 0;
-  const controller = createTelegramModelSwitchControllerRuntime({ isIdle: () => false, getActiveTurn: () => active,
+  const controller = createBaleModelSwitchControllerRuntime({ isIdle: () => false, getActiveTurn: () => active,
     getAbortHandler: () => () => {
       aborts++;
       assert.equal(store.getQueuedItems()[0]!.queueLane, "control", "Continuation publication precedes abort");
@@ -539,17 +539,17 @@ test("Model-switch producer queues Control before abort without retargeting or s
   assert.equal(continuation.queueLane, "control"); assert.deepEqual(continuation.sourceMessageIds, []);
   assert.deepEqual(continuation.target, steer.target);
   assert.deepEqual(steer, before, "A model change adds no task affinity, source rewrite or attempt marker to waiting Steer");
-  assert.deepEqual(Queue.planTelegramSteerPacket(store.getQueuedItems(), { blocked: false, isItemReady: () => true }), { kind: "none" });
-  const started = Queue.consumeDispatchedTelegramPrompt(store.getQueuedItems(), true);
+  assert.deepEqual(Queue.planBaleSteerPacket(store.getQueuedItems(), { blocked: false, isItemReady: () => true }), { kind: "none" });
+  const started = Queue.consumeDispatchedBalePrompt(store.getQueuedItems(), true);
   assert.equal(started.activeTurn, continuation);
-  const packet = Queue.planTelegramSteerPacket(started.remainingItems, { blocked: false, isItemReady: () => true });
+  const packet = Queue.planBaleSteerPacket(started.remainingItems, { blocked: false, isItemReady: () => true });
   assert.equal(packet.kind, "packet");
   if (packet.kind === "packet") assert.equal(packet.items[0], steer, "Same-session continuation preserves later Steer eligibility");
 });
 
 test("Model-switch continuation turn stays control-lane and resume-oriented", () => {
   const createContinuationTurn =
-    createTelegramModelSwitchContinuationTurnBuilder({
+    createBaleModelSwitchContinuationTurnBuilder({
       allocateItemOrder: () => 5,
       allocateControlOrder: () => 6,
     });
@@ -560,10 +560,10 @@ test("Model-switch continuation turn stays control-lane and resume-oriented", ()
   assert.equal(builtTurn.queueOrder, 5);
   assert.equal(builtTurn.laneOrder, 6);
   const sourceTarget = { chatId: 1, threadId: 42 };
-  const turn = buildTelegramModelSwitchContinuationTurn({
+  const turn = buildBaleModelSwitchContinuationTurn({
     turn: { chatId: 1, replyToMessageId: 2, target: sourceTarget },
     selection: createModelTestSelection(createModelTestModel(), "high"),
-    telegramPrefix: "[telegram]",
+    balePrefix: "[bale]",
     queueOrder: 3,
     laneOrder: 4,
   });
@@ -589,8 +589,8 @@ test("Model-switch continuation turn stays control-lane and resume-oriented", ()
 });
 
 test("Model-switch continuation queue runtime builds and appends control-lane turns", () => {
-  const appended: PendingTelegramTurn[] = [];
-  const queueContinuation = createTelegramModelSwitchContinuationQueueRuntime({
+  const appended: PendingBaleTurn[] = [];
+  const queueContinuation = createBaleModelSwitchContinuationQueueRuntime({
     allocateItemOrder: () => 3,
     allocateControlOrder: () => 4,
     appendQueuedItem: (item) => {
@@ -607,14 +607,14 @@ test("Model-switch continuation queue runtime builds and appends control-lane tu
   assert.equal(appended[0]?.queueLane, "control");
   assert.match(
     String((appended[0]?.content[0] as { text?: string } | undefined)?.text),
-    /^\[telegram\] Continue/,
+    /^\[bale\] Continue/,
   );
 });
 
 test("Model-switch continuation queue creates and appends continuation turns", () => {
-  const appended: Array<{ item: PendingTelegramTurn; ctx: { id: string } }> =
+  const appended: Array<{ item: PendingBaleTurn; ctx: { id: string } }> =
     [];
-  const queueContinuation = createTelegramModelSwitchContinuationQueue({
+  const queueContinuation = createBaleModelSwitchContinuationQueue({
     createContinuationTurn: ({ turn, selection }) => ({
       ...turn,
       kind: "prompt" as const,
@@ -641,10 +641,10 @@ test("Model-switch continuation queue creates and appends continuation turns", (
 
 test("Continuation prompt keeps scope, model, resume instruction and optional thinking in one compact line", () => {
   for (const thinking of [undefined, "off", "high"] as const) {
-    const text = buildTelegramModelSwitchContinuationText(
-      "[telegram]", createModelTestModel(), thinking,
+    const text = buildBaleModelSwitchContinuationText(
+      "[bale]", createModelTestModel(), thinking,
     );
-    assert.equal(text, `[telegram] Continue from the last unfinished step. Model: openai/gpt-5${
+    assert.equal(text, `[bale] Continue from the last unfinished step. Model: openai/gpt-5${
       thinking ? `; thinking: ${thinking}` : ""
     }.`);
   }

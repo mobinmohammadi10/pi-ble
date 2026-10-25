@@ -1,67 +1,67 @@
 /**
- * Telegram bus local transport boundary
+ * Bale bus local transport boundary
  * Zones: multi-instance bus, IPC transport, Windows named pipes, Unix sockets
  * Owns endpoint derivation, transport-kind detection, retry/error classification, and small timing policy.
  */
-export type TelegramBusEndpointLayout = "consolidated";
-export declare const TELEGRAM_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES = 80;
-export type TelegramBusTransportKind = "pipe" | "socket";
-export type TelegramBusTransportEventRecorder = (phase: string, details: Record<string, unknown>) => void;
-export type TelegramBusTransportEndpointDiagnostics = Record<string, unknown> & {
+export type BaleBusEndpointLayout = "consolidated";
+export declare const BALE_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES = 80;
+export type BaleBusTransportKind = "pipe" | "socket";
+export type BaleBusTransportEventRecorder = (phase: string, details: Record<string, unknown>) => void;
+export type BaleBusTransportEndpointDiagnostics = Record<string, unknown> & {
     endpoint: string;
-    transport: TelegramBusTransportKind;
+    transport: BaleBusTransportKind;
 };
-export interface TelegramBusTransportRetryPolicy {
+export interface BaleBusTransportRetryPolicy {
     attempts: number;
     delayMs: number;
 }
-export interface TelegramBusTransportRetryPolicyOverrides {
+export interface BaleBusTransportRetryPolicyOverrides {
     attempts?: number;
     delayMs?: number;
 }
-export type TelegramBusTransportOperation = "registration" | "operation";
-export declare const TELEGRAM_BUS_REGISTRATION_RETRY: TelegramBusTransportRetryPolicy;
-export declare function getTelegramBusPipePath(input: {
+export type BaleBusTransportOperation = "registration" | "operation";
+export declare const BALE_BUS_REGISTRATION_RETRY: BaleBusTransportRetryPolicy;
+export declare function getBaleBusPipePath(input: {
     agentDir: string;
     scope: string;
 }): string;
-export declare function isTelegramBusPipePath(endpoint: string): boolean;
-export declare function getTelegramBusTransportKind(endpoint: string): TelegramBusTransportKind;
-export declare function getTelegramBusEndpointDiagnostics(endpoint: string): TelegramBusTransportEndpointDiagnostics;
-export declare function getTelegramBusTransportRetryPolicy(input: {
+export declare function isBaleBusPipePath(endpoint: string): boolean;
+export declare function getBaleBusTransportKind(endpoint: string): BaleBusTransportKind;
+export declare function getBaleBusEndpointDiagnostics(endpoint: string): BaleBusTransportEndpointDiagnostics;
+export declare function getBaleBusTransportRetryPolicy(input: {
     endpoint: string;
-    operation: TelegramBusTransportOperation;
-    overrides?: TelegramBusTransportRetryPolicyOverrides;
-}): TelegramBusTransportRetryPolicy | undefined;
-export declare function getTelegramBusLeaderEndpoint(input: {
+    operation: BaleBusTransportOperation;
+    overrides?: BaleBusTransportRetryPolicyOverrides;
+}): BaleBusTransportRetryPolicy | undefined;
+export declare function getBaleBusLeaderEndpoint(input: {
     agentDir: string;
     platform: NodeJS.Platform | string;
     profileName?: string;
-    layout?: TelegramBusEndpointLayout;
+    layout?: BaleBusEndpointLayout;
 }): string;
-export declare function getTelegramBusFollowerEndpoint(input: {
+export declare function getBaleBusFollowerEndpoint(input: {
     agentDir: string;
     platform: NodeJS.Platform | string;
     instanceId: string;
     profileName?: string;
-    layout?: TelegramBusEndpointLayout;
+    layout?: BaleBusEndpointLayout;
 }): string;
-export interface TelegramBusTransportErrorInfo {
+export interface BaleBusTransportErrorInfo {
     message: string;
     code?: string;
     syscall?: string;
     kind: "connect" | "timeout" | "auth" | "protocol" | "unknown";
     retryable: boolean;
 }
-export declare function classifyTelegramBusTransportError(error: unknown): TelegramBusTransportErrorInfo;
-export declare function isRetryableTelegramBusTransportError(error: unknown): boolean;
-export declare function createTelegramBusTransportTimeoutError(message: string): NodeJS.ErrnoException;
-export declare function delayTelegramBusTransportRetry(ms: number): Promise<void>;
-export interface TelegramBusTransportProbeResult extends TelegramBusTransportEndpointDiagnostics {
+export declare function classifyBaleBusTransportError(error: unknown): BaleBusTransportErrorInfo;
+export declare function isRetryableBaleBusTransportError(error: unknown): boolean;
+export declare function createBaleBusTransportTimeoutError(message: string): NodeJS.ErrnoException;
+export declare function delayBaleBusTransportRetry(ms: number): Promise<void>;
+export interface BaleBusTransportProbeResult extends BaleBusTransportEndpointDiagnostics {
     reachable: boolean;
-    error?: TelegramBusTransportErrorInfo;
+    error?: BaleBusTransportErrorInfo;
 }
-export declare function probeTelegramBusEndpoint(input: {
+export declare function probeBaleBusEndpoint(input: {
     endpoint: string;
     timeoutMs?: number;
-}): Promise<TelegramBusTransportProbeResult>;
+}): Promise<BaleBusTransportProbeResult>;

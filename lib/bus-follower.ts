@@ -1,146 +1,146 @@
 /**
- * Telegram bus follower runtime
+ * Bale bus follower runtime
  * Zones: multi-instance bus, follower lifecycle, manual registration
  * Owns this Pi instance's follower-side bus behavior: manual registration,
  * heartbeat, forwarded-update receiving, and follower-routed API calls.
- * It must not spawn Pi processes or create hidden Telegram-originated instances.
+ * It must not spawn Pi processes or create hidden Bale-originated instances.
  */
 
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
-import type { TelegramPreparedHeldCommand } from "./commands.ts";
+import type { BalePreparedHeldCommand } from "./commands.ts";
 import type {
-  TelegramWorkspaceRestoreExecutor,
-  TelegramWorkspaceRestoreIntent,
+  BaleWorkspaceRestoreExecutor,
+  BaleWorkspaceRestoreIntent,
 } from "./threads.ts";
 import type {
-  TelegramLiveInputPreparation,
-  TelegramLiveSourceCompletionReadiness,
-  TelegramUpdateAdmissionLifecycleRuntime,
+  BaleLiveInputPreparation,
+  BaleLiveSourceCompletionReadiness,
+  BaleUpdateAdmissionLifecycleRuntime,
 } from "./updates.ts";
 
 import {
-  getTelegramBusTransportRetryPolicy,
-  TELEGRAM_BUS_REGISTRATION_RETRY,
+  getBaleBusTransportRetryPolicy,
+  BALE_BUS_REGISTRATION_RETRY,
 } from "./bus-transport.ts";
 import {
-  createTelegramBusFollowerDeliveryIdentity,
-  createTelegramBusForeignOwnedUpdateForwarder,
-  createTelegramBusLocalServer,
-  createTelegramBusRequestIdFactory,
+  createBaleBusFollowerDeliveryIdentity,
+  createBaleBusForeignOwnedUpdateForwarder,
+  createBaleBusLocalServer,
+  createBaleBusRequestIdFactory,
   createUnauthorizedBusAck,
-  rejectTelegramBusRequest,
-  getTelegramBusProtocolCompatibility,
-  getTelegramBusSocketPath,
-  hasTelegramBusCapability,
-  hasTelegramBusSteerQueueHandoffCapability,
-  isTelegramBusEnvelopeAuthorized,
-  parseTelegramBusEnvelope,
-  resolveTelegramBusSocketPath,
-  sendTelegramBusLocalEnvelope,
-  TELEGRAM_BUS_CAPABILITY_DIRECTORY_DISPLAY_FORMAT,
-  TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY,
-  TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SAVE,
-  TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE,
-  TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION,
-  TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
-  TELEGRAM_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
-  TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE,
-  TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE,
-  TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
-  TELEGRAM_BUS_HELD_COMMAND_CAPABILITIES,
-  getTelegramBusHeldCommandCapabilities,
-  TELEGRAM_BUS_LIVE_REBIND_CAPABILITIES,
-  TelegramBusLocalAuthorityError,
-  type TelegramBusAgentMessage,
-  type TelegramBusAgentTargetSelector,
-  type TelegramBusEnvelope,
-  type TelegramBusFollowerQueueHandoffOffer,
-  type TelegramBusForwardOwnership,
-  type TelegramBusLiveRebindApplyObservation,
-  type TelegramBusLiveRebindCommandObservation,
-  type TelegramBusLiveRebindSaveObservation,
-  type TelegramBusLiveRebindSettlementObservation,
-  type TelegramBusLiveRebindWorkObservation,
-  type TelegramBusLiveRebindWorkState,
-  type TelegramBusProtocolIdentity,
-  type TelegramBusSelectedMenuDeliveryObservation,
-  type TelegramBusSelectedMenuTextEffect,
-  type TelegramBusSocketPathSource,
-  type TelegramBusWorkspaceRestoreObservation,
-  TELEGRAM_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE,
+  rejectBaleBusRequest,
+  getBaleBusProtocolCompatibility,
+  getBaleBusSocketPath,
+  hasBaleBusCapability,
+  hasBaleBusSteerQueueHandoffCapability,
+  isBaleBusEnvelopeAuthorized,
+  parseBaleBusEnvelope,
+  resolveBaleBusSocketPath,
+  sendBaleBusLocalEnvelope,
+  BALE_BUS_CAPABILITY_DIRECTORY_DISPLAY_FORMAT,
+  BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY,
+  BALE_BUS_CAPABILITY_LIVE_REBIND_SAVE,
+  BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE,
+  BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION,
+  BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
+  BALE_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
+  BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE,
+  BALE_BUS_CAPABILITY_WORKSPACE_RESTORE,
+  BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
+  BALE_BUS_HELD_COMMAND_CAPABILITIES,
+  getBaleBusHeldCommandCapabilities,
+  BALE_BUS_LIVE_REBIND_CAPABILITIES,
+  BaleBusLocalAuthorityError,
+  type BaleBusAgentMessage,
+  type BaleBusAgentTargetSelector,
+  type BaleBusEnvelope,
+  type BaleBusFollowerQueueHandoffOffer,
+  type BaleBusForwardOwnership,
+  type BaleBusLiveRebindApplyObservation,
+  type BaleBusLiveRebindCommandObservation,
+  type BaleBusLiveRebindSaveObservation,
+  type BaleBusLiveRebindSettlementObservation,
+  type BaleBusLiveRebindWorkObservation,
+  type BaleBusLiveRebindWorkState,
+  type BaleBusProtocolIdentity,
+  type BaleBusSelectedMenuDeliveryObservation,
+  type BaleBusSelectedMenuTextEffect,
+  type BaleBusSocketPathSource,
+  type BaleBusWorkspaceRestoreObservation,
+  BALE_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE,
 } from "./bus.ts";
 import type {
-  TelegramConfigStore,
-  TelegramThreadDisplayMode,
+  BaleConfigStore,
+  BaleThreadDisplayMode,
 } from "./config.ts";
 import {
-  parseTelegramUpdateJournalQueueOwner,
-  type TelegramUpdateJournalStoreOptions,
+  parseBaleUpdateJournalQueueOwner,
+  type BaleUpdateJournalStoreOptions,
 } from "./journal.ts";
 import {
-  TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS,
-  type TelegramLockEntry,
-  type TelegramLockState,
+  BALE_BUS_LEADER_STALE_HEARTBEAT_MS,
+  type BaleLockEntry,
+  type BaleLockState,
 } from "./locks.ts";
 import * as Machine from "./machine.ts";
 import { isPiStaleContextError } from "./pi.ts";
-import type { TelegramQueueHandoffStageResult } from "./queue.ts";
+import type { BaleQueueHandoffStageResult } from "./queue.ts";
 import {
-  parseTelegramTarget as parseTarget,
-  type TelegramTarget,
+  parseBaleTarget as parseTarget,
+  type BaleTarget,
 } from "./target.ts";
 import {
-  isTelegramApiMethodRetrySafe,
-  assertTelegramApiCallAuthority,
-  TelegramApiAuthorityError,
-  TelegramApiCommitUnknownError,
-  TelegramApiFollowerNotAllowedError,
-  TelegramApiStaleTargetError,
-  type TelegramApiCallOptions,
-} from "./telegram-api.ts";
+  isBaleApiMethodRetrySafe,
+  assertBaleApiCallAuthority,
+  BaleApiAuthorityError,
+  BaleApiCommitUnknownError,
+  BaleApiFollowerNotAllowedError,
+  BaleApiStaleTargetError,
+  type BaleApiCallOptions,
+} from "./bale-api.ts";
 import * as Threads from "./threads.ts";
 import { isWireRecord as isRecord } from "./wire.ts";
 import {
-  createTelegramWorkspaceAdmissionOperationId,
-  runWithTelegramWorkspaceAdmissionsAsync,
-  type TelegramWorkspaceAdmissionLedger,
+  createBaleWorkspaceAdmissionOperationId,
+  runWithBaleWorkspaceAdmissionsAsync,
+  type BaleWorkspaceAdmissionLedger,
 } from "./workspace-admission.ts";
 import * as WorkspaceIdentity from "./workspace-identity.ts";
 
-const TELEGRAM_BUS_FOLLOWER_PROMOTION_GRACE_MS = 2_500;
-const TELEGRAM_FOLLOWER_SESSION_HANDOFF_TTL_MS = 30_000;
-const TELEGRAM_BUS_FOLLOWER_CLIENT_TIMEOUT_MS = 30_000;
-const TELEGRAM_BUS_FOLLOWER_API_SLOW_CALL_MS = 1_500;
-const TELEGRAM_BUS_FOLLOWER_REGISTRATION_WAIT_MS = 30_000;
-export const TELEGRAM_BUS_FOLLOWER_HEARTBEAT_TIMEOUT_MS =
-  TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS;
-const TELEGRAM_BUS_FOLLOWER_REGISTRATION_RETRY_ATTEMPTS =
-  TELEGRAM_BUS_REGISTRATION_RETRY.attempts;
-const TELEGRAM_BUS_FOLLOWER_REGISTRATION_RETRY_DELAY_MS =
-  TELEGRAM_BUS_REGISTRATION_RETRY.delayMs;
+const BALE_BUS_FOLLOWER_PROMOTION_GRACE_MS = 2_500;
+const BALE_FOLLOWER_SESSION_HANDOFF_TTL_MS = 30_000;
+const BALE_BUS_FOLLOWER_CLIENT_TIMEOUT_MS = 30_000;
+const BALE_BUS_FOLLOWER_API_SLOW_CALL_MS = 1_500;
+const BALE_BUS_FOLLOWER_REGISTRATION_WAIT_MS = 30_000;
+export const BALE_BUS_FOLLOWER_HEARTBEAT_TIMEOUT_MS =
+  BALE_BUS_LEADER_STALE_HEARTBEAT_MS;
+const BALE_BUS_FOLLOWER_REGISTRATION_RETRY_ATTEMPTS =
+  BALE_BUS_REGISTRATION_RETRY.attempts;
+const BALE_BUS_FOLLOWER_REGISTRATION_RETRY_DELAY_MS =
+  BALE_BUS_REGISTRATION_RETRY.delayMs;
 
-const TELEGRAM_FOLLOWER_SESSION_HANDOFF_KEY =
-  "__piTelegramFollowerSessionHandoff";
+const BALE_FOLLOWER_SESSION_HANDOFF_KEY =
+  "__piBaleFollowerSessionHandoff";
 
-export interface TelegramFollowerSessionHandoff {
+export interface BaleFollowerSessionHandoff {
   pid: number;
   instanceId: string;
   createdAtMs: number;
-  target: TelegramTarget;
+  target: BaleTarget;
   slot?: string;
   threadName?: string;
 }
 
-export function getTelegramFollowerSessionHandoff():
-  TelegramFollowerSessionHandoff | undefined {
+export function getBaleFollowerSessionHandoff():
+  BaleFollowerSessionHandoff | undefined {
   const value = (globalThis as Record<string, unknown>)[
-    TELEGRAM_FOLLOWER_SESSION_HANDOFF_KEY
+    BALE_FOLLOWER_SESSION_HANDOFF_KEY
   ];
   if (!value || typeof value !== "object") return undefined;
-  const handoff = value as Partial<TelegramFollowerSessionHandoff>;
+  const handoff = value as Partial<BaleFollowerSessionHandoff>;
   if (
     typeof handoff.pid !== "number" ||
     typeof handoff.instanceId !== "string" ||
@@ -151,34 +151,34 @@ export function getTelegramFollowerSessionHandoff():
   ) {
     return undefined;
   }
-  return handoff as TelegramFollowerSessionHandoff;
+  return handoff as BaleFollowerSessionHandoff;
 }
 
-export function setTelegramFollowerSessionHandoff(
-  handoff: TelegramFollowerSessionHandoff | undefined,
+export function setBaleFollowerSessionHandoff(
+  handoff: BaleFollowerSessionHandoff | undefined,
 ): void {
   const store = globalThis as Record<string, unknown>;
-  if (!handoff) delete store[TELEGRAM_FOLLOWER_SESSION_HANDOFF_KEY];
-  else store[TELEGRAM_FOLLOWER_SESSION_HANDOFF_KEY] = handoff;
+  if (!handoff) delete store[BALE_FOLLOWER_SESSION_HANDOFF_KEY];
+  else store[BALE_FOLLOWER_SESSION_HANDOFF_KEY] = handoff;
 }
 
-function isTelegramFollowerSessionHandoffFresh(
-  handoff: TelegramFollowerSessionHandoff | undefined,
+function isBaleFollowerSessionHandoffFresh(
+  handoff: BaleFollowerSessionHandoff | undefined,
   options: { pid?: number; nowMs?: number; ttlMs?: number } = {},
-): handoff is TelegramFollowerSessionHandoff {
+): handoff is BaleFollowerSessionHandoff {
   if (!handoff) return false;
   const pid = options.pid ?? process.pid;
   const nowMs = options.nowMs ?? Date.now();
-  const ttlMs = options.ttlMs ?? TELEGRAM_FOLLOWER_SESSION_HANDOFF_TTL_MS;
+  const ttlMs = options.ttlMs ?? BALE_FOLLOWER_SESSION_HANDOFF_TTL_MS;
   return handoff.pid === pid && nowMs - handoff.createdAtMs <= ttlMs;
 }
 
-export interface TelegramBusFollowerRegistrationRuntime<TContext> {
+export interface BaleBusFollowerRegistrationRuntime<TContext> {
   registerWithLeader: (
     ctx: TContext,
     leader: { busSocketPath?: string; busSecret?: string },
     options?: {
-      target?: TelegramTarget;
+      target?: BaleTarget;
       previousInstanceId?: string;
       restoreWorkspace?: boolean;
       recoverConnection?: boolean;
@@ -187,30 +187,30 @@ export interface TelegramBusFollowerRegistrationRuntime<TContext> {
   setContext: (ctx: TContext) => void | Promise<void>;
   disconnectFromLeader?: () => Promise<boolean>;
   renameThread?: (
-    target: TelegramTarget & { threadId: number },
+    target: BaleTarget & { threadId: number },
     threadName: string,
   ) => Promise<string>;
   resetThreadName?: (
-    target: TelegramTarget & { threadId: number },
+    target: BaleTarget & { threadId: number },
   ) => Promise<string>;
-  setThreadDisplayMode?: (mode: TelegramThreadDisplayMode) => Promise<void>;
+  setThreadDisplayMode?: (mode: BaleThreadDisplayMode) => Promise<void>;
   /** Leader-mediated durable publication or successor claim; true only after exact commit. */
   requestSessionReplacement?: (
     operation: "publish" | "settle",
-    intent: Threads.TelegramSessionReplacementIntent,
+    intent: Threads.BaleSessionReplacementIntent,
   ) => Promise<boolean>;
   stop: () => void;
 }
 
-export interface TelegramBusFollowerSessionReplacementSuspenderDeps {
+export interface BaleBusFollowerSessionReplacementSuspenderDeps {
   registrationState: Pick<
-    TelegramBusFollowerRegistrationState,
+    BaleBusFollowerRegistrationState,
     "isRegistered" | "getTarget" | "getSlot" | "getThreadName"
   >;
   instanceId: string;
   suspendPolling: () => Promise<void>;
   isLeader?: () => boolean;
-  getLeaderBinding?: () => TelegramBusFollowerPromotedBinding | undefined;
+  getLeaderBinding?: () => BaleBusFollowerPromotedBinding | undefined;
   getActiveContext?: () => { cwd?: string } | undefined;
   getActiveProfileName?: () => string | undefined;
   recordRuntimeEvent: (
@@ -222,13 +222,13 @@ export interface TelegramBusFollowerSessionReplacementSuspenderDeps {
   getPid?: () => number;
 }
 
-export interface TelegramBusFollowerSessionRefreshHookDeps<TContext> {
-  registrationState: Pick<TelegramBusFollowerRegistrationState, "isRegistered">;
+export interface BaleBusFollowerSessionRefreshHookDeps<TContext> {
+  registrationState: Pick<BaleBusFollowerRegistrationState, "isRegistered">;
   registrationRuntime: Pick<
-    TelegramBusFollowerRegistrationRuntime<TContext>,
+    BaleBusFollowerRegistrationRuntime<TContext>,
     "registerWithLeader" | "setContext"
   >;
-  getLeaderState: () => TelegramLockState;
+  getLeaderState: () => BaleLockState;
   isSessionActive?: (ctx: TContext) => boolean;
   updateStatus: (ctx: TContext) => void;
   recordRuntimeEvent: (
@@ -238,20 +238,20 @@ export interface TelegramBusFollowerSessionRefreshHookDeps<TContext> {
   ) => void;
 }
 
-export type TelegramBusFollowerControlLifecyclePhase = "electing";
+export type BaleBusFollowerControlLifecyclePhase = "electing";
 
-export interface TelegramBusFollowerControlState {
+export interface BaleBusFollowerControlState {
   getActiveAuthSecret: () => string | undefined;
   setActiveAuthSecret: (secret: string | undefined) => void;
-  getLifecyclePhase: () => TelegramBusFollowerControlLifecyclePhase | undefined;
+  getLifecyclePhase: () => BaleBusFollowerControlLifecyclePhase | undefined;
   setLifecyclePhase: (
-    phase: TelegramBusFollowerControlLifecyclePhase | undefined,
+    phase: BaleBusFollowerControlLifecyclePhase | undefined,
   ) => void;
 }
 
-export interface TelegramBusFollowerRegistrationState {
+export interface BaleBusFollowerRegistrationState {
   isRegistered: () => boolean;
-  getTarget: () => TelegramTarget | undefined;
+  getTarget: () => BaleTarget | undefined;
   getSlot: () => string | undefined;
   getThreadName: () => string | undefined;
   getDisplayTitle: () => string | undefined;
@@ -262,37 +262,37 @@ export interface TelegramBusFollowerRegistrationState {
   beginRecovery: () => number;
   cancelRecovery: () => void;
   waitForGeneration: (timeoutMs?: number) => Promise<string | undefined>;
-  getLeaderProtocol: () => TelegramBusProtocolIdentity | undefined;
+  getLeaderProtocol: () => BaleBusProtocolIdentity | undefined;
   getEligibleElectionSlots: () => readonly string[];
   setEligibleElectionSlots: (slots: readonly string[]) => void;
   setRegistered: (
     registered: boolean,
-    target?: TelegramTarget,
+    target?: BaleTarget,
     metadata?: {
       slot?: string;
       threadName?: string;
       displayTitle?: string;
       generation?: string;
       sessionId?: string;
-      leaderProtocol?: TelegramBusProtocolIdentity;
+      leaderProtocol?: BaleBusProtocolIdentity;
     },
   ) => void;
 }
 
-export interface TelegramBusForwardedUpdateReceiverRuntime {
+export interface BaleBusForwardedUpdateReceiverRuntime {
   start: () => Promise<void>;
   stop: () => Promise<void>;
 }
 
-export interface TelegramBusFollowerDurableAdmissionResult {
+export interface BaleBusFollowerDurableAdmissionResult {
   deliveryId: string;
   sourceUpdateId: number;
 }
 
-export interface TelegramBusFollowerDurableAdmissionPort<TContext> {
+export interface BaleBusFollowerDurableAdmissionPort<TContext> {
   admit: (
     envelope: Extract<
-      TelegramBusEnvelope,
+      BaleBusEnvelope,
       {
         kind:
           | "leader.forwardCallback"
@@ -303,11 +303,11 @@ export interface TelegramBusFollowerDurableAdmissionPort<TContext> {
       }
     >,
     ctx: TContext,
-  ) => Promise<TelegramBusFollowerDurableAdmissionResult>;
+  ) => Promise<BaleBusFollowerDurableAdmissionResult>;
 }
 
-export interface TelegramBusFollowerClientRuntimeDeps<TMessage = unknown> {
-  socketPath: TelegramBusSocketPathSource;
+export interface BaleBusFollowerClientRuntimeDeps<TMessage = unknown> {
+  socketPath: BaleBusSocketPathSource;
   instanceId: string;
   getApiAuthSecret?: () => string | undefined;
   getForwardingAuthSecret?: () => string | undefined;
@@ -319,7 +319,7 @@ export interface TelegramBusFollowerClientRuntimeDeps<TMessage = unknown> {
     message: TMessage,
   ) => "comment" | "forward" | undefined;
   validateForwardOwnership?: (
-    ownership: TelegramBusForwardOwnership,
+    ownership: BaleBusForwardOwnership,
   ) => boolean;
   recordRuntimeEvent?: (
     category: string,
@@ -330,21 +330,21 @@ export interface TelegramBusFollowerClientRuntimeDeps<TMessage = unknown> {
 }
 
 /** Structural port for run-collapsing diagnostics, implemented by the logging domain. */
-export interface TelegramFailureRunLogPort {
+export interface BaleFailureRunLogPort {
   record: (error: unknown, details?: Record<string, unknown>) => boolean;
-  settled: () => TelegramFailureRunSummaryPort | undefined;
+  settled: () => BaleFailureRunSummaryPort | undefined;
   reset: () => void;
 }
 
-export interface TelegramFailureRunSummaryPort {
+export interface BaleFailureRunSummaryPort {
   signature: string;
   failedAttempts: number;
   suppressedFailures: number;
   failedForMs: number;
 }
 
-export interface TelegramBusFollowerApiCallerDeps {
-  socketPath: TelegramBusSocketPathSource;
+export interface BaleBusFollowerApiCallerDeps {
+  socketPath: BaleBusSocketPathSource;
   instanceId: string;
   createRequestId: () => string;
   getAuthSecret?: () => string | undefined;
@@ -363,17 +363,17 @@ export interface TelegramBusFollowerApiCallerDeps {
   slowCallMs?: number;
 }
 
-export interface TelegramBusFollowerRegistrationRuntimeDeps<
+export interface BaleBusFollowerRegistrationRuntimeDeps<
   TContext extends { cwd?: string },
 > {
   /**
    * Collapses one sustained heartbeat failure run. Optional at this unit boundary, where an absent port records
    * every failure; the runtime assembly requires it so production always supplies the logging domain's owner.
    */
-  failureLog?: TelegramFailureRunLogPort;
+  failureLog?: BaleFailureRunLogPort;
   instanceId: string;
   createRequestId: () => string;
-  protocolIdentity: TelegramBusProtocolIdentity;
+  protocolIdentity: BaleBusProtocolIdentity;
   getLeaderAuthSecret?: (leader: { busSecret?: string }) => string | undefined;
   setActiveAuthSecret?: (secret: string | undefined) => void;
   followerBusSocketPath?: string;
@@ -381,7 +381,7 @@ export interface TelegramBusFollowerRegistrationRuntimeDeps<
   getLeaderSocketPath?: () => string;
   startReceiving?: () => Promise<void>;
   stopReceiving?: () => Promise<void> | void;
-  registrationState?: TelegramBusFollowerRegistrationState;
+  registrationState?: BaleBusFollowerRegistrationState;
   isContextActive?: (ctx: TContext) => boolean;
   getProfileKey?: (ctx: TContext) => string | undefined;
   getThreadName?: (ctx: TContext) => string | undefined;
@@ -406,34 +406,34 @@ export interface TelegramBusFollowerRegistrationRuntimeDeps<
   onDisplayTitleChanged?: (ctx: TContext) => void;
 }
 
-export function createTelegramManualFollowerProfileKeyResolver(input: {
+export function createBaleManualFollowerProfileKeyResolver(input: {
   getActiveProfileName: () => string | undefined;
   manualFollowerOwnerId: string;
 }): () => string {
   return () =>
-    Threads.getTelegramThreadOwnerKey({
+    Threads.getBaleThreadOwnerKey({
       kind: "manual-follower",
       instanceId: input.manualFollowerOwnerId,
-      telegramProfile: input.getActiveProfileName(),
+      baleProfile: input.getActiveProfileName(),
     });
 }
 
-export interface TelegramBusFollowerElection {
-  expectedOwner?: TelegramLockEntry;
+export interface BaleBusFollowerElection {
+  expectedOwner?: BaleLockEntry;
   /** The expected owner is bus-proven unresponsive; the lock CAS still requires it to be the current owner. */
   unresponsive?: boolean;
 }
 
-export type TelegramBusFollowerPromotionHandler<TContext> = (
+export type BaleBusFollowerPromotionHandler<TContext> = (
   ctx: TContext,
-  binding: TelegramBusFollowerPromotedBinding,
-  election: TelegramBusFollowerElection,
+  binding: BaleBusFollowerPromotedBinding,
+  election: BaleBusFollowerElection,
 ) => Promise<boolean>;
 
-type TelegramBusFollowerWorkspaceAdmissionDeps = {
+type BaleBusFollowerWorkspaceAdmissionDeps = {
   getWorkspaceAdmission?: () =>
     | Pick<
-        TelegramWorkspaceAdmissionLedger,
+        BaleWorkspaceAdmissionLedger,
         "acquireAdmission" | "releaseAdmission"
       >
     | undefined;
@@ -444,19 +444,19 @@ type TelegramBusFollowerWorkspaceAdmissionDeps = {
   ) => void;
 };
 
-function runTelegramBusFollowerWorkspaceMutation<T>(
-  deps: TelegramBusFollowerWorkspaceAdmissionDeps,
+function runBaleBusFollowerWorkspaceMutation<T>(
+  deps: BaleBusFollowerWorkspaceAdmissionDeps,
   operationKind: string,
   operation: () => Promise<T>,
 ): Promise<T> {
   if (!deps.getWorkspaceAdmission) return operation();
   const admission = deps.getWorkspaceAdmission();
   if (!admission) {
-    throw new Error("Telegram Workspace admission authority is unavailable.");
+    throw new Error("Bale Workspace admission authority is unavailable.");
   }
-  return runWithTelegramWorkspaceAdmissionsAsync({
+  return runWithBaleWorkspaceAdmissionsAsync({
     ledger: admission,
-    operationId: createTelegramWorkspaceAdmissionOperationId(),
+    operationId: createBaleWorkspaceAdmissionOperationId(),
     operationKind,
     scopes: [{ kind: "profile" }],
     operation,
@@ -469,16 +469,16 @@ function runTelegramBusFollowerWorkspaceMutation<T>(
   });
 }
 
-export function createTelegramBusFollowerPromotionHandler<
+export function createBaleBusFollowerPromotionHandler<
   TContext extends { cwd: string },
 >(input: {
-  topicTargetStore: Threads.TelegramTopicTargetStore;
+  topicTargetStore: Threads.BaleTopicTargetStore;
   instanceId: string;
   getActiveProfileName: () => string | undefined;
   getSessionId?: (ctx: TContext) => string | undefined;
   startLeader: (
     ctx: TContext,
-    election: TelegramBusFollowerElection,
+    election: BaleBusFollowerElection,
     onAcquired: () => Promise<void>,
   ) => Promise<boolean>;
   recordRuntimeEvent: (
@@ -488,22 +488,22 @@ export function createTelegramBusFollowerPromotionHandler<
   ) => void;
   getNowMs?: () => number;
   getPid?: () => number;
-  getWorkspaceAdmission?: TelegramBusFollowerWorkspaceAdmissionDeps["getWorkspaceAdmission"];
-}): TelegramBusFollowerPromotionHandler<TContext> {
+  getWorkspaceAdmission?: BaleBusFollowerWorkspaceAdmissionDeps["getWorkspaceAdmission"];
+}): BaleBusFollowerPromotionHandler<TContext> {
   return (ctx, binding, election) =>
-    runTelegramBusFollowerWorkspaceMutation(
+    runBaleBusFollowerWorkspaceMutation(
       input,
       "workspace.promote-follower",
       async () => {
-        let promotedRecord: Threads.TelegramTopicTargetRecord | undefined;
+        let promotedRecord: Threads.BaleTopicTargetRecord | undefined;
         const promoted = await input.startLeader(ctx, election, async () => {
-          promotedRecord = await Threads.promoteTelegramFollowerBindingToLeader(
+          promotedRecord = await Threads.promoteBaleFollowerBindingToLeader(
             {
               store: input.topicTargetStore,
               instanceId: input.instanceId,
               cwd: ctx.cwd,
               sessionId: input.getSessionId?.(ctx),
-              telegramProfile: input.getActiveProfileName(),
+              baleProfile: input.getActiveProfileName(),
               target: binding.target,
               slot: binding.slot,
               threadName: binding.threadName,
@@ -511,7 +511,7 @@ export function createTelegramBusFollowerPromotionHandler<
           );
           if (!promotedRecord && typeof binding.target?.threadId === "number") {
             throw new Error(
-              "Telegram follower promotion slot authority is unavailable.",
+              "Bale follower promotion slot authority is unavailable.",
             );
           }
           if (promotedRecord) {
@@ -533,13 +533,13 @@ export function createTelegramBusFollowerPromotionHandler<
           promotedRecord &&
           typeof binding.target?.threadId === "number"
         ) {
-          const profileKey = Threads.getTelegramThreadOwnerKey({
+          const profileKey = Threads.getBaleThreadOwnerKey({
             kind: "leader",
             cwd: ctx.cwd,
             instanceId: input.instanceId,
-            telegramProfile: input.getActiveProfileName(),
+            baleProfile: input.getActiveProfileName(),
           });
-          Threads.setTelegramLeaderSessionHandoff({
+          Threads.setBaleLeaderSessionHandoff({
             pid: input.getPid?.() ?? process.pid,
             instanceId: input.instanceId,
             createdAtMs: input.getNowMs?.() ?? Date.now(),
@@ -568,23 +568,23 @@ export function createTelegramBusFollowerPromotionHandler<
     );
 }
 
-export type TelegramBusFollowerLeaderState =
+export type BaleBusFollowerLeaderState =
   | { kind: "inactive" }
-  | { kind: "active-here"; lock: TelegramBusFollowerLeaderLock }
-  | { kind: "active-elsewhere"; lock: TelegramBusFollowerLeaderLock }
-  | { kind: "stale"; lock: TelegramBusFollowerLeaderLock };
+  | { kind: "active-here"; lock: BaleBusFollowerLeaderLock }
+  | { kind: "active-elsewhere"; lock: BaleBusFollowerLeaderLock }
+  | { kind: "stale"; lock: BaleBusFollowerLeaderLock };
 
-export type TelegramBusFollowerLeaderLock = TelegramLockEntry;
+export type BaleBusFollowerLeaderLock = BaleLockEntry;
 
-export interface TelegramBusFollowerPromotedBinding {
-  target?: TelegramTarget;
+export interface BaleBusFollowerPromotedBinding {
+  target?: BaleTarget;
   slot?: string;
   threadName?: string;
 }
 
-export interface TelegramBusFollowerHeartbeatRecoveryHandlerDeps<TContext> {
+export interface BaleBusFollowerHeartbeatRecoveryHandlerDeps<TContext> {
   registrationState: Pick<
-    TelegramBusFollowerRegistrationState,
+    BaleBusFollowerRegistrationState,
     | "getTarget"
     | "getSlot"
     | "getThreadName"
@@ -592,21 +592,21 @@ export interface TelegramBusFollowerHeartbeatRecoveryHandlerDeps<TContext> {
     | "beginRecovery"
     | "setRegistered"
   >;
-  getRegistrationRuntime: () => TelegramBusFollowerRegistrationRuntime<TContext>;
-  getLeaderState: () => TelegramBusFollowerLeaderState;
+  getRegistrationRuntime: () => BaleBusFollowerRegistrationRuntime<TContext>;
+  getLeaderState: () => BaleBusFollowerLeaderState;
   setLifecyclePhase: (phase: "electing" | undefined) => void;
   updateStatus: (ctx: TContext) => void;
   promoteToLeader: (
     ctx: TContext,
-    binding: TelegramBusFollowerPromotedBinding,
-    election: TelegramBusFollowerElection,
+    binding: BaleBusFollowerPromotedBinding,
+    election: BaleBusFollowerElection,
   ) => Promise<boolean>;
   sleep?: (ms: number) => Promise<void>;
   scheduleRetry?: (retry: () => void, delayMs: number) => void;
   getActiveContext?: () => TContext | undefined;
   promotionGraceMs?: number;
   /** Bus liveness proof for a live-PID leader that no longer answers; replaces the retired file heartbeat. */
-  proveLeaderUnresponsive?: (owner: TelegramLockEntry) => Promise<boolean>;
+  proveLeaderUnresponsive?: (owner: BaleLockEntry) => Promise<boolean>;
   /** Shared bot state says Threaded Mode is off: followers cannot exist, so recovery goes offline instead. */
   isThreadModeDisabled?: () => boolean | Promise<boolean>;
   recordRuntimeEvent: (
@@ -616,66 +616,66 @@ export interface TelegramBusFollowerHeartbeatRecoveryHandlerDeps<TContext> {
   ) => void;
 }
 
-export interface TelegramBusForwardedUpdateReceiverRuntimeDeps<TContext> {
-  socketPath: TelegramBusSocketPathSource;
+export interface BaleBusForwardedUpdateReceiverRuntimeDeps<TContext> {
+  socketPath: BaleBusSocketPathSource;
   instanceId: string;
   getAuthSecret?: () => string | undefined;
   getRegistrationGeneration: () => string | undefined;
   getRecipientBindingKey: () => string | undefined;
   /** Live preparation names the current journal, not the stable forwarding/profile identity. */
   getLiveRebindJournalBindingKey?: () => string | undefined;
-  durableAdmission: TelegramBusFollowerDurableAdmissionPort<TContext>;
-  sourceReferenceAdmission?: TelegramBusFollowerDurableAdmissionPort<TContext>;
+  durableAdmission: BaleBusFollowerDurableAdmissionPort<TContext>;
+  sourceReferenceAdmission?: BaleBusFollowerDurableAdmissionPort<TContext>;
   isSourceReferenceAdmissionEnabled?: () => boolean;
   hasAuthenticatedSourceReferenceTransport?: () => boolean;
   getContext: () => TContext | undefined;
   handleInputCustodyHandoff?: (
     envelope: Extract<
-      TelegramBusEnvelope,
+      BaleBusEnvelope,
       { kind: "leader.offerInputCustodyHandoff" }
     >,
     ctx: TContext,
   ) => Promise<unknown> | unknown;
   handleQueueHandoff?: (
     envelope: Extract<
-      TelegramBusEnvelope,
+      BaleBusEnvelope,
       { kind: "leader.offerQueueHandoff" }
     >,
     ctx: TContext,
   ) =>
-    Promise<TelegramQueueHandoffStageResult> | TelegramQueueHandoffStageResult;
+    Promise<BaleQueueHandoffStageResult> | BaleQueueHandoffStageResult;
   getSessionId?: () => string | undefined;
-  getLeaderProtocol?: () => TelegramBusProtocolIdentity | undefined;
-  getLocalProtocol?: () => TelegramBusProtocolIdentity | undefined;
+  getLeaderProtocol?: () => BaleBusProtocolIdentity | undefined;
+  getLocalProtocol?: () => BaleBusProtocolIdentity | undefined;
   isLiveRebindSaveEnabled?: () => boolean;
   isLiveRebindApplyEnabled?: () => boolean;
   isLiveRebindSettleEnabled?: () => boolean;
   handleLiveRebindSettle?: (
-    envelope: Extract<TelegramBusEnvelope, { kind: "leader.settleLiveRebind" }>,
+    envelope: Extract<BaleBusEnvelope, { kind: "leader.settleLiveRebind" }>,
     ctx: TContext,
     isCurrent: () => boolean,
   ) => Promise<
-    | TelegramBusLiveRebindSettlementObservation
-    | TelegramBusLiveRebindWorkObservation
-    | TelegramBusLiveRebindCommandObservation
+    | BaleBusLiveRebindSettlementObservation
+    | BaleBusLiveRebindWorkObservation
+    | BaleBusLiveRebindCommandObservation
   >;
   handleLiveRebindApply?: (
-    envelope: Extract<TelegramBusEnvelope, { kind: "leader.applyLiveRebind" }>,
+    envelope: Extract<BaleBusEnvelope, { kind: "leader.applyLiveRebind" }>,
     ctx: TContext,
     isCurrent: () => boolean,
-  ) => Promise<TelegramBusLiveRebindApplyObservation>;
+  ) => Promise<BaleBusLiveRebindApplyObservation>;
   /** Availability only; never future recipient activation or a command execution grant. */
   isLiveRebindCommandSetEnabled?: () => boolean;
   handleLiveRebindSave?: (
     envelope: Extract<
-      TelegramBusEnvelope,
+      BaleBusEnvelope,
       { kind: "leader.prepareLiveRebind" }
     >,
     ctx: TContext,
     isCurrent: () => boolean,
   ) =>
-    | TelegramBusLiveRebindSaveObservation
-    | Promise<TelegramBusLiveRebindSaveObservation>;
+    | BaleBusLiveRebindSaveObservation
+    | Promise<BaleBusLiveRebindSaveObservation>;
   isWorkspaceRestoreEnabled?: () => boolean;
   handleWorkspaceRestore?: (
     input: {
@@ -684,7 +684,7 @@ export interface TelegramBusForwardedUpdateReceiverRuntimeDeps<TContext> {
       mode: "apply" | "inspect";
     },
     ctx: TContext,
-  ) => Promise<TelegramBusWorkspaceRestoreObservation>;
+  ) => Promise<BaleBusWorkspaceRestoreObservation>;
   recordRuntimeEvent?: (
     category: string,
     error: unknown,
@@ -692,34 +692,34 @@ export interface TelegramBusForwardedUpdateReceiverRuntimeDeps<TContext> {
   ) => void;
 }
 
-export interface TelegramBusFollowerRuntimeAssembly<TContext> {
-  receiver: TelegramBusForwardedUpdateReceiverRuntime;
-  registration: TelegramBusFollowerRegistrationRuntime<TContext>;
+export interface BaleBusFollowerRuntimeAssembly<TContext> {
+  receiver: BaleBusForwardedUpdateReceiverRuntime;
+  registration: BaleBusFollowerRegistrationRuntime<TContext>;
   getReadySessionId: () => string | undefined;
 }
 
-export interface TelegramBusFollowerRuntimeAssemblyPorts<
+export interface BaleBusFollowerRuntimeAssemblyPorts<
   TContext extends { cwd?: string },
 > {
   instanceId: string;
   /** Collapses one sustained heartbeat failure run; the composition root supplies the logging domain's owner. */
-  failureLog: TelegramFailureRunLogPort;
-  registrationState: TelegramBusFollowerRegistrationState;
+  failureLog: BaleFailureRunLogPort;
+  registrationState: BaleBusFollowerRegistrationState;
   recordRuntimeEvent: (
     category: string,
     error: unknown,
     details?: Record<string, unknown>,
   ) => void;
   receiver: Omit<
-    TelegramBusForwardedUpdateReceiverRuntimeDeps<TContext>,
+    BaleBusForwardedUpdateReceiverRuntimeDeps<TContext>,
     "instanceId" | "recordRuntimeEvent" | "getRegistrationGeneration"
   >;
   recovery: Omit<
-    TelegramBusFollowerHeartbeatRecoveryHandlerDeps<TContext>,
+    BaleBusFollowerHeartbeatRecoveryHandlerDeps<TContext>,
     "getRegistrationRuntime" | "registrationState" | "recordRuntimeEvent"
   >;
   registration: Omit<
-    TelegramBusFollowerRegistrationRuntimeDeps<TContext>,
+    BaleBusFollowerRegistrationRuntimeDeps<TContext>,
     | "startReceiving"
     | "stopReceiving"
     | "onHeartbeatFailure"
@@ -728,15 +728,15 @@ export interface TelegramBusFollowerRuntimeAssemblyPorts<
     | "recordRuntimeEvent"
     | "protocolIdentity"
   > & {
-    protocolIdentity: TelegramBusProtocolIdentity;
+    protocolIdentity: BaleBusProtocolIdentity;
   };
 }
 
-export function createTelegramBusFollowerRuntimeAssembly<
+export function createBaleBusFollowerRuntimeAssembly<
   TContext extends { cwd?: string },
 >(
-  ports: TelegramBusFollowerRuntimeAssemblyPorts<TContext>,
-): TelegramBusFollowerRuntimeAssembly<TContext> {
+  ports: BaleBusFollowerRuntimeAssemblyPorts<TContext>,
+): BaleBusFollowerRuntimeAssembly<TContext> {
   // Binding startup needs registration identity before it can grant inbound authority.
   let readyContext:
     | {
@@ -777,7 +777,7 @@ export function createTelegramBusFollowerRuntimeAssembly<
         ports.registrationState.getSessionId(sessionId) !== sessionId)
     )
       throw new Error(
-        "Telegram follower session change requires acknowledged leader registration and a current canonical context.",
+        "Bale follower session change requires acknowledged leader registration and a current canonical context.",
       );
     // Connect has a command context; inbound work uses the session's canonical object.
     await ports.registration.onRegistered?.(executionContext);
@@ -803,7 +803,7 @@ export function createTelegramBusFollowerRuntimeAssembly<
     registrationState: ports.registrationState,
     recordRuntimeEvent: ports.recordRuntimeEvent,
   };
-  const receiver = createTelegramBusForwardedUpdateReceiverRuntime({
+  const receiver = createBaleBusForwardedUpdateReceiverRuntime({
     ...ports.receiver,
     instanceId: ports.instanceId,
     recordRuntimeEvent: ports.recordRuntimeEvent,
@@ -811,14 +811,14 @@ export function createTelegramBusFollowerRuntimeAssembly<
       return isReadyContext() ? readyContext?.generation : undefined;
     },
   });
-  let registration: TelegramBusFollowerRegistrationRuntime<TContext>;
-  const recovery = createTelegramBusFollowerHeartbeatRecoveryHandler({
+  let registration: BaleBusFollowerRegistrationRuntime<TContext>;
+  const recovery = createBaleBusFollowerHeartbeatRecoveryHandler({
     ...ports.recovery,
     registrationState: ports.registrationState,
     recordRuntimeEvent: ports.recordRuntimeEvent,
     getRegistrationRuntime: () => baseRegistration,
   });
-  registration = createTelegramBusFollowerRegistrationRuntime({
+  registration = createBaleBusFollowerRegistrationRuntime({
     ...ports.registration,
     failureLog: ports.failureLog,
     ...sharedRuntimeDeps,
@@ -859,42 +859,42 @@ export function createTelegramBusFollowerRuntimeAssembly<
   };
 }
 
-export interface TelegramBusFollowerRestoreContext {
-  executor: TelegramWorkspaceRestoreExecutor;
+export interface BaleBusFollowerRestoreContext {
+  executor: BaleWorkspaceRestoreExecutor;
   profileBindingKey: string;
   operatorUserId: number;
   cwd: string;
   sessionId: string;
   generation: string | number;
-  leaderProtocol?: TelegramBusProtocolIdentity;
+  leaderProtocol?: BaleBusProtocolIdentity;
 }
 
 /** Binds Restore to real Pi lifetime and the current authenticated transport owner, not request fields. */
-export function createTelegramBusFollowerRestoreContextGetter<TContext>(deps: {
+export function createBaleBusFollowerRestoreContextGetter<TContext>(deps: {
   isContextCurrent: (ctx: TContext) => boolean;
   getSessionId: (ctx: TContext) => string | undefined;
   getCwd: (ctx: TContext) => string | undefined;
   getGeneration: () => number;
   getProfileBindingKey: () => string | undefined;
   getOperatorUserId: () => number | undefined;
-  getLeaderState: () => TelegramLockState;
+  getLeaderState: () => BaleLockState;
   getAuthenticatedSecret: () => string | undefined;
-  getLeaderProtocol: () => TelegramBusProtocolIdentity | undefined;
+  getLeaderProtocol: () => BaleBusProtocolIdentity | undefined;
   capability?:
-    | typeof TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE
-    | typeof TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY
-    | typeof TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY;
+    | typeof BALE_BUS_CAPABILITY_WORKSPACE_RESTORE
+    | typeof BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY
+    | typeof BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY;
 }) {
-  return (ctx: TContext): TelegramBusFollowerRestoreContext | undefined => {
+  return (ctx: TContext): BaleBusFollowerRestoreContext | undefined => {
     if (!deps.isContextCurrent(ctx)) return undefined;
     const leader = deps.getLeaderState();
     const secret = deps.getAuthenticatedSecret();
     const leaderProtocol = deps.getLeaderProtocol();
     if (
       !leaderProtocol ||
-      !hasTelegramBusCapability(
+      !hasBaleBusCapability(
         leaderProtocol,
-        deps.capability ?? TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE,
+        deps.capability ?? BALE_BUS_CAPABILITY_WORKSPACE_RESTORE,
       )
     )
       return undefined;
@@ -939,31 +939,31 @@ export function createTelegramBusFollowerRestoreContextGetter<TContext>(deps: {
 }
 
 /** Shared canonical/local target owner and scoped live-carrier hooks; caller authenticates transport, no canonical writes or cleanup. */
-export function createTelegramBusFollowerWorkspaceRestoreHandler<
+export function createBaleBusFollowerWorkspaceRestoreHandler<
   TContext,
 >(deps: {
   instanceId: string;
   /** Captures actual Pi lifetime and authenticated leader/profile authority, never request-derived values. */
   getContextAuthority: (
     ctx: TContext,
-  ) => TelegramBusFollowerRestoreContext | undefined;
+  ) => BaleBusFollowerRestoreContext | undefined;
   readRestoreIntent: (
     operationId: string,
     profileBindingKey: string,
-  ) => TelegramWorkspaceRestoreIntent | undefined;
+  ) => BaleWorkspaceRestoreIntent | undefined;
   readLiveRebindIntent?: (
     operationId: string,
     profileBindingKey: string,
-  ) => Threads.TelegramWorkspaceLiveRebindIntent | undefined;
+  ) => Threads.BaleWorkspaceLiveRebindIntent | undefined;
   topicTargetStore: Pick<
-    Threads.TelegramTopicTargetStore,
+    Threads.BaleTopicTargetStore,
     "load" | "withWorkspaceRestoreSnapshot"
   > &
     Partial<
-      Pick<Threads.TelegramTopicTargetStore, "withWorkspaceLiveRebindSnapshot">
+      Pick<Threads.BaleTopicTargetStore, "withWorkspaceLiveRebindSnapshot">
     >;
   registrationState: Pick<
-    TelegramBusFollowerRegistrationState,
+    BaleBusFollowerRegistrationState,
     | "getTarget"
     | "getSlot"
     | "getGeneration"
@@ -971,9 +971,9 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
     | "getLeaderProtocol"
   >;
   getWorkspaceAdmission: NonNullable<
-    TelegramBusFollowerWorkspaceAdmissionDeps["getWorkspaceAdmission"]
+    BaleBusFollowerWorkspaceAdmissionDeps["getWorkspaceAdmission"]
   >;
-  recordRuntimeEvent?: TelegramBusFollowerWorkspaceAdmissionDeps["recordRuntimeEvent"];
+  recordRuntimeEvent?: BaleBusFollowerWorkspaceAdmissionDeps["recordRuntimeEvent"];
 }) {
   const handler = async (
     input: {
@@ -984,10 +984,10 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
         sourceUpdateIds: readonly number[];
         isCurrent(): boolean;
         /** Captured prepared-branch target; equality must precede local apply or release grants. */
-        expectedTarget?: TelegramTarget & { threadId: number };
-        release?: (canRelease: () => boolean, target: TelegramTarget & { threadId: number }) => void;
+        expectedTarget?: BaleTarget & { threadId: number };
+        release?: (canRelease: () => boolean, target: BaleTarget & { threadId: number }) => void;
         observeWork?: (
-          oldTarget: TelegramTarget & { threadId: number },
+          oldTarget: BaleTarget & { threadId: number },
         ) => void;
       };
     },
@@ -1007,7 +1007,7 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
       release = scope && ports!.release?.bind(scope),
       workObserver = scope && ports!.observeWork?.bind(scope);
     const captured = deps.getContextAuthority(ctx);
-    if (!captured) throw new Error("Stale Telegram follower Restore context.");
+    if (!captured) throw new Error("Stale Bale follower Restore context.");
     const snapshotStore = deps.topicTargetStore,
       liveSnapshot = snapshotStore.withWorkspaceLiveRebindSnapshot,
       restoreSnapshot = snapshotStore.withWorkspaceRestoreSnapshot;
@@ -1040,17 +1040,17 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
       throw new Error("Invalid prepared live-rebind target.");
     if (
       (release || workObserver) &&
-      !hasTelegramBusCapability(
+      !hasBaleBusCapability(
         authority.leaderProtocol,
-        TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE,
+        BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE,
       )
     )
       throw new Error("Live-rebind settlement capability is unavailable.");
     if (
       liveCurrent &&
-      !hasTelegramBusCapability(
+      !hasBaleBusCapability(
         authority.leaderProtocol,
-        TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY,
+        BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY,
       )
     )
       throw new Error("Live-rebind apply capability is unavailable.");
@@ -1070,7 +1070,7 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
       !request.registrationGeneration ||
       !["apply", "inspect"].includes(request.mode)
     )
-      throw new Error("Invalid Telegram follower Restore authority.");
+      throw new Error("Invalid Bale follower Restore authority.");
     const assertCurrent = (): void => {
       if (
         !isDeepStrictEqual(deps.getContextAuthority(ctx), authority) ||
@@ -1087,12 +1087,12 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
         deps.registrationState.getGeneration() !==
           request.registrationGeneration
       )
-        throw new Error("Stale Telegram follower Restore authority.");
+        throw new Error("Stale Bale follower Restore authority.");
     };
     assertCurrent();
     if (!deps.getWorkspaceAdmission)
-      throw new Error("Telegram Workspace admission authority is unavailable.");
-    const result = await runTelegramBusFollowerWorkspaceMutation(
+      throw new Error("Bale Workspace admission authority is unavailable.");
+    const result = await runBaleBusFollowerWorkspaceMutation(
       deps,
       "workspace.restore-follower-target",
       async () => {
@@ -1105,7 +1105,7 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
           (liveCurrent
             ? !("kind" in intent) ||
               intent.kind !== "live-rebind" ||
-              (intent.inputRelease !== undefined && !hasTelegramBusCapability(authority.leaderProtocol, TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION)) ||
+              (intent.inputRelease !== undefined && !hasBaleBusCapability(authority.leaderProtocol, BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION)) ||
               !isDeepStrictEqual(
                 [...intent.request.source.updateIds].sort((a, b) => a - b),
                 sourceUpdateIds,
@@ -1129,10 +1129,10 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
           intent.recipient.sessionId !== authority.sessionId ||
           intent.request.binding.sessionId !== authority.sessionId ||
           intent.request.binding.cwd !==
-            WorkspaceIdentity.normalizeTelegramWorkspacePath(authority.cwd)
+            WorkspaceIdentity.normalizeBaleWorkspacePath(authority.cwd)
         )
           throw new Error(
-            "Telegram follower Restore intent does not match this recipient.",
+            "Bale follower Restore intent does not match this recipient.",
           );
         const expected = structuredClone(intent);
         await snapshotStore.load();
@@ -1140,13 +1140,13 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
         const observe = (
           canonical: Readonly<
             Pick<
-              Threads.TelegramTopicTargetFile,
+              Threads.BaleTopicTargetFile,
               "threads" | "workspaceBindings"
             >
           >,
-        ): TelegramBusWorkspaceRestoreObservation => {
+        ): BaleBusWorkspaceRestoreObservation => {
           if (!isDeepStrictEqual(readIntent(), expected))
-            throw new Error("Telegram follower Restore intent changed.");
+            throw new Error("Bale follower Restore intent changed.");
           assertCurrent();
           const { binding, target } = expected.request;
           const bindings = (canonical.workspaceBindings ?? []).filter(
@@ -1178,18 +1178,18 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
             deps.registrationState.getSlot() !== binding.slot
           )
             throw new Error(
-              "Telegram follower Restore canonical binding is not committed.",
+              "Bale follower Restore canonical binding is not committed.",
             );
           const localTarget = deps.registrationState.getTarget();
           const alreadyReady = isDeepStrictEqual(localTarget, target);
           if (!alreadyReady && !isDeepStrictEqual(localTarget, binding.target))
-            throw new Error("Telegram follower Restore local target changed.");
+            throw new Error("Bale follower Restore local target changed.");
           assertCurrent();
           if (!alreadyReady && request.mode === "apply") {
             if (
               expected.phase !== (liveCurrent ? "rebound" : "recipient-issued")
             )
-              throw new Error("Telegram follower Restore readiness regressed.");
+              throw new Error("Bale follower Restore readiness regressed.");
             deps.registrationState.setRegistered(true, target, {
               slot: binding.slot,
               threadName: records[0]?.threadName,
@@ -1204,7 +1204,7 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
             (!isDeepStrictEqual(observedTarget, target) &&
               !isDeepStrictEqual(observedTarget, binding.target))
           )
-            throw new Error("Telegram follower Restore local target changed.");
+            throw new Error("Bale follower Restore local target changed.");
           const ready = isDeepStrictEqual(observedTarget, target);
           assertCurrent();
           return {
@@ -1232,20 +1232,20 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
           } else restoreSnapshot.call(snapshotStore, expected, observer);
           assertCurrent();
         };
-        let result: TelegramBusWorkspaceRestoreObservation | undefined;
+        let result: BaleBusWorkspaceRestoreObservation | undefined;
         withSnapshot((snapshot) => {
           result = observe(snapshot);
         });
         if (!result)
           throw new Error(
-            "Telegram follower Restore observation was not completed.",
+            "Bale follower Restore observation was not completed.",
           );
         if (release || workObserver) {
           if (
             !("kind" in expected) ||
             expected.kind !== "live-rebind" ||
-            (release ? !Threads.isTelegramLiveRebindInputAuthorized(expected)
-              : !(Threads.isTelegramLiveRebindInputAuthorized(expected) || expected.phase === "released" && expected.inputRelease === "held" && !expected.cleanup)) ||
+            (release ? !Threads.isBaleLiveRebindInputAuthorized(expected)
+              : !(Threads.isBaleLiveRebindInputAuthorized(expected) || expected.phase === "released" && expected.inputRelease === "held" && !expected.cleanup)) ||
             !result.ready ||
             request.mode !== "inspect"
           )
@@ -1283,7 +1283,7 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
       deps.registrationState.getSlot() !== result.slot
     )
       throw new Error(
-        "Telegram follower Restore local registration changed after admission release.",
+        "Bale follower Restore local registration changed after admission release.",
       );
     // Work can change while admission releases; sample only after that await under a fresh canonical snapshot.
     sampleWork?.();
@@ -1298,12 +1298,12 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
         registrationGeneration: string;
         sessionId: string;
         sourceUpdateIds: readonly number[];
-        target: TelegramTarget & { threadId: number };
+        target: BaleTarget & { threadId: number };
       },
       ctx: TContext,
     ):
       | Pick<
-          TelegramBusFollowerCommandOwner<TContext>,
+          BaleBusFollowerCommandOwner<TContext>,
           "isCurrent" | "assertRecipientCurrent"
         >
       | undefined {
@@ -1375,10 +1375,10 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
               authority.leaderProtocol,
             ) ||
             ![
-              ...TELEGRAM_BUS_LIVE_REBIND_CAPABILITIES,
-              ...TELEGRAM_BUS_HELD_COMMAND_CAPABILITIES,
+              ...BALE_BUS_LIVE_REBIND_CAPABILITIES,
+              ...BALE_BUS_HELD_COMMAND_CAPABILITIES,
             ].every((cap) =>
-              hasTelegramBusCapability(authority.leaderProtocol, cap),
+              hasBaleBusCapability(authority.leaderProtocol, cap),
             ) ||
             ![oldTarget, expected.target].some((target) =>
               isDeepStrictEqual(state.getTarget(), target),
@@ -1417,7 +1417,7 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
           if (
             !value ||
             value.kind !== "live-rebind" ||
-            !Threads.isTelegramLiveRebindInputAuthorized(value) ||
+            !Threads.isBaleLiveRebindInputAuthorized(value) ||
             value.request.operationId !== expected.operationId ||
             value.recipient.kind !== "follower" ||
             value.recipient.instanceId !== instanceId ||
@@ -1436,7 +1436,7 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
             value.request.owner.slot !== slot ||
             !isDeepStrictEqual(value.request.owner.target, oldTarget) ||
             value.request.binding.cwd !==
-              WorkspaceIdentity.normalizeTelegramWorkspacePath(authority.cwd) ||
+              WorkspaceIdentity.normalizeBaleWorkspacePath(authority.cwd) ||
             value.request.binding.sessionId !== expected.sessionId ||
             value.request.binding.slot !== slot ||
             !isCurrent()
@@ -1506,14 +1506,14 @@ export function createTelegramBusFollowerWorkspaceRestoreHandler<
   });
 }
 
-export function createTelegramBusFollowerClientRuntime<
+export function createBaleBusFollowerClientRuntime<
   TContext,
   TReactionUpdate,
   TCallbackQuery,
   TMessage = unknown,
->(deps: TelegramBusFollowerClientRuntimeDeps<TMessage>) {
-  const createRequestId = createTelegramBusRequestIdFactory(deps.instanceId);
-  const timeoutMs = deps.timeoutMs ?? TELEGRAM_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
+>(deps: BaleBusFollowerClientRuntimeDeps<TMessage>) {
+  const createRequestId = createBaleBusRequestIdFactory(deps.instanceId);
+  const timeoutMs = deps.timeoutMs ?? BALE_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
   const sharedClientDeps = {
     socketPath: deps.socketPath,
     createRequestId,
@@ -1522,20 +1522,20 @@ export function createTelegramBusFollowerClientRuntime<
   };
   return {
     createRequestId,
-    callApi: createTelegramBusFollowerApiCaller({
+    callApi: createBaleBusFollowerApiCaller({
       ...sharedClientDeps,
       instanceId: deps.instanceId,
       getAuthSecret: deps.getApiAuthSecret,
       getRegistrationGeneration: deps.getRegistrationGeneration,
       recordRuntimeEvent: deps.recordRuntimeEvent,
     }),
-    agentMessages: createTelegramBusAgentMessageClient({
+    agentMessages: createBaleBusAgentMessageClient({
       ...sharedClientDeps,
       instanceId: deps.instanceId,
       getAuthSecret: deps.getApiAuthSecret,
       getRegistrationGeneration: deps.getRegistrationGeneration,
     }),
-    foreignOwnedUpdateForwarder: createTelegramBusForeignOwnedUpdateForwarder<
+    foreignOwnedUpdateForwarder: createBaleBusForeignOwnedUpdateForwarder<
       TContext,
       TReactionUpdate,
       TCallbackQuery,
@@ -1547,7 +1547,7 @@ export function createTelegramBusFollowerClientRuntime<
       validateForwardOwnership: deps.validateForwardOwnership,
       recordRuntimeEvent: deps.recordRuntimeEvent,
     }),
-    queueHandoff: createTelegramBusFollowerQueueHandoffClient({
+    queueHandoff: createBaleBusFollowerQueueHandoffClient({
       ...sharedClientDeps,
       instanceId: deps.instanceId,
       getAuthSecret: deps.getApiAuthSecret,
@@ -1556,20 +1556,20 @@ export function createTelegramBusFollowerClientRuntime<
   };
 }
 
-export function createTelegramBusFollowerQueueHandoffClient(
-  deps: TelegramBusFollowerApiCallerDeps,
+export function createBaleBusFollowerQueueHandoffClient(
+  deps: BaleBusFollowerApiCallerDeps,
 ): (
-  input: TelegramBusFollowerQueueHandoffOffer,
-) => Promise<TelegramQueueHandoffStageResult> {
+  input: BaleBusFollowerQueueHandoffOffer,
+) => Promise<BaleQueueHandoffStageResult> {
   const getNowMs = deps.getNowMs ?? Date.now;
-  const timeoutMs = deps.timeoutMs ?? TELEGRAM_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
+  const timeoutMs = deps.timeoutMs ?? BALE_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
   return async (input) => {
-    const registration = await resolveTelegramBusFollowerRegistration(
+    const registration = await resolveBaleBusFollowerRegistration(
       deps,
       timeoutMs,
     );
-    const socketPath = resolveTelegramBusSocketPath(deps.socketPath);
-    const response = await sendTelegramBusOperation(
+    const socketPath = resolveBaleBusSocketPath(deps.socketPath);
+    const response = await sendBaleBusOperation(
       socketPath,
       registration.remainingTimeoutMs,
       {
@@ -1584,7 +1584,7 @@ export function createTelegramBusFollowerQueueHandoffClient(
     );
     const queueOwner =
       response?.kind === "bus.ack" && isRecord(response.result)
-        ? parseTelegramUpdateJournalQueueOwner(response.result.queueOwner)
+        ? parseBaleUpdateJournalQueueOwner(response.result.queueOwner)
         : undefined;
     if (
       response?.kind === "bus.ack" &&
@@ -1615,30 +1615,30 @@ export function createTelegramBusFollowerQueueHandoffClient(
     }
     throw new Error(
       response?.kind === "bus.ack"
-        ? (response.message ?? "Telegram queue handoff was rejected.")
-        : "Telegram queue handoff did not return an acknowledgement.",
+        ? (response.message ?? "Bale queue handoff was rejected.")
+        : "Bale queue handoff did not return an acknowledgement.",
     );
   };
 }
 
-function createTelegramBusAgentMessageClient(
-  deps: TelegramBusFollowerApiCallerDeps,
+function createBaleBusAgentMessageClient(
+  deps: BaleBusFollowerApiCallerDeps,
 ): {
   resolveTarget: (
-    selector: TelegramBusAgentTargetSelector,
-  ) => Promise<TelegramTarget & { threadId: number }>;
-  routeMessage: (message: TelegramBusAgentMessage) => Promise<void>;
+    selector: BaleBusAgentTargetSelector,
+  ) => Promise<BaleTarget & { threadId: number }>;
+  routeMessage: (message: BaleBusAgentMessage) => Promise<void>;
 } {
   const getNowMs = deps.getNowMs ?? Date.now;
-  const timeoutMs = deps.timeoutMs ?? TELEGRAM_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
+  const timeoutMs = deps.timeoutMs ?? BALE_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
   const request = async (
     envelope:
-      | Extract<TelegramBusEnvelope, { kind: "follower.resolveAgentTarget" }>
-      | Extract<TelegramBusEnvelope, { kind: "follower.routeAgentMessage" }>,
+      | Extract<BaleBusEnvelope, { kind: "follower.resolveAgentTarget" }>
+      | Extract<BaleBusEnvelope, { kind: "follower.routeAgentMessage" }>,
     requestTimeoutMs = timeoutMs,
   ): Promise<unknown> => {
-    const socketPath = resolveTelegramBusSocketPath(deps.socketPath);
-    const response = await sendTelegramBusOperation(
+    const socketPath = resolveBaleBusSocketPath(deps.socketPath);
+    const response = await sendBaleBusOperation(
       socketPath,
       requestTimeoutMs,
       envelope,
@@ -1646,12 +1646,12 @@ function createTelegramBusAgentMessageClient(
     if (response?.kind === "bus.ack" && response.ok) return response.result;
     throw new Error(
       response?.kind === "bus.ack"
-        ? (response.message ?? "Telegram bus agent message failed.")
-        : "Telegram bus agent message did not return an acknowledgement.",
+        ? (response.message ?? "Bale bus agent message failed.")
+        : "Bale bus agent message did not return an acknowledgement.",
     );
   };
   const registrationFields = async () => {
-    const registration = await resolveTelegramBusFollowerRegistration(
+    const registration = await resolveBaleBusFollowerRegistration(
       deps,
       timeoutMs,
     );
@@ -1678,14 +1678,14 @@ function createTelegramBusAgentMessageClient(
         registration.remainingTimeoutMs,
       );
       if (!result || typeof result !== "object" || Array.isArray(result)) {
-        throw new Error("Telegram bus returned an invalid agent target.");
+        throw new Error("Bale bus returned an invalid agent target.");
       }
       const target = result as Record<string, unknown>;
       if (
         typeof target.chatId !== "number" ||
         typeof target.threadId !== "number"
       ) {
-        throw new Error("Telegram bus returned an invalid agent target.");
+        throw new Error("Bale bus returned an invalid agent target.");
       }
       return { chatId: target.chatId, threadId: target.threadId };
     },
@@ -1706,17 +1706,17 @@ function createTelegramBusAgentMessageClient(
 }
 
 /** Private selected text-effect caller; not a guarded ordinary API adapter or follower command admission grant. */
-export function createTelegramBusFollowerSelectedMenuCaller<TContext>(deps: {
-  client: TelegramBusFollowerApiCallerDeps;
-  protocolIdentity: TelegramBusProtocolIdentity;
+export function createBaleBusFollowerSelectedMenuCaller<TContext>(deps: {
+  client: BaleBusFollowerApiCallerDeps;
+  protocolIdentity: BaleBusProtocolIdentity;
   recipient: {
     getContextAuthority(
       ctx: TContext,
-    ): TelegramBusFollowerRestoreContext | undefined;
+    ): BaleBusFollowerRestoreContext | undefined;
     getJournalBindingKey(ctx: TContext): string | undefined;
     getProcessIdentity(): { processId: number; processBirthId: string };
     registrationState: Pick<
-      TelegramBusFollowerRegistrationState,
+      BaleBusFollowerRegistrationState,
       "getTarget" | "getSlot" | "getGeneration" | "getLeaderProtocol"
     >;
   };
@@ -1725,9 +1725,9 @@ export function createTelegramBusFollowerSelectedMenuCaller<TContext>(deps: {
     ctx: TContext;
     operationId: string;
     registrationGeneration: string;
-    effect: TelegramBusSelectedMenuTextEffect;
+    effect: BaleBusSelectedMenuTextEffect;
     assertAuthority: () => void;
-  }): Promise<TelegramBusSelectedMenuDeliveryObservation> => {
+  }): Promise<BaleBusSelectedMenuDeliveryObservation> => {
     let dispatched = false,
       method = "sendMessage";
     try {
@@ -1753,8 +1753,8 @@ export function createTelegramBusFollowerSelectedMenuCaller<TContext>(deps: {
       const protocol = structuredClone(deps.protocolIdentity),
         leaderProtocol = structuredClone(state.getLeaderProtocol()),
         auth = client.getAuthSecret?.();
-      const endpoint = resolveTelegramBusSocketPath(client.socketPath),
-        timeoutMs = client.timeoutMs ?? TELEGRAM_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
+      const endpoint = resolveBaleBusSocketPath(client.socketPath),
+        timeoutMs = client.timeoutMs ?? BALE_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
       if (
         !authority ||
         typeof authority.generation !== "number" ||
@@ -1765,7 +1765,7 @@ export function createTelegramBusFollowerSelectedMenuCaller<TContext>(deps: {
         timeoutMs <= 0
       )
         throw new Error("Selected-menu local owner is unavailable.");
-      const decoded = parseTelegramBusEnvelope(
+      const decoded = parseBaleBusEnvelope(
         JSON.stringify({
           kind: "follower.deliverSelectedMenu",
           requestId: client.createRequestId(),
@@ -1819,20 +1819,20 @@ export function createTelegramBusFollowerSelectedMenuCaller<TContext>(deps: {
           (currentGeneration !== undefined &&
             currentGeneration !== expected.registrationGeneration) ||
           client.getAuthSecret?.() !== auth ||
-          resolveTelegramBusSocketPath(client.socketPath) !== endpoint ||
+          resolveBaleBusSocketPath(client.socketPath) !== endpoint ||
           !isDeepStrictEqual(deps.protocolIdentity, protocol) ||
           !isDeepStrictEqual(state.getLeaderProtocol(), leaderProtocol) ||
-          !getTelegramBusProtocolCompatibility({
+          !getBaleBusProtocolCompatibility({
             local: protocol,
             remote: leaderProtocol,
           }).compatible ||
-          !hasTelegramBusCapability(
+          !hasBaleBusCapability(
             protocol,
-            TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
+            BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
           ) ||
-          !hasTelegramBusCapability(
+          !hasBaleBusCapability(
             leaderProtocol,
-            TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
+            BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
           )
         )
           throw new Error("Selected-menu local authority changed.");
@@ -1843,7 +1843,7 @@ export function createTelegramBusFollowerSelectedMenuCaller<TContext>(deps: {
         assertAuthority();
       };
       assertCurrent(true);
-      const registration = await resolveTelegramBusFollowerRegistration(
+      const registration = await resolveBaleBusFollowerRegistration(
         client,
         timeoutMs,
       );
@@ -1851,7 +1851,7 @@ export function createTelegramBusFollowerSelectedMenuCaller<TContext>(deps: {
         throw new Error("Selected-menu registration changed.");
       assertCurrent();
       dispatched = true;
-      const response = await sendTelegramBusLocalEnvelope({
+      const response = await sendBaleBusLocalEnvelope({
         socketPath: endpoint,
         envelope: expected,
         timeoutMs: registration.remainingTimeoutMs,
@@ -1900,45 +1900,45 @@ export function createTelegramBusFollowerSelectedMenuCaller<TContext>(deps: {
     } catch (error) {
       if (
         !dispatched ||
-        (error instanceof TelegramBusLocalAuthorityError &&
+        (error instanceof BaleBusLocalAuthorityError &&
           !error.requestIssued)
       )
-        throw new TelegramApiAuthorityError(false);
-      throw new TelegramApiCommitUnknownError(method, error);
+        throw new BaleApiAuthorityError(false);
+      throw new BaleApiCommitUnknownError(method, error);
     }
   };
 }
 
-export function createTelegramBusFollowerApiCaller(
-  deps: TelegramBusFollowerApiCallerDeps,
-): (method: string, args: unknown[], localOptions?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<unknown> {
+export function createBaleBusFollowerApiCaller(
+  deps: BaleBusFollowerApiCallerDeps,
+): (method: string, args: unknown[], localOptions?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<unknown> {
   const getNowMs = deps.getNowMs ?? Date.now;
-  const timeoutMs = deps.timeoutMs ?? TELEGRAM_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
-  const slowCallMs = deps.slowCallMs ?? TELEGRAM_BUS_FOLLOWER_API_SLOW_CALL_MS;
+  const timeoutMs = deps.timeoutMs ?? BALE_BUS_FOLLOWER_CLIENT_TIMEOUT_MS;
+  const slowCallMs = deps.slowCallMs ?? BALE_BUS_FOLLOWER_API_SLOW_CALL_MS;
   const caller = async (
     method: string,
     args: unknown[],
-    localOptions: Pick<TelegramApiCallOptions, "assertAuthority"> | undefined,
+    localOptions: Pick<BaleApiCallOptions, "assertAuthority"> | undefined,
     timing: { registeredAtMs?: number; apiMethod?: string },
   ): Promise<unknown> => {
     const assertion = localOptions?.assertAuthority;
-    const assertCurrent = () => assertTelegramApiCallAuthority(assertion, false);
+    const assertCurrent = () => assertBaleApiCallAuthority(assertion, false);
     assertCurrent();
     // Match IPC's JSON semantics once, before awaits; send and refusal metadata share this identity.
     const requestArgs = JSON.parse(JSON.stringify(args)) as unknown[];
     const apiMethod = (method === "call" || method === "callMultipart") && typeof requestArgs[0] === "string"
       ? requestArgs[0] : method;
     timing.apiMethod = apiMethod;
-    const registration = await resolveTelegramBusFollowerRegistration(
+    const registration = await resolveBaleBusFollowerRegistration(
       deps,
       timeoutMs,
     );
     timing.registeredAtMs = getNowMs();
     assertCurrent();
-    const socketPath = resolveTelegramBusSocketPath(deps.socketPath);
-    let response: TelegramBusEnvelope | undefined;
+    const socketPath = resolveBaleBusSocketPath(deps.socketPath);
+    let response: BaleBusEnvelope | undefined;
     try {
-      response = await sendTelegramBusOperation(
+      response = await sendBaleBusOperation(
         socketPath,
         registration.remainingTimeoutMs,
         {
@@ -1954,9 +1954,9 @@ export function createTelegramBusFollowerApiCaller(
         assertion ? assertCurrent : undefined,
       );
     } catch (error) {
-      if (error instanceof TelegramBusLocalAuthorityError) throw new TelegramApiAuthorityError(error.requestIssued);
-      if (!isTelegramApiMethodRetrySafe(apiMethod)) {
-        throw new TelegramApiCommitUnknownError(apiMethod, error);
+      if (error instanceof BaleBusLocalAuthorityError) throw new BaleApiAuthorityError(error.requestIssued);
+      if (!isBaleApiMethodRetrySafe(apiMethod)) {
+        throw new BaleApiCommitUnknownError(apiMethod, error);
       }
       throw error;
     }
@@ -1964,15 +1964,15 @@ export function createTelegramBusFollowerApiCaller(
     const message =
       response?.kind === "bus.ack"
         ? response.message
-        : "Telegram bus API call did not return an acknowledgement.";
+        : "Bale bus API call did not return an acknowledgement.";
     if (
       response?.kind === "bus.ack" &&
       response.error?.code === "stale-target" &&
       response.error.chatId !== undefined &&
       response.error.threadId !== undefined
     ) {
-      throw new TelegramApiStaleTargetError(
-        message ?? "Telegram thread target is stale.",
+      throw new BaleApiStaleTargetError(
+        message ?? "Bale thread target is stale.",
         {
           chatId: response.error.chatId,
           threadId: response.error.threadId,
@@ -1983,31 +1983,31 @@ export function createTelegramBusFollowerApiCaller(
       response?.kind === "bus.ack" &&
       response.error?.code === "commit-unknown"
     ) {
-      throw new TelegramApiCommitUnknownError(
+      throw new BaleApiCommitUnknownError(
         response.error.method ?? method,
-        new Error(message ?? "Telegram bus API call result is ambiguous."),
+        new Error(message ?? "Bale bus API call result is ambiguous."),
       );
     }
     const refusedMethod = response?.kind === "bus.ack" && !response.ok &&
       response.error?.code === "follower-api-not-allowed" &&
       response.error.method === apiMethod
       ? apiMethod : undefined;
-    if (refusedMethod || message === TELEGRAM_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE) {
+    if (refusedMethod || message === BALE_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE) {
       const body =
         (method === "call" || method === "callMultipart") && isRecord(requestArgs[1])
           ? requestArgs[1]
           : undefined;
       const chatId = Number(body?.chat_id);
       const threadId = Number(body?.message_thread_id);
-      throw new TelegramApiFollowerNotAllowedError(
-        message ?? TELEGRAM_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE,
+      throw new BaleApiFollowerNotAllowedError(
+        message ?? BALE_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE,
         Number.isSafeInteger(chatId) && Number.isSafeInteger(threadId)
           ? { chatId, threadId }
           : undefined,
         refusedMethod,
       );
     }
-    throw new Error(message ?? "Telegram bus API call failed.");
+    throw new Error(message ?? "Bale bus API call failed.");
   };
   return async (method, args, localOptions) => {
     const startedAtMs = getNowMs();
@@ -2025,7 +2025,7 @@ export function createTelegramBusFollowerApiCaller(
         try {
           deps.recordRuntimeEvent?.(
             "bus",
-            `Telegram bus follower API call was slow (${elapsedMs}ms).`,
+            `Bale bus follower API call was slow (${elapsedMs}ms).`,
             {
               phase: "follower-api-slow",
               method: apiMethod,
@@ -2046,9 +2046,9 @@ export function createTelegramBusFollowerApiCaller(
   };
 }
 
-async function resolveTelegramBusFollowerRegistration(
+async function resolveBaleBusFollowerRegistration(
   deps: Pick<
-    TelegramBusFollowerApiCallerDeps,
+    BaleBusFollowerApiCallerDeps,
     "getRegistrationGeneration" | "waitForRegistrationGeneration" | "getNowMs"
   >,
   timeoutMs: number,
@@ -2065,24 +2065,24 @@ async function resolveTelegramBusFollowerRegistration(
   if (restored && remainingTimeoutMs > 0) {
     return { generation: restored, remainingTimeoutMs };
   }
-  throw new Error("Telegram bus follower is not registered.");
+  throw new Error("Bale bus follower is not registered.");
 }
 
-export function createTelegramBusFollowerSessionReplacementSuspender(
-  deps: TelegramBusFollowerSessionReplacementSuspenderDeps,
+export function createBaleBusFollowerSessionReplacementSuspender(
+  deps: BaleBusFollowerSessionReplacementSuspenderDeps,
 ): (preserveTarget?: boolean) => Promise<void> {
   const getNowMs = deps.getNowMs ?? Date.now;
   const getPid = deps.getPid ?? (() => process.pid);
   return async (preserveTarget = true) => {
     if (!preserveTarget) {
-      setTelegramFollowerSessionHandoff(undefined);
-      Threads.setTelegramLeaderSessionHandoff(undefined);
+      setBaleFollowerSessionHandoff(undefined);
+      Threads.setBaleLeaderSessionHandoff(undefined);
       await deps.suspendPolling();
       return;
     }
     const target = deps.registrationState.getTarget();
     if (deps.registrationState.isRegistered() && target) {
-      setTelegramFollowerSessionHandoff({
+      setBaleFollowerSessionHandoff({
         pid: getPid(),
         instanceId: deps.instanceId,
         createdAtMs: getNowMs(),
@@ -2092,7 +2092,7 @@ export function createTelegramBusFollowerSessionReplacementSuspender(
       });
       deps.recordRuntimeEvent(
         "bus",
-        "Telegram follower registration suspended for session replacement",
+        "Bale follower registration suspended for session replacement",
         {
           phase: "follower-session-handoff",
           instanceId: deps.instanceId,
@@ -2104,13 +2104,13 @@ export function createTelegramBusFollowerSessionReplacementSuspender(
       const leaderBinding = deps.getLeaderBinding?.();
       if (typeof leaderBinding?.target?.threadId === "number") {
         const activeContext = deps.getActiveContext?.();
-        const profileKey = Threads.getTelegramThreadOwnerKey({
+        const profileKey = Threads.getBaleThreadOwnerKey({
           kind: "leader",
           cwd: activeContext?.cwd,
           instanceId: deps.instanceId,
-          telegramProfile: deps.getActiveProfileName?.(),
+          baleProfile: deps.getActiveProfileName?.(),
         });
-        Threads.setTelegramLeaderSessionHandoff({
+        Threads.setBaleLeaderSessionHandoff({
           pid: getPid(),
           instanceId: deps.instanceId,
           createdAtMs: getNowMs(),
@@ -2124,7 +2124,7 @@ export function createTelegramBusFollowerSessionReplacementSuspender(
         });
         deps.recordRuntimeEvent(
           "bus",
-          "Telegram leader binding suspended for session replacement",
+          "Bale leader binding suspended for session replacement",
           {
             phase: "leader-session-handoff",
             instanceId: deps.instanceId,
@@ -2140,15 +2140,15 @@ export function createTelegramBusFollowerSessionReplacementSuspender(
   };
 }
 
-export function createTelegramBusFollowerSessionRefreshHook<TContext>(
-  deps: TelegramBusFollowerSessionRefreshHookDeps<TContext>,
+export function createBaleBusFollowerSessionRefreshHook<TContext>(
+  deps: BaleBusFollowerSessionRefreshHookDeps<TContext>,
 ): (_event: unknown, ctx: TContext) => Promise<void> {
   return async (_event, ctx) => {
     if (deps.isSessionActive && !deps.isSessionActive(ctx)) return;
     if (!deps.registrationState.isRegistered()) {
-      const handoff = getTelegramFollowerSessionHandoff();
+      const handoff = getBaleFollowerSessionHandoff();
       const lockState = deps.getLeaderState();
-      const handoffIsFresh = isTelegramFollowerSessionHandoffFresh(handoff);
+      const handoffIsFresh = isBaleFollowerSessionHandoffFresh(handoff);
       if (handoffIsFresh && lockState.kind === "active-elsewhere") {
         try {
           const restored = await deps.registrationRuntime.registerWithLeader(
@@ -2161,11 +2161,11 @@ export function createTelegramBusFollowerSessionRefreshHook<TContext>(
           );
           if (deps.isSessionActive && !deps.isSessionActive(ctx)) return;
           if (restored) {
-            setTelegramFollowerSessionHandoff(undefined);
+            setBaleFollowerSessionHandoff(undefined);
             deps.updateStatus(ctx);
             deps.recordRuntimeEvent(
               "bus",
-              "Telegram follower registration restored after session replacement",
+              "Bale follower registration restored after session replacement",
               {
                 phase: "follower-session-restore",
                 previousInstanceId: handoff.instanceId,
@@ -2179,7 +2179,7 @@ export function createTelegramBusFollowerSessionRefreshHook<TContext>(
           });
         }
       } else if (handoff) {
-        setTelegramFollowerSessionHandoff(undefined);
+        setBaleFollowerSessionHandoff(undefined);
       }
     }
     if (!deps.registrationState.isRegistered()) return;
@@ -2196,15 +2196,15 @@ export function createTelegramBusFollowerSessionRefreshHook<TContext>(
     deps.updateStatus(ctx);
     deps.recordRuntimeEvent(
       "bus",
-      "Telegram follower session context refreshed",
+      "Bale follower session context refreshed",
       { phase: "follower-session-refresh" },
     );
   };
 }
 
-export function createTelegramBusFollowerControlState(): TelegramBusFollowerControlState {
+export function createBaleBusFollowerControlState(): BaleBusFollowerControlState {
   let activeAuthSecret: string | undefined;
-  let lifecyclePhase: TelegramBusFollowerControlLifecyclePhase | undefined;
+  let lifecyclePhase: BaleBusFollowerControlLifecyclePhase | undefined;
   return {
     getActiveAuthSecret: () => activeAuthSecret,
     setActiveAuthSecret(secret) {
@@ -2217,17 +2217,17 @@ export function createTelegramBusFollowerControlState(): TelegramBusFollowerCont
   };
 }
 
-export function createTelegramBusFollowerRegistrationState(
+export function createBaleBusFollowerRegistrationState(
   options: { onAvailabilityChanged?: () => void } = {},
-): TelegramBusFollowerRegistrationState {
+): BaleBusFollowerRegistrationState {
   let registered = false;
-  let target: TelegramTarget | undefined;
+  let target: BaleTarget | undefined;
   let slot: string | undefined;
   let threadName: string | undefined;
   let displayTitle: string | undefined;
   let generation: string | undefined;
   let sessionId: string | undefined;
-  let leaderProtocol: TelegramBusProtocolIdentity | undefined;
+  let leaderProtocol: BaleBusProtocolIdentity | undefined;
   let eligibleElectionSlots: string[] = [];
   let recoveryEpoch = 0;
   let activeRecoveryEpoch: number | undefined;
@@ -2278,7 +2278,7 @@ export function createTelegramBusFollowerRegistrationState(
       if (epoch !== undefined) settleGenerationWaiters(undefined, epoch);
     },
     waitForGeneration: (
-      timeoutMs = TELEGRAM_BUS_FOLLOWER_REGISTRATION_WAIT_MS,
+      timeoutMs = BALE_BUS_FOLLOWER_REGISTRATION_WAIT_MS,
     ) => {
       if (generation) return Promise.resolve(generation);
       const epoch = activeRecoveryEpoch;
@@ -2350,13 +2350,13 @@ export function createTelegramBusFollowerRegistrationState(
 }
 
 /** Heartbeat-failure recovery that a deliberate local stop halts until the next deliberate registration. */
-export type TelegramBusFollowerHeartbeatRecoveryHandler<TContext> = ((
+export type BaleBusFollowerHeartbeatRecoveryHandler<TContext> = ((
   error: unknown,
   ctx: TContext,
 ) => Promise<void>) & { halt: () => void; resume: () => void };
 
-/** The whole recovery lifecycle state; only `transitionTelegramBusFollowerRecovery` produces a new one. */
-export interface TelegramBusFollowerRecoveryState {
+/** The whole recovery lifecycle state; only `transitionBaleBusFollowerRecovery` produces a new one. */
+export interface BaleBusFollowerRecoveryState {
   /** Bumped by halt and resume, so a recovery or retry from before an operator stop or connect is inert. */
   readonly epoch: number;
   readonly halted: boolean;
@@ -2366,7 +2366,7 @@ export interface TelegramBusFollowerRecoveryState {
   readonly nextRetryId: number;
 }
 
-export type TelegramBusFollowerRecoveryEvent =
+export type BaleBusFollowerRecoveryEvent =
   | { type: "recoverRequested" }
   | { type: "recoverySettled"; epoch: number }
   | { type: "retryRequested"; epoch: number }
@@ -2374,12 +2374,12 @@ export type TelegramBusFollowerRecoveryEvent =
   | { type: "halted" }
   | { type: "resumed" };
 
-export type TelegramBusFollowerRecoveryEffect =
+export type BaleBusFollowerRecoveryEffect =
   | { type: "runRecovery"; epoch: number }
   | { type: "armRetry"; retryId: number }
   | { type: "cancelRetry"; retryId: number };
 
-export function createTelegramBusFollowerRecoveryState(): TelegramBusFollowerRecoveryState {
+export function createBaleBusFollowerRecoveryState(): BaleBusFollowerRecoveryState {
   return {
     epoch: 0,
     halted: false,
@@ -2393,22 +2393,22 @@ export function createTelegramBusFollowerRecoveryState(): TelegramBusFollowerRec
  * Pure follower-recovery lifecycle. An operator stop halts it and a connect resumes it, each in a new epoch: work
  * from the old epoch, a recovery still awaiting or a retry still armed, can no longer register or promote.
  */
-export function transitionTelegramBusFollowerRecovery(
-  state: TelegramBusFollowerRecoveryState,
-  event: TelegramBusFollowerRecoveryEvent,
-): Machine.TelegramMachineStep<
-  TelegramBusFollowerRecoveryState,
-  TelegramBusFollowerRecoveryEffect
+export function transitionBaleBusFollowerRecovery(
+  state: BaleBusFollowerRecoveryState,
+  event: BaleBusFollowerRecoveryEvent,
+): Machine.BaleMachineStep<
+  BaleBusFollowerRecoveryState,
+  BaleBusFollowerRecoveryEffect
 > {
-  const cancelRetry: TelegramBusFollowerRecoveryEffect[] =
+  const cancelRetry: BaleBusFollowerRecoveryEffect[] =
     state.retryId === null
       ? []
       : [{ type: "cancelRetry", retryId: state.retryId }];
   const start = (
-    from: TelegramBusFollowerRecoveryState,
-  ): Machine.TelegramMachineStep<
-    TelegramBusFollowerRecoveryState,
-    TelegramBusFollowerRecoveryEffect
+    from: BaleBusFollowerRecoveryState,
+  ): Machine.BaleMachineStep<
+    BaleBusFollowerRecoveryState,
+    BaleBusFollowerRecoveryEffect
   > =>
     from.halted || from.recovering
       ? { state: from, effects: [] }
@@ -2450,13 +2450,13 @@ export function transitionTelegramBusFollowerRecovery(
   }
 }
 
-export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
-  deps: TelegramBusFollowerHeartbeatRecoveryHandlerDeps<TContext>,
-): TelegramBusFollowerHeartbeatRecoveryHandler<TContext> {
+export function createBaleBusFollowerHeartbeatRecoveryHandler<TContext>(
+  deps: BaleBusFollowerHeartbeatRecoveryHandlerDeps<TContext>,
+): BaleBusFollowerHeartbeatRecoveryHandler<TContext> {
   // Promotion stops registration internally and must keep retrying; only an operator stop or a confirmed
   // switch to classic mode halts recovery, so it never re-registers behind a disconnect.
   const promotionGraceMs =
-    deps.promotionGraceMs ?? TELEGRAM_BUS_FOLLOWER_PROMOTION_GRACE_MS;
+    deps.promotionGraceMs ?? BALE_BUS_FOLLOWER_PROMOTION_GRACE_MS;
   const sleep =
     deps.sleep ??
     ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -2471,19 +2471,19 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
   type RecoveryRequest = {
     reason: unknown;
     ctx: TContext;
-    binding?: TelegramBusFollowerPromotedBinding;
+    binding?: BaleBusFollowerPromotedBinding;
   };
   const retryRequests = new Map<number, RecoveryRequest>();
   let pendingRetry: RecoveryRequest | undefined;
   let request: RecoveryRequest | undefined;
   let running: Promise<void> = Promise.resolve();
-  const machine = Machine.createTelegramMachineRunner<
-    TelegramBusFollowerRecoveryState,
-    TelegramBusFollowerRecoveryEvent,
-    TelegramBusFollowerRecoveryEffect
+  const machine = Machine.createBaleMachineRunner<
+    BaleBusFollowerRecoveryState,
+    BaleBusFollowerRecoveryEvent,
+    BaleBusFollowerRecoveryEffect
   >({
-    initial: createTelegramBusFollowerRecoveryState(),
-    transition: transitionTelegramBusFollowerRecovery,
+    initial: createBaleBusFollowerRecoveryState(),
+    transition: transitionBaleBusFollowerRecovery,
     run(effect) {
       switch (effect.type) {
         case "runRecovery": {
@@ -2526,7 +2526,7 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
   });
   const requestRecovery = (
     next: RecoveryRequest,
-    event: TelegramBusFollowerRecoveryEvent,
+    event: BaleBusFollowerRecoveryEvent,
   ): Promise<void> => {
     const before = running;
     request = next;
@@ -2546,7 +2546,7 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
     const scheduleRecovery = (
       reason: unknown,
       fallbackCtx: TContext,
-      binding: TelegramBusFollowerPromotedBinding,
+      binding: BaleBusFollowerPromotedBinding,
     ) => {
       pendingRetry = { reason, ctx: fallbackCtx, binding };
       try {
@@ -2571,9 +2571,9 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
     };
     const tryRegisterWithLeader = async (
       ctx: TContext,
-      leader: TelegramBusFollowerLeaderLock,
+      leader: BaleBusFollowerLeaderLock,
       phase: string,
-      binding?: TelegramBusFollowerPromotedBinding,
+      binding?: BaleBusFollowerPromotedBinding,
     ) => {
       if (!isCurrent()) return false;
       try {
@@ -2590,7 +2590,7 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
         safeUpdateStatus(ctx);
         deps.recordRuntimeEvent(
           "bus",
-          "Telegram follower registration restored",
+          "Bale follower registration restored",
           {
             phase,
           },
@@ -2603,7 +2603,7 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
         return false;
       }
     };
-    const snapshotBinding = (): TelegramBusFollowerPromotedBinding => ({
+    const snapshotBinding = (): BaleBusFollowerPromotedBinding => ({
       target: deps.registrationState.getTarget(),
       slot: deps.registrationState.getSlot(),
       threadName: deps.registrationState.getThreadName(),
@@ -2611,8 +2611,8 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
     const promoteToLeader = async (
       reason: unknown,
       ctx: TContext,
-      binding: TelegramBusFollowerPromotedBinding,
-      election: TelegramBusFollowerElection,
+      binding: BaleBusFollowerPromotedBinding,
+      election: BaleBusFollowerElection,
     ) => {
       if (!isCurrent()) return;
       if (deps.getActiveContext) {
@@ -2634,7 +2634,7 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
       deps.getRegistrationRuntime().stop();
       deps.setLifecyclePhase("electing");
       safeUpdateStatus(ctx);
-      deps.recordRuntimeEvent("bus", "Telegram follower attempting promotion", {
+      deps.recordRuntimeEvent("bus", "Bale follower attempting promotion", {
         phase: "follower-promotion-electing",
       });
       const promoted = await deps.promoteToLeader(ctx, binding, election);
@@ -2644,8 +2644,8 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
       deps.recordRuntimeEvent(
         "bus",
         promoted
-          ? "Telegram follower promotion completed"
-          : "Telegram follower promotion lost election",
+          ? "Bale follower promotion completed"
+          : "Bale follower promotion lost election",
         {
           phase: promoted
             ? "follower-promotion-complete"
@@ -2657,8 +2657,8 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
     const attemptPreferredPromotion = async (
       reason: unknown,
       ctx: TContext,
-      binding: TelegramBusFollowerPromotedBinding,
-      candidateState: TelegramBusFollowerLeaderState,
+      binding: BaleBusFollowerPromotedBinding,
+      candidateState: BaleBusFollowerLeaderState,
     ): Promise<void> => {
       const slot = binding.slot;
       const lowerEligibleSlot = slot
@@ -2669,7 +2669,7 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
       if (lowerEligibleSlot) {
         deps.recordRuntimeEvent(
           "bus",
-          "Telegram follower deferring to a lower-slot election candidate",
+          "Bale follower deferring to a lower-slot election candidate",
           {
             phase: "follower-promotion-slot-priority",
             slot,
@@ -2719,7 +2719,7 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
         safeUpdateStatus(ctx);
         deps.recordRuntimeEvent(
           "bus",
-          "Telegram follower went offline: Threaded Mode is off. Run /telegram-connect after turning it back on.",
+          "Bale follower went offline: Threaded Mode is off. Run /bale-connect after turning it back on.",
           { phase: "follower-thread-mode-disabled" },
         );
         return;
@@ -2742,7 +2742,7 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
         safeUpdateStatus(ctx);
         deps.recordRuntimeEvent(
           "bus",
-          "Telegram follower waiting for leader reload recovery",
+          "Bale follower waiting for leader reload recovery",
           { phase: "follower-promotion-grace" },
         );
         await sleep(promotionGraceMs);
@@ -2774,7 +2774,7 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
           safeUpdateStatus(ctx);
           deps.recordRuntimeEvent(
             "bus",
-            "Telegram follower promotion blocked by live leader lease",
+            "Bale follower promotion blocked by live leader lease",
             {
               phase: "follower-promotion-live-owner",
               leaderInstanceId: graceState.lock.instanceId,
@@ -2818,26 +2818,26 @@ export function createTelegramBusFollowerHeartbeatRecoveryHandler<TContext>(
   );
 }
 
-export function createTelegramBusFollowerRegistrationRuntime<
+export function createBaleBusFollowerRegistrationRuntime<
   TContext extends { cwd?: string },
 >(
-  deps: TelegramBusFollowerRegistrationRuntimeDeps<TContext>,
-): TelegramBusFollowerRegistrationRuntime<TContext> {
+  deps: BaleBusFollowerRegistrationRuntimeDeps<TContext>,
+): BaleBusFollowerRegistrationRuntime<TContext> {
   const getNowMs = deps.getNowMs ?? Date.now;
   const getPid = deps.getPid ?? (() => process.pid);
   const heartbeatMs = deps.heartbeatMs ?? 1000;
   const heartbeatTimeoutMs =
     deps.heartbeatTimeoutMs ??
     deps.timeoutMs ??
-    TELEGRAM_BUS_FOLLOWER_HEARTBEAT_TIMEOUT_MS;
+    BALE_BUS_FOLLOWER_HEARTBEAT_TIMEOUT_MS;
   const registrationTimeoutMs =
     deps.registrationTimeoutMs ?? deps.timeoutMs ?? 30000;
   const registrationRetryAttempts =
     deps.registrationRetryAttempts ??
-    TELEGRAM_BUS_FOLLOWER_REGISTRATION_RETRY_ATTEMPTS;
+    BALE_BUS_FOLLOWER_REGISTRATION_RETRY_ATTEMPTS;
   const registrationRetryDelayMs =
     deps.registrationRetryDelayMs ??
-    TELEGRAM_BUS_FOLLOWER_REGISTRATION_RETRY_DELAY_MS;
+    BALE_BUS_FOLLOWER_REGISTRATION_RETRY_DELAY_MS;
   let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
   let heartbeatPromise: Promise<void> | undefined;
   let heartbeatPromiseGeneration: string | undefined;
@@ -2852,7 +2852,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
       }
     | undefined;
   let activeContext: TContext | undefined;
-  let lastKnownTarget: TelegramTarget | undefined;
+  let lastKnownTarget: BaleTarget | undefined;
   let lastKnownSlot: string | undefined;
   let lastKnownThreadName: string | undefined;
   // A leader result is accepted only for the same endpoint and registration generation that issued the request.
@@ -2896,7 +2896,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
     });
   };
   /** A sustained leader outage repeats one identical failure every interval; the port collapses the run. */
-  const heartbeatFailureLog: TelegramFailureRunLogPort =
+  const heartbeatFailureLog: BaleFailureRunLogPort =
     deps.failureLog ?? {
       record(error) {
         try {
@@ -2922,7 +2922,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
       activeRegistrationGeneration === registrationGeneration &&
       activeContext === heartbeatContext;
     try {
-      const response = await sendTelegramBusOperation(
+      const response = await sendBaleBusOperation(
         leaderSocketPath,
         heartbeatTimeoutMs,
         {
@@ -2964,7 +2964,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
       }
       if (response?.kind === "bus.ack" && !response.ok) {
         throw new Error(
-          response.message ?? "Telegram bus follower heartbeat was rejected.",
+          response.message ?? "Bale bus follower heartbeat was rejected.",
         );
       }
     } catch (error) {
@@ -3046,8 +3046,8 @@ export function createTelegramBusFollowerRegistrationRuntime<
       };
       // A fresh handoff belongs to this same process, so a replaced session reuses its Thread: the tab keeps
       // one identity and only its owner rotates. Explicit options still override the preserved target.
-      const pendingHandoff = getTelegramFollowerSessionHandoff();
-      const pendingHandoffOptions = isTelegramFollowerSessionHandoffFresh(
+      const pendingHandoff = getBaleFollowerSessionHandoff();
+      const pendingHandoffOptions = isBaleFollowerSessionHandoffFresh(
         pendingHandoff,
       )
         ? {
@@ -3057,7 +3057,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
         : undefined;
       const registrationOptions:
         | {
-            target?: TelegramTarget;
+            target?: BaleTarget;
             previousInstanceId?: string;
             restoreWorkspace?: boolean;
             recoverConnection?: boolean;
@@ -3066,7 +3066,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
       const leaderSocketPath =
         leader.busSocketPath ??
         deps.getLeaderSocketPath?.() ??
-        getTelegramBusSocketPath();
+        getBaleBusSocketPath();
       await deps.startReceiving?.();
       if (!isCurrentRequest()) {
         await abandonOwnedRequest();
@@ -3077,7 +3077,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
         : leader?.busSecret;
       deps.setActiveAuthSecret?.(activeAuthSecret);
       const registrationGeneration = deps.createRequestId();
-      const registrationEnvelope: TelegramBusEnvelope = {
+      const registrationEnvelope: BaleBusEnvelope = {
         kind: registrationOptions?.restoreWorkspace
           ? "follower.restoreWorkspace"
           : "follower.register",
@@ -3117,13 +3117,13 @@ export function createTelegramBusFollowerRegistrationRuntime<
           connectedAtMs: getNowMs(),
         },
       };
-      let response: TelegramBusEnvelope | undefined;
+      let response: BaleBusEnvelope | undefined;
       try {
-        response = await sendTelegramBusLocalEnvelope({
+        response = await sendBaleBusLocalEnvelope({
           socketPath: leaderSocketPath,
           timeoutMs: registrationTimeoutMs,
           envelope: registrationEnvelope,
-          retry: getTelegramBusTransportRetryPolicy({
+          retry: getBaleBusTransportRetryPolicy({
             endpoint: leaderSocketPath,
             operation: "registration",
             overrides: {
@@ -3132,7 +3132,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
             },
           }),
           recordTransportEvent(phase, details) {
-            deps.recordRuntimeEvent?.("bus", `Telegram bus ${phase}`, {
+            deps.recordRuntimeEvent?.("bus", `Bale bus ${phase}`, {
               phase: `follower-register-${phase}`,
               ...details,
             });
@@ -3150,7 +3150,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
         await abandonOwnedRequest();
         return false;
       }
-      const compatibility = getTelegramBusProtocolCompatibility({
+      const compatibility = getBaleBusProtocolCompatibility({
         local: deps.protocolIdentity,
         remote: response?.kind === "bus.ack" ? response.protocol : undefined,
       });
@@ -3162,7 +3162,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
       if (!compatibility.compatible && !unidentifiedRejection) {
         await failRegistration();
         throw new Error(
-          `Incompatible Telegram bus leader protocol: ${compatibility.reason}.`,
+          `Incompatible Bale bus leader protocol: ${compatibility.reason}.`,
         );
       }
       if (response?.kind === "bus.ack" && !response.ok) {
@@ -3173,7 +3173,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
         ) {
           deps.recordRuntimeEvent?.(
             "bus",
-            "Telegram follower auto-connect refused by leader: Workspace binding unavailable.",
+            "Bale follower auto-connect refused by leader: Workspace binding unavailable.",
             {
               phase: "follower-auto-connect-skip",
               reason: "leader-binding-unavailable",
@@ -3183,7 +3183,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
         }
         throw new Error(
           response.message ??
-            "Telegram bus follower registration was rejected.",
+            "Bale bus follower registration was rejected.",
         );
       }
       if (response?.kind === "bus.ack" && response.ok) {
@@ -3222,10 +3222,10 @@ export function createTelegramBusFollowerRegistrationRuntime<
         startHeartbeat(leaderSocketPath);
         if (
           pendingHandoffOptions &&
-          getTelegramFollowerSessionHandoff()?.instanceId ===
+          getBaleFollowerSessionHandoff()?.instanceId ===
             pendingHandoffOptions.previousInstanceId
         ) {
-          setTelegramFollowerSessionHandoff(undefined);
+          setBaleFollowerSessionHandoff(undefined);
         }
         return true;
       }
@@ -3252,25 +3252,25 @@ export function createTelegramBusFollowerRegistrationRuntime<
         !generation ||
         !deps.registrationState?.isRegistered()
       ) {
-        throw new Error("Telegram follower is not registered with the leader.");
+        throw new Error("Bale follower is not registered with the leader.");
       }
       const requiredCapability =
         mode === "directory-snake" || mode === "directory-title"
-          ? TELEGRAM_BUS_CAPABILITY_DIRECTORY_DISPLAY_FORMAT
-          : TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE;
+          ? BALE_BUS_CAPABILITY_DIRECTORY_DISPLAY_FORMAT
+          : BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE;
       if (
-        !hasTelegramBusCapability(deps.protocolIdentity, requiredCapability) ||
-        !hasTelegramBusCapability(
+        !hasBaleBusCapability(deps.protocolIdentity, requiredCapability) ||
+        !hasBaleBusCapability(
           deps.registrationState.getLeaderProtocol(),
           requiredCapability,
         )
       ) {
         throw new Error(
-          "The Telegram peers do not support this Thread display setting. Update or restart both instances.",
+          "The Bale peers do not support this Thread display setting. Update or restart both instances.",
         );
       }
       const requestId = deps.createRequestId();
-      const response = await sendTelegramBusLocalEnvelope({
+      const response = await sendBaleBusLocalEnvelope({
         socketPath,
         timeoutMs: registrationTimeoutMs,
         envelope: {
@@ -3289,7 +3289,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
         deps.registrationState.getGeneration() !== generation
       ) {
         throw new Error(
-          "Telegram Thread display setting completed for a stale registration.",
+          "Bale Thread display setting completed for a stale registration.",
         );
       }
       if (
@@ -3302,30 +3302,30 @@ export function createTelegramBusFollowerRegistrationRuntime<
         throw new Error(
           response?.kind === "bus.ack"
             ? (response.message ??
-                "Telegram Thread display setting was rejected.")
-            : "Telegram Thread display setting was not acknowledged.",
+                "Bale Thread display setting was rejected.")
+            : "Bale Thread display setting was not acknowledged.",
         );
       }
     },
     async renameThread(target, threadName) {
       if (!activeLeaderSocketPath || !activeRegistrationGeneration) {
-        throw new Error("Telegram follower is not registered with the leader.");
+        throw new Error("Bale follower is not registered with the leader.");
       }
       if (
         deps.registrationState &&
-        !hasTelegramBusCapability(
+        !hasBaleBusCapability(
           deps.registrationState.getLeaderProtocol(),
-          TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
+          BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
         )
       ) {
         throw new Error(
-          "The active Telegram leader does not support Workspace Thread rename. Update or restart that Pi instance.",
+          "The active Bale leader does not support Workspace Thread rename. Update or restart that Pi instance.",
         );
       }
       const expectedLeaderSocketPath = activeLeaderSocketPath;
       const expectedRegistrationGeneration = activeRegistrationGeneration;
       const expectedAuthSecret = activeAuthSecret;
-      const response = await sendTelegramBusOperation(
+      const response = await sendBaleBusOperation(
         expectedLeaderSocketPath,
         registrationTimeoutMs,
         {
@@ -3343,8 +3343,8 @@ export function createTelegramBusFollowerRegistrationRuntime<
         throw new Error(
           response?.kind === "bus.ack"
             ? (response.message ??
-                "Telegram Workspace Thread rename was rejected.")
-            : "Telegram Workspace Thread rename was not acknowledged.",
+                "Bale Workspace Thread rename was rejected.")
+            : "Bale Workspace Thread rename was not acknowledged.",
         );
       }
       if (
@@ -3354,7 +3354,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
         )
       ) {
         throw new Error(
-          "Telegram Workspace Thread rename completed for a stale follower registration.",
+          "Bale Workspace Thread rename completed for a stale follower registration.",
         );
       }
       const renamedThreadName =
@@ -3377,22 +3377,22 @@ export function createTelegramBusFollowerRegistrationRuntime<
     },
     async resetThreadName(target) {
       if (!activeLeaderSocketPath || !activeRegistrationGeneration) {
-        throw new Error("Telegram follower is not registered with the leader.");
+        throw new Error("Bale follower is not registered with the leader.");
       }
       if (
         deps.registrationState &&
-        !hasTelegramBusCapability(
+        !hasBaleBusCapability(
           deps.registrationState.getLeaderProtocol(),
-          TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
+          BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
         )
       ) {
         throw new Error(
-          "The active Telegram leader does not support Workspace Thread reset. Update or restart that Pi instance.",
+          "The active Bale leader does not support Workspace Thread reset. Update or restart that Pi instance.",
         );
       }
       const expectedLeaderSocketPath = activeLeaderSocketPath;
       const expectedRegistrationGeneration = activeRegistrationGeneration;
-      const response = await sendTelegramBusOperation(
+      const response = await sendBaleBusOperation(
         expectedLeaderSocketPath,
         registrationTimeoutMs,
         {
@@ -3418,8 +3418,8 @@ export function createTelegramBusFollowerRegistrationRuntime<
         throw new Error(
           response?.kind === "bus.ack"
             ? (response.message ??
-                "Telegram Workspace Thread reset was rejected.")
-            : "Telegram Workspace Thread reset was not acknowledged.",
+                "Bale Workspace Thread reset was rejected.")
+            : "Bale Workspace Thread reset was not acknowledged.",
         );
       }
       if (
@@ -3429,7 +3429,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
         )
       ) {
         throw new Error(
-          "Telegram Workspace Thread reset completed for a stale follower registration.",
+          "Bale Workspace Thread reset completed for a stale follower registration.",
         );
       }
       const registrationTarget = deps.registrationState?.getTarget();
@@ -3445,27 +3445,27 @@ export function createTelegramBusFollowerRegistrationRuntime<
     },
     async requestSessionReplacement(operation, intent) {
       if (!activeLeaderSocketPath || !activeRegistrationGeneration) {
-        throw new Error("Telegram follower is not registered with the leader.");
+        throw new Error("Bale follower is not registered with the leader.");
       }
       if (
-        !hasTelegramBusCapability(
+        !hasBaleBusCapability(
           deps.protocolIdentity,
-          TELEGRAM_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
+          BALE_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
         ) ||
-        !hasTelegramBusCapability(
+        !hasBaleBusCapability(
           deps.registrationState?.getLeaderProtocol(),
-          TELEGRAM_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
+          BALE_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
         )
       ) {
         throw new Error(
-          "The active Telegram leader does not support follower session replacement. Update or restart that Pi instance.",
+          "The active Bale leader does not support follower session replacement. Update or restart that Pi instance.",
         );
       }
       const expectedLeaderSocketPath = activeLeaderSocketPath;
       const expectedRegistrationGeneration = activeRegistrationGeneration;
       const expectedAuthSecret = activeAuthSecret;
       const requestId = deps.createRequestId();
-      const response = await sendTelegramBusOperation(
+      const response = await sendBaleBusOperation(
         expectedLeaderSocketPath,
         registrationTimeoutMs,
         {
@@ -3490,8 +3490,8 @@ export function createTelegramBusFollowerRegistrationRuntime<
       ) {
         throw new Error(
           response?.kind === "bus.ack"
-            ? (response.message ?? "Telegram session replacement was rejected.")
-            : "Telegram session replacement was not acknowledged.",
+            ? (response.message ?? "Bale session replacement was rejected.")
+            : "Bale session replacement was not acknowledged.",
         );
       }
       if (
@@ -3502,7 +3502,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
         activeAuthSecret !== expectedAuthSecret
       ) {
         throw new Error(
-          "Telegram session replacement completed for a stale follower registration.",
+          "Bale session replacement completed for a stale follower registration.",
         );
       }
       return true;
@@ -3511,7 +3511,7 @@ export function createTelegramBusFollowerRegistrationRuntime<
       if (!activeLeaderSocketPath || !activeRegistrationGeneration) {
         return false;
       }
-      const response = await sendTelegramBusOperation(
+      const response = await sendBaleBusOperation(
         activeLeaderSocketPath,
         registrationTimeoutMs,
         {
@@ -3526,31 +3526,31 @@ export function createTelegramBusFollowerRegistrationRuntime<
       if (response?.kind === "bus.ack" && response.ok) return true;
       throw new Error(
         response?.kind === "bus.ack"
-          ? (response.message ?? "Telegram follower disconnect was rejected.")
-          : "Telegram follower disconnect was not acknowledged.",
+          ? (response.message ?? "Bale follower disconnect was rejected.")
+          : "Bale follower disconnect was not acknowledged.",
       );
     },
     stop,
   };
 }
 
-const TELEGRAM_FOLLOWER_FORWARD_BATCH_POSITION_FIELD =
-  "pi_telegram_forward_comment_batch_position";
+const BALE_FOLLOWER_FORWARD_BATCH_POSITION_FIELD =
+  "pi_bale_forward_comment_batch_position";
 
 /** Bind source-owned sender checks to the journal's already-admitted synchronous v1 hook. */
-export function createTelegramBusFollowerPairedAdmission(deps: {
+export function createBaleBusFollowerPairedAdmission(deps: {
   profileName: string;
   tokenSha256: string;
-  configStore: Pick<TelegramConfigStore, "withPairedUserAdmission">;
+  configStore: Pick<BaleConfigStore, "withPairedUserAdmission">;
   assertExecutionCurrent: () => void;
-}): NonNullable<TelegramUpdateJournalStoreOptions["withPairedAdmission"]> {
+}): NonNullable<BaleUpdateJournalStoreOptions["withPairedAdmission"]> {
   return (updates, publish) => {
     if (updates.length !== 1) return { admitted: false };
     const update = updates[0]!;
     const keys = Object.keys(update).filter(
       (key) =>
         key !== "update_id" &&
-        key !== TELEGRAM_FOLLOWER_FORWARD_BATCH_POSITION_FIELD,
+        key !== BALE_FOLLOWER_FORWARD_BATCH_POSITION_FIELD,
     );
     if (keys.length !== 1) return { admitted: false };
     const kind = keys[0];
@@ -3561,7 +3561,7 @@ export function createTelegramBusFollowerPairedAdmission(deps: {
       kind !== "message_reaction"
     )
       return { admitted: false };
-    const position = update[TELEGRAM_FOLLOWER_FORWARD_BATCH_POSITION_FIELD];
+    const position = update[BALE_FOLLOWER_FORWARD_BATCH_POSITION_FIELD];
     if (
       position !== undefined &&
       (kind !== "message" || (position !== "comment" && position !== "forward"))
@@ -3572,7 +3572,7 @@ export function createTelegramBusFollowerPairedAdmission(deps: {
       !Number.isSafeInteger(update.update_id) ||
       update.update_id < 0 ||
       !isRecord(carrier) ||
-      carrier.pi_telegram_source_update_id !== update.update_id ||
+      carrier.pi_bale_source_update_id !== update.update_id ||
       carrier.sender_chat !== undefined ||
       carrier.actor_chat !== undefined
     )
@@ -3597,25 +3597,25 @@ export function createTelegramBusFollowerPairedAdmission(deps: {
 }
 
 /** One authenticated local operation request with the shared operation retry policy; no replay semantics. */
-function sendTelegramBusOperation(
+function sendBaleBusOperation(
   socketPath: string,
   timeoutMs: number,
-  envelope: TelegramBusEnvelope,
+  envelope: BaleBusEnvelope,
   assertAuthority?: () => void,
 ) {
-  return sendTelegramBusLocalEnvelope({
+  return sendBaleBusLocalEnvelope({
     socketPath,
     timeoutMs,
     envelope,
     assertAuthority,
-    retry: assertAuthority ? { attempts: 1, delayMs: 0 } : getTelegramBusTransportRetryPolicy({
+    retry: assertAuthority ? { attempts: 1, delayMs: 0 } : getBaleBusTransportRetryPolicy({
       endpoint: socketPath,
       operation: "operation",
     }),
   });
 }
 
-export function prepareTelegramBusFollowerJournaledUpdateForExecution<
+export function prepareBaleBusFollowerJournaledUpdateForExecution<
   TUpdate extends { message?: unknown } & Record<string, unknown>,
 >(
   update: TUpdate,
@@ -3624,7 +3624,7 @@ export function prepareTelegramBusFollowerJournaledUpdateForExecution<
     position: "comment" | "forward",
   ) => void,
 ): TUpdate {
-  const position = update[TELEGRAM_FOLLOWER_FORWARD_BATCH_POSITION_FIELD];
+  const position = update[BALE_FOLLOWER_FORWARD_BATCH_POSITION_FIELD];
   if (
     update.message !== undefined &&
     (position === "comment" || position === "forward")
@@ -3636,12 +3636,12 @@ export function prepareTelegramBusFollowerJournaledUpdateForExecution<
   }
   if (position === undefined) return update;
   const prepared = { ...update };
-  delete prepared[TELEGRAM_FOLLOWER_FORWARD_BATCH_POSITION_FIELD];
+  delete prepared[BALE_FOLLOWER_FORWARD_BATCH_POSITION_FIELD];
   return prepared;
 }
 
 type LiveRebindCarrierEnvelope = Pick<
-  Extract<TelegramBusEnvelope, { kind: "leader.settleLiveRebind" }>,
+  Extract<BaleBusEnvelope, { kind: "leader.settleLiveRebind" }>,
   | "operationId"
   | "recipientInstanceId"
   | "recipientSessionId"
@@ -3654,8 +3654,8 @@ type LiveRebindCarrierEnvelope = Pick<
 
 /** Copy the captured command target for the native owner; ordinary input supplies no target constraint. */
 function copyLiveRebindCommandTarget(
-  saved: TelegramBusLiveRebindSaveObservation,
-): { expectedTarget?: TelegramTarget & { threadId: number } } {
+  saved: BaleBusLiveRebindSaveObservation,
+): { expectedTarget?: BaleTarget & { threadId: number } } {
   return saved.selectedCommand
     ? { expectedTarget: { ...saved.selectedCommand.target } }
     : {};
@@ -3663,7 +3663,7 @@ function copyLiveRebindCommandTarget(
 
 /** Exact operation/recipient/source agreement between a retained save and a later request; identity only, never currency. */
 function matchesLiveRebindCarrier(
-  saved: TelegramBusLiveRebindSaveObservation,
+  saved: BaleBusLiveRebindSaveObservation,
   envelope: LiveRebindCarrierEnvelope,
 ): boolean {
   return (
@@ -3681,7 +3681,7 @@ function matchesLiveRebindCarrier(
 
 /** Exact branch agreement: a command record requires its saved proof; ordinary input refuses any proof. */
 function matchesLiveRebindBranch(
-  saved: TelegramBusLiveRebindSaveObservation,
+  saved: BaleBusLiveRebindSaveObservation,
   status: boolean,
   envelope: LiveRebindCarrierEnvelope,
 ): boolean {
@@ -3694,65 +3694,65 @@ function matchesLiveRebindBranch(
 }
 
 /** Existing Commands/menu assembly preflights the copied input and captures independent recipient/transport owners. */
-export interface TelegramBusFollowerCommandOwner<TContext> {
+export interface BaleBusFollowerCommandOwner<TContext> {
   isCurrent(): boolean;
   assertRecipientCurrent(): void;
   prepare(
-    readiness: TelegramLiveSourceCompletionReadiness,
+    readiness: BaleLiveSourceCompletionReadiness,
     ctx: TContext,
     input: {
-      target: TelegramTarget & { threadId: number };
+      target: BaleTarget & { threadId: number };
       assertSourceCurrent(): void;
       assertRecipientCurrent(): void;
     },
-  ): TelegramPreparedHeldCommand | undefined;
+  ): BalePreparedHeldCommand | undefined;
 }
 
 /** One current warm preparation, not a prompt queue or restart recovery record. */
-export function createTelegramBusFollowerLiveRebindRuntime<TContext>(deps: {
+export function createBaleBusFollowerLiveRebindRuntime<TContext>(deps: {
   getAdmission(
     ctx: TContext,
   ):
     | Pick<
-        TelegramUpdateAdmissionLifecycleRuntime<TContext>,
+        BaleUpdateAdmissionLifecycleRuntime<TContext>,
         "prepareLiveInput" | "appendBatch" | "getJournalBindingKey"
       >
     | undefined;
   applyTarget?: (
     ...args: Parameters<
       ReturnType<
-        typeof createTelegramBusFollowerWorkspaceRestoreHandler<TContext>
+        typeof createBaleBusFollowerWorkspaceRestoreHandler<TContext>
       >
     >
   ) => ReturnType<
     ReturnType<
-      typeof createTelegramBusFollowerWorkspaceRestoreHandler<TContext>
+      typeof createBaleBusFollowerWorkspaceRestoreHandler<TContext>
     >
   >;
   observeWork?: (
-    oldTarget: TelegramTarget & { threadId: number },
+    oldTarget: BaleTarget & { threadId: number },
     ctx: TContext,
-  ) => TelegramBusLiveRebindWorkState;
+  ) => BaleBusLiveRebindWorkState;
   /** Pure preflight: undefined refuses before hold/append; this port never activates future recipient authority. */
   getCommandOwner?: (
     input: Readonly<
       Omit<
-        Extract<TelegramBusEnvelope, { kind: "leader.prepareLiveRebind" }>,
+        Extract<BaleBusEnvelope, { kind: "leader.prepareLiveRebind" }>,
         "kind" | "auth" | "requestId" | "sentAtMs"
       >
     >,
     ctx: TContext,
-  ) => TelegramBusFollowerCommandOwner<TContext> | undefined;
+  ) => BaleBusFollowerCommandOwner<TContext> | undefined;
 }) {
   type Status = {
-    owner: TelegramBusFollowerCommandOwner<TContext>;
+    owner: BaleBusFollowerCommandOwner<TContext>;
     current(): boolean;
-    prepare: TelegramBusFollowerCommandOwner<TContext>["prepare"];
+    prepare: BaleBusFollowerCommandOwner<TContext>["prepare"];
     recipient: () => void;
     attempted?: true;
-    plan?: TelegramPreparedHeldCommand;
+    plan?: BalePreparedHeldCommand;
     ports?: Pick<
-      TelegramPreparedHeldCommand,
+      BalePreparedHeldCommand,
       "bindCarrier" | "execute" | "inspectCompletion"
     >;
     result?: "completed" | "unknown";
@@ -3762,25 +3762,25 @@ export function createTelegramBusFollowerLiveRebindRuntime<TContext>(deps: {
         operationId: string;
         digest: string;
         current(): boolean;
-        held: TelegramLiveInputPreparation;
+        held: BaleLiveInputPreparation;
         ctx: TContext;
-        observation: TelegramBusLiveRebindSaveObservation;
+        observation: BaleBusLiveRebindSaveObservation;
         applyIssued?: true;
         applying?: true;
         settling?: true;
-        outcome?: TelegramBusLiveRebindSettlementObservation;
+        outcome?: BaleBusLiveRebindSettlementObservation;
         status?: Status;
       }
     | undefined;
   const runtime = {
     save(
       envelope: Extract<
-        TelegramBusEnvelope,
+        BaleBusEnvelope,
         { kind: "leader.prepareLiveRebind" }
       >,
       ctx: TContext,
       isCurrent: () => boolean,
-    ): TelegramBusLiveRebindSaveObservation {
+    ): BaleBusLiveRebindSaveObservation {
       const captured = structuredClone(envelope),
         selectedCommand = captured.selectedCommand;
       const heldMarker = selectedCommand,
@@ -4025,12 +4025,12 @@ export function createTelegramBusFollowerLiveRebindRuntime<TContext>(deps: {
     },
     async apply(
       envelope: Extract<
-        TelegramBusEnvelope,
+        BaleBusEnvelope,
         { kind: "leader.applyLiveRebind" }
       >,
       ctx: TContext,
       isCurrent: () => boolean,
-    ): Promise<TelegramBusLiveRebindApplyObservation> {
+    ): Promise<BaleBusLiveRebindApplyObservation> {
       const record = retained;
       if (envelope.selectedCommand !== undefined && !record?.status?.plan)
         throw new Error("Selected command native consumption is unavailable.");
@@ -4094,15 +4094,15 @@ export function createTelegramBusFollowerLiveRebindRuntime<TContext>(deps: {
     },
     async settle(
       envelope: Extract<
-        TelegramBusEnvelope,
+        BaleBusEnvelope,
         { kind: "leader.settleLiveRebind" }
       >,
       ctx: TContext,
       isCurrent: () => boolean,
     ): Promise<
-      | TelegramBusLiveRebindSettlementObservation
-      | TelegramBusLiveRebindWorkObservation
-      | TelegramBusLiveRebindCommandObservation
+      | BaleBusLiveRebindSettlementObservation
+      | BaleBusLiveRebindWorkObservation
+      | BaleBusLiveRebindCommandObservation
     > {
       if (envelope.mode === "observe-command")
         return inspectCommandCompletion(envelope, ctx, isCurrent);
@@ -4156,7 +4156,7 @@ export function createTelegramBusFollowerLiveRebindRuntime<TContext>(deps: {
             "Live-rebind work observation has no released carrier or observer.",
           );
         const oldTarget = { ...envelope.oldTarget };
-        let work: TelegramBusLiveRebindWorkState | undefined;
+        let work: BaleBusLiveRebindWorkState | undefined;
         record.settling = true;
         try {
           await deps.applyTarget(
@@ -4214,8 +4214,8 @@ export function createTelegramBusFollowerLiveRebindRuntime<TContext>(deps: {
       }
       record.settling = true;
       const observation = (
-        status: TelegramBusLiveRebindSettlementObservation["status"],
-      ): TelegramBusLiveRebindSettlementObservation => ({
+        status: BaleBusLiveRebindSettlementObservation["status"],
+      ): BaleBusLiveRebindSettlementObservation => ({
         ...structuredClone(record.observation),
         action,
         status,
@@ -4268,10 +4268,10 @@ export function createTelegramBusFollowerLiveRebindRuntime<TContext>(deps: {
     },
   };
   async function inspectCommandCompletion(
-    envelope: Extract<TelegramBusEnvelope, { kind: "leader.settleLiveRebind" }>,
+    envelope: Extract<BaleBusEnvelope, { kind: "leader.settleLiveRebind" }>,
     ctx: TContext,
     isCurrent: () => boolean,
-  ): Promise<TelegramBusLiveRebindCommandObservation> {
+  ): Promise<BaleBusLiveRebindCommandObservation> {
     const record = retained;
     const current = () =>
       retained === record &&
@@ -4347,7 +4347,7 @@ export function createTelegramBusFollowerLiveRebindRuntime<TContext>(deps: {
   return runtime;
 }
 
-export function createTelegramBusFollowerDurableAdmissionRuntime<
+export function createBaleBusFollowerDurableAdmissionRuntime<
   TContext,
 >(deps: {
   journal: {
@@ -4359,7 +4359,7 @@ export function createTelegramBusFollowerDurableAdmissionRuntime<
   getNowMs?: () => number;
   /** Bounded process-local replay window; omit for the production 24 h / 4,096-delivery defaults. */
   recentDeliveryLimit?: { maxAgeMs: number; maxEntries: number };
-}): TelegramBusFollowerDurableAdmissionPort<TContext> {
+}): BaleBusFollowerDurableAdmissionPort<TContext> {
   // The journal forgets a delivery once its worker completes; this window absorbs a leader retry after a lost ACK.
   const recentDeliveries = new Map<string, number>();
   const getNowMs = deps.getNowMs ?? Date.now;
@@ -4382,20 +4382,20 @@ export function createTelegramBusFollowerDurableAdmissionRuntime<
       const delivery = envelope.delivery;
       if (!delivery) {
         throw new Error(
-          "Telegram follower durable admission requires delivery identity.",
+          "Bale follower durable admission requires delivery identity.",
         );
       }
       if (envelope.kind === "leader.wakeInputCustody")
         throw new Error(
-          "Telegram follower custody wake cannot use executable-copy admission.",
+          "Bale follower custody wake cannot use executable-copy admission.",
         );
-      const expected = createTelegramBusFollowerDeliveryIdentity({
+      const expected = createBaleBusFollowerDeliveryIdentity({
         kind: envelope.kind,
         recipientBindingKey: delivery.recipientBindingKey,
         sourceUpdateId: delivery.sourceUpdateId,
       });
       if (expected.deliveryId !== delivery.deliveryId) {
-        throw new Error("Invalid Telegram follower delivery id.");
+        throw new Error("Invalid Bale follower delivery id.");
       }
       const carrier =
         envelope.kind === "leader.forwardCallback"
@@ -4405,10 +4405,10 @@ export function createTelegramBusFollowerDurableAdmissionRuntime<
             : envelope.message;
       if (
         !isRecord(carrier) ||
-        carrier.pi_telegram_source_update_id !== delivery.sourceUpdateId
+        carrier.pi_bale_source_update_id !== delivery.sourceUpdateId
       ) {
         throw new Error(
-          "Telegram follower delivery source update id mismatch.",
+          "Bale follower delivery source update id mismatch.",
         );
       }
       const update = {
@@ -4416,7 +4416,7 @@ export function createTelegramBusFollowerDurableAdmissionRuntime<
         ...(envelope.kind === "leader.forwardMessage" &&
         envelope.forwardCommentBatchPosition
           ? {
-              [TELEGRAM_FOLLOWER_FORWARD_BATCH_POSITION_FIELD]:
+              [BALE_FOLLOWER_FORWARD_BATCH_POSITION_FIELD]:
                 envelope.forwardCommentBatchPosition,
             }
           : {}),
@@ -4443,7 +4443,7 @@ export function createTelegramBusFollowerDurableAdmissionRuntime<
   };
 }
 
-export interface TelegramBusFollowerInputCustodyBundle<TContext> {
+export interface BaleBusFollowerInputCustodyBundle<TContext> {
   acceptHandoff(
     input: {
       sourceRecoveryKey: string;
@@ -4458,7 +4458,7 @@ export interface TelegramBusFollowerInputCustodyBundle<TContext> {
     ctx: TContext,
   ): unknown;
   wakeSource(
-    input: TelegramBusFollowerDurableAdmissionResult & {
+    input: BaleBusFollowerDurableAdmissionResult & {
       recipientBindingKey: string;
       sourceRecoveryKey: string;
       sourceClaim: { acquisitionId: string; handoffId: string };
@@ -4482,21 +4482,21 @@ export interface TelegramBusFollowerInputCustodyBundle<TContext> {
     | undefined;
 }
 
-export function createTelegramBusFollowerInputCustodyPorts<TContext>(deps: {
+export function createBaleBusFollowerInputCustodyPorts<TContext>(deps: {
   getInputCustodyBus():
-    TelegramBusFollowerInputCustodyBundle<TContext> | undefined;
+    BaleBusFollowerInputCustodyBundle<TContext> | undefined;
 }) {
-  const getRequired = (): TelegramBusFollowerInputCustodyBundle<TContext> => {
+  const getRequired = (): BaleBusFollowerInputCustodyBundle<TContext> => {
     const bundle = deps.getInputCustodyBus();
     if (!bundle)
-      throw new Error("Telegram input custody bus binding is unavailable.");
+      throw new Error("Bale input custody bus binding is unavailable.");
     return bundle;
   };
   return {
     isSourceReferenceAdmissionEnabled: () => Boolean(deps.getInputCustodyBus()),
     handleInputCustodyHandoff(
       envelope: Extract<
-        TelegramBusEnvelope,
+        BaleBusEnvelope,
         { kind: "leader.offerInputCustodyHandoff" }
       >,
       ctx: TContext,
@@ -4512,7 +4512,7 @@ export function createTelegramBusFollowerInputCustodyPorts<TContext>(deps: {
       );
     },
     sourceReferenceAdmission:
-      createTelegramBusFollowerSourceReferenceAdmissionRuntime<TContext>({
+      createBaleBusFollowerSourceReferenceAdmissionRuntime<TContext>({
         wakeSource(input, ctx) {
           getRequired().wakeSource(input, ctx);
         },
@@ -4526,41 +4526,41 @@ export function createTelegramBusFollowerInputCustodyPorts<TContext>(deps: {
   };
 }
 
-export function createTelegramBusFollowerSourceReferenceAdmissionRuntime<
+export function createBaleBusFollowerSourceReferenceAdmissionRuntime<
   TContext,
 >(deps: {
   wakeSource: (
-    input: TelegramBusFollowerDurableAdmissionResult & {
+    input: BaleBusFollowerDurableAdmissionResult & {
       recipientBindingKey: string;
       sourceRecoveryKey: string;
       sourceClaim: { acquisitionId: string; handoffId: string };
     },
     ctx: TContext,
   ) => Promise<void> | void;
-}): TelegramBusFollowerDurableAdmissionPort<TContext> {
+}): BaleBusFollowerDurableAdmissionPort<TContext> {
   return {
     async admit(envelope, ctx) {
       const delivery = envelope.delivery;
       if (!delivery)
         throw new Error(
-          "Telegram follower source-reference admission requires delivery identity.",
+          "Bale follower source-reference admission requires delivery identity.",
         );
       if (!delivery.sourceRecoveryKey)
         throw new Error(
-          "Telegram follower source-reference admission requires a recovery key.",
+          "Bale follower source-reference admission requires a recovery key.",
         );
       if (!delivery.sourceClaim)
         throw new Error(
-          "Telegram follower source-reference admission requires exact claim evidence.",
+          "Bale follower source-reference admission requires exact claim evidence.",
         );
-      const expected = createTelegramBusFollowerDeliveryIdentity({
+      const expected = createBaleBusFollowerDeliveryIdentity({
         kind: envelope.kind,
         recipientBindingKey: delivery.recipientBindingKey,
         sourceUpdateId: delivery.sourceUpdateId,
       });
       if (expected.deliveryId !== delivery.deliveryId)
         throw new Error(
-          "Invalid Telegram follower source-reference delivery id.",
+          "Invalid Bale follower source-reference delivery id.",
         );
       const carrier =
         envelope.kind === "leader.wakeInputCustody"
@@ -4573,10 +4573,10 @@ export function createTelegramBusFollowerSourceReferenceAdmissionRuntime<
       if (
         envelope.kind !== "leader.wakeInputCustody" &&
         (!isRecord(carrier) ||
-          carrier.pi_telegram_source_update_id !== delivery.sourceUpdateId)
+          carrier.pi_bale_source_update_id !== delivery.sourceUpdateId)
       )
         throw new Error(
-          "Telegram follower source-reference update id mismatch.",
+          "Bale follower source-reference update id mismatch.",
         );
       await deps.wakeSource(
         {
@@ -4596,13 +4596,13 @@ export function createTelegramBusFollowerSourceReferenceAdmissionRuntime<
   };
 }
 
-export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
-  deps: TelegramBusForwardedUpdateReceiverRuntimeDeps<TContext>,
-): TelegramBusForwardedUpdateReceiverRuntime {
-  const server = createTelegramBusLocalServer({
+export function createBaleBusForwardedUpdateReceiverRuntime<TContext>(
+  deps: BaleBusForwardedUpdateReceiverRuntimeDeps<TContext>,
+): BaleBusForwardedUpdateReceiverRuntime {
+  const server = createBaleBusLocalServer({
     socketPath: deps.socketPath,
     recordTransportEvent(phase, details) {
-      deps.recordRuntimeEvent?.("bus", `Telegram bus ${phase}`, {
+      deps.recordRuntimeEvent?.("bus", `Bale bus ${phase}`, {
         phase: `follower-receiver-${phase}`,
         ...details,
       });
@@ -4611,7 +4611,7 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
       const authSecret = deps.getAuthSecret?.();
       if (
         deps.getAuthSecret &&
-        (!authSecret || !isTelegramBusEnvelopeAuthorized(envelope, authSecret))
+        (!authSecret || !isBaleBusEnvelopeAuthorized(envelope, authSecret))
       ) {
         return createUnauthorizedBusAck(envelope.requestId);
       }
@@ -4629,9 +4629,9 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
           envelope.kind !== "leader.offerQueueHandoff") ||
         envelope.recipientInstanceId !== deps.instanceId
       ) {
-        return rejectTelegramBusRequest(
+        return rejectBaleBusRequest(
           envelope.requestId,
-          "Telegram bus receiver cannot handle this envelope.",
+          "Bale bus receiver cannot handle this envelope.",
         );
       }
       const registrationGeneration = deps.getRegistrationGeneration();
@@ -4639,9 +4639,9 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
         !registrationGeneration ||
         envelope.recipientRegistrationGeneration !== registrationGeneration
       ) {
-        return rejectTelegramBusRequest(
+        return rejectBaleBusRequest(
           envelope.requestId,
-          "Stale Telegram bus follower registration generation.",
+          "Stale Bale bus follower registration generation.",
         );
       }
       if (
@@ -4654,16 +4654,16 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
         const commandInput = envelope.selectedCommand,
           commandEnabled = deps.isLiveRebindCommandSetEnabled;
         const required = [
-          TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SAVE,
-          ...(apply ? [TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY] : []),
-          ...(settle ? [TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE] : []),
+          BALE_BUS_CAPABILITY_LIVE_REBIND_SAVE,
+          ...(apply ? [BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY] : []),
+          ...(settle ? [BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE] : []),
           ...(envelope.kind === "leader.settleLiveRebind" && envelope.mode === "observe-held"
-            ? [TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION] : []),
+            ? [BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION] : []),
           ...(commandInput
             ? [
-                TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY,
-                TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE,
-                ...getTelegramBusHeldCommandCapabilities(commandInput.name),
+                BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY,
+                BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE,
+                ...getBaleBusHeldCommandCapabilities(commandInput.name),
               ]
             : []),
         ];
@@ -4696,11 +4696,11 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
           bindingKey !== envelope.recipientBindingKey ||
           !required.every(
             (cap) =>
-              hasTelegramBusCapability(protocol, cap) &&
-              hasTelegramBusCapability(localProtocol, cap),
+              hasBaleBusCapability(protocol, cap) &&
+              hasBaleBusCapability(localProtocol, cap),
           ) ||
           !localProtocol ||
-          !getTelegramBusProtocolCompatibility({
+          !getBaleBusProtocolCompatibility({
             local: localProtocol,
             remote: protocol,
           }).compatible ||
@@ -4711,7 +4711,7 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
               ? !deps.handleLiveRebindApply
               : !deps.handleLiveRebindSave)
         )
-          return rejectTelegramBusRequest(
+          return rejectBaleBusRequest(
             envelope.requestId,
             "Live-rebind capability or recipient authority is unavailable.",
           );
@@ -4753,7 +4753,7 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
           !deps.isWorkspaceRestoreEnabled?.() ||
           !deps.handleWorkspaceRestore
         )
-          return rejectTelegramBusRequest(
+          return rejectBaleBusRequest(
             envelope.requestId,
             "Workspace Restore capability is unavailable.",
           );
@@ -4798,9 +4798,9 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
         envelope.kind === "leader.offerInputCustodyHandoff" &&
         envelope.recipientBindingKey !== deps.getRecipientBindingKey()
       )
-        return rejectTelegramBusRequest(
+        return rejectBaleBusRequest(
           envelope.requestId,
-          "Mismatched Telegram follower handoff recipient identity.",
+          "Mismatched Bale follower handoff recipient identity.",
         );
       if (
         envelope.kind !== "leader.offerQueueHandoff" &&
@@ -4809,31 +4809,31 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
           envelope.delivery.recipientBindingKey !==
             deps.getRecipientBindingKey())
       ) {
-        return rejectTelegramBusRequest(
+        return rejectBaleBusRequest(
           envelope.requestId,
-          "Mismatched Telegram follower delivery identity.",
+          "Mismatched Bale follower delivery identity.",
         );
       }
       const ctx = deps.getContext();
       if (!ctx) {
-        return rejectTelegramBusRequest(
+        return rejectBaleBusRequest(
           envelope.requestId,
-          "Telegram bus follower has no active context.",
+          "Bale bus follower has no active context.",
         );
       }
       try {
         if (envelope.kind === "leader.offerInputCustodyHandoff") {
           if (!(deps.isSourceReferenceAdmissionEnabled?.() ?? false))
             throw new Error(
-              "Telegram input custody handoff capability is not enabled.",
+              "Bale input custody handoff capability is not enabled.",
             );
           if (!deps.hasAuthenticatedSourceReferenceTransport?.())
             throw new Error(
-              "Telegram input custody handoff requires authenticated transport.",
+              "Bale input custody handoff requires authenticated transport.",
             );
           if (!deps.handleInputCustodyHandoff)
             throw new Error(
-              "Telegram input custody handoff acceptance is unavailable.",
+              "Bale input custody handoff acceptance is unavailable.",
             );
           const result = await deps.handleInputCustodyHandoff(envelope, ctx);
           return {
@@ -4852,14 +4852,14 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
             !deps.hasAuthenticatedSourceReferenceTransport?.()
           )
             throw new Error(
-              "Telegram follower source-reference admission requires authenticated transport.",
+              "Bale follower source-reference admission requires authenticated transport.",
             );
           const admission = sourceReferenceEnabled
             ? deps.sourceReferenceAdmission
             : deps.durableAdmission;
           if (!admission)
             throw new Error(
-              "Telegram follower source-reference admission is enabled without a wake authority.",
+              "Bale follower source-reference admission is enabled without a wake authority.",
             );
           const receipt = await admission.admit(envelope, ctx);
           return {
@@ -4870,12 +4870,12 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
           };
         }
         if (envelope.payload.queueLane === "steer" &&
-            ![deps.getLocalProtocol?.(), deps.getLeaderProtocol?.()].every(hasTelegramBusSteerQueueHandoffCapability)) {
+            ![deps.getLocalProtocol?.(), deps.getLeaderProtocol?.()].every(hasBaleBusSteerQueueHandoffCapability)) {
           throw new Error("Steer queue handoff capability was not negotiated.");
         }
         if (!deps.handleQueueHandoff) {
           throw new Error(
-            "Telegram bus receiver cannot accept queue handoff payloads.",
+            "Bale bus receiver cannot accept queue handoff payloads.",
           );
         }
         const result = await deps.handleQueueHandoff(envelope, ctx);
@@ -4891,7 +4891,7 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
           )
         ) {
           throw new Error(
-            "Telegram queue handoff staging returned a mismatched receipt.",
+            "Bale queue handoff staging returned a mismatched receipt.",
           );
         }
         return {
@@ -4909,7 +4909,7 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
           message:
             error instanceof Error
               ? error.message
-              : "Telegram bus follower dispatch failed.",
+              : "Bale bus follower dispatch failed.",
         };
       }
     },
@@ -4918,7 +4918,7 @@ export function createTelegramBusForwardedUpdateReceiverRuntime<TContext>(
 }
 
 function parseRegistrationResult(value: unknown): {
-  target?: TelegramTarget;
+  target?: BaleTarget;
   slot?: string;
   threadName?: string;
   displayTitle?: string;

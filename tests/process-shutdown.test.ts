@@ -1,6 +1,6 @@
 /**
- * Process-level shutdown regressions for the Telegram extension
- * Zones: process lifecycle, telegram polling, shutdown cleanup
+ * Process-level shutdown regressions for the Bale extension
+ * Zones: process lifecycle, bale polling, shutdown cleanup
  * Verifies session shutdown releases or unrefs runtime handles so headless processes can exit
  */
 
@@ -169,25 +169,25 @@ async function createPiPrintFixtureExtension(tempDir: string): Promise<string> {
       `import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";\n\n` +
       `export default function (pi) {\n` +
       `  const agentDir = process.env.PI_CODING_AGENT_DIR;\n` +
-      `  if (process.env.PI_TELEGRAM_TEST_LOCK_MODE === "owner" && agentDir) {\n` +
-      `    const ownersDir = join(agentDir, "tmp", "pi-telegram");\n` +
+      `  if (process.env.PI_BALE_TEST_LOCK_MODE === "owner" && agentDir) {\n` +
+      `    const ownersDir = join(agentDir, "tmp", "pi-bale");\n` +
       `    mkdirSync(ownersDir, { recursive: true });\n` +
       `    writeFileSync(join(ownersDir, "state.json"), JSON.stringify({ version: 2, profiles: { default: { transport: { pid: process.pid } } } }) + "\\n", { mode: 0o600 });\n` +
       `  }\n` +
       `  pi.on("session_start", (_event, ctx) => {\n` +
-      `    const forcedMode = process.env.PI_TELEGRAM_TEST_CTX_MODE;\n` +
+      `    const forcedMode = process.env.PI_BALE_TEST_CTX_MODE;\n` +
       `    if (forcedMode && ctx.mode === undefined) ctx.mode = forcedMode;\n` +
-      `    const methodMarker = process.env.PI_TELEGRAM_TEST_METHOD_MARKER;\n` +
+      `    const methodMarker = process.env.PI_BALE_TEST_METHOD_MARKER;\n` +
       `    if (methodMarker) appendFileSync(methodMarker, "session-mode:" + String(ctx.mode) + "\\n");\n` +
       `  });\n` +
       `  globalThis.fetch = async (input, init = {}) => {\n` +
       `    const method = String(input).split("/").at(-1);\n` +
-      `    const methodMarker = process.env.PI_TELEGRAM_TEST_METHOD_MARKER;\n` +
+      `    const methodMarker = process.env.PI_BALE_TEST_METHOD_MARKER;\n` +
       `    if (methodMarker) appendFileSync(methodMarker, method + "\\n");\n` +
       `    if (method === "deleteWebhook") return { json: async () => ({ ok: true, result: true }) };\n` +
       `    if (method === "sendChatAction") return { json: async () => ({ ok: true, result: true }) };\n` +
       `    if (method === "sendMessage") {\n` +
-      `      const marker = process.env.PI_TELEGRAM_TEST_SEND_MARKER;\n` +
+      `      const marker = process.env.PI_BALE_TEST_SEND_MARKER;\n` +
       `      if (marker) writeFileSync(marker, String(init.body ?? "") + "\\n");\n` +
       `      return { json: async () => ({ ok: true, result: { message_id: 100 } }) };\n` +
       `    }\n` +
@@ -199,7 +199,7 @@ async function createPiPrintFixtureExtension(tempDir: string): Promise<string> {
       `        signal?.addEventListener("abort", abort, { once: true });\n` +
       `      });\n` +
       `    }\n` +
-      `    throw new Error("Unexpected Telegram API method: " + method);\n` +
+      `    throw new Error("Unexpected Bale API method: " + method);\n` +
       `  };\n` +
       `  pi.registerProvider("fixture", {\n` +
       `    name: "Fixture Provider", baseUrl: "http://fixture.local", apiKey: "fixture", api: "fixture-stream",\n` +
@@ -231,13 +231,13 @@ async function createPiPrintAgentDir(
   config: Record<string, unknown>,
   locks: Record<string, unknown> = {},
 ): Promise<string> {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-pi-print-"));
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-pi-print-"));
   await writeFile(
-    join(agentDir, "telegram.json"),
+    join(agentDir, "bale.json"),
     JSON.stringify(config, null, "\t") + "\n",
     "utf8",
   );
-  const ownersDir = join(agentDir, "tmp", "pi-telegram");
+  const ownersDir = join(agentDir, "tmp", "pi-bale");
   await mkdir(ownersDir, { recursive: true });
   await writeFile(
     join(ownersDir, "state.json"),
@@ -247,7 +247,7 @@ async function createPiPrintAgentDir(
   return agentDir;
 }
 
-async function runPiPrintWithTelegram(
+async function runPiPrintWithBale(
   agentDir: string,
   fixtureExtension: string,
   env: NodeJS.ProcessEnv = {},
@@ -296,7 +296,7 @@ test("Process diagnostics identify an injected shutdown stall without exposing f
       exitTimeoutMs: 1000,
       env: {
         PI_CODING_AGENT_DIR: "/private-fixture-path-not-for-diagnostics",
-        PI_TELEGRAM_TEST_PROBE_SECRET: "private-fixture-token-not-for-diagnostics",
+        PI_BALE_TEST_PROBE_SECRET: "private-fixture-token-not-for-diagnostics",
       },
     }),
     (error: unknown) => {
@@ -334,9 +334,9 @@ test("Process exit deadline starts after the event-loop checkpoint, not during s
   });
 });
 
-test("Child process sharing the agent dir does not poll while parent owns Telegram lock", async (t) => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-process-lock-"));
-  const markerPath = join(tempDir, "telegram-methods.log");
+test("Child process sharing the agent dir does not poll while parent owns Bale lock", async (t) => {
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-process-lock-"));
+  const markerPath = join(tempDir, "bale-methods.log");
   const stopPath = join(tempDir, "stop");
   const agentDir = await createPiPrintAgentDir({
     botToken: "123:abc",
@@ -350,10 +350,10 @@ test("Child process sharing the agent dir does not poll while parent owns Telegr
     import { join } from "node:path";
 
     const agentDir = process.env.PI_CODING_AGENT_DIR;
-    const markerPath = process.env.PI_TELEGRAM_TEST_METHOD_MARKER;
-    const stopPath = process.env.PI_TELEGRAM_TEST_STOP_PATH;
+    const markerPath = process.env.PI_BALE_TEST_METHOD_MARKER;
+    const stopPath = process.env.PI_BALE_TEST_STOP_PATH;
     const cwd = "/repo/parent-owner";
-    const ownersDir = join(agentDir, "tmp", "pi-telegram");
+    const ownersDir = join(agentDir, "tmp", "pi-bale");
     mkdirSync(ownersDir, { recursive: true });
     writeFileSync(
       join(ownersDir, "state.json"),
@@ -374,7 +374,7 @@ test("Child process sharing the agent dir does not poll while parent owns Telegr
           signal?.addEventListener("abort", abort, { once: true });
         });
       }
-      throw new Error("Unexpected Telegram API method: " + method);
+      throw new Error("Unexpected Bale API method: " + method);
     };
     const handlers = new Map();
     const pi = {
@@ -422,8 +422,8 @@ test("Child process sharing the agent dir does not poll while parent owns Telegr
       env: {
         ...process.env,
         PI_CODING_AGENT_DIR: agentDir,
-        PI_TELEGRAM_TEST_METHOD_MARKER: markerPath,
-        PI_TELEGRAM_TEST_STOP_PATH: stopPath,
+        PI_BALE_TEST_METHOD_MARKER: markerPath,
+        PI_BALE_TEST_STOP_PATH: stopPath,
       },
       stdio: ["ignore", "ignore", "pipe"],
     },
@@ -445,7 +445,7 @@ test("Child process sharing the agent dir does not poll while parent owns Telegr
     const childScript = `
       ${processProbePrelude("child")}
       import { appendFileSync } from "node:fs";
-      const markerPath = process.env.PI_TELEGRAM_TEST_METHOD_MARKER;
+      const markerPath = process.env.PI_BALE_TEST_METHOD_MARKER;
       globalThis.fetch = async (input) => {
         const method = String(input).split("/").at(-1);
         appendFileSync(markerPath, "child:" + method + "\\n");
@@ -488,7 +488,7 @@ test("Child process sharing the agent dir does not poll while parent owns Telegr
     const child = await runNodeScript(childScript, {
       env: {
         PI_CODING_AGENT_DIR: agentDir,
-        PI_TELEGRAM_TEST_METHOD_MARKER: markerPath,
+        PI_BALE_TEST_METHOD_MARKER: markerPath,
       },
       // Linux and macOS traces exceeded five seconds before import completion.
       // Reuse the existing Windows total cap, but keep a strict post-checkpoint exit budget everywhere.
@@ -526,9 +526,9 @@ test("Child process sharing the agent dir does not poll while parent owns Telegr
   }
 });
 
-test("Direct Telegram tools refuse delivery from a non-owner process", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-direct-owner-"));
-  const markerPath = join(tempDir, "telegram-methods.log");
+test("Direct Bale tools refuse delivery from a non-owner process", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-direct-owner-"));
+  const markerPath = join(tempDir, "bale-methods.log");
   const attachmentPath = join(tempDir, "demo.txt");
   await writeFile(attachmentPath, "demo", "utf8");
   const agentDir = await createPiPrintAgentDir(
@@ -548,8 +548,8 @@ test("Direct Telegram tools refuse delivery from a non-owner process", async () 
   try {
     const script = `
       import { appendFileSync } from "node:fs";
-      const markerPath = process.env.PI_TELEGRAM_TEST_METHOD_MARKER;
-      const attachmentPath = process.env.PI_TELEGRAM_TEST_ATTACHMENT_PATH;
+      const markerPath = process.env.PI_BALE_TEST_METHOD_MARKER;
+      const attachmentPath = process.env.PI_BALE_TEST_ATTACHMENT_PATH;
       globalThis.fetch = async (input) => {
         const method = String(input).split("/").at(-1);
         appendFileSync(markerPath, method + "\\n");
@@ -590,8 +590,8 @@ test("Direct Telegram tools refuse delivery from a non-owner process", async () 
       await handlers.get("session_start")?.({}, ctx);
       const failures = [];
       for (const [name, params] of [
-        ["telegram_message", { text: "hello" }],
-        ["telegram_attach", { paths: [attachmentPath] }],
+        ["bale_message", { text: "hello" }],
+        ["bale_attach", { paths: [attachmentPath] }],
       ]) {
         try {
           await tools.get(name)?.execute("tool-call", params);
@@ -606,18 +606,18 @@ test("Direct Telegram tools refuse delivery from a non-owner process", async () 
     const result = await runNodeScript(script, {
       env: {
         PI_CODING_AGENT_DIR: agentDir,
-        PI_TELEGRAM_TEST_METHOD_MARKER: markerPath,
-        PI_TELEGRAM_TEST_ATTACHMENT_PATH: attachmentPath,
+        PI_BALE_TEST_METHOD_MARKER: markerPath,
+        PI_BALE_TEST_ATTACHMENT_PATH: attachmentPath,
       },
     });
     assert.equal(result.code, 0, result.stderr);
     assert.match(
       result.stdout,
-      /telegram_message:\nTelegram direct delivery requires this Pi instance to own \/telegram-connect/,
+      /bale_message:\nBale direct delivery requires this Pi instance to own \/bale-connect/,
     );
     assert.match(
       result.stdout,
-      /telegram_attach:\nTelegram direct delivery requires this Pi instance to own \/telegram-connect/,
+      /bale_attach:\nBale direct delivery requires this Pi instance to own \/bale-connect/,
     );
     await assert.rejects(() => readFile(markerPath, "utf8"), {
       code: "ENOENT",
@@ -629,10 +629,10 @@ test("Direct Telegram tools refuse delivery from a non-owner process", async () 
 });
 
 test(
-  "pi -p with Telegram extension and no active lock exits",
+  "pi -p with Bale extension and no active lock exits",
   { skip: !PI_CLI_AVAILABLE },
   async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-pi-print-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-pi-print-"));
     const fixtureExtension = await createPiPrintFixtureExtension(tempDir);
     const agentDir = await createPiPrintAgentDir({
       botToken: "123:abc",
@@ -640,7 +640,7 @@ test(
       lastUpdateId: 0,
     });
     try {
-      const result = await runPiPrintWithTelegram(agentDir, fixtureExtension);
+      const result = await runPiPrintWithBale(agentDir, fixtureExtension);
       assert.equal(result.code, 0, result.stderr);
       assert.equal(result.signal, null, result.stderr);
       assert.match(result.stdout, /fixture ok/);
@@ -652,22 +652,22 @@ test(
 );
 
 test(
-  "pi -p with Telegram-owned lock stays passive and does not poll",
+  "pi -p with Bale-owned lock stays passive and does not poll",
   { skip: !PI_CLI_AVAILABLE },
   async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-pi-print-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-pi-print-"));
     const fixtureExtension = await createPiPrintFixtureExtension(tempDir);
-    const markerPath = join(tempDir, "telegram-methods.log");
+    const markerPath = join(tempDir, "bale-methods.log");
     const agentDir = await createPiPrintAgentDir({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
     try {
-      const result = await runPiPrintWithTelegram(agentDir, fixtureExtension, {
-        PI_TELEGRAM_TEST_CTX_MODE: "print",
-        PI_TELEGRAM_TEST_LOCK_MODE: "owner",
-        PI_TELEGRAM_TEST_METHOD_MARKER: markerPath,
+      const result = await runPiPrintWithBale(agentDir, fixtureExtension, {
+        PI_BALE_TEST_CTX_MODE: "print",
+        PI_BALE_TEST_LOCK_MODE: "owner",
+        PI_BALE_TEST_METHOD_MARKER: markerPath,
       });
       assert.equal(result.code, 0, result.stderr);
       assert.equal(result.signal, null, result.stderr);
@@ -683,10 +683,10 @@ test(
 );
 
 test(
-  "pi -p with proactive config and Telegram-owned lock exits",
+  "pi -p with proactive config and Bale-owned lock exits",
   { skip: !PI_CLI_AVAILABLE },
   async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-pi-print-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-pi-print-"));
     const fixtureExtension = await createPiPrintFixtureExtension(tempDir);
     const agentDir = await createPiPrintAgentDir({
       botToken: "123:abc",
@@ -695,8 +695,8 @@ test(
       assistant: { proactivePush: true },
     });
     try {
-      const result = await runPiPrintWithTelegram(agentDir, fixtureExtension, {
-        PI_TELEGRAM_TEST_LOCK_MODE: "owner",
+      const result = await runPiPrintWithBale(agentDir, fixtureExtension, {
+        PI_BALE_TEST_LOCK_MODE: "owner",
       });
       assert.equal(result.code, 0, result.stderr);
       assert.equal(result.signal, null, result.stderr);
@@ -709,10 +709,10 @@ test(
 );
 
 test(
-  "pi -p non-owner skips proactive Telegram result",
+  "pi -p non-owner skips proactive Bale result",
   { skip: !PI_CLI_AVAILABLE },
   async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-pi-print-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-pi-print-"));
     const fixtureExtension = await createPiPrintFixtureExtension(tempDir);
     const markerPath = join(tempDir, "send-marker.json");
     const agentDir = await createPiPrintAgentDir(
@@ -730,8 +730,8 @@ test(
       },
     );
     try {
-      const result = await runPiPrintWithTelegram(agentDir, fixtureExtension, {
-        PI_TELEGRAM_TEST_SEND_MARKER: markerPath,
+      const result = await runPiPrintWithBale(agentDir, fixtureExtension, {
+        PI_BALE_TEST_SEND_MARKER: markerPath,
       });
       assert.equal(result.code, 0, result.stderr);
       assert.equal(result.signal, null, result.stderr);
@@ -753,10 +753,10 @@ test("Extension session shutdown without active lock lets process exit", async (
     import { tmpdir } from "node:os";
     import { join } from "node:path";
 
-    const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-process-shutdown-"));
+    const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-process-shutdown-"));
     process.env.PI_CODING_AGENT_DIR = agentDir;
     await writeFile(
-      join(agentDir, "telegram.json"),
+      join(agentDir, "bale.json"),
       JSON.stringify({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0 }) + "\\n",
       "utf8",
     );
@@ -801,15 +801,15 @@ test("Extension session shutdown lets an active polling owner process exit", asy
     import { tmpdir } from "node:os";
     import { join } from "node:path";
 
-    const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-process-shutdown-"));
+    const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-process-shutdown-"));
     process.env.PI_CODING_AGENT_DIR = agentDir;
     const cwd = "/repo/process-shutdown";
     await writeFile(
-      join(agentDir, "telegram.json"),
+      join(agentDir, "bale.json"),
       JSON.stringify({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0 }) + "\\n",
       "utf8",
     );
-    const ownersDir = join(agentDir, "tmp", "pi-telegram");
+    const ownersDir = join(agentDir, "tmp", "pi-bale");
     await mkdir(ownersDir, { recursive: true });
     await writeFile(
       join(ownersDir, "state.json"),
@@ -833,7 +833,7 @@ test("Extension session shutdown lets an active polling owner process exit", asy
           signal?.addEventListener("abort", abort, { once: true });
         });
       }
-      throw new Error("Unexpected Telegram API method: " + method);
+      throw new Error("Unexpected Bale API method: " + method);
     };
 
     const handlers = new Map();

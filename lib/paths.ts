@@ -1,5 +1,5 @@
 /**
- * Telegram bridge path resolution for Pi-compatible runtimes
+ * Bale bridge path resolution for Pi-compatible runtimes
  * Zones: telemetry paths, filesystem, runtime identity
  * Owns agent-dir detection and extension-local path derivation
  */
@@ -17,9 +17,9 @@ import {
   sep,
 } from "node:path";
 
-export const TELEGRAM_DEFAULT_PROFILE_NAME = "default";
+export const BALE_DEFAULT_PROFILE_NAME = "default";
 
-export interface TelegramAgentDirResolutionInput {
+export interface BaleAgentDirResolutionInput {
   env?: Partial<Pick<NodeJS.ProcessEnv, "PI_CODING_AGENT_DIR">>;
   execPath?: string;
   argv?: readonly string[];
@@ -35,7 +35,7 @@ export interface TelegramAgentDirResolutionInput {
  * 3. Fallback: `~/.pi/agent`.
  */
 export function resolveAgentDir(
-  input: TelegramAgentDirResolutionInput = {},
+  input: BaleAgentDirResolutionInput = {},
 ): string {
   const env = input.env ?? process.env;
   if (env.PI_CODING_AGENT_DIR) return resolve(env.PI_CODING_AGENT_DIR);
@@ -54,7 +54,7 @@ export function resolveAgentDir(
  * Reject aliases; never repair relative historical references or redirect storage.
  * Equality proves spelling only, not file identity, consumer closure or migration readiness.
  */
-export function requireTelegramStoragePathReference(
+export function requireBaleStoragePathReference(
   path: string,
   expectedPath: string,
 ): string {
@@ -68,15 +68,15 @@ export function requireTelegramStoragePathReference(
     path !== expectedPath
   ) {
     throw new Error(
-      "Telegram storage reference does not match its approved absolute path.",
+      "Bale storage reference does not match its approved absolute path.",
     );
   }
   return path;
 }
 
-/** Telegram bridge configuration file (<agentDir>/telegram.json). */
-export function resolveTelegramConfigPath(): string {
-  return join(resolveAgentDir(), "telegram.json");
+/** Bale bridge configuration file (<agentDir>/bale.json). */
+export function resolveBaleConfigPath(): string {
+  return join(resolveAgentDir(), "bale.json");
 }
 
 /**
@@ -107,68 +107,68 @@ function canonicalizeExistingPrefix(path: string): string {
   }
 }
 
-/** Telegram bridge temporary directory (<agentDir>/tmp/pi-telegram); releases before 0.52.0 used `tmp/telegram`. */
-export function resolveTelegramTempDir(agentDir = resolveAgentDir()): string {
-  return join(canonicalizeExistingPrefix(agentDir), "tmp", "pi-telegram");
+/** Bale bridge temporary directory (<agentDir>/tmp/pi-bale); releases before 0.52.0 used `tmp/bale`. */
+export function resolveBaleTempDir(agentDir = resolveAgentDir()): string {
+  return join(canonicalizeExistingPrefix(agentDir), "tmp", "pi-bale");
 }
 
 /** Consolidated-root service artifacts (transaction guards, staging and IPC), never session custody. */
-export function resolveTelegramRuntimeDir(
+export function resolveBaleRuntimeDir(
   agentDir = resolveAgentDir(),
 ): string {
-  return join(resolveTelegramTempDir(agentDir), "runtime");
+  return join(resolveBaleTempDir(agentDir), "runtime");
 }
 
 /** Rotated shared runtime event segments, outside the persistent root-file census. */
-export function resolveTelegramRuntimeLogsDir(
+export function resolveBaleRuntimeLogsDir(
   agentDir = resolveAgentDir(),
 ): string {
-  return join(resolveTelegramTempDir(agentDir), "logs");
+  return join(resolveBaleTempDir(agentDir), "logs");
 }
 
-/** Consolidated runtime state for every logical profile (`tmp/pi-telegram/state.json`). */
-export function resolveTelegramStatePath(agentDir = resolveAgentDir()): string {
-  return join(resolveTelegramTempDir(agentDir), "state.json");
+/** Consolidated runtime state for every logical profile (`tmp/pi-bale/state.json`). */
+export function resolveBaleStatePath(agentDir = resolveAgentDir()): string {
+  return join(resolveBaleTempDir(agentDir), "state.json");
 }
 
-/** Flat attachment scratch directory (<agentDir>/tmp/pi-telegram/attachments). */
-export function resolveTelegramAttachmentsDir(
+/** Flat attachment scratch directory (<agentDir>/tmp/pi-bale/attachments). */
+export function resolveBaleAttachmentsDir(
   agentDir = resolveAgentDir(),
 ): string {
-  return join(resolveTelegramTempDir(agentDir), "attachments");
+  return join(resolveBaleTempDir(agentDir), "attachments");
 }
 
 /** Read-only pre-0.52.0 ownership file, consulted only to refuse a second poller beside a live older leader. */
-export function resolveLegacyTelegramOwnersPath(
+export function resolveLegacyBaleOwnersPath(
   agentDir = resolveAgentDir(),
 ): string {
-  return join(agentDir, "tmp", "telegram", "owners.json");
+  return join(agentDir, "tmp", "bale", "owners.json");
 }
 
-/** Telegram transport ownership store (<agentDir>/tmp/pi-telegram/owners.json). */
-export function resolveTelegramOwnersPath(): string {
-  return join(resolveTelegramTempDir(), "owners.json");
+/** Bale transport ownership store (<agentDir>/tmp/pi-bale/owners.json). */
+export function resolveBaleOwnersPath(): string {
+  return join(resolveBaleTempDir(), "owners.json");
 }
 
-export function getTelegramProfilePathSuffix(profileName?: string): string {
-  if (!profileName || profileName === TELEGRAM_DEFAULT_PROFILE_NAME) return "";
+export function getBaleProfilePathSuffix(profileName?: string): string {
+  if (!profileName || profileName === BALE_DEFAULT_PROFILE_NAME) return "";
   return `.${profileName.replace(/[^a-zA-Z0-9._-]+/g, "_")}`;
 }
 
-export function resolveTelegramProfileTempFilePath(
+export function resolveBaleProfileTempFilePath(
   baseName: string,
   extension: string,
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
   return join(
-    resolveTelegramTempDir(agentDir),
-    `${baseName}${getTelegramProfilePathSuffix(profileName)}.${extension}`,
+    resolveBaleTempDir(agentDir),
+    `${baseName}${getBaleProfilePathSuffix(profileName)}.${extension}`,
   );
 }
 
 /** Shared state/log paths for every profile, under the resolved agent dir (honors `PI_CODING_AGENT_DIR`). */
-export function getTelegramDiagnosticsDisplayPaths(
+export function getBaleDiagnosticsDisplayPaths(
   _profileName?: string,
   agentDir = resolveAgentDir(),
 ): {
@@ -191,17 +191,17 @@ export function getTelegramDiagnosticsDisplayPaths(
       : path;
   };
   return {
-    state: display(resolveTelegramStatePath(agentDir)),
-    logs: display(resolveTelegramRuntimeLogPath(agentDir)),
+    state: display(resolveBaleStatePath(agentDir)),
+    logs: display(resolveBaleRuntimeLogPath(agentDir)),
   };
 }
 
-/** Durable Workspace admission ledger (<agentDir>/tmp/pi-telegram/workspace-admission[.<profile>].json). */
-export function resolveTelegramWorkspaceAdmissionPath(
+/** Durable Workspace admission ledger (<agentDir>/tmp/pi-bale/workspace-admission[.<profile>].json). */
+export function resolveBaleWorkspaceAdmissionPath(
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
-  return resolveTelegramProfileTempFilePath(
+  return resolveBaleProfileTempFilePath(
     "workspace-admission",
     "json",
     agentDir,
@@ -210,31 +210,31 @@ export function resolveTelegramWorkspaceAdmissionPath(
 }
 
 /** Profile-only callback shape; binds storage to the configured agent directory. */
-export function resolveTelegramWorkspaceAdmissionPathForProfile(
+export function resolveBaleWorkspaceAdmissionPathForProfile(
   profileName?: string,
 ): string {
-  return resolveTelegramWorkspaceAdmissionPath(resolveAgentDir(), profileName);
+  return resolveBaleWorkspaceAdmissionPath(resolveAgentDir(), profileName);
 }
 
 /** Consolidated non-session service journal (`journals/<kind>.<profile sha256>.json`) and its runtime namespace. */
-export function resolveTelegramServiceJournalStorage(
+export function resolveBaleServiceJournalStorage(
   kind: "thread-cleanup" | "channel-posts",
   agentDir = resolveAgentDir(),
-  profileName = TELEGRAM_DEFAULT_PROFILE_NAME,
+  profileName = BALE_DEFAULT_PROFILE_NAME,
 ): { path: string; runtimeDir: string } {
   const profileHash = createHash("sha256").update(profileName).digest("hex");
   return {
     path: join(
-      resolveTelegramTempDir(agentDir),
+      resolveBaleTempDir(agentDir),
       "journals",
       `${kind}.${profileHash}.json`,
     ),
-    runtimeDir: resolveTelegramRuntimeDir(agentDir),
+    runtimeDir: resolveBaleRuntimeDir(agentDir),
   };
 }
 
 /** Bind one non-session journal to its exact colocated-root service namespace, never a format fallback. */
-export function getTelegramJournalPublicationPaths(
+export function getBaleJournalPublicationPaths(
   path: string,
   runtimeDir?: string,
 ): {
@@ -243,14 +243,14 @@ export function getTelegramJournalPublicationPaths(
 } {
   if (runtimeDir === undefined)
     return { transactionPath: `${path}.transaction`, temporaryBasePath: path };
-  requireTelegramStoragePathReference(path, resolve(path));
-  requireTelegramStoragePathReference(
+  requireBaleStoragePathReference(path, resolve(path));
+  requireBaleStoragePathReference(
     runtimeDir,
     join(dirname(dirname(path)), "runtime"),
   );
   if (basename(dirname(path)) !== "journals")
     throw new Error(
-      "Telegram service journal must use its journals namespace.",
+      "Bale service journal must use its journals namespace.",
     );
   return {
     transactionPath: join(runtimeDir, `${basename(path)}.transaction`),
@@ -259,11 +259,11 @@ export function getTelegramJournalPublicationPaths(
 }
 
 /** Durable inactive Thread cleanup work-set journal. */
-export function resolveTelegramThreadCleanupWorkPath(
+export function resolveBaleThreadCleanupWorkPath(
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
-  return resolveTelegramProfileTempFilePath(
+  return resolveBaleProfileTempFilePath(
     "thread-cleanup",
     "json",
     agentDir,
@@ -272,11 +272,11 @@ export function resolveTelegramThreadCleanupWorkPath(
 }
 
 /** Durable agent-authored channel post journal. */
-export function resolveTelegramChannelPostJournalPath(
+export function resolveBaleChannelPostJournalPath(
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
-  return resolveTelegramProfileTempFilePath(
+  return resolveBaleProfileTempFilePath(
     "channel-posts",
     "json",
     agentDir,
@@ -284,12 +284,12 @@ export function resolveTelegramChannelPostJournalPath(
   );
 }
 
-/** Durable inbound update journal (<agentDir>/tmp/pi-telegram/inbox[.<profile>].json). */
-export function resolveTelegramUpdateJournalPath(
+/** Durable inbound update journal (<agentDir>/tmp/pi-bale/inbox[.<profile>].json). */
+export function resolveBaleUpdateJournalPath(
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
-  return resolveTelegramProfileTempFilePath(
+  return resolveBaleProfileTempFilePath(
     "inbox",
     "json",
     agentDir,
@@ -298,26 +298,26 @@ export function resolveTelegramUpdateJournalPath(
 }
 
 /** Profile-only callback shape; binds storage to the configured agent directory. */
-export function resolveTelegramUpdateJournalPathForProfile(
+export function resolveBaleUpdateJournalPathForProfile(
   profileName?: string,
 ): string {
-  return resolveTelegramUpdateJournalPath(resolveAgentDir(), profileName);
+  return resolveBaleUpdateJournalPath(resolveAgentDir(), profileName);
 }
 
 /** Durable follower delivery journal, isolated by stable recipient binding. */
-export function resolveTelegramFollowerJournalPath(
+export function resolveBaleFollowerJournalPath(
   recipientBindingKey: string,
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
   if (!recipientBindingKey) {
-    throw new Error("Telegram follower journal binding key is required.");
+    throw new Error("Bale follower journal binding key is required.");
   }
   const bindingHash = createHash("sha256")
     .update(recipientBindingKey)
     .digest("hex")
     .slice(0, 16);
-  return resolveTelegramProfileTempFilePath(
+  return resolveBaleProfileTempFilePath(
     `follower-inbox-${bindingHash}`,
     "json",
     agentDir,
@@ -325,7 +325,7 @@ export function resolveTelegramFollowerJournalPath(
   );
 }
 
-const TELEGRAM_SESSION_DIRECTORY_MAX_LENGTH = 200;
+const BALE_SESSION_DIRECTORY_MAX_LENGTH = 200;
 const WINDOWS_RESERVED_NAME =
   /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?$/u;
 
@@ -335,7 +335,7 @@ const WINDOWS_RESERVED_NAME =
  * filesystems never merge two sessions; a leading or trailing dot and Windows reserved names are encoded so the name
  * can never be `.`/`..`, hidden, or a device. The encoding is reversible; an empty or over-long result is refused.
  */
-export function encodeTelegramSessionDirectoryName(
+export function encodeBaleSessionDirectoryName(
   sessionId: string,
 ): string | undefined {
   if (typeof sessionId !== "string" || sessionId.length === 0) return undefined;
@@ -353,13 +353,13 @@ export function encodeTelegramSessionDirectoryName(
   });
   if (WINDOWS_RESERVED_NAME.test(name))
     name = `%${name.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}${name.slice(1)}`;
-  return name.length <= TELEGRAM_SESSION_DIRECTORY_MAX_LENGTH
+  return name.length <= BALE_SESSION_DIRECTORY_MAX_LENGTH
     ? name
     : undefined;
 }
 
-/** Inverse of `encodeTelegramSessionDirectoryName`; undefined unless the name is exactly canonical. */
-export function decodeTelegramSessionDirectoryName(
+/** Inverse of `encodeBaleSessionDirectoryName`; undefined unless the name is exactly canonical. */
+export function decodeBaleSessionDirectoryName(
   name: string,
 ): string | undefined {
   if (!/^[a-z0-9_.%A-F-]+$/u.test(name)) return undefined;
@@ -373,35 +373,35 @@ export function decodeTelegramSessionDirectoryName(
     } else bytes.push(name.charCodeAt(index));
   }
   const decoded = Buffer.from(bytes).toString("utf8");
-  return encodeTelegramSessionDirectoryName(decoded) === name
+  return encodeBaleSessionDirectoryName(decoded) === name
     ? decoded
     : undefined;
 }
 
-/** Root of every session folder (<agentDir>/tmp/pi-telegram/sessions). */
-export function resolveTelegramSessionsDir(
+/** Root of every session folder (<agentDir>/tmp/pi-bale/sessions). */
+export function resolveBaleSessionsDir(
   agentDir = resolveAgentDir(),
 ): string {
-  return join(resolveTelegramTempDir(agentDir), "sessions");
+  return join(resolveBaleTempDir(agentDir), "sessions");
 }
 
-/** One session's folder (<agentDir>/tmp/pi-telegram/sessions/<session id>). */
-export function resolveTelegramSessionDir(
+/** One session's folder (<agentDir>/tmp/pi-bale/sessions/<session id>). */
+export function resolveBaleSessionDir(
   sessionId: string,
   agentDir = resolveAgentDir(),
 ): string {
-  const name = encodeTelegramSessionDirectoryName(sessionId);
+  const name = encodeBaleSessionDirectoryName(sessionId);
   if (!name)
-    throw new Error("Telegram session directory requires a usable session id.");
-  return join(resolveTelegramSessionsDir(agentDir), name);
+    throw new Error("Bale session directory requires a usable session id.");
+  return join(resolveBaleSessionsDir(agentDir), name);
 }
 
 /** Hash naming one recipient incarnation inside its session folder; unchanged from the former follower inbox. */
-export function getTelegramRecipientJournalHash(
+export function getBaleRecipientJournalHash(
   recipientBindingKey: string,
 ): string {
   if (!recipientBindingKey)
-    throw new Error("Telegram session journal binding key is required.");
+    throw new Error("Bale session journal binding key is required.");
   return createHash("sha256")
     .update(recipientBindingKey)
     .digest("hex")
@@ -409,54 +409,54 @@ export function getTelegramRecipientJournalHash(
 }
 
 /** Durable per-session journal (`sessions/<session id>/journal.<hash>[.<profile>].json`); the name never reveals a role. */
-export function resolveTelegramSessionJournalPath(
+export function resolveBaleSessionJournalPath(
   sessionId: string,
   recipientBindingKey: string,
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
   return join(
-    resolveTelegramSessionDir(sessionId, agentDir),
-    `journal.${getTelegramRecipientJournalHash(recipientBindingKey)}${getTelegramProfilePathSuffix(profileName)}.json`,
+    resolveBaleSessionDir(sessionId, agentDir),
+    `journal.${getBaleRecipientJournalHash(recipientBindingKey)}${getBaleProfilePathSuffix(profileName)}.json`,
   );
 }
 
 /** Leader polling journal hosted by the session that first led (`sessions/<id>/inbox[.<profile>].json`); owners.json names it. */
-export function resolveTelegramSessionPollingJournalPath(
+export function resolveBaleSessionPollingJournalPath(
   sessionId: string,
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
   return join(
-    resolveTelegramSessionDir(sessionId, agentDir),
-    `inbox${getTelegramProfilePathSuffix(profileName)}.json`,
+    resolveBaleSessionDir(sessionId, agentDir),
+    `inbox${getBaleProfilePathSuffix(profileName)}.json`,
   );
 }
 
 /** Accept only a canonical `sessions/<id>/inbox[.<profile>].json` beneath this agent's runtime. */
-export function isTelegramSessionPollingJournalPath(
+export function isBaleSessionPollingJournalPath(
   path: string,
   agentDir = resolveAgentDir(),
 ): boolean {
-  const parts = relative(resolveTelegramSessionsDir(agentDir), path).split(sep);
+  const parts = relative(resolveBaleSessionsDir(agentDir), path).split(sep);
   return (
     isAbsolute(path) &&
     parts.length === 2 &&
-    decodeTelegramSessionDirectoryName(parts[0]!) !== undefined &&
+    decodeBaleSessionDirectoryName(parts[0]!) !== undefined &&
     /^inbox(?:\.[a-zA-Z0-9._-]+)?\.json$/u.test(parts[1]!)
   );
 }
 
-/** Runtime event log (<agentDir>/tmp/pi-telegram/logs.jsonl). */
-export function resolveTelegramRuntimeLogPath(
+/** Runtime event log (<agentDir>/tmp/pi-bale/logs.jsonl). */
+export function resolveBaleRuntimeLogPath(
   agentDir = resolveAgentDir(),
 ): string {
-  return resolveTelegramProfileTempFilePath("logs", "jsonl", agentDir);
+  return resolveBaleProfileTempFilePath("logs", "jsonl", agentDir);
 }
 
 /** Bounded previous shared log segment below `logs/`. */
-export function resolveTelegramPreviousSharedRuntimeLogPath(
+export function resolveBalePreviousSharedRuntimeLogPath(
   agentDir = resolveAgentDir(),
 ): string {
-  return join(resolveTelegramRuntimeLogsDir(agentDir), "logs._prev.jsonl");
+  return join(resolveBaleRuntimeLogsDir(agentDir), "logs._prev.jsonl");
 }

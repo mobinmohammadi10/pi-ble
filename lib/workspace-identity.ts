@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { posix, resolve } from "node:path";
 
-export interface TelegramWorkspaceBindingIdentity {
+export interface BaleWorkspaceBindingIdentity {
   cwd: string;
   workspaceKey: string;
   /** Exact durable Pi session identity; absent only on legacy cwd-only bindings. */
@@ -21,30 +21,30 @@ export interface TelegramWorkspaceBindingIdentity {
   slot?: string;
 }
 
-export const TELEGRAM_WORKSPACE_KEY_MAX_LENGTH = 180;
-const TELEGRAM_SESSION_ID_MAX_LENGTH = 256;
+export const BALE_WORKSPACE_KEY_MAX_LENGTH = 180;
+const BALE_SESSION_ID_MAX_LENGTH = 256;
 
-export function normalizeTelegramSessionId(
+export function normalizeBaleSessionId(
   sessionId: string,
 ): string | undefined {
   if (typeof sessionId !== "string") return undefined;
   const normalized = sessionId.trim();
   return normalized &&
-    Buffer.byteLength(normalized, "utf8") <= TELEGRAM_SESSION_ID_MAX_LENGTH
+    Buffer.byteLength(normalized, "utf8") <= BALE_SESSION_ID_MAX_LENGTH
     ? normalized
     : undefined;
 }
 
-export function createTelegramSessionKey(
+export function createBaleSessionKey(
   sessionId: string,
 ): string | undefined {
-  const normalized = normalizeTelegramSessionId(sessionId);
+  const normalized = normalizeBaleSessionId(sessionId);
   return normalized
     ? createHash("sha256").update(normalized).digest("hex")
     : undefined;
 }
 
-export function normalizeTelegramWorkspacePath(
+export function normalizeBaleWorkspacePath(
   cwd: string,
 ): string | undefined {
   const trimmed = cwd.trim();
@@ -62,25 +62,25 @@ export function normalizeTelegramWorkspacePath(
     : withoutTrailingSeparators;
 }
 
-export function createTelegramWorkspaceDirectoryKey(
+export function createBaleWorkspaceDirectoryKey(
   cwd: string,
 ): string | undefined {
-  const normalized = normalizeTelegramWorkspacePath(cwd);
+  const normalized = normalizeBaleWorkspacePath(cwd);
   if (!normalized) return undefined;
   const readable =
     normalized.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/gu, "") ||
     "root";
   const candidate = `--${readable}--`;
-  if (candidate.length <= TELEGRAM_WORKSPACE_KEY_MAX_LENGTH) return candidate;
+  if (candidate.length <= BALE_WORKSPACE_KEY_MAX_LENGTH) return candidate;
   const digest = createHash("sha256")
     .update(normalized)
     .digest("hex")
     .slice(0, 12);
-  const prefixLength = TELEGRAM_WORKSPACE_KEY_MAX_LENGTH - digest.length - 5;
+  const prefixLength = BALE_WORKSPACE_KEY_MAX_LENGTH - digest.length - 5;
   return `--${readable.slice(0, prefixLength)}-${digest}--`;
 }
 
-function createTelegramWorkspaceInstanceSlot(
+function createBaleWorkspaceInstanceSlot(
   ordinal: number,
 ): string | undefined {
   if (!Number.isSafeInteger(ordinal) || ordinal < 0) return undefined;
@@ -94,18 +94,18 @@ function createTelegramWorkspaceInstanceSlot(
   return slot;
 }
 
-export function createTelegramWorkspaceBindingIdentityWithKey(
+export function createBaleWorkspaceBindingIdentityWithKey(
   cwd: string,
   workspaceKey: string,
   ordinal: number,
   sessionId?: string,
-): TelegramWorkspaceBindingIdentity | undefined {
-  const instanceSlot = createTelegramWorkspaceInstanceSlot(ordinal);
+): BaleWorkspaceBindingIdentity | undefined {
+  const instanceSlot = createBaleWorkspaceInstanceSlot(ordinal);
   if (!instanceSlot) return undefined;
   const normalizedSessionId =
-    sessionId === undefined ? undefined : normalizeTelegramSessionId(sessionId);
+    sessionId === undefined ? undefined : normalizeBaleSessionId(sessionId);
   const sessionKey = normalizedSessionId
-    ? createTelegramSessionKey(normalizedSessionId)
+    ? createBaleSessionKey(normalizedSessionId)
     : undefined;
   if (sessionId !== undefined && (!normalizedSessionId || !sessionKey)) {
     return undefined;
@@ -125,17 +125,17 @@ export function createTelegramWorkspaceBindingIdentityWithKey(
   };
 }
 
-export function createTelegramWorkspaceBindingIdentity(
+export function createBaleWorkspaceBindingIdentity(
   cwd: string,
   ordinal = 0,
   sessionId?: string,
-): TelegramWorkspaceBindingIdentity | undefined {
-  const normalized = normalizeTelegramWorkspacePath(cwd);
+): BaleWorkspaceBindingIdentity | undefined {
+  const normalized = normalizeBaleWorkspacePath(cwd);
   const workspaceKey = normalized
-    ? createTelegramWorkspaceDirectoryKey(normalized)
+    ? createBaleWorkspaceDirectoryKey(normalized)
     : undefined;
   if (!normalized || !workspaceKey) return undefined;
-  return createTelegramWorkspaceBindingIdentityWithKey(
+  return createBaleWorkspaceBindingIdentityWithKey(
     normalized,
     workspaceKey,
     ordinal,

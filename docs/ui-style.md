@@ -1,3 +1,5 @@
+> Bale port: only the supported subset in [Bale compatibility](bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
 # UI Style Guide
 
 Small standard for inline buttons, menu rows, state controls, cards, and confirmation dialogs.
@@ -8,7 +10,7 @@ Small standard for inline buttons, menu rows, state controls, cards, and confirm
 - Put emoji where they help scanning, not everywhere.
 - Use one strong indicator for current selection; avoid emoji noise on every option.
 - Match label casing to control role.
-- Keep Telegram bot commands such as `/start` and `/abort` as plain text so clients expose their native command links; bot command names use Telegram-compatible characters and never hyphens. Render Pi TUI commands mentioned inside Telegram HTML, such as `<code>/telegram-connect</code>`, as code so Telegram does not mis-tokenize their hyphenated names; callback alerts remain plain because Telegram does not support rich formatting there.
+- Keep Bale bot commands such as `/start` and `/abort` as plain text so clients expose their native command links; bot command names use Bale-compatible characters and never hyphens. Render Pi TUI commands mentioned inside Bale HTML, such as `<code>/bale-connect</code>`, as code so Bale does not mis-tokenize their hyphenated names; callback alerts remain plain because Bale does not support rich formatting there.
 - Prefer minimal, clear configuration UI over exhaustive explanation.
 - Preserve domain-owned callback prefixes and behavior in the owning module.
 
@@ -20,9 +22,9 @@ Use emoji as stable semantic markers, not decoration. Emoji carry transportable 
 
 | Emoji | Meaning | Canonical surfaces | Notes |
 | --- | --- | --- | --- |
-| `🧵` | Telegram/Pi thread | Unbound-thread warnings, thread lifecycle/status copy, and concrete thread target buttons in the Reroute and Restore submenus | Canonical thread marker. In route submenus the action lives in the heading and every target button is a thread, so each one carries `🧵` before its acknowledged display title or stable-name fallback. |
+| `🧵` | Bale/Pi thread | Unbound-thread warnings, thread lifecycle/status copy, and concrete thread target buttons in the Reroute and Restore submenus | Canonical thread marker. In route submenus the action lives in the heading and every target button is a thread, so each one carries `🧵` before its acknowledged display title or stable-name fallback. |
 | `🚦` | Routing decision | Root route chooser heading in unbound or temporary tabs (`🚦 Route this message:`) | The heading only asks for a decision; the buttons name each available action. |
-| `📡` | Telegram transport / bridge connection | Instance connected notices, polling/transport role, bridge online copy | Transport is not thread identity; use `🧵` for thread concepts. |
+| `📡` | Bale transport / bridge connection | Instance connected notices, polling/transport role, bridge online copy | Transport is not thread identity; use `🧵` for thread concepts. |
 | `📊` | Status / overview | `/status` command description, status cards or status rows | Use for status summaries, not queue priority. |
 | `🤖` | Model selection | `/model`, model menu headings, model status rows | Keep model-control surfaces visually distinct from thinking. |
 | `🧠` | Thinking level | `/thinking`, thinking menu headings, thinking status rows | Use only for reasoning/thinking controls. |
@@ -81,16 +83,16 @@ Use emoji as stable semantic markers, not decoration. Emoji carry transportable 
 
 ### Queue Reaction Shortcuts
 
-Queue reactions are shortcut controls for waiting turns. Preserve their semantics across Telegram reactions, queue-menu rows, status previews, and tests. Effective positive intent controls Steer/Priority/Normal; negative emoji control Keep/Skip. Fire selects Steer, dominates other positive reactions, and removing it falls back to remaining Priority aliases or Normal. Only changed effective intent overrides a menu choice; decorative changes and weaker positives under fire preserve lane/order. These categories are independent, may coexist, and mutate only their own dimension. Crossing lanes appends the prompt at the destination FIFO tail; changing Keep/Skip or changing emoji within one category preserves lane position. Skip wins only when dispatch reaches the prompt.
+Queue reactions are shortcut controls for waiting turns. Preserve their semantics across Bale reactions, queue-menu rows, status previews, and tests. Effective positive intent controls Steer/Priority/Normal; negative emoji control Keep/Skip. Fire selects Steer, dominates other positive reactions, and removing it falls back to remaining Priority aliases or Normal. Only changed effective intent overrides a menu choice; decorative changes and weaker positives under fire preserve lane/order. These categories are independent, may coexist, and mutate only their own dimension. Crossing lanes appends the prompt at the destination FIFO tail; changing Keep/Skip or changing emoji within one category preserves lane position. Skip wins only when dispatch reaches the prompt.
 
-Skipped queue ordinals strike only the numeric position. Detail HTML closes `<s>` before the period; list-button labels place a hair-space boundary between the combining-struck number and the plain period so Telegram font overhang cannot visually strike punctuation.
+Skipped queue ordinals strike only the numeric position. Detail HTML closes `<s>` before the period; list-button labels place a hair-space boundary between the combining-struck number and the plain period so Bale font overhang cannot visually strike punctuation.
 
 Queue item detail renders two independent selector rows:
 
 - `Normal` / `Priority` / `Steer` selects the lane in one horizontal row, increasing intervention from left to right. Active values are `🔵 Normal`, `🟣 Priority`, or `🟡 Steer`; inactive values use `⚫️`. Control is producer-owned, not a selectable lane.
 - `🟢 Keep` / `⚫️ Skip` or `⚫️ Keep` / `🔴 Skip` selects dispatch disposition.
 
-The menu may clear internal Skip but cannot remove a reaction created by the user through Telegram's Bot API. Frozen attempts and the Pi-owned pending head expose inspection/Back only, with no success or model-use claim. An over-capacity idle Steer item remains editable and offers Priority/Normal rather than splitting its source group. Published legacy Priority/Normal callbacks remain explicit lane selections.
+The menu may clear internal Skip but cannot remove a reaction created by the user through Bale's Bot API. Frozen attempts and the Pi-owned pending head expose inspection/Back only, with no success or model-use claim. An over-capacity idle Steer item remains editable and offers Priority/Normal rather than splitting its source group. Published legacy Priority/Normal callbacks remain explicit lane selections.
 
 | Emoji | Meaning | Canonical surfaces | Notes |
 | --- | --- | --- | --- |
@@ -103,7 +105,7 @@ Only `👍`, `👎`, and `🔥` are queue reaction shortcuts. Every other reacti
 
 ### Decorative Or Local-Example Emoji
 
-Some emoji are intentionally local examples or decorative variants, not global semantics. Empty-queue rotating messages (`🫙`, `🍃`, `🕳`, `🦗`, `🌙`, `🧘`, `🪐`, `🧺`, `🔭`, `🫧`, `🛸`) are copy flavor only and must not become controls. The Guest Mode placeholder frames (`🌎`, `🌍`, `🌏` stepping every second with dots growing once every two seconds) are the same kind of decorative copy: they complete whole 6-frame cycles over at least a ~20 s rotation while a guest answer is pending and then hold the cycle's final frame (a 26 s safety bound caps slow streams), never become controls, and must not carry another meaning. Example extension icons such as `🧪`, `🔧`, and `🗂` are documentation fixtures for companion extensions, not built-in pi-telegram meanings.
+Some emoji are intentionally local examples or decorative variants, not global semantics. Empty-queue rotating messages (`🫙`, `🍃`, `🕳`, `🦗`, `🌙`, `🧘`, `🪐`, `🧺`, `🔭`, `🫧`, `🛸`) are copy flavor only and must not become controls. The Guest Mode placeholder frames (`🌎`, `🌍`, `🌏` stepping every second with dots growing once every two seconds) are the same kind of decorative copy: they complete whole 6-frame cycles over at least a ~20 s rotation while a guest answer is pending and then hold the cycle's final frame (a 26 s safety bound caps slow streams), never become controls, and must not carry another meaning. Example extension icons such as `🧪`, `🔧`, and `🗂` are documentation fixtures for companion extensions, not built-in pi-bale meanings.
 
 Thread UI rule: thread lifecycle and status copy starts with `🧵`. Route choosers lead with their action instead: `🚦` asks for the routing decision at the root, the `🔀`/`🔁` submenu headings name the chosen action, and the concrete thread target buttons beneath them carry `🧵`, so the same marker always means "a thread".
 
@@ -117,7 +119,7 @@ All inline controls are buttons at the transport level. The local UI kit gives t
 
 Selection cardinality belongs to the control's domain, not to the visual family. Independent checkbox dimensions or tab groups may each have an active value. Do not confuse list and radio-style controls merely because both can select one item. Canonical names, identifiers and numeric/spatial tokens keep their own spelling; casing rules apply to authored value words.
 
-These are button-based visual grammars, not claims that Telegram exposes native list, radio, checkbox or tab widgets. Selection markers project actual state; they never grant callback, mutation or routing authority. The specialized rules below define each reuse.
+These are button-based visual grammars, not claims that Bale exposes native list, radio, checkbox or tab widgets. Selection markers project actual state; they never grant callback, mutation or routing authority. The specialized rules below define each reuse.
 
 ## Action Buttons
 
@@ -238,19 +240,19 @@ A message (or All-tab command) held in an unbound or temporary tab gets one rout
 - Root buttons, one per row and only when available: `🔀 Reroute: send it to a Pi thread`, `🔁 Restore: move a Pi into this tab`, `⛔️ Cancel routing`. The `🚦` heading echoes these three choices, with `⛔️` as the red stop.
 - Submenus start with `⬆️ Back`, which restores the root with its exact original text. Headings are bold: `🔀 Reroute this message to:` / `🔀 Reroute <code>/start</code> to:` name the root's subject, and `🔁 Restore a Pi into this tab:` names a command only when there is one (`🔁 Restore a Pi into this tab for <code>/start</code>:`). Every target button below is a thread, written `🧵 <display title>`.
 - Cancel appears only at the root.
-- An input sent from `All` moves into the routing tab opened for it: the tab starts with a silent forward of the input (Telegram shows it as forwarded from the operator), the chooser replies to it, and the original leaves `All` once the copy is confirmed. A restored Thread therefore keeps the prompt it answers.
-- A chooser is one-shot: every final outcome deletes its message. A confirmed Cancel, a Forward or Reroute, and a successful Restore remove the menu; Restore keeps the tab as the Pi's Thread, while a temporary tab with no remaining unresolved input is removed. If Telegram refuses the delete, Cancel and Restore leave an inert bold notice (`⛔️ Routing cancelled.` / `✅ Message routed.`) with an empty keyboard, and Forward asks for one more tap to clear the menu.
+- An input sent from `All` moves into the routing tab opened for it: the tab starts with a silent forward of the input (Bale shows it as forwarded from the operator), the chooser replies to it, and the original leaves `All` once the copy is confirmed. A restored Thread therefore keeps the prompt it answers.
+- A chooser is one-shot: every final outcome deletes its message. A confirmed Cancel, a Forward or Reroute, and a successful Restore remove the menu; Restore keeps the tab as the Pi's Thread, while a temporary tab with no remaining unresolved input is removed. If Bale refuses the delete, Cancel and Restore leave an inert bold notice (`⛔️ Routing cancelled.` / `✅ Message routed.`) with an empty keyboard, and Forward asks for one more tap to clear the menu.
 - Old or expired controls answer `⌛ Routing choice expired.` A newly committed expiry instead displays the fully bold `⌛ Routing expired; input was not delivered.` only for proven unissued work. Selected/issued or uncertain work displays fully bold `⌛ Routing expired; delivery is unconfirmed.` followed by `Previously accepted work may continue.` If the chooser is gone, or its temporary tab will be removed, send that notice without an old reply anchor to the leader's current owned Thread in the same private chat; never fall back to All. No owned Thread means diagnostics only.
-- Tab name: every temporary routing tab is named `🚦 Routing`, whether the bot created it (menu command or threadless prompt) or adopted the `New Chat` tab Telegram opened for a typed input. It is never renamed after its first input.
-- Status → `❌ Pending cancellations` lists one row per protected original: its text, or `📎` plus the caption, file name or the message field carrying Telegram's `file_id`.
+- Tab name: every temporary routing tab is named `🚦 Routing`, whether the bot created it (menu command or threadless prompt) or adopted the `New Chat` tab Bale opened for a typed input. It is never renamed after its first input.
+- Status → `❌ Pending cancellations` lists one row per protected original: its text, or `📎` plus the caption, file name or the message field carrying Bale's `file_id`.
 
 ## Pi Connection Notices
 
-Pi TUI connection notices use plain text: a short known cause and one recovery action. Unknown failures use a generic connection-failed notice with `/telegram-status --debug`; never interpolate raw exceptions, credentials, stack traces or Pi lifecycle guidance. Technical evidence belongs in the redacted runtime recorder. Failed disconnect must retain the instruction to keep Pi open; do not also rethrow the same error as a second Pi banner. These TUI notices are distinct from Telegram bot message cards below.
+Pi TUI connection notices use plain text: a short known cause and one recovery action. Unknown failures use a generic connection-failed notice with `/bale-status --debug`; never interpolate raw exceptions, credentials, stack traces or Pi lifecycle guidance. Technical evidence belongs in the redacted runtime recorder. Failed disconnect must retain the instruction to keep Pi open; do not also rethrow the same error as a second Pi banner. These TUI notices are distinct from Bale bot message cards below.
 
 The compact TUI status bar shows one `+N` counter in yellow `warning` for total waiting work across Normal, Priority, Steer and Control, hidden when zero. Custom themes control the exact hue. It excludes the pending dispatched head, Skip and frozen attempts; active work never adds to the counter. Queue state and dispatch precedence are unchanged.
 
-The compact TUI status bar preserves the acknowledged Thread display title and its casing, including manual `/name` overrides. Names equal to `Telegram`, `Leader` or `Follower` are ordinary titles, not fallback markers. Connection states, including disconnected and error, do not replace a supplied title; only an absent or empty title uses the generic `telegram` label.
+The compact TUI status bar preserves the acknowledged Thread display title and its casing, including manual `/name` overrides. Names equal to `Bale`, `Leader` or `Follower` are ordinary titles, not fallback markers. Connection states, including disconnected and error, do not replace a supplied title; only an absent or empty title uses the generic `bale` label.
 
 ## Message Cards
 

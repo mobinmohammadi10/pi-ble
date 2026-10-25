@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram config and setup prompt defaults
+ * Regression tests for Bale config and setup prompt defaults
  * Covers persisted config state plus token-prefill priority across stored config, environment variables, and placeholder fallback
  */
 
@@ -26,44 +26,44 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
 
-import type { TelegramConfig } from "../lib/config.ts";
+import type { BaleConfig } from "../lib/config.ts";
 import {
-  getTelegramBotTokenDiagnostic,
-  resolveTelegramBotToken,
-  createTelegramActiveProfileKeyGetter,
-  createTelegramConfigBotIdGetter,
-  createTelegramConfigControls,
-  createTelegramConfigStore,
-  createTelegramProactivePushTargetGetter,
-  createTelegramTimeInjectionModeGetter,
-  createTelegramTimeInjectionModeSetter,
-  createTelegramUserPairingRuntime,
-  createTelegramVoiceReplyModeConfiguredChecker,
-  createTelegramVoiceReplyModeGetter,
-  createTelegramVoiceReplyModeSetter,
-  getTelegramAuthorizationState,
-  isValidTelegramProfileName,
-  normalizeTelegramDefaultProfileConfig,
-  pairTelegramUserIfNeeded,
-  readTelegramConfig,
-  resolveTelegramThreadDisplayMode,
-  setTelegramThreadDisplayMode,
+  getBaleBotTokenDiagnostic,
+  resolveBaleBotToken,
+  createBaleActiveProfileKeyGetter,
+  createBaleConfigBotIdGetter,
+  createBaleConfigControls,
+  createBaleConfigStore,
+  createBaleProactivePushTargetGetter,
+  createBaleTimeInjectionModeGetter,
+  createBaleTimeInjectionModeSetter,
+  createBaleUserPairingRuntime,
+  createBaleVoiceReplyModeConfiguredChecker,
+  createBaleVoiceReplyModeGetter,
+  createBaleVoiceReplyModeSetter,
+  getBaleAuthorizationState,
+  isValidBaleProfileName,
+  normalizeBaleDefaultProfileConfig,
+  pairBaleUserIfNeeded,
+  readBaleConfig,
+  resolveBaleThreadDisplayMode,
+  setBaleThreadDisplayMode,
 } from "../lib/config.ts";
-import { createTelegramJournalSourceSerialization } from "../lib/journal.ts";
-import { createTelegramSettingsMenuRuntime } from "../lib/menu-settings.ts";
-import { createTelegramLockRuntime } from "../lib/locks.ts";
+import { createBaleJournalSourceSerialization } from "../lib/journal.ts";
+import { createBaleSettingsMenuRuntime } from "../lib/menu-settings.ts";
+import { createBaleLockRuntime } from "../lib/locks.ts";
 
 const execFileAsync = promisify(execFile);
 
-function legacyConfig(value: Record<string, unknown>): TelegramConfig {
-  return value as TelegramConfig;
+function legacyConfig(value: Record<string, unknown>): BaleConfig {
+  return value as BaleConfig;
 }
 
 /** Seed a config file the way an operator-edited, atomically replaced file appears on disk. */
-async function writeTelegramConfig(
+async function writeBaleConfig(
   agentDir: string,
   configPath: string,
-  config: TelegramConfig,
+  config: BaleConfig,
 ): Promise<void> {
   await mkdir(agentDir, { recursive: true });
   const tempConfigPath = `${configPath}.tmp-${process.pid}-${Date.now()}`;
@@ -76,32 +76,32 @@ async function writeTelegramConfig(
   await chmod(configPath, 0o600);
 }
 import {
-  createTelegramSetupPromptRuntime,
-  getTelegramBotTokenInputDefault,
-  getTelegramBotTokenPromptSpec,
-  runTelegramSetup,
+  createBaleSetupPromptRuntime,
+  getBaleBotTokenInputDefault,
+  getBaleBotTokenPromptSpec,
+  runBaleSetup,
 } from "../lib/setup.ts";
 
 test("Thread display mode keeps every supported mode and maps invalid values to letters", () => {
   for (const mode of [undefined, "invalid", null]) {
-    assert.equal(resolveTelegramThreadDisplayMode(legacyConfig({
+    assert.equal(resolveBaleThreadDisplayMode(legacyConfig({
       threads: { displayMode: mode },
     })), "letters");
   }
-  assert.equal(resolveTelegramThreadDisplayMode({}), "letters");
-  assert.equal(resolveTelegramThreadDisplayMode({ threads: { displayMode: "names" } }), "names");
-  assert.equal(resolveTelegramThreadDisplayMode({ threads: { displayMode: "letters" } }), "letters");
-  assert.equal(resolveTelegramThreadDisplayMode(legacyConfig({ threads: { displayMode: "directories" } })), "letters");
-  assert.equal(resolveTelegramThreadDisplayMode({ threads: { displayMode: "directory-snake" } }), "directory-snake");
-  assert.equal(resolveTelegramThreadDisplayMode({ threads: { displayMode: "directory-title" } }), "directory-title");
+  assert.equal(resolveBaleThreadDisplayMode({}), "letters");
+  assert.equal(resolveBaleThreadDisplayMode({ threads: { displayMode: "names" } }), "names");
+  assert.equal(resolveBaleThreadDisplayMode({ threads: { displayMode: "letters" } }), "letters");
+  assert.equal(resolveBaleThreadDisplayMode(legacyConfig({ threads: { displayMode: "directories" } })), "letters");
+  assert.equal(resolveBaleThreadDisplayMode({ threads: { displayMode: "directory-snake" } }), "directory-snake");
+  assert.equal(resolveBaleThreadDisplayMode({ threads: { displayMode: "directory-title" } }), "directory-title");
   // The retired profile-scoped key is not read as an effective value.
-  assert.equal(resolveTelegramThreadDisplayMode(legacyConfig({ threadDisplayMode: "names" })), "letters");
+  assert.equal(resolveBaleThreadDisplayMode(legacyConfig({ threadDisplayMode: "names" })), "letters");
 });
 
 test("Thread display mode is shared top-level config, never profile state", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-display-mode-"));
-  const configPath = join(agentDir, "telegram.json");
-  const store = createTelegramConfigStore({ agentDir, configPath, initialConfig: {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-display-mode-"));
+  const configPath = join(agentDir, "bale.json");
+  const store = createBaleConfigStore({ agentDir, configPath, initialConfig: {
     profiles: {
       default: { botToken: "token-default" },
       work: { botToken: "token-work" },
@@ -110,29 +110,29 @@ test("Thread display mode is shared top-level config, never profile state", asyn
   } });
   try {
     await store.persist();
-    assert.equal(resolveTelegramThreadDisplayMode(store.get()), "directory-title");
+    assert.equal(resolveBaleThreadDisplayMode(store.get()), "directory-title");
     store.activateProfile("work");
-    assert.equal(resolveTelegramThreadDisplayMode(store.get()), "directory-title");
-    await setTelegramThreadDisplayMode(store, "names", () => true);
-    const saved = await readTelegramConfig(configPath);
+    assert.equal(resolveBaleThreadDisplayMode(store.get()), "directory-title");
+    await setBaleThreadDisplayMode(store, "names", () => true);
+    const saved = await readBaleConfig(configPath);
     assert.deepEqual(saved.threads, { automaticCleanup: false, displayMode: "names" });
     assert.deepEqual(saved.profiles, {
       default: { botToken: "token-default" },
       work: { botToken: "token-work" },
     });
-    const restored = createTelegramConfigStore({ agentDir, configPath });
+    const restored = createBaleConfigStore({ agentDir, configPath });
     await restored.load();
-    assert.equal(resolveTelegramThreadDisplayMode(restored.get()), "names");
+    assert.equal(resolveBaleThreadDisplayMode(restored.get()), "names");
     restored.activateProfile("work");
-    assert.equal(resolveTelegramThreadDisplayMode(restored.get()), "names");
+    assert.equal(resolveBaleThreadDisplayMode(restored.get()), "names");
   } finally {
     await rm(agentDir, { recursive: true, force: true });
   }
 });
 
 test("Retired profile-scoped Thread display mode is ignored without migration", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-display-retired-"));
-  const configPath = join(agentDir, "telegram.json");
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-display-retired-"));
+  const configPath = join(agentDir, "bale.json");
   const legacy = legacyConfig({
     profiles: {
       default: { botToken: "token-default", allowedUserId: 7, threadDisplayMode: "directory-title" },
@@ -140,40 +140,40 @@ test("Retired profile-scoped Thread display mode is ignored without migration", 
     threads: { automaticCleanup: false },
   });
   try {
-    await writeTelegramConfig(agentDir, configPath, legacy);
-    const store = createTelegramConfigStore({ agentDir, configPath });
+    await writeBaleConfig(agentDir, configPath, legacy);
+    const store = createBaleConfigStore({ agentDir, configPath });
     await store.load();
-    assert.equal(resolveTelegramThreadDisplayMode(store.get()), "letters");
-    assert.deepEqual(await readTelegramConfig(configPath), legacy, "Loading must not migrate config");
+    assert.equal(resolveBaleThreadDisplayMode(store.get()), "letters");
+    assert.deepEqual(await readBaleConfig(configPath), legacy, "Loading must not migrate config");
   } finally {
     await rm(agentDir, { recursive: true, force: true });
   }
 });
 
 test("Thread display preference writes fence authority inside the config transaction", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-display-fence-"));
-  const configPath = join(agentDir, "telegram.json");
-  const store = createTelegramConfigStore({ agentDir, configPath,
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-display-fence-"));
+  const configPath = join(agentDir, "bale.json");
+  const store = createBaleConfigStore({ agentDir, configPath,
     initialConfig: { profiles: { default: { botToken: "token" } } } });
   try {
     await store.persist();
-    await setTelegramThreadDisplayMode(store, "directory-snake", () => true);
-    assert.equal(resolveTelegramThreadDisplayMode(store.get()), "directory-snake");
+    await setBaleThreadDisplayMode(store, "directory-snake", () => true);
+    assert.equal(resolveBaleThreadDisplayMode(store.get()), "directory-snake");
     let current = true;
     const pending = store.persist({ ...store.get(), threads: { displayMode: "letters" } }, {
       isCurrent: () => current,
     });
     current = false;
     await assert.rejects(pending, /originating authority/);
-    assert.equal((await readTelegramConfig(configPath)).threads?.displayMode, "directory-snake");
-    assert.equal(resolveTelegramThreadDisplayMode(store.get()), "directory-snake");
+    assert.equal((await readBaleConfig(configPath)).threads?.displayMode, "directory-snake");
+    assert.equal(resolveBaleThreadDisplayMode(store.get()), "directory-snake");
     await assert.rejects(
-      setTelegramThreadDisplayMode(store, "names", () => false),
+      setBaleThreadDisplayMode(store, "names", () => false),
       /lost authority/,
     );
     await assert.rejects(
-      setTelegramThreadDisplayMode(store, "bogus" as never, () => true),
-      /Invalid Telegram Thread display mode/,
+      setBaleThreadDisplayMode(store, "bogus" as never, () => true),
+      /Invalid Bale Thread display mode/,
     );
   } finally {
     await rm(agentDir, { recursive: true, force: true });
@@ -181,7 +181,7 @@ test("Thread display preference writes fence authority inside the config transac
 });
 
 test("Config projections own bot and effective profile lookup", () => {
-  const store = createTelegramConfigStore({
+  const store = createBaleConfigStore({
     initialConfig: {
       profiles: {
         default: { botToken: "token-a", botId: 7 },
@@ -189,8 +189,8 @@ test("Config projections own bot and effective profile lookup", () => {
       },
     },
   });
-  const getBotId = createTelegramConfigBotIdGetter(store);
-  const getProfileKey = createTelegramActiveProfileKeyGetter(store);
+  const getBotId = createBaleConfigBotIdGetter(store);
+  const getProfileKey = createBaleActiveProfileKeyGetter(store);
   assert.equal(getBotId(), 7);
   assert.equal(getProfileKey(), "default");
   store.activateProfile("work");
@@ -198,11 +198,11 @@ test("Config projections own bot and effective profile lookup", () => {
   assert.equal(getProfileKey(), "work");
 });
 
-test("Telegram profile names allow only lowercase letters and digits", () => {
-  assert.equal(isValidTelegramProfileName("work2"), true);
-  assert.equal(isValidTelegramProfileName("previous"), true);
-  assert.equal(isValidTelegramProfileName("prev"), true);
-  assert.equal(isValidTelegramProfileName("default"), true);
+test("Bale profile names allow only lowercase letters and digits", () => {
+  assert.equal(isValidBaleProfileName("work2"), true);
+  assert.equal(isValidBaleProfileName("previous"), true);
+  assert.equal(isValidBaleProfileName("prev"), true);
+  assert.equal(isValidBaleProfileName("default"), true);
   for (const name of [
     "main",
     "active",
@@ -213,22 +213,22 @@ test("Telegram profile names allow only lowercase letters and digits", () => {
     "work one",
     "",
   ]) {
-    assert.equal(isValidTelegramProfileName(name), false, name);
+    assert.equal(isValidBaleProfileName(name), false, name);
   }
 });
 
-test("Telegram config helper returns empty config when file is absent", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-missing-config-"));
+test("Bale config helper returns empty config when file is absent", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-missing-config-"));
   assert.deepEqual(
-    await readTelegramConfig(join(agentDir, "telegram.json")),
+    await readBaleConfig(join(agentDir, "bale.json")),
     {},
   );
 });
 
 test("activity defaults absent config to verbose, fails invalid values closed, and migrates legacy verbosity on write", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-verbosity-"));
-  const configPath = join(agentDir, "telegram.json");
-  const store = createTelegramConfigStore({
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-verbosity-"));
+  const configPath = join(agentDir, "bale.json");
+  const store = createBaleConfigStore({
     agentDir,
     configPath,
     initialConfig: {
@@ -237,7 +237,7 @@ test("activity defaults absent config to verbose, fails invalid values closed, a
       },
     },
   });
-  const controls = createTelegramConfigControls(store);
+  const controls = createBaleConfigControls(store);
   store.set({});
   assert.equal(controls.getActivityVerbosity(), "verbose");
   store.set({ assistant: { activityVerbosity: "quiet" } });
@@ -263,8 +263,8 @@ test("activity defaults absent config to verbose, fails invalid values closed, a
 });
 
 test("Concurrent config processes preserve independent settings mutations", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-config-processes-"));
-  const configPath = join(agentDir, "telegram.json");
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-config-processes-"));
+  const configPath = join(agentDir, "bale.json");
   await writeFile(
     configPath,
     `${JSON.stringify({ assistant: { activity: "verbose", timeInjection: "interval" } })}\n`,
@@ -274,13 +274,13 @@ test("Concurrent config processes preserve independent settings mutations", asyn
     join(process.cwd(), "lib", "config.ts"),
   ).href;
   const script = `
-    import { createTelegramConfigControls, createTelegramConfigStore } from ${JSON.stringify(moduleUrl)};
-    const store = createTelegramConfigStore({
+    import { createBaleConfigControls, createBaleConfigStore } from ${JSON.stringify(moduleUrl)};
+    const store = createBaleConfigStore({
       agentDir: process.env.TEST_AGENT_DIR,
       configPath: process.env.TEST_CONFIG_PATH,
     });
     await store.load();
-    const controls = createTelegramConfigControls(store);
+    const controls = createBaleConfigControls(store);
     if (process.env.TEST_MUTATION === "activity") {
       await controls.setActivityVerbosity("quiet");
     } else {
@@ -312,8 +312,8 @@ test("Concurrent config processes preserve independent settings mutations", asyn
 });
 
 test("Cross-process pairing observation serializes before an owner-fenced grant", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "telegram-pair-process-order-"));
-  const configPath = join(agentDir, "telegram.json");
+  const agentDir = await mkdtemp(join(tmpdir(), "bale-pair-process-order-"));
+  const configPath = join(agentDir, "bale.json");
   const locksPath = join(agentDir, "owners.json");
   const startPath = join(agentDir, "start");
   const ownerHeldPath = join(agentDir, "owner-held");
@@ -322,16 +322,16 @@ test("Cross-process pairing observation serializes before an owner-fenced grant"
   await writeFile(configPath, JSON.stringify({ profiles: { default: { botToken: "fixture-token" } } }));
   const script = `
     import { existsSync, writeFileSync } from "node:fs";
-    import { createTelegramConfigStore } from ${JSON.stringify(configModule)};
-    import { createTelegramLockRuntime } from ${JSON.stringify(locksModule)};
-    const store = createTelegramConfigStore({ agentDir: process.env.TEST_AGENT_DIR, configPath: process.env.TEST_CONFIG_PATH });
+    import { createBaleConfigStore } from ${JSON.stringify(configModule)};
+    import { createBaleLockRuntime } from ${JSON.stringify(locksModule)};
+    const store = createBaleConfigStore({ agentDir: process.env.TEST_AGENT_DIR, configPath: process.env.TEST_CONFIG_PATH });
     await store.load();
     const deadline = Date.now() + 8000;
     while (!existsSync(process.env.TEST_START_PATH)) {
       if (Date.now() >= deadline) throw new Error("start barrier timed out");
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);
     }
-    const owner = createTelegramLockRuntime({ locksPath: process.env.TEST_LOCKS_PATH, instanceId: "pair-grant-child" });
+    const owner = createBaleLockRuntime({ locksPath: process.env.TEST_LOCKS_PATH, instanceId: "pair-grant-child" });
     if (!owner.acquire({ cwd: "/fixture" }).ok) throw new Error("fixture ownership unavailable");
     try {
       const allowed = await store.persistAllowedUserId(42, undefined, (publish) => owner.commitIfOwned(() => {
@@ -348,7 +348,7 @@ test("Cross-process pairing observation serializes before an owner-fenced grant"
       timeout: 15_000,
     });
   try {
-    const store = createTelegramConfigStore({ agentDir, configPath });
+    const store = createBaleConfigStore({ agentDir, configPath });
     await store.load();
     const tokenSha256 = createHash("sha256").update("fixture-token").digest("hex");
     const before = store.withPairingAdmission("default", tokenSha256, (excluded) => {
@@ -375,9 +375,9 @@ test("Cross-process pairing observation serializes before an owner-fenced grant"
   }
 });
 
-test("Telegram config reads valid atomic snapshots without acquiring the transaction guard", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-config-read-"));
-  const configPath = join(agentDir, "telegram.json");
+test("Bale config reads valid atomic snapshots without acquiring the transaction guard", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-config-read-"));
+  const configPath = join(agentDir, "bale.json");
   const transactionPath = `${configPath}.transaction`;
   const generation = "10000000-0000-4000-8000-000000000001";
   await writeFile(configPath, '{"botToken":"123:abc"}\n', "utf8");
@@ -388,7 +388,7 @@ test("Telegram config reads valid atomic snapshots without acquiring the transac
     "utf8",
   );
   try {
-    assert.deepEqual(await readTelegramConfig(configPath), {
+    assert.deepEqual(await readBaleConfig(configPath), {
       botToken: "123:abc",
     });
   } finally {
@@ -396,22 +396,22 @@ test("Telegram config reads valid atomic snapshots without acquiring the transac
   }
 });
 
-test("Telegram proactive target getter prefers active then assigned targets", () => {
-  const target = createTelegramProactivePushTargetGetter({
+test("Bale proactive target getter prefers active then assigned targets", () => {
+  const target = createBaleProactivePushTargetGetter({
     getActiveTurnTarget: () => undefined,
     getAssignedTarget: () => ({ chatId: -1007, threadId: 42 }),
     getAllowedUserId: () => 7,
   });
   assert.deepEqual(target(), { chatId: -1007, threadId: 42 });
 
-  const activeTarget = createTelegramProactivePushTargetGetter({
+  const activeTarget = createBaleProactivePushTargetGetter({
     getActiveTurnTarget: () => ({ chatId: -1008, threadId: 99 }),
     getAssignedTarget: () => ({ chatId: -1007, threadId: 42 }),
     getAllowedUserId: () => 7,
   });
   assert.deepEqual(activeTarget(), { chatId: -1008, threadId: 99 });
 
-  const privateTarget = createTelegramProactivePushTargetGetter({
+  const privateTarget = createBaleProactivePushTargetGetter({
     getActiveTurnTarget: () => undefined,
     getAssignedTarget: () => undefined,
     getAllowedUserId: () => 7,
@@ -419,16 +419,16 @@ test("Telegram proactive target getter prefers active then assigned targets", ()
   assert.deepEqual(privateTarget(), { chatId: 7 });
 });
 
-test("Telegram config helpers persist and reload config", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-config-"));
-  const configPath = join(agentDir, "telegram.json");
+test("Bale config helpers persist and reload config", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-config-"));
+  const configPath = join(agentDir, "bale.json");
   const config = {
     botToken: "123:abc",
     botUsername: "demo_bot",
     allowedUserId: 42,
   };
-  await writeTelegramConfig(agentDir, configPath, config);
-  const reloaded = await readTelegramConfig(configPath);
+  await writeBaleConfig(agentDir, configPath, config);
+  const reloaded = await readBaleConfig(configPath);
   assert.deepEqual(reloaded, config);
   const raw = await readFile(configPath, "utf8");
   assert.match(raw, /demo_bot/);
@@ -441,8 +441,8 @@ test("Telegram config helpers persist and reload config", async () => {
   );
 });
 
-test("Telegram default profile normalization moves legacy root identity", () => {
-  const normalized = normalizeTelegramDefaultProfileConfig(legacyConfig({
+test("Bale default profile normalization moves legacy root identity", () => {
+  const normalized = normalizeBaleDefaultProfileConfig(legacyConfig({
     botToken: "123:abc",
     botUsername: "demo_bot",
     botId: 123,
@@ -468,19 +468,19 @@ test("Telegram default profile normalization moves legacy root identity", () => 
   });
 });
 
-test("Telegram default profile normalization rejects conflicting identity", () => {
+test("Bale default profile normalization rejects conflicting identity", () => {
   assert.throws(
     () =>
-      normalizeTelegramDefaultProfileConfig({
+      normalizeBaleDefaultProfileConfig({
         botToken: "123:abc",
         profiles: { default: { botToken: "456:def" } },
       }),
-    /Conflicting Telegram default profile identity/,
+    /Conflicting Bale default profile identity/,
   );
 });
 
-test("Telegram default profile normalization collapses identical duplicates", () => {
-  const normalized = normalizeTelegramDefaultProfileConfig({
+test("Bale default profile normalization collapses identical duplicates", () => {
+  const normalized = normalizeBaleDefaultProfileConfig({
     botToken: "123:abc",
     allowedUserId: 7,
     profiles: {
@@ -498,8 +498,8 @@ test("Telegram default profile normalization collapses identical duplicates", ()
   });
 });
 
-test("Telegram default profile normalization merges non-conflicting fields", () => {
-  const normalized = normalizeTelegramDefaultProfileConfig({
+test("Bale default profile normalization merges non-conflicting fields", () => {
+  const normalized = normalizeBaleDefaultProfileConfig({
     botToken: "123:abc",
     allowedUserId: 7,
     profiles: {
@@ -519,11 +519,11 @@ test("Telegram default profile normalization merges non-conflicting fields", () 
   });
 });
 
-test("Telegram config load rejects conflicting default identity without mutation", async () => {
+test("Bale config load rejects conflicting default identity without mutation", async () => {
   const agentDir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-default-conflict-"),
+    join(tmpdir(), "pi-bale-default-conflict-"),
   );
-  const configPath = join(agentDir, "telegram.json");
+  const configPath = join(agentDir, "bale.json");
   const original = `${JSON.stringify(
     {
       botToken: "123:abc",
@@ -534,10 +534,10 @@ test("Telegram config load rejects conflicting default identity without mutation
   )}\n`;
   await writeFile(configPath, original, "utf8");
   try {
-    const store = createTelegramConfigStore({ agentDir, configPath });
+    const store = createBaleConfigStore({ agentDir, configPath });
     await assert.rejects(
       store.load(),
-      /Conflicting Telegram default profile identity/,
+      /Conflicting Bale default profile identity/,
     );
     assert.equal(await readFile(configPath, "utf8"), original);
   } finally {
@@ -545,12 +545,12 @@ test("Telegram config load rejects conflicting default identity without mutation
   }
 });
 
-test("Telegram config load atomically normalizes the default profile", async () => {
+test("Bale config load atomically normalizes the default profile", async () => {
   const agentDir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-default-profile-"),
+    join(tmpdir(), "pi-bale-default-profile-"),
   );
-  const configPath = join(agentDir, "telegram.json");
-  await writeTelegramConfig(
+  const configPath = join(agentDir, "bale.json");
+  await writeBaleConfig(
     agentDir,
     configPath,
     legacyConfig({
@@ -559,23 +559,23 @@ test("Telegram config load atomically normalizes the default profile", async () 
       assistant: { proactivePush: false },
     }),
   );
-  const store = createTelegramConfigStore({ agentDir, configPath });
+  const store = createBaleConfigStore({ agentDir, configPath });
 
   await store.load();
 
   assert.equal(store.getBotToken(), "123:abc");
   assert.equal(store.getAllowedUserId(), 7);
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     profiles: {
       default: { botToken: "123:abc", allowedUserId: 7 },
     },
   });
 });
 
-test("Telegram config store persists active named profile configuration without overwriting default", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-profile-config-"));
-  const configPath = join(agentDir, "telegram.json");
-  const store = createTelegramConfigStore({
+test("Bale config store persists active named profile configuration without overwriting default", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-profile-config-"));
+  const configPath = join(agentDir, "bale.json");
+  const store = createBaleConfigStore({
     agentDir,
     configPath,
     initialConfig: legacyConfig({
@@ -599,7 +599,7 @@ test("Telegram config store persists active named profile configuration without 
   store.setAllowedUserId(3);
   await store.persist();
 
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     voice: { replyMode: "mirror" },
     profiles: {
       default: {
@@ -617,20 +617,20 @@ test("Telegram config store persists active named profile configuration without 
 });
 
 test("Stale config persistence preserves unrelated global and profile disk deltas", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-config-delta-"));
-  const configPath = join(dir, "telegram.json");
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-config-delta-"));
+  const configPath = join(dir, "bale.json");
   try {
-    await writeTelegramConfig(dir, configPath, legacyConfig({
+    await writeBaleConfig(dir, configPath, legacyConfig({
       profiles: {
         default: { botToken: "default-token" },
         work: { botToken: "work-token", lastUpdateId: 10 },
       },
       assistant: { rendering: "rich" },
     }));
-    const stale = createTelegramConfigStore({ agentDir: dir, configPath });
+    const stale = createBaleConfigStore({ agentDir: dir, configPath });
     await stale.load();
 
-    await writeTelegramConfig(dir, configPath, legacyConfig({
+    await writeBaleConfig(dir, configPath, legacyConfig({
       profiles: {
         default: { botToken: "default-token" },
         work: {
@@ -647,7 +647,7 @@ test("Stale config persistence preserves unrelated global and profile disk delta
     });
     await stale.persist();
 
-    assert.deepEqual(await readTelegramConfig(configPath), {
+    assert.deepEqual(await readBaleConfig(configPath), {
       profiles: {
         default: { botToken: "default-token" },
         work: {
@@ -666,15 +666,15 @@ test("Stale config persistence preserves unrelated global and profile disk delta
 });
 
 test("No-op config persistence adopts newer disk state without rewriting it", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-config-noop-"));
-  const configPath = join(dir, "telegram.json");
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-config-noop-"));
+  const configPath = join(dir, "bale.json");
   try {
-    await writeTelegramConfig(dir, configPath, {
+    await writeBaleConfig(dir, configPath, {
       profiles: { default: { botToken: "default-token" } },
     });
-    const store = createTelegramConfigStore({ agentDir: dir, configPath });
+    const store = createBaleConfigStore({ agentDir: dir, configPath });
     await store.load();
-    await writeTelegramConfig(dir, configPath, {
+    await writeBaleConfig(dir, configPath, {
       profiles: { default: { botToken: "default-token" } },
       assistant: { timeInjection: "interval" },
       time: { interval: 5000 },
@@ -685,7 +685,7 @@ test("No-op config persistence adopts newer disk state without rewriting it", as
     await store.persist();
 
     assert.deepEqual(store.get().time, { interval: 5000 });
-    assert.deepEqual(await readTelegramConfig(configPath), {
+    assert.deepEqual(await readBaleConfig(configPath), {
       profiles: { default: { botToken: "default-token" } },
       assistant: { timeInjection: "interval" },
       time: { interval: 5000 },
@@ -698,8 +698,8 @@ test("No-op config persistence adopts newer disk state without rewriting it", as
   }
 });
 
-test("Telegram config store rejects missing named profile activation", () => {
-  const store = createTelegramConfigStore({
+test("Bale config store rejects missing named profile activation", () => {
+  const store = createBaleConfigStore({
     initialConfig: { profiles: { work: { botToken: "work-token" } } },
   });
 
@@ -708,12 +708,12 @@ test("Telegram config store rejects missing named profile activation", () => {
   assert.equal(store.getBotToken(), undefined);
 });
 
-test("Telegram config load recovers invalid JSON and records a diagnostic", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-invalid-config-"));
-  const configPath = join(agentDir, "telegram.json");
+test("Bale config load recovers invalid JSON and records a diagnostic", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-invalid-config-"));
+  const configPath = join(agentDir, "bale.json");
   await writeFile(configPath, "{not valid json", "utf8");
   const events: string[] = [];
-  const store = createTelegramConfigStore({
+  const store = createBaleConfigStore({
     agentDir,
     configPath,
     initialConfig: { botToken: "previous" },
@@ -729,23 +729,23 @@ test("Telegram config load recovers invalid JSON and records a diagnostic", asyn
   assert.deepEqual(store.get(), {});
   const entries = await readdir(agentDir);
   const recovery = entries.find((entry) =>
-    entry.startsWith("telegram.json.invalid-"),
+    entry.startsWith("bale.json.invalid-"),
   );
   assert.ok(recovery);
   assert.equal(
     await readFile(join(agentDir, recovery), "utf8"),
     "{not valid json",
   );
-  assert.equal(entries.includes("telegram.json"), false);
+  assert.equal(entries.includes("bale.json"), false);
   assert.equal(events.length, 1);
   assert.match(events[0] ?? "", /^config:SyntaxError:load:/);
 });
 
-test("Telegram voice reply mode helpers normalize legacy hidden to manual", () => {
-  let config: TelegramConfig = {};
+test("Bale voice reply mode helpers normalize legacy hidden to manual", () => {
+  let config: BaleConfig = {};
   const store = { get: () => config };
-  const getMode = createTelegramVoiceReplyModeGetter(store);
-  const isConfigured = createTelegramVoiceReplyModeConfiguredChecker(store);
+  const getMode = createBaleVoiceReplyModeGetter(store);
+  const isConfigured = createBaleVoiceReplyModeConfiguredChecker(store);
 
   assert.equal(getMode(), "manual");
   assert.equal(isConfigured(), false);
@@ -758,25 +758,25 @@ test("Telegram voice reply mode helpers normalize legacy hidden to manual", () =
   assert.equal(getMode(), "manual");
   assert.equal(isConfigured(), false);
 
-  config = { voice: { replyMode: "invalid" } } as unknown as TelegramConfig;
+  config = { voice: { replyMode: "invalid" } } as unknown as BaleConfig;
   assert.equal(getMode(), "manual");
   assert.equal(isConfigured(), false);
 });
 
-test("Telegram voice reply mode setter persists telegram.json", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-voice-mode-"));
-  const configPath = join(agentDir, "telegram.json");
-  const store = createTelegramConfigStore({
+test("Bale voice reply mode setter persists bale.json", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-voice-mode-"));
+  const configPath = join(agentDir, "bale.json");
+  const store = createBaleConfigStore({
     initialConfig: { botToken: "123:abc" },
     agentDir,
     configPath,
   });
-  const setMode = createTelegramVoiceReplyModeSetter(store);
+  const setMode = createBaleVoiceReplyModeSetter(store);
 
   await setMode("mirror");
 
   assert.deepEqual(store.get().voice, { replyMode: "mirror" });
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     profiles: { default: { botToken: "123:abc" } },
     voice: { replyMode: "mirror" },
   });
@@ -784,13 +784,13 @@ test("Telegram voice reply mode setter persists telegram.json", async () => {
   await setMode("manual");
 
   assert.equal(store.get().voice, undefined);
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     profiles: { default: { botToken: "123:abc" } },
   });
 });
 
-test("Telegram config normalization removes the retired proactive push option", () => {
-  const normalized = normalizeTelegramDefaultProfileConfig(
+test("Bale config normalization removes the retired proactive push option", () => {
+  const normalized = normalizeBaleDefaultProfileConfig(
     legacyConfig({
       assistant: { proactivePush: false, rendering: "html" },
     }),
@@ -802,20 +802,20 @@ test("Telegram config normalization removes the retired proactive push option", 
   });
 });
 
-test("Telegram settings setters reload before scoped writes to preserve shared config changes", async () => {
+test("Bale settings setters reload before scoped writes to preserve shared config changes", async () => {
   const agentDir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-shared-settings-"),
+    join(tmpdir(), "pi-bale-shared-settings-"),
   );
-  const configPath = join(agentDir, "telegram.json");
-  await writeTelegramConfig(agentDir, configPath, { botToken: "123:abc" });
-  const firstStore = createTelegramConfigStore({ agentDir, configPath });
-  const secondStore = createTelegramConfigStore({ agentDir, configPath });
+  const configPath = join(agentDir, "bale.json");
+  await writeBaleConfig(agentDir, configPath, { botToken: "123:abc" });
+  const firstStore = createBaleConfigStore({ agentDir, configPath });
+  const secondStore = createBaleConfigStore({ agentDir, configPath });
   await firstStore.load();
   await secondStore.load();
 
-  const setVoiceMode = createTelegramVoiceReplyModeSetter(firstStore);
-  const staleReaderControls = createTelegramConfigControls(firstStore);
-  const controls = createTelegramConfigControls(secondStore);
+  const setVoiceMode = createBaleVoiceReplyModeSetter(firstStore);
+  const staleReaderControls = createBaleConfigControls(firstStore);
+  const controls = createBaleConfigControls(secondStore);
   assert.equal(controls.isAutomaticThreadCleanupEnabled(), true);
 
   await setVoiceMode("mirror");
@@ -829,7 +829,7 @@ test("Telegram settings setters reload before scoped writes to preserve shared c
     false,
   );
 
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     profiles: { default: { botToken: "123:abc" } },
     assistant: {
       draftPreviews: true,
@@ -847,73 +847,73 @@ test("Telegram settings setters reload before scoped writes to preserve shared c
 
 test("Thread cleanup fails closed after invalid shared config recovery", async () => {
   const agentDir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-invalid-cleanup-setting-"),
+    join(tmpdir(), "pi-bale-invalid-cleanup-setting-"),
   );
-  const configPath = join(agentDir, "telegram.json");
-  await writeTelegramConfig(agentDir, configPath, {
+  const configPath = join(agentDir, "bale.json");
+  await writeBaleConfig(agentDir, configPath, {
     profiles: { default: { botToken: "123:abc" } },
     threads: { automaticCleanup: false },
   });
-  const store = createTelegramConfigStore({ agentDir, configPath });
+  const store = createBaleConfigStore({ agentDir, configPath });
   await store.load();
-  const controls = createTelegramConfigControls(store);
+  const controls = createBaleConfigControls(store);
   await writeFile(configPath, "{invalid", "utf8");
 
   await assert.rejects(
     controls.resolveAutomaticThreadCleanupEnabled(),
-    /unavailable after invalid Telegram config recovery/,
+    /unavailable after invalid Bale config recovery/,
   );
   assert.equal(store.didLastLoadRecoverInvalidConfig(), true);
   assert.equal(controls.isAutomaticThreadCleanupEnabled(), false);
 });
 
-test("Telegram draft previews default on while explicit current and legacy choices remain authoritative", async () => {
+test("Bale draft previews default on while explicit current and legacy choices remain authoritative", async () => {
   for (const [config, expected] of [
     [{ profiles: { default: { botToken: "123:abc" } } }, true],
     [{ profiles: { default: { botToken: "123:abc" } }, assistant: { draftPreviews: false } }, false],
     [{ profiles: { default: { botToken: "123:abc" } }, draftPreviews: false }, false],
     [{ profiles: { default: { botToken: "123:abc" } }, richDraftPreviews: false }, false],
   ] as const) {
-    const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-draft-default-"));
-    const configPath = join(agentDir, "telegram.json");
-    await writeTelegramConfig(agentDir, configPath, config);
-    const store = createTelegramConfigStore({ agentDir, configPath });
+    const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-draft-default-"));
+    const configPath = join(agentDir, "bale.json");
+    await writeBaleConfig(agentDir, configPath, config);
+    const store = createBaleConfigStore({ agentDir, configPath });
     await store.load();
-    assert.equal(createTelegramConfigControls(store).areDraftPreviewsEnabled(), expected);
-    assert.deepEqual(await readTelegramConfig(configPath), config, "Reading a default must not persist or migrate config");
+    assert.equal(createBaleConfigControls(store).areDraftPreviewsEnabled(), expected);
+    assert.deepEqual(await readBaleConfig(configPath), config, "Reading a default must not persist or migrate config");
   }
 });
 
-test("Telegram draft preview config reads and migrates legacy rich flag", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-draft-legacy-"));
-  const configPath = join(agentDir, "telegram.json");
-  await writeTelegramConfig(agentDir, configPath, {
+test("Bale draft preview config reads and migrates legacy rich flag", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-draft-legacy-"));
+  const configPath = join(agentDir, "bale.json");
+  await writeBaleConfig(agentDir, configPath, {
     botToken: "123:abc",
     richDraftPreviews: true,
   });
-  const store = createTelegramConfigStore({ agentDir, configPath });
+  const store = createBaleConfigStore({ agentDir, configPath });
   await store.load();
-  const controls = createTelegramConfigControls(store);
+  const controls = createBaleConfigControls(store);
 
   assert.equal(controls.areDraftPreviewsEnabled(), true);
   await controls.setDraftPreviewsEnabled(false);
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     profiles: { default: { botToken: "123:abc" } },
     assistant: { draftPreviews: false },
   });
 });
 
-test("Telegram settings menu callbacks persist voice and time settings to telegram.json", async () => {
+test("Bale settings menu callbacks persist voice and time settings to bale.json", async () => {
   const agentDir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-settings-callbacks-"),
+    join(tmpdir(), "pi-bale-settings-callbacks-"),
   );
-  const configPath = join(agentDir, "telegram.json");
-  const store = createTelegramConfigStore({
+  const configPath = join(agentDir, "bale.json");
+  const store = createBaleConfigStore({
     initialConfig: { botToken: "123:abc" },
     agentDir,
     configPath,
   });
-  const controls = createTelegramConfigControls(store);
+  const controls = createBaleConfigControls(store);
   const state = {
     chatId: 1,
     messageId: 2,
@@ -923,7 +923,7 @@ test("Telegram settings menu callbacks persist voice and time settings to telegr
     scopedModels: [],
     allModels: [],
   };
-  const runtime = createTelegramSettingsMenuRuntime({
+  const runtime = createBaleSettingsMenuRuntime({
     ...controls,
     getModelMenuState: async () => state,
     getStoredModelMenuState: () => state,
@@ -966,33 +966,33 @@ test("Telegram settings menu callbacks persist voice and time settings to telegr
     ),
     true,
   );
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     profiles: { default: { botToken: "123:abc" } },
     assistant: { draftPreviews: true, timeInjection: "always" },
     voice: { replyMode: "mirror" },
   });
 });
 
-test("Telegram time injection mode setter persists telegram.json", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-time-mode-"));
-  const configPath = join(agentDir, "telegram.json");
-  const store = createTelegramConfigStore({
+test("Bale time injection mode setter persists bale.json", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-time-mode-"));
+  const configPath = join(agentDir, "bale.json");
+  const store = createBaleConfigStore({
     initialConfig: {
       botToken: "123:abc",
       time: { interval: 5000, injectionMode: "always" },
-    } as TelegramConfig,
+    } as BaleConfig,
     agentDir,
     configPath,
   });
-  const getMode = createTelegramTimeInjectionModeGetter(store);
-  const setMode = createTelegramTimeInjectionModeSetter(store);
+  const getMode = createBaleTimeInjectionModeGetter(store);
+  const setMode = createBaleTimeInjectionModeSetter(store);
 
   assert.equal(getMode(), "interval");
 
   await setMode("interval");
 
   assert.equal(getMode(), "interval");
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     profiles: { default: { botToken: "123:abc" } },
     assistant: { timeInjection: "interval" },
     time: { interval: 5000, injectionMode: "always" },
@@ -1001,17 +1001,17 @@ test("Telegram time injection mode setter persists telegram.json", async () => {
   await setMode("hidden");
 
   assert.equal(getMode(), "hidden");
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     profiles: { default: { botToken: "123:abc" } },
     assistant: { timeInjection: "hidden" },
     time: { interval: 5000, injectionMode: "always" },
   });
 });
 
-test("Telegram config store owns load, mutation, and persistence", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-store-"));
-  const configPath = join(agentDir, "telegram.json");
-  const store = createTelegramConfigStore({
+test("Bale config store owns load, mutation, and persistence", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-store-"));
+  const configPath = join(agentDir, "bale.json");
+  const store = createBaleConfigStore({
     initialConfig: {
       botToken: "initial",
       inboundHandlers: [{ type: "text", template: "translate" }],
@@ -1042,7 +1042,7 @@ test("Telegram config store owns load, mutation, and persistence", async () => {
   store.setAllowedUserId(43);
   assert.equal(store.getAllowedUserId(), 43);
   await store.persist();
-  assert.deepEqual(await readTelegramConfig(configPath), {
+  assert.deepEqual(await readBaleConfig(configPath), {
     inboundHandlers: [{ type: "text", template: "translate" }],
     attachmentHandlers: [{ mime: "audio/*", template: "transcribe {file}" }],
     profiles: {
@@ -1068,20 +1068,20 @@ test("Telegram config store owns load, mutation, and persistence", async () => {
 
 test("Paired-only admission adopts a peer grant without writing config or losing local settings", async (t) => {
   for (const profileName of ["default", "work"]) {
-    const dir = await mkdtemp(join(tmpdir(), "telegram-paired-only-"));
-    const configPath = join(dir, "telegram.json");
+    const dir = await mkdtemp(join(tmpdir(), "bale-paired-only-"));
+    const configPath = join(dir, "bale.json");
     const hash = createHash("sha256").update("fixture-token").digest("hex");
     let pendingSettings: Promise<void> | undefined;
     try {
       await writeFile(configPath, JSON.stringify({ profiles: { [profileName]: { botToken: "fixture-token" } }, assistant: { activity: "verbose" } }));
-      const store = createTelegramConfigStore({ agentDir: dir, configPath });
+      const store = createBaleConfigStore({ agentDir: dir, configPath });
       await store.load();
       assert.equal(store.activateProfile(profileName), true);
       const unpaired = await readFile(configPath, "utf8");
       assert.deepEqual(store.withPairedUserAdmission(profileName, hash, 42, () => assert.fail("unpaired publication")), { admitted: false });
       assert.equal(store.getAllowedUserId(), undefined);
       assert.equal(await readFile(configPath, "utf8"), unpaired);
-      const peer = createTelegramConfigStore({ agentDir: dir, configPath });
+      const peer = createBaleConfigStore({ agentDir: dir, configPath });
       await peer.load();
       peer.activateProfile(profileName);
       assert.equal(await peer.persistAllowedUserId(42), true);
@@ -1129,16 +1129,16 @@ test("Paired-only admission adopts a peer grant without writing config or losing
 for (const profileName of ["default", "work"]) {
   for (const change of ["local-unpair", "disk-revocation"] as const) {
     test(`Queued config adoption preserves ${change} after paired observation (${profileName})`, async () => {
-      const dir = await mkdtemp(join(tmpdir(), "telegram-observation-rebase-"));
-      const configPath = join(dir, "telegram.json");
+      const dir = await mkdtemp(join(tmpdir(), "bale-observation-rebase-"));
+      const configPath = join(dir, "bale.json");
       const hash = createHash("sha256").update("fixture-token").digest("hex");
       let pendingSettings: Promise<void> | undefined;
       try {
         await writeFile(configPath, JSON.stringify({ profiles: { [profileName]: { botToken: "fixture-token" } } }));
-        const store = createTelegramConfigStore({ agentDir: dir, configPath });
+        const store = createBaleConfigStore({ agentDir: dir, configPath });
         await store.load();
         store.activateProfile(profileName);
-        const peer = createTelegramConfigStore({ agentDir: dir, configPath });
+        const peer = createBaleConfigStore({ agentDir: dir, configPath });
         await peer.load();
         peer.activateProfile(profileName);
         await peer.persistAllowedUserId(42);
@@ -1179,12 +1179,12 @@ for (const profileName of ["default", "work"]) {
 
 test("Paired-only admission rejects stale or conflicting authority without cache adoption or publication", async () => {
   for (const scenario of ["entry-fence", "commit-fence", "local-profile", "local-token", "local-owner", "local-unpair", "disk-token", "disk-owner", "malformed-owner", "invalid-user"] as const) {
-    const dir = await mkdtemp(join(tmpdir(), "telegram-paired-only-denial-"));
-    const configPath = join(dir, "telegram.json");
+    const dir = await mkdtemp(join(tmpdir(), "bale-paired-only-denial-"));
+    const configPath = join(dir, "bale.json");
     const hash = createHash("sha256").update("fixture-token").digest("hex");
     try {
       await writeFile(configPath, JSON.stringify({ profiles: { default: { botToken: "fixture-token" } } }));
-      const store = createTelegramConfigStore({ agentDir: dir, configPath });
+      const store = createBaleConfigStore({ agentDir: dir, configPath });
       await store.load();
       await writeFile(configPath, JSON.stringify({ profiles: { default: {
         botToken: scenario === "disk-token" ? "rebound" : "fixture-token",
@@ -1216,8 +1216,8 @@ test("Paired-only admission rejects stale or conflicting authority without cache
 test("Journal source serialization never blocks pairing observation, sender admission or owner-fenced grant", async (t) => {
   for (const mode of ["observation", "paired", "grant"] as const) {
     await t.test(mode, async () => {
-      const dir = await mkdtemp(join(tmpdir(), "telegram-source-contention-"));
-      const configPath = join(dir, "telegram.json");
+      const dir = await mkdtemp(join(tmpdir(), "bale-source-contention-"));
+      const configPath = join(dir, "bale.json");
       const startPath = join(dir, "start");
       const blockedPath = join(dir, "blocked");
       const enteredPath = join(dir, "entered");
@@ -1231,12 +1231,12 @@ test("Journal source serialization never blocks pairing observation, sender admi
         import fs from "node:fs";
         import { syncBuiltinESMExports } from "node:module";
         import { createHash } from "node:crypto";
-        import { createTelegramConfigStore } from ${JSON.stringify(configModule)};
-        import { createTelegramLockRuntime } from ${JSON.stringify(locksModule)};
+        import { createBaleConfigStore } from ${JSON.stringify(configModule)};
+        import { createBaleLockRuntime } from ${JSON.stringify(locksModule)};
         const dir = ${JSON.stringify(dir)};
         const configPath = ${JSON.stringify(configPath)};
         const mode = ${JSON.stringify(mode)};
-        const store = createTelegramConfigStore({ agentDir: dir, configPath });
+        const store = createBaleConfigStore({ agentDir: dir, configPath });
         await store.load();
         const deadline = Date.now() + 8000;
         while (!fs.existsSync(${JSON.stringify(startPath)})) {
@@ -1259,7 +1259,7 @@ test("Journal source serialization never blocks pairing observation, sender admi
         if (mode === "observation") result = store.withPairingAdmission("default", hash, entered);
         else if (mode === "paired") result = store.withPairedUserAdmission("default", hash, 42, entered);
         else {
-          const owner = createTelegramLockRuntime({ locksPath: dir + "/owners.json", instanceId: "source-grant-child" });
+          const owner = createBaleLockRuntime({ locksPath: dir + "/owners.json", instanceId: "source-grant-child" });
           if (!owner.acquire({ cwd: "/fixture" }).ok) throw new Error("fixture owner unavailable");
           try { result = await store.persistAllowedUserId(42, undefined, owner.commitIfOwned); entered(); }
           finally { owner.release(); }
@@ -1270,7 +1270,7 @@ test("Journal source serialization never blocks pairing observation, sender admi
         ["--experimental-strip-types", "--input-type=module", "--eval", script], { timeout: 15_000 });
       try {
         // Config authority is a separate outer lock: holding journal serialization never delays it.
-        createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"))(() => {
+        createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"))(() => {
           fs.writeFileSync(startPath, "start");
           const deadline = Date.now() + 8000;
           while (!fs.existsSync(enteredPath)) {
@@ -1295,12 +1295,12 @@ test("Journal source serialization never blocks pairing observation, sender admi
 });
 
 test("Pairing admission observes exact persisted identity under the config transaction", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "telegram-pair-observation-"));
-  const configPath = join(dir, "telegram.json");
+  const dir = await mkdtemp(join(tmpdir(), "bale-pair-observation-"));
+  const configPath = join(dir, "bale.json");
   const tokenSha256 = createHash("sha256").update("fixture-token").digest("hex");
   try {
     await writeFile(configPath, JSON.stringify({ profiles: { default: { botToken: "fixture-token" } } }));
-    const store = createTelegramConfigStore({ agentDir: dir, configPath });
+    const store = createBaleConfigStore({ agentDir: dir, configPath });
     await store.load();
     const classifications: boolean[] = [];
     const observe = () => store.withPairingAdmission("default", tokenSha256, (excluded) => {
@@ -1334,8 +1334,8 @@ test("Pairing admission observes exact persisted identity under the config trans
 });
 
 test("Pairing owner guard encloses the queued synchronous config commit and rejects a replaced owner", async (t) => {
-  const dir = await mkdtemp(join(tmpdir(), "telegram-pair-owner-commit-"));
-  const configPath = join(dir, "telegram.json");
+  const dir = await mkdtemp(join(tmpdir(), "bale-pair-owner-commit-"));
+  const configPath = join(dir, "bale.json");
   const locksPath = join(dir, "owners.json");
   const originalRename = fs.renameSync;
   let configRenames = 0;
@@ -1350,9 +1350,9 @@ test("Pairing owner guard encloses the queued synchronous config commit and reje
   syncBuiltinESMExports();
   try {
     await writeFile(configPath, JSON.stringify({ profiles: { default: { botToken: "fixture-token" } } }));
-    const store = createTelegramConfigStore({ agentDir: dir, configPath });
+    const store = createBaleConfigStore({ agentDir: dir, configPath });
     await store.load();
-    const first = createTelegramLockRuntime({ locksPath, instanceId: "first" });
+    const first = createBaleLockRuntime({ locksPath, instanceId: "first" });
     const acquired = first.acquire({ cwd: "/fixture" });
     assert.equal(acquired.ok, true);
     let callReturned = false;
@@ -1361,7 +1361,7 @@ test("Pairing owner guard encloses the queued synchronous config commit and reje
       return first.commitIfOwned(commit);
     });
     callReturned = true;
-    const replacement = createTelegramLockRuntime({ locksPath, instanceId: "replacement" });
+    const replacement = createBaleLockRuntime({ locksPath, instanceId: "replacement" });
     assert.equal(replacement.acquire({ cwd: "/fixture" }, {
       force: true, expectedOwner: acquired.ok ? acquired.lock : undefined,
     }).ok, true);
@@ -1381,8 +1381,8 @@ test("Pairing owner guard encloses the queued synchronous config commit and reje
 });
 
 test("Pairing publication failure never grants in-memory authority and retry publishes first", async (t) => {
-  const dir = await mkdtemp(join(tmpdir(), "telegram-pair-publication-"));
-  const configPath = join(dir, "telegram.json");
+  const dir = await mkdtemp(join(tmpdir(), "bale-pair-publication-"));
+  const configPath = join(dir, "bale.json");
   const renameSync = fs.renameSync;
   let fail = true;
   const rename = t.mock.method(fs, "renameSync", (from: fs.PathLike, to: fs.PathLike) => {
@@ -1392,11 +1392,11 @@ test("Pairing publication failure never grants in-memory authority and retry pub
   syncBuiltinESMExports();
   try {
     await writeFile(configPath, JSON.stringify({ profiles: { default: { botToken: "fixture-token" } } }));
-    const store = createTelegramConfigStore({ agentDir: dir, configPath });
+    const store = createBaleConfigStore({ agentDir: dir, configPath });
     await store.load();
     const original = await readFile(configPath, "utf8");
     let statuses = 0;
-    const runtime = createTelegramUserPairingRuntime({ getAllowedUserId: store.getAllowedUserId,
+    const runtime = createBaleUserPairingRuntime({ getAllowedUserId: store.getAllowedUserId,
       persistAllowedUserId: store.persistAllowedUserId, updateStatus() { statuses++; } });
     const rejected = runtime.pairIfNeeded(42, {});
     assert.equal(store.getAllowedUserId(), undefined);
@@ -1417,14 +1417,14 @@ test("Pairing publication failure never grants in-memory authority and retry pub
 });
 
 test("Pairing compares the disk owner atomically and preserves unrelated local edits and profiles", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "telegram-pair-owner-"));
-  const configPath = join(dir, "telegram.json");
+  const dir = await mkdtemp(join(tmpdir(), "bale-pair-owner-"));
+  const configPath = join(dir, "bale.json");
   try {
     await writeFile(configPath, JSON.stringify({ profiles: {
       default: { botToken: "fixture-default" }, work: { botToken: "fixture-work" },
     } }));
-    const first = createTelegramConfigStore({ agentDir: dir, configPath });
-    const second = createTelegramConfigStore({ agentDir: dir, configPath });
+    const first = createBaleConfigStore({ agentDir: dir, configPath });
+    const second = createBaleConfigStore({ agentDir: dir, configPath });
     await first.load();
     await second.load();
     second.update((config) => { config.assistant = { activity: "quiet" }; });
@@ -1447,12 +1447,12 @@ test("Pairing compares the disk owner atomically and preserves unrelated local e
 
 test("Pairing rejects stale execution, switched profiles, and changed disk bot identity before publication", async () => {
   for (const scenario of ["stale-entry", "stale-commit", "profile-switch", "token-rebind"] as const) {
-    const dir = await mkdtemp(join(tmpdir(), "telegram-pair-fence-"));
-    const configPath = join(dir, "telegram.json");
+    const dir = await mkdtemp(join(tmpdir(), "bale-pair-fence-"));
+    const configPath = join(dir, "bale.json");
     try {
       const initial = { profiles: { default: { botToken: "fixture-default" }, work: { botToken: "fixture-work" } } };
       await writeFile(configPath, JSON.stringify(initial));
-      const store = createTelegramConfigStore({ agentDir: dir, configPath });
+      const store = createBaleConfigStore({ agentDir: dir, configPath });
       await store.load();
       let guards = 0;
       const pending = store.persistAllowedUserId(42, () => {
@@ -1475,20 +1475,20 @@ test("Pairing rejects stale execution, switched profiles, and changed disk bot i
   }
 });
 
-test("Telegram config helpers classify authorization state for pair, allow, and deny", () => {
-  assert.deepEqual(getTelegramAuthorizationState(10), {
+test("Bale config helpers classify authorization state for pair, allow, and deny", () => {
+  assert.deepEqual(getBaleAuthorizationState(10), {
     kind: "pair",
     userId: 10,
   });
-  assert.deepEqual(getTelegramAuthorizationState(10, 10), { kind: "allow" });
-  assert.deepEqual(getTelegramAuthorizationState(10, 11), { kind: "deny" });
+  assert.deepEqual(getBaleAuthorizationState(10, 10), { kind: "allow" });
+  assert.deepEqual(getBaleAuthorizationState(10, 11), { kind: "deny" });
 });
 
-test("Telegram config helpers pair only when no user is configured", async () => {
+test("Bale config helpers pair only when no user is configured", async () => {
   const events: string[] = [];
   let allowedUserId: number | undefined;
   assert.equal(
-    await pairTelegramUserIfNeeded(10, {
+    await pairBaleUserIfNeeded(10, {
       allowedUserId,
       ctx: "ctx",
       persistAllowedUserId: async (userId) => {
@@ -1503,7 +1503,7 @@ test("Telegram config helpers pair only when no user is configured", async () =>
     true,
   );
   assert.equal(
-    await pairTelegramUserIfNeeded(11, {
+    await pairBaleUserIfNeeded(11, {
       allowedUserId,
       ctx: "ctx",
       persistAllowedUserId: async () => {
@@ -1520,11 +1520,11 @@ test("Telegram config helpers pair only when no user is configured", async () =>
   assert.deepEqual(events, ["persist:10", "status:ctx"]);
 });
 
-test("Telegram config pairing rechecks execution authority around persistence", async () => {
+test("Bale config pairing rechecks execution authority around persistence", async () => {
   let current = false;
   let persisted = 0;
   await assert.rejects(
-    pairTelegramUserIfNeeded(10, {
+    pairBaleUserIfNeeded(10, {
       ctx: "ctx",
       persistAllowedUserId: async () => {
         persisted += 1;
@@ -1540,9 +1540,9 @@ test("Telegram config pairing rechecks execution authority around persistence", 
   assert.equal(persisted, 0);
 });
 
-test("Telegram config pairing swallows only stale context status errors", async () => {
+test("Bale config pairing swallows only stale context status errors", async () => {
   await assert.doesNotReject(() =>
-    pairTelegramUserIfNeeded(10, {
+    pairBaleUserIfNeeded(10, {
       ctx: "ctx",
       persistAllowedUserId: async () => true,
       updateStatus: () => {
@@ -1552,7 +1552,7 @@ test("Telegram config pairing swallows only stale context status errors", async 
   );
   await assert.rejects(
     () =>
-      pairTelegramUserIfNeeded(10, {
+      pairBaleUserIfNeeded(10, {
         ctx: "ctx",
         persistAllowedUserId: async () => true,
         updateStatus: () => {
@@ -1563,10 +1563,10 @@ test("Telegram config pairing swallows only stale context status errors", async 
   );
 });
 
-test("Telegram config pairing runtime binds config and status ports", async () => {
+test("Bale config pairing runtime binds config and status ports", async () => {
   const events: string[] = [];
   let allowedUserId: number | undefined;
-  const runtime = createTelegramUserPairingRuntime({
+  const runtime = createBaleUserPairingRuntime({
     getAllowedUserId: () => allowedUserId,
     persistAllowedUserId: async (userId) => {
       events.push(`persist:${userId}`);
@@ -1584,42 +1584,42 @@ test("Telegram config pairing runtime binds config and status ports", async () =
 });
 
 test("Bot token input prefers stored config over env vars", () => {
-  const value = getTelegramBotTokenInputDefault(
+  const value = getBaleBotTokenInputDefault(
     {
-      TELEGRAM_KEY: "key-last",
-      TELEGRAM_TOKEN: "token-third",
-      TELEGRAM_BOT_KEY: "key-second",
-      TELEGRAM_BOT_TOKEN: "token-first",
+      BALE_KEY: "key-last",
+      BALE_TOKEN: "token-third",
+      BALE_BOT_KEY: "key-second",
+      BALE_BOT_TOKEN: "token-first",
     },
     "stored-token",
   );
   assert.equal(value, "stored-token");
 });
 
-test("Bot token input prefers the first configured Telegram env var when no config exists", () => {
-  const value = getTelegramBotTokenInputDefault({
-    TELEGRAM_KEY: "key-last",
-    TELEGRAM_TOKEN: "token-third",
-    TELEGRAM_BOT_KEY: "key-second",
-    TELEGRAM_BOT_TOKEN: "token-first",
+test("Bot token input prefers the first configured Bale env var when no config exists", () => {
+  const value = getBaleBotTokenInputDefault({
+    BALE_KEY: "key-last",
+    BALE_TOKEN: "token-third",
+    BALE_BOT_KEY: "key-second",
+    BALE_BOT_TOKEN: "token-first",
   });
-  assert.equal(value, "$TELEGRAM_BOT_TOKEN");
+  assert.equal(value, "$BALE_BOT_TOKEN");
 });
 
 test("Bot token prompt uses the editor when a real prefill exists", () => {
-  const prompt = getTelegramBotTokenPromptSpec({
-    TELEGRAM_BOT_TOKEN: "token-first",
+  const prompt = getBaleBotTokenPromptSpec({
+    BALE_BOT_TOKEN: "token-first",
   });
   assert.deepEqual(prompt, {
     method: "editor",
-    value: "$TELEGRAM_BOT_TOKEN",
+    value: "$BALE_BOT_TOKEN",
   });
 });
 
 test("Bot token prompt shows stored config before env values", () => {
-  const prompt = getTelegramBotTokenPromptSpec(
+  const prompt = getBaleBotTokenPromptSpec(
     {
-      TELEGRAM_BOT_TOKEN: "token-first",
+      BALE_BOT_TOKEN: "token-first",
     },
     "stored-token",
   );
@@ -1630,11 +1630,11 @@ test("Bot token prompt shows stored config before env values", () => {
 });
 
 test("Bot token input skips blank env vars and falls back to config", () => {
-  const value = getTelegramBotTokenInputDefault(
+  const value = getBaleBotTokenInputDefault(
     {
-      TELEGRAM_BOT_TOKEN: "   ",
-      TELEGRAM_BOT_KEY: "",
-      TELEGRAM_TOKEN: "  ",
+      BALE_BOT_TOKEN: "   ",
+      BALE_BOT_KEY: "",
+      BALE_TOKEN: "  ",
     },
     "stored-token",
   );
@@ -1642,12 +1642,12 @@ test("Bot token input skips blank env vars and falls back to config", () => {
 });
 
 test("Bot token input falls back to placeholder when no value exists", () => {
-  const value = getTelegramBotTokenInputDefault({});
+  const value = getBaleBotTokenInputDefault({});
   assert.equal(value, "123456:ABCDEF...");
 });
 
 test("Bot token prompt uses placeholder input when no prefill exists", () => {
-  const prompt = getTelegramBotTokenPromptSpec({});
+  const prompt = getBaleBotTokenPromptSpec({});
   assert.deepEqual(prompt, {
     method: "input",
     value: "123456:ABCDEF...",
@@ -1656,9 +1656,9 @@ test("Bot token prompt uses placeholder input when no prefill exists", () => {
 
 test("Setup runtime prompts, validates token, persists config, and starts polling", async () => {
   const events: string[] = [];
-  const nextConfig = await runTelegramSetup({
+  const nextConfig = await runBaleSetup({
     hasUI: true,
-    env: { TELEGRAM_BOT_TOKEN: "env-token" },
+    env: { BALE_BOT_TOKEN: "env-token" },
     config: { allowedUserId: 7 },
     promptInput: async () => {
       events.push("input");
@@ -1695,11 +1695,11 @@ test("Setup runtime prompts, validates token, persists config, and starts pollin
     },
   });
   assert.deepEqual(events, [
-    "editor:Telegram bot token:$TELEGRAM_BOT_TOKEN",
+    "editor:Bale bot token:$BALE_BOT_TOKEN",
     "getMe:new-token",
     "persist:new-token:demo_bot",
-    "notify:info:Telegram bot connected: @demo_bot",
-    "notify:info:Send /start to your bot in Telegram to pair this extension with your account.",
+    "notify:info:Bale bot connected: @demo_bot",
+    "notify:info:Send /start to your bot in Bale to pair this extension with your account.",
     "poll",
     "status",
   ]);
@@ -1707,7 +1707,7 @@ test("Setup runtime prompts, validates token, persists config, and starts pollin
 
 test("Setup runtime reports invalid tokens without persisting", async () => {
   const events: string[] = [];
-  const nextConfig = await runTelegramSetup({
+  const nextConfig = await runBaleSetup({
     hasUI: true,
     env: {},
     config: {},
@@ -1733,10 +1733,10 @@ test("Setup runtime reports invalid tokens without persisting", async () => {
 
 test("Setup prompt runtime guards concurrent setup and stores successful config", async () => {
   const events: string[] = [];
-  let config: TelegramConfig = { allowedUserId: 7 };
+  let config: BaleConfig = { allowedUserId: 7 };
   let inProgress = false;
-  const promptForConfig = createTelegramSetupPromptRuntime({
-    env: { TELEGRAM_BOT_TOKEN: "env-token" },
+  const promptForConfig = createBaleSetupPromptRuntime({
+    env: { BALE_BOT_TOKEN: "env-token" },
     getConfig: () => config,
     setConfig: (nextConfig) => {
       config = nextConfig;
@@ -1806,12 +1806,12 @@ test("Setup prompt runtime guards concurrent setup and stores successful config"
   });
   assert.deepEqual(events, [
     "start",
-    "editor:$TELEGRAM_BOT_TOKEN",
+    "editor:$BALE_BOT_TOKEN",
     "getMe:new-token",
     "set:demo_bot",
     "persist:new-token",
-    "notify:info:Telegram bot connected: @demo_bot",
-    "notify:info:Send /start to your bot in Telegram to pair this extension with your account.",
+    "notify:info:Bale bot connected: @demo_bot",
+    "notify:info:Send /start to your bot in Bale to pair this extension with your account.",
     "poll",
     "status",
     "finish",
@@ -1820,21 +1820,21 @@ test("Setup prompt runtime guards concurrent setup and stores successful config"
 });
 
 test("Stored token references resolve from the configured environment", () => {
-  assert.equal(resolveTelegramBotToken(undefined), undefined);
-  assert.equal(resolveTelegramBotToken("  "), undefined);
-  assert.equal(resolveTelegramBotToken("123:abc", {}), "123:abc");
+  assert.equal(resolveBaleBotToken(undefined), undefined);
+  assert.equal(resolveBaleBotToken("  "), undefined);
+  assert.equal(resolveBaleBotToken("123:abc", {}), "123:abc");
   assert.equal(
-    resolveTelegramBotToken("$WORK_BOT_TOKEN", { WORK_BOT_TOKEN: " 456:def " }),
+    resolveBaleBotToken("$WORK_BOT_TOKEN", { WORK_BOT_TOKEN: " 456:def " }),
     "456:def",
   );
   assert.equal(
-    resolveTelegramBotToken("${WORK_BOT_TOKEN}", { WORK_BOT_TOKEN: "456:def" }),
+    resolveBaleBotToken("${WORK_BOT_TOKEN}", { WORK_BOT_TOKEN: "456:def" }),
     "456:def",
   );
-  assert.equal(resolveTelegramBotToken("$MISSING_BOT_TOKEN", {}), undefined);
-  assert.equal(resolveTelegramBotToken("$not-a-valid-name", {}), undefined);
+  assert.equal(resolveBaleBotToken("$MISSING_BOT_TOKEN", {}), undefined);
+  assert.equal(resolveBaleBotToken("$not-a-valid-name", {}), undefined);
 
-  const store = createTelegramConfigStore({
+  const store = createBaleConfigStore({
     initialConfig: legacyConfig({ botToken: "$WORK_BOT_TOKEN" }),
     env: { WORK_BOT_TOKEN: "456:def" },
   });
@@ -1849,7 +1849,7 @@ test("Stored token references resolve from the configured environment", () => {
 });
 
 test("Unresolved and malformed token references fail closed with a redacted diagnostic", () => {
-  const missing = createTelegramConfigStore({
+  const missing = createBaleConfigStore({
     initialConfig: legacyConfig({ botToken: "$MISSING_BOT_TOKEN" }),
     env: {},
   });
@@ -1857,14 +1857,14 @@ test("Unresolved and malformed token references fail closed with a redacted diag
   assert.equal(missing.getBotToken(), undefined);
   assert.equal(
     missing.getBotTokenDiagnostic(),
-    "Telegram bot token environment variable MISSING_BOT_TOKEN is not set.",
+    "Bale bot token environment variable MISSING_BOT_TOKEN is not set.",
   );
   assert.equal(
-    getTelegramBotTokenDiagnostic("$MISSING_BOT_TOKEN", {}),
-    "Telegram bot token environment variable MISSING_BOT_TOKEN is not set.",
+    getBaleBotTokenDiagnostic("$MISSING_BOT_TOKEN", {}),
+    "Bale bot token environment variable MISSING_BOT_TOKEN is not set.",
   );
 
-  const malformed = createTelegramConfigStore({
+  const malformed = createBaleConfigStore({
     initialConfig: legacyConfig({ botToken: "$not-a-valid-name" }),
     env: { "not-a-valid-name": "secret-value" },
   });
@@ -1877,14 +1877,14 @@ test("Unresolved and malformed token references fail closed with a redacted diag
 });
 
 test("Token references persist and reload per named profile without copying secrets", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-token-ref-"));
-  const configPath = join(agentDir, "telegram.json");
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-token-ref-"));
+  const configPath = join(agentDir, "bale.json");
   const env = {
     DEFAULT_BOT_TOKEN: "123:abc",
     WORK_BOT_TOKEN: "456:def",
   };
   try {
-    const store = createTelegramConfigStore({
+    const store = createBaleConfigStore({
       agentDir,
       configPath,
       env,
@@ -1900,13 +1900,13 @@ test("Token references persist and reload per named profile without copying secr
     assert.match(raw, /\$DEFAULT_BOT_TOKEN/);
     assert.match(raw, /\$\{WORK_BOT_TOKEN\}/);
 
-    const reloaded = createTelegramConfigStore({ agentDir, configPath, env });
+    const reloaded = createBaleConfigStore({ agentDir, configPath, env });
     await reloaded.load();
     assert.equal(reloaded.getBotToken(), "123:abc");
     assert.equal(reloaded.activateProfile("work"), true);
     assert.equal(reloaded.getBotToken(), "456:def");
     assert.equal(reloaded.getBotTokenDiagnostic(), undefined);
-    assert.deepEqual(await readTelegramConfig(configPath), {
+    assert.deepEqual(await readBaleConfig(configPath), {
       profiles: {
         default: { botToken: "$DEFAULT_BOT_TOKEN" },
         work: { botToken: "${WORK_BOT_TOKEN}" },
@@ -1918,10 +1918,10 @@ test("Token references persist and reload per named profile without copying secr
 });
 
 test("Pairing admission hashes the resolved token reference", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-token-ref-pairing-"));
-  const configPath = join(agentDir, "telegram.json");
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-token-ref-pairing-"));
+  const configPath = join(agentDir, "bale.json");
   try {
-    const store = createTelegramConfigStore({
+    const store = createBaleConfigStore({
       agentDir,
       configPath,
       env: { PAIR_BOT_TOKEN: "123:pairing" },

@@ -1,46 +1,46 @@
 /**
- * Telegram inline-keyboard structural contracts
- * Zones: telegram ui, shared structure
+ * Bale inline-keyboard structural contracts
+ * Zones: bale ui, shared structure
  * Owns the shared Bot API reply-markup shape while feature domains own their button semantics
  */
 
-export type TelegramInlineKeyboardButtonStyle =
+export type BaleInlineKeyboardButtonStyle =
   "danger" | "success" | "primary";
 
-export type TelegramInlineKeyboardButton = {
+export type BaleInlineKeyboardButton = {
   text: string;
-  style?: TelegramInlineKeyboardButtonStyle;
+  style?: BaleInlineKeyboardButtonStyle;
 } & (
   | { callback_data: string; disabled?: never }
   | { disabled: Record<string, never>; callback_data?: never }
 );
 
-export interface TelegramInlineKeyboardMarkup {
-  inline_keyboard: TelegramInlineKeyboardButton[][];
+export interface BaleInlineKeyboardMarkup {
+  inline_keyboard: BaleInlineKeyboardButton[][];
 }
 
-const TELEGRAM_CALLBACK_DATA_MAX_BYTES = 64;
+const BALE_CALLBACK_DATA_MAX_BYTES = 64;
 
-function getTelegramCallbackDataByteLength(value: string): number {
+function getBaleCallbackDataByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
-export function assertTelegramCallbackData(
+export function assertBaleCallbackData(
   callbackData: string,
-  context = "Telegram callback_data",
+  context = "Bale callback_data",
 ): string {
-  const byteLength = getTelegramCallbackDataByteLength(callbackData);
-  if (byteLength > TELEGRAM_CALLBACK_DATA_MAX_BYTES) {
+  const byteLength = getBaleCallbackDataByteLength(callbackData);
+  if (byteLength > BALE_CALLBACK_DATA_MAX_BYTES) {
     throw new Error(
-      `${context} exceeds ${TELEGRAM_CALLBACK_DATA_MAX_BYTES} bytes (${byteLength}). Use a shorter action/payload or store state behind a compact key.`,
+      `${context} exceeds ${BALE_CALLBACK_DATA_MAX_BYTES} bytes (${byteLength}). Use a shorter action/payload or store state behind a compact key.`,
     );
   }
   return callbackData;
 }
 
-export function assertTelegramInlineKeyboardCallbackData(
+export function assertBaleInlineKeyboardCallbackData(
   replyMarkup: unknown,
-  context = "Telegram inline keyboard callback_data",
+  context = "Bale inline keyboard callback_data",
 ): void {
   if (!replyMarkup || typeof replyMarkup !== "object") return;
   const keyboard = (replyMarkup as { inline_keyboard?: unknown })
@@ -53,7 +53,7 @@ export function assertTelegramInlineKeyboardCallbackData(
       const callbackData = (button as { callback_data?: unknown })
         .callback_data;
       if (typeof callbackData !== "string") continue;
-      assertTelegramCallbackData(callbackData, context);
+      assertBaleCallbackData(callbackData, context);
     }
   }
 }

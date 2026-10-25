@@ -1,19 +1,19 @@
 /**
- * Durable Telegram Workspace admission and retirement fencing
- * Zones: telegram workspace identity, filesystem authority, process recovery
+ * Durable Bale Workspace admission and retirement fencing
+ * Zones: bale workspace identity, filesystem authority, process recovery
  * Owns profile-scoped admission leases, destructive fences, and deletion permits
  * Excludes journal/API operations, retirement policy, and binding persistence
  */
 import { type PathLike } from "node:fs";
-import { type TelegramProcessLiveness } from "./process-identity.ts";
-import { type TelegramTarget } from "./target.ts";
-export interface TelegramWorkspaceAdmissionOwner {
+import { type BaleProcessLiveness } from "./process-identity.ts";
+import { type BaleTarget } from "./target.ts";
+export interface BaleWorkspaceAdmissionOwner {
     processId: number;
     processBirthId: string;
 }
-export type TelegramWorkspaceAdmissionScope = {
+export type BaleWorkspaceAdmissionScope = {
     kind: "target";
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
 } | {
@@ -22,28 +22,28 @@ export type TelegramWorkspaceAdmissionScope = {
 } | {
     kind: "profile";
 };
-interface TelegramWorkspaceAdmissionLease {
+interface BaleWorkspaceAdmissionLease {
     operationId: string;
     operationKind: string;
     profileKey: string;
-    scope: TelegramWorkspaceAdmissionScope;
-    owner: TelegramWorkspaceAdmissionOwner;
+    scope: BaleWorkspaceAdmissionScope;
+    owner: BaleWorkspaceAdmissionOwner;
     acquiredAtMs: number;
 }
-type TelegramWorkspaceDestructiveFenceKind = "pressure-retirement" | "manual-thread-cleanup" | "journal-writer-closure";
-export type TelegramWorkspaceDeletionFenceKind = Exclude<TelegramWorkspaceDestructiveFenceKind, "journal-writer-closure">;
-interface TelegramWorkspaceJournalWriterClosureFence {
+type BaleWorkspaceDestructiveFenceKind = "pressure-retirement" | "manual-thread-cleanup" | "journal-writer-closure";
+export type BaleWorkspaceDeletionFenceKind = Exclude<BaleWorkspaceDestructiveFenceKind, "journal-writer-closure">;
+interface BaleWorkspaceJournalWriterClosureFence {
     destructiveKind: "journal-writer-closure";
     phase: "fenced";
     operationId: string;
     profileKey: string;
     recoveryKey: string;
-    owner: TelegramWorkspaceAdmissionOwner;
+    owner: BaleWorkspaceAdmissionOwner;
     requestedAtMs: number;
     acquiredAtMs: number;
 }
-export declare function normalizeTelegramWorkspaceJournalWriterClosureFence(value: unknown, profileKey: string): TelegramWorkspaceJournalWriterClosureFence | undefined;
-interface TelegramWorkspaceJournalWriterProtocolMode {
+export declare function normalizeBaleWorkspaceJournalWriterClosureFence(value: unknown, profileKey: string): BaleWorkspaceJournalWriterClosureFence | undefined;
+interface BaleWorkspaceJournalWriterProtocolMode {
     version: 1;
     protocol: "custody-v3";
     profileKey: string;
@@ -51,234 +51,234 @@ interface TelegramWorkspaceJournalWriterProtocolMode {
     startupAuthorityId: string;
     closureOperationId: string;
     writerInventorySha256: string;
-    installedBy: TelegramWorkspaceAdmissionOwner;
+    installedBy: BaleWorkspaceAdmissionOwner;
     installedAtMs: number;
 }
-export declare function normalizeTelegramWorkspaceJournalWriterProtocolMode(value: unknown, profileKey: string): TelegramWorkspaceJournalWriterProtocolMode | undefined;
-interface TelegramWorkspaceRetirementFenceBase {
-    destructiveKind?: TelegramWorkspaceDeletionFenceKind;
+export declare function normalizeBaleWorkspaceJournalWriterProtocolMode(value: unknown, profileKey: string): BaleWorkspaceJournalWriterProtocolMode | undefined;
+interface BaleWorkspaceRetirementFenceBase {
+    destructiveKind?: BaleWorkspaceDeletionFenceKind;
     operationId: string;
     retirementIntentId: string;
     profileKey: string;
     bindingKey: string;
     /** Null is admitted only for explicit manual cleanup of a slotless binding. */
     slot: string | null;
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
     leaderEpoch: number | string;
     retirementRequestedAtMs: number;
-    owner: TelegramWorkspaceAdmissionOwner;
+    owner: BaleWorkspaceAdmissionOwner;
     acquiredAtMs: number;
 }
-export type TelegramWorkspaceRetirementFence = (TelegramWorkspaceRetirementFenceBase & {
+export type BaleWorkspaceRetirementFence = (BaleWorkspaceRetirementFenceBase & {
     phase: "fenced";
-}) | (TelegramWorkspaceRetirementFenceBase & {
+}) | (BaleWorkspaceRetirementFenceBase & {
     phase: "deletion-issued";
     deletionIssuedAtMs: number;
-}) | (TelegramWorkspaceRetirementFenceBase & {
+}) | (BaleWorkspaceRetirementFenceBase & {
     destructiveKind?: "pressure-retirement";
     phase: "deletion-rejected";
     deletionIssuedAtMs: number;
     rejectionConfirmedAtMs: number;
-}) | (TelegramWorkspaceRetirementFenceBase & {
+}) | (BaleWorkspaceRetirementFenceBase & {
     phase: "commit-ready";
     absenceConfirmedAtMs: number;
     deletionIssuedAtMs?: number;
 });
-export type TelegramWorkspaceDestructiveFence = TelegramWorkspaceRetirementFence | TelegramWorkspaceJournalWriterClosureFence;
-export declare function isTelegramWorkspaceRetirementFence(fence: TelegramWorkspaceDestructiveFence): fence is TelegramWorkspaceRetirementFence;
-export interface TelegramWorkspaceDeletionPermit {
-    readonly destructiveKind?: TelegramWorkspaceDeletionFenceKind;
+export type BaleWorkspaceDestructiveFence = BaleWorkspaceRetirementFence | BaleWorkspaceJournalWriterClosureFence;
+export declare function isBaleWorkspaceRetirementFence(fence: BaleWorkspaceDestructiveFence): fence is BaleWorkspaceRetirementFence;
+export interface BaleWorkspaceDeletionPermit {
+    readonly destructiveKind?: BaleWorkspaceDeletionFenceKind;
     readonly operationId: string;
     readonly retirementIntentId: string;
     readonly profileKey: string;
     readonly bindingKey: string;
     readonly slot: string | null;
-    readonly target: TelegramTarget & {
+    readonly target: BaleTarget & {
         threadId: number;
     };
     readonly leaderEpoch: number | string;
     readonly issuedAtMs: number;
 }
-type TelegramWorkspaceAdmissionAcquireResult = {
+type BaleWorkspaceAdmissionAcquireResult = {
     kind: "acquired";
-    lease: TelegramWorkspaceAdmissionLease;
+    lease: BaleWorkspaceAdmissionLease;
     resumed: boolean;
 } | {
     kind: "blocked";
     reason: "retirement-fenced";
 };
-type TelegramWorkspaceRetirementFenceAcquireResult = {
+type BaleWorkspaceRetirementFenceAcquireResult = {
     kind: "acquired";
-    fence: TelegramWorkspaceRetirementFence;
+    fence: BaleWorkspaceRetirementFence;
     resumed: boolean;
 } | {
     kind: "blocked";
     reason: "admission-active" | "retirement-active";
 };
-type TelegramWorkspaceJournalWriterProtocolInstallResult = {
-    mode: TelegramWorkspaceJournalWriterProtocolMode;
+type BaleWorkspaceJournalWriterProtocolInstallResult = {
+    mode: BaleWorkspaceJournalWriterProtocolMode;
     resumed: boolean;
 };
-type TelegramWorkspaceJournalWriterClosureAcquireResult = {
+type BaleWorkspaceJournalWriterClosureAcquireResult = {
     kind: "acquired";
-    fence: TelegramWorkspaceJournalWriterClosureFence;
+    fence: BaleWorkspaceJournalWriterClosureFence;
     resumed: boolean;
 } | {
     kind: "blocked";
     reason: "admission-active" | "retirement-active";
 };
-type TelegramWorkspaceDeletionPermitResult = {
+type BaleWorkspaceDeletionPermitResult = {
     kind: "issued";
-    fence: TelegramWorkspaceRetirementFence;
-    permit: TelegramWorkspaceDeletionPermit;
+    fence: BaleWorkspaceRetirementFence;
+    permit: BaleWorkspaceDeletionPermit;
 } | {
     kind: "already-issued";
-    fence: TelegramWorkspaceRetirementFence;
+    fence: BaleWorkspaceRetirementFence;
 };
-interface TelegramWorkspaceAdmissionLedgerSnapshot {
+interface BaleWorkspaceAdmissionLedgerSnapshot {
     profileKey: string;
-    leases: TelegramWorkspaceAdmissionLease[];
-    fence?: TelegramWorkspaceDestructiveFence;
-    writerProtocolMode?: TelegramWorkspaceJournalWriterProtocolMode;
+    leases: BaleWorkspaceAdmissionLease[];
+    fence?: BaleWorkspaceDestructiveFence;
+    writerProtocolMode?: BaleWorkspaceJournalWriterProtocolMode;
 }
-type TelegramWorkspaceAdmissionPublicationBoundary = "before-write" | "after-write-before-rename";
-interface TelegramWorkspaceAdmissionLedgerOptions {
+type BaleWorkspaceAdmissionPublicationBoundary = "before-write" | "after-write-before-rename";
+interface BaleWorkspaceAdmissionLedgerOptions {
     path: string;
     /** Explicit logical section identity for the consolidated root; absent means the standalone ledger adapter. */
     stateProfile?: string;
     profileKey: string;
-    owner: TelegramWorkspaceAdmissionOwner;
+    owner: BaleWorkspaceAdmissionOwner;
     getNowMs?: () => number;
-    getProcessLiveness?: (owner: TelegramWorkspaceAdmissionOwner) => TelegramProcessLiveness;
+    getProcessLiveness?: (owner: BaleWorkspaceAdmissionOwner) => BaleProcessLiveness;
     publishRename?: (sourcePath: PathLike, destinationPath: PathLike) => void;
-    onPublicationBoundary?: (boundary: TelegramWorkspaceAdmissionPublicationBoundary, path: string) => void;
+    onPublicationBoundary?: (boundary: BaleWorkspaceAdmissionPublicationBoundary, path: string) => void;
     authorizeJournalWriterProtocolClosure?: (input: {
-        mode: TelegramWorkspaceJournalWriterProtocolMode;
-        closure: TelegramWorkspaceJournalWriterClosureFence;
+        mode: BaleWorkspaceJournalWriterProtocolMode;
+        closure: BaleWorkspaceJournalWriterClosureFence;
     }) => boolean;
 }
-export declare class TelegramWorkspaceAdmissionError extends Error {
+export declare class BaleWorkspaceAdmissionError extends Error {
     readonly code: "invalid-input" | "invalid-state" | "state-unavailable" | "authority-changed" | "admission-blocked" | "publication-unknown";
-    constructor(code: TelegramWorkspaceAdmissionError["code"], message: string, options?: ErrorOptions);
+    constructor(code: BaleWorkspaceAdmissionError["code"], message: string, options?: ErrorOptions);
 }
-export interface TelegramWorkspaceAdmissionLedger {
+export interface BaleWorkspaceAdmissionLedger {
     getProfileKey: () => string;
-    getOwner: () => TelegramWorkspaceAdmissionOwner;
+    getOwner: () => BaleWorkspaceAdmissionOwner;
     listReservedSlots: () => string[];
-    read: () => TelegramWorkspaceAdmissionLedgerSnapshot;
+    read: () => BaleWorkspaceAdmissionLedgerSnapshot;
     acquireAdmission: (input: {
         operationId: string;
         operationKind: string;
-        scope: TelegramWorkspaceAdmissionScope;
-    }) => TelegramWorkspaceAdmissionAcquireResult;
-    releaseAdmission: (expected: TelegramWorkspaceAdmissionLease) => boolean;
+        scope: BaleWorkspaceAdmissionScope;
+    }) => BaleWorkspaceAdmissionAcquireResult;
+    releaseAdmission: (expected: BaleWorkspaceAdmissionLease) => boolean;
     acquireJournalWriterClosure: (input: {
         operationId: string;
         recoveryKey: string;
         requestedAtMs: number;
-    }) => TelegramWorkspaceJournalWriterClosureAcquireResult;
-    releaseJournalWriterClosure: (expected: TelegramWorkspaceJournalWriterClosureFence) => boolean;
-    installJournalWriterProtocolMode: (expected: TelegramWorkspaceJournalWriterClosureFence, input: {
+    }) => BaleWorkspaceJournalWriterClosureAcquireResult;
+    releaseJournalWriterClosure: (expected: BaleWorkspaceJournalWriterClosureFence) => boolean;
+    installJournalWriterProtocolMode: (expected: BaleWorkspaceJournalWriterClosureFence, input: {
         startupAuthorityId: string;
         writerInventorySha256: string;
-    }) => TelegramWorkspaceJournalWriterProtocolInstallResult;
+    }) => BaleWorkspaceJournalWriterProtocolInstallResult;
     acquireJournalWriterAdmission: (input: {
         operationId: string;
         recoveryKey: string;
         startupAuthorityId: string;
         closureOperationId: string;
         writerInventorySha256: string;
-    }) => TelegramWorkspaceAdmissionAcquireResult;
+    }) => BaleWorkspaceAdmissionAcquireResult;
     acquireRetirementFence: (input: {
         operationId: string;
         retirementIntentId: string;
         bindingKey: string;
         slot: string;
-        target: TelegramTarget & {
+        target: BaleTarget & {
             threadId: number;
         };
         leaderEpoch: number | string;
         retirementRequestedAtMs: number;
-    }) => TelegramWorkspaceRetirementFenceAcquireResult;
+    }) => BaleWorkspaceRetirementFenceAcquireResult;
     acquireThreadCleanupFence: (input: {
         operationId: string;
         cleanupWorkSetId: string;
         bindingKey: string;
         slot: string | null;
-        target: TelegramTarget & {
+        target: BaleTarget & {
             threadId: number;
         };
         leaderEpoch: number | string;
         cleanupRequestedAtMs: number;
-    }) => TelegramWorkspaceRetirementFenceAcquireResult;
-    adoptRetirementFence: (expected: TelegramWorkspaceRetirementFence, replacement: {
-        owner: TelegramWorkspaceAdmissionOwner;
+    }) => BaleWorkspaceRetirementFenceAcquireResult;
+    adoptRetirementFence: (expected: BaleWorkspaceRetirementFence, replacement: {
+        owner: BaleWorkspaceAdmissionOwner;
         leaderEpoch: number | string;
-    }) => TelegramWorkspaceRetirementFence;
-    adoptThreadCleanupFence: TelegramWorkspaceAdmissionLedger["adoptRetirementFence"];
-    issueDeletionPermit: (expected: TelegramWorkspaceRetirementFence) => TelegramWorkspaceDeletionPermitResult;
-    issueThreadCleanupDeletionPermit: TelegramWorkspaceAdmissionLedger["issueDeletionPermit"];
-    confirmRetirementAbsence: (expected: TelegramWorkspaceRetirementFence) => TelegramWorkspaceRetirementFence;
-    confirmThreadCleanupAbsence: TelegramWorkspaceAdmissionLedger["confirmRetirementAbsence"];
+    }) => BaleWorkspaceRetirementFence;
+    adoptThreadCleanupFence: BaleWorkspaceAdmissionLedger["adoptRetirementFence"];
+    issueDeletionPermit: (expected: BaleWorkspaceRetirementFence) => BaleWorkspaceDeletionPermitResult;
+    issueThreadCleanupDeletionPermit: BaleWorkspaceAdmissionLedger["issueDeletionPermit"];
+    confirmRetirementAbsence: (expected: BaleWorkspaceRetirementFence) => BaleWorkspaceRetirementFence;
+    confirmThreadCleanupAbsence: BaleWorkspaceAdmissionLedger["confirmRetirementAbsence"];
     /** Caller must have exact transport proof of rejection, never merely target presence. */
-    confirmRetirementRejection: (expected: TelegramWorkspaceRetirementFence) => TelegramWorkspaceRetirementFence;
+    confirmRetirementRejection: (expected: BaleWorkspaceRetirementFence) => BaleWorkspaceRetirementFence;
     /** Caller must first durably withdraw the exact rejected intent, retaining its binding. */
-    completeRejectedRetirementFence: (expected: TelegramWorkspaceRetirementFence) => boolean;
-    releaseUnissuedRetirementFence: (expected: TelegramWorkspaceRetirementFence) => boolean;
-    releaseUnissuedThreadCleanupFence: TelegramWorkspaceAdmissionLedger["releaseUnissuedRetirementFence"];
-    completeRetirementFence: (expected: TelegramWorkspaceRetirementFence) => boolean;
-    completeThreadCleanupFence: TelegramWorkspaceAdmissionLedger["completeRetirementFence"];
+    completeRejectedRetirementFence: (expected: BaleWorkspaceRetirementFence) => boolean;
+    releaseUnissuedRetirementFence: (expected: BaleWorkspaceRetirementFence) => boolean;
+    releaseUnissuedThreadCleanupFence: BaleWorkspaceAdmissionLedger["releaseUnissuedRetirementFence"];
+    completeRetirementFence: (expected: BaleWorkspaceRetirementFence) => boolean;
+    completeThreadCleanupFence: BaleWorkspaceAdmissionLedger["completeRetirementFence"];
 }
-export declare function resolveTelegramWorkspaceDestructiveFenceKind(fence: {
-    destructiveKind?: TelegramWorkspaceDestructiveFenceKind;
-}): TelegramWorkspaceDestructiveFenceKind;
+export declare function resolveBaleWorkspaceDestructiveFenceKind(fence: {
+    destructiveKind?: BaleWorkspaceDestructiveFenceKind;
+}): BaleWorkspaceDestructiveFenceKind;
 /** Pure damage check for one consolidated admission section under its own stored profile key; throws when invalid. */
-export declare function assertTelegramConsolidatedAdmissionSection(value: unknown, stateProfile: string): void;
-export declare function createTelegramWorkspaceAdmissionOperationId(): string;
-export declare function createTelegramWorkspaceAdmissionProfileKey(input: {
+export declare function assertBaleConsolidatedAdmissionSection(value: unknown, stateProfile: string): void;
+export declare function createBaleWorkspaceAdmissionOperationId(): string;
+export declare function createBaleWorkspaceAdmissionProfileKey(input: {
     profileName?: string;
     botToken: string;
 }): string;
-interface TelegramWorkspaceAdmissionRuntimeBinding {
-    resolve: () => TelegramWorkspaceAdmissionLedger | undefined;
+interface BaleWorkspaceAdmissionRuntimeBinding {
+    resolve: () => BaleWorkspaceAdmissionLedger | undefined;
 }
-export declare function createTelegramWorkspaceAdmissionRuntimeBinding(input: {
+export declare function createBaleWorkspaceAdmissionRuntimeBinding(input: {
     getProfileName: () => string | undefined;
     getBotToken: () => string | undefined;
-    owner: TelegramWorkspaceAdmissionOwner;
+    owner: BaleWorkspaceAdmissionOwner;
     getNowMs?: () => number;
-    getProcessLiveness?: (owner: TelegramWorkspaceAdmissionOwner) => TelegramProcessLiveness;
+    getProcessLiveness?: (owner: BaleWorkspaceAdmissionOwner) => BaleProcessLiveness;
 } & ({
     getPath: (profileName?: string) => string;
     getStatePath?: never;
 } | {
     getStatePath: () => string;
     getPath?: never;
-})): TelegramWorkspaceAdmissionRuntimeBinding;
+})): BaleWorkspaceAdmissionRuntimeBinding;
 /** Stable admission-scope identity used by leases and admission-gated journal operations. */
-export declare function getTelegramWorkspaceAdmissionScopeKey(scope: TelegramWorkspaceAdmissionScope): string;
-export declare function runWithTelegramWorkspaceAdmissions<T>(input: {
-    ledger: Pick<TelegramWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission">;
+export declare function getBaleWorkspaceAdmissionScopeKey(scope: BaleWorkspaceAdmissionScope): string;
+export declare function runWithBaleWorkspaceAdmissions<T>(input: {
+    ledger: Pick<BaleWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission">;
     operationId: string;
     operationKind: string;
-    scopes: readonly TelegramWorkspaceAdmissionScope[];
+    scopes: readonly BaleWorkspaceAdmissionScope[];
     operation: () => T;
 }): T;
-export declare function createTelegramWorkspaceJournalWriterAdmission(input: {
-    ledger: Pick<TelegramWorkspaceAdmissionLedger, "acquireAdmission" | "acquireJournalWriterAdmission" | "releaseAdmission">;
-    protocolAuthority?: Omit<Parameters<TelegramWorkspaceAdmissionLedger["acquireJournalWriterAdmission"]>[0], "operationId">;
+export declare function createBaleWorkspaceJournalWriterAdmission(input: {
+    ledger: Pick<BaleWorkspaceAdmissionLedger, "acquireAdmission" | "acquireJournalWriterAdmission" | "releaseAdmission">;
+    protocolAuthority?: Omit<Parameters<BaleWorkspaceAdmissionLedger["acquireJournalWriterAdmission"]>[0], "operationId">;
     createOperationId?: () => string;
     onReleaseError?: (error: unknown) => void;
 }): <T>(operation: () => T) => T;
-export declare function runWithTelegramWorkspaceAdmissionsAsync<T>(input: {
-    ledger: Pick<TelegramWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission">;
+export declare function runWithBaleWorkspaceAdmissionsAsync<T>(input: {
+    ledger: Pick<BaleWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission">;
     operationId: string;
     operationKind: string;
-    scopes: readonly TelegramWorkspaceAdmissionScope[];
+    scopes: readonly BaleWorkspaceAdmissionScope[];
     operation: () => Promise<T>;
     onReleaseError?: (error: unknown) => void;
 }): Promise<T>;
-export declare function createTelegramWorkspaceAdmissionLedger(options: TelegramWorkspaceAdmissionLedgerOptions): TelegramWorkspaceAdmissionLedger;
+export declare function createBaleWorkspaceAdmissionLedger(options: BaleWorkspaceAdmissionLedgerOptions): BaleWorkspaceAdmissionLedger;
 export {};

@@ -1,12 +1,12 @@
 /**
- * Telegram inline-keyboard structural contracts
- * Zones: telegram ui, shared structure
+ * Bale inline-keyboard structural contracts
+ * Zones: bale ui, shared structure
  * Owns the shared Bot API reply-markup shape while feature domains own their button semantics
  */
-export type TelegramInlineKeyboardButtonStyle = "danger" | "success" | "primary";
-export type TelegramInlineKeyboardButton = {
+export type BaleInlineKeyboardButtonStyle = "danger" | "success" | "primary";
+export type BaleInlineKeyboardButton = {
     text: string;
-    style?: TelegramInlineKeyboardButtonStyle;
+    style?: BaleInlineKeyboardButtonStyle;
 } & ({
     callback_data: string;
     disabled?: never;
@@ -14,8 +14,8 @@ export type TelegramInlineKeyboardButton = {
     disabled: Record<string, never>;
     callback_data?: never;
 });
-export interface TelegramInlineKeyboardMarkup {
-    inline_keyboard: TelegramInlineKeyboardButton[][];
+export interface BaleInlineKeyboardMarkup {
+    inline_keyboard: BaleInlineKeyboardButton[][];
 }
-export declare function assertTelegramCallbackData(callbackData: string, context?: string): string;
-export declare function assertTelegramInlineKeyboardCallbackData(replyMarkup: unknown, context?: string): void;
+export declare function assertBaleCallbackData(callbackData: string, context?: string): string;
+export declare function assertBaleInlineKeyboardCallbackData(replyMarkup: unknown, context?: string): void;

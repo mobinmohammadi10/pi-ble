@@ -1,5 +1,5 @@
 /**
- * Telegram bus local transport boundary
+ * Bale bus local transport boundary
  * Zones: multi-instance bus, IPC transport, Windows named pipes, Unix sockets
  * Owns endpoint derivation, transport-kind detection, retry/error classification, and small timing policy.
  */
@@ -8,59 +8,59 @@ import { createHash } from "node:crypto";
 import { createConnection } from "node:net";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { resolveTelegramRuntimeDir, resolveTelegramTempDir } from "./paths.ts";
+import { resolveBaleRuntimeDir, resolveBaleTempDir } from "./paths.ts";
 
-export type TelegramBusEndpointLayout = "consolidated";
-export const TELEGRAM_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES = 80;
+export type BaleBusEndpointLayout = "consolidated";
+export const BALE_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES = 80;
 
 function requireConsolidatedUnixEndpoint(path: string): string {
   if (!isAbsolute(path) || resolve(path) !== path)
     throw new Error(
-      "Consolidated Telegram IPC requires an exact absolute runtime path.",
+      "Consolidated Bale IPC requires an exact absolute runtime path.",
     );
   // Over-budget logical paths keep their identity; socket resolution applies the bounded private external fallback.
   return path;
 }
 
-export type TelegramBusTransportKind = "pipe" | "socket";
+export type BaleBusTransportKind = "pipe" | "socket";
 
-export type TelegramBusTransportEventRecorder = (
+export type BaleBusTransportEventRecorder = (
   phase: string,
   details: Record<string, unknown>,
 ) => void;
 
-export type TelegramBusTransportEndpointDiagnostics = Record<
+export type BaleBusTransportEndpointDiagnostics = Record<
   string,
   unknown
 > & {
   endpoint: string;
-  transport: TelegramBusTransportKind;
+  transport: BaleBusTransportKind;
 };
 
-export interface TelegramBusTransportRetryPolicy {
+export interface BaleBusTransportRetryPolicy {
   attempts: number;
   delayMs: number;
 }
 
-export interface TelegramBusTransportRetryPolicyOverrides {
+export interface BaleBusTransportRetryPolicyOverrides {
   attempts?: number;
   delayMs?: number;
 }
 
-export type TelegramBusTransportOperation = "registration" | "operation";
+export type BaleBusTransportOperation = "registration" | "operation";
 
-export const TELEGRAM_BUS_REGISTRATION_RETRY: TelegramBusTransportRetryPolicy =
+export const BALE_BUS_REGISTRATION_RETRY: BaleBusTransportRetryPolicy =
   {
     attempts: 10,
     delayMs: 150,
   };
 
-const TELEGRAM_BUS_OPERATION_RETRY: TelegramBusTransportRetryPolicy = {
+const BALE_BUS_OPERATION_RETRY: BaleBusTransportRetryPolicy = {
   attempts: 3,
   delayMs: 100,
 };
 
-export function getTelegramBusPipePath(input: {
+export function getBaleBusPipePath(input: {
   agentDir: string;
   scope: string;
 }): string {
@@ -69,38 +69,38 @@ export function getTelegramBusPipePath(input: {
     .digest("base64url")
     .slice(0, 16);
   const scope = input.scope.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 80);
-  return `\\\\.\\pipe\\pi-telegram-${digest}-${scope}`;
+  return `\\\\.\\pipe\\pi-bale-${digest}-${scope}`;
 }
 
-export function isTelegramBusPipePath(endpoint: string): boolean {
+export function isBaleBusPipePath(endpoint: string): boolean {
   return /^\\\\[.?]\\pipe\\/i.test(endpoint);
 }
 
-export function getTelegramBusTransportKind(
+export function getBaleBusTransportKind(
   endpoint: string,
-): TelegramBusTransportKind {
-  return isTelegramBusPipePath(endpoint) ? "pipe" : "socket";
+): BaleBusTransportKind {
+  return isBaleBusPipePath(endpoint) ? "pipe" : "socket";
 }
 
-export function getTelegramBusEndpointDiagnostics(
+export function getBaleBusEndpointDiagnostics(
   endpoint: string,
-): TelegramBusTransportEndpointDiagnostics {
+): BaleBusTransportEndpointDiagnostics {
   return {
     endpoint,
-    transport: getTelegramBusTransportKind(endpoint),
+    transport: getBaleBusTransportKind(endpoint),
   };
 }
 
-export function getTelegramBusTransportRetryPolicy(input: {
+export function getBaleBusTransportRetryPolicy(input: {
   endpoint: string;
-  operation: TelegramBusTransportOperation;
-  overrides?: TelegramBusTransportRetryPolicyOverrides;
-}): TelegramBusTransportRetryPolicy | undefined {
+  operation: BaleBusTransportOperation;
+  overrides?: BaleBusTransportRetryPolicyOverrides;
+}): BaleBusTransportRetryPolicy | undefined {
   const base =
     input.operation === "registration"
-      ? TELEGRAM_BUS_REGISTRATION_RETRY
-      : isTelegramBusPipePath(input.endpoint)
-        ? TELEGRAM_BUS_OPERATION_RETRY
+      ? BALE_BUS_REGISTRATION_RETRY
+      : isBaleBusPipePath(input.endpoint)
+        ? BALE_BUS_OPERATION_RETRY
         : undefined;
   if (!base && !input.overrides) return undefined;
   return {
@@ -109,12 +109,12 @@ export function getTelegramBusTransportRetryPolicy(input: {
   };
 }
 
-function normalizeTelegramBusEndpointScope(value: string): string {
+function normalizeBaleBusEndpointScope(value: string): string {
   return value.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 80);
 }
 
 /** Consolidated endpoints hash their identity so profile/instance names never reach the path. */
-function getConsolidatedTelegramBusEndpoint(
+function getConsolidatedBaleBusEndpoint(
   input: { agentDir: string; platform: NodeJS.Platform | string },
   identity: readonly string[],
   pipePrefix: string,
@@ -125,28 +125,28 @@ function getConsolidatedTelegramBusEndpoint(
     .digest("hex")
     .slice(0, 16);
   return input.platform === "win32"
-    ? getTelegramBusPipePath({
+    ? getBaleBusPipePath({
         agentDir: input.agentDir,
         scope: `${pipePrefix}-${scope}`,
       })
     : requireConsolidatedUnixEndpoint(
         join(
-          resolveTelegramRuntimeDir(input.agentDir),
+          resolveBaleRuntimeDir(input.agentDir),
           `${socketPrefix}.${scope}.sock`,
         ),
       );
 }
 
-export function getTelegramBusLeaderEndpoint(input: {
+export function getBaleBusLeaderEndpoint(input: {
   agentDir: string;
   platform: NodeJS.Platform | string;
   profileName?: string;
-  layout?: TelegramBusEndpointLayout;
+  layout?: BaleBusEndpointLayout;
 }): string {
   if (input.layout !== undefined && input.layout !== "consolidated")
-    throw new Error("Telegram IPC layout is invalid.");
+    throw new Error("Bale IPC layout is invalid.");
   if (input.layout === "consolidated") {
-    return getConsolidatedTelegramBusEndpoint(
+    return getConsolidatedBaleBusEndpoint(
       input,
       [input.profileName ?? "default"],
       "bus",
@@ -154,56 +154,56 @@ export function getTelegramBusLeaderEndpoint(input: {
     );
   }
   const profileScope = input.profileName
-    ? normalizeTelegramBusEndpointScope(input.profileName)
+    ? normalizeBaleBusEndpointScope(input.profileName)
     : undefined;
   return input.platform === "win32"
-    ? getTelegramBusPipePath({
+    ? getBaleBusPipePath({
         agentDir: input.agentDir,
         scope: profileScope ? `bus-${profileScope}` : "bus",
       })
     : join(
-        resolveTelegramTempDir(input.agentDir),
+        resolveBaleTempDir(input.agentDir),
         profileScope ? `bus.${profileScope}.sock` : "bus.sock",
       );
 }
 
-export function getTelegramBusFollowerEndpoint(input: {
+export function getBaleBusFollowerEndpoint(input: {
   agentDir: string;
   platform: NodeJS.Platform | string;
   instanceId: string;
   profileName?: string;
-  layout?: TelegramBusEndpointLayout;
+  layout?: BaleBusEndpointLayout;
 }): string {
   if (input.layout !== undefined && input.layout !== "consolidated")
-    throw new Error("Telegram IPC layout is invalid.");
+    throw new Error("Bale IPC layout is invalid.");
   if (input.layout === "consolidated") {
-    return getConsolidatedTelegramBusEndpoint(
+    return getConsolidatedBaleBusEndpoint(
       input,
       [input.profileName ?? "default", input.instanceId],
       "follower",
       "f",
     );
   }
-  const instanceScope = normalizeTelegramBusEndpointScope(input.instanceId);
+  const instanceScope = normalizeBaleBusEndpointScope(input.instanceId);
   const profileScope = input.profileName
-    ? normalizeTelegramBusEndpointScope(input.profileName)
+    ? normalizeBaleBusEndpointScope(input.profileName)
     : undefined;
   return input.platform === "win32"
-    ? getTelegramBusPipePath({
+    ? getBaleBusPipePath({
         agentDir: input.agentDir,
         scope: profileScope
           ? `follower-${profileScope}-${instanceScope}`
           : `follower-${instanceScope}`,
       })
     : join(
-        resolveTelegramTempDir(input.agentDir),
+        resolveBaleTempDir(input.agentDir),
         "followers",
         ...(profileScope ? [profileScope] : []),
         `${instanceScope}.sock`,
       );
 }
 
-export interface TelegramBusTransportErrorInfo {
+export interface BaleBusTransportErrorInfo {
   message: string;
   code?: string;
   syscall?: string;
@@ -211,9 +211,9 @@ export interface TelegramBusTransportErrorInfo {
   retryable: boolean;
 }
 
-export function classifyTelegramBusTransportError(
+export function classifyBaleBusTransportError(
   error: unknown,
-): TelegramBusTransportErrorInfo {
+): BaleBusTransportErrorInfo {
   const message = error instanceof Error ? error.message : String(error);
   const maybeNodeError = error as NodeJS.ErrnoException;
   const code =
@@ -238,11 +238,11 @@ export function classifyTelegramBusTransportError(
   return { message, code, syscall, kind, retryable };
 }
 
-export function isRetryableTelegramBusTransportError(error: unknown): boolean {
-  return classifyTelegramBusTransportError(error).retryable;
+export function isRetryableBaleBusTransportError(error: unknown): boolean {
+  return classifyBaleBusTransportError(error).retryable;
 }
 
-export function createTelegramBusTransportTimeoutError(
+export function createBaleBusTransportTimeoutError(
   message: string,
 ): NodeJS.ErrnoException {
   const error = new Error(message) as NodeJS.ErrnoException;
@@ -250,27 +250,27 @@ export function createTelegramBusTransportTimeoutError(
   return error;
 }
 
-export function delayTelegramBusTransportRetry(ms: number): Promise<void> {
+export function delayBaleBusTransportRetry(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
 
-export interface TelegramBusTransportProbeResult extends TelegramBusTransportEndpointDiagnostics {
+export interface BaleBusTransportProbeResult extends BaleBusTransportEndpointDiagnostics {
   reachable: boolean;
-  error?: TelegramBusTransportErrorInfo;
+  error?: BaleBusTransportErrorInfo;
 }
 
-export function probeTelegramBusEndpoint(input: {
+export function probeBaleBusEndpoint(input: {
   endpoint: string;
   timeoutMs?: number;
-}): Promise<TelegramBusTransportProbeResult> {
+}): Promise<BaleBusTransportProbeResult> {
   const timeoutMs = input.timeoutMs ?? 250;
-  const diagnostics = getTelegramBusEndpointDiagnostics(input.endpoint);
+  const diagnostics = getBaleBusEndpointDiagnostics(input.endpoint);
   return new Promise((resolve) => {
     const socket = createConnection(input.endpoint);
     let settled = false;
-    const settle = (result: TelegramBusTransportProbeResult): void => {
+    const settle = (result: BaleBusTransportProbeResult): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
@@ -281,9 +281,9 @@ export function probeTelegramBusEndpoint(input: {
       settle({
         ...diagnostics,
         reachable: false,
-        error: classifyTelegramBusTransportError(
-          createTelegramBusTransportTimeoutError(
-            "Timed out probing Telegram bus endpoint",
+        error: classifyBaleBusTransportError(
+          createBaleBusTransportTimeoutError(
+            "Timed out probing Bale bus endpoint",
           ),
         ),
       });
@@ -293,7 +293,7 @@ export function probeTelegramBusEndpoint(input: {
       settle({
         ...diagnostics,
         reachable: false,
-        error: classifyTelegramBusTransportError(error),
+        error: classifyBaleBusTransportError(error),
       }),
     );
   });

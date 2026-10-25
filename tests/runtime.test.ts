@@ -7,9 +7,9 @@ import assert from "node:assert/strict";
 import testRoot, { type TestContext } from "node:test";
 
 import * as Runtime from "../lib/runtime.ts";
-import { createTelegramThreadTarget } from "../lib/target.ts";
+import { createBaleThreadTarget } from "../lib/target.ts";
 import { createPassthroughFailureLog } from "./fixtures/failure-log.ts";
-import { createTelegramFailureRunLog } from "../lib/logging.ts";
+import { createBaleFailureRunLog } from "../lib/logging.ts";
 
 type RuntimeTestHandler = (context: TestContext) => void | Promise<void>;
 function test(name: string, fn: RuntimeTestHandler): void {
@@ -23,8 +23,8 @@ async function flushMicrotasks(iterations = 10): Promise<void> {
 }
 
 test("Runtime facade binds grouped operations to one bridge state", () => {
-  const state = Runtime.createTelegramBridgeRuntimeState();
-  const runtime = Runtime.createTelegramBridgeRuntime(state);
+  const state = Runtime.createBaleBridgeRuntimeState();
+  const runtime = Runtime.createBaleBridgeRuntime(state);
   assert.equal(runtime.state, state);
   assert.equal(runtime.queue.allocateItemOrder(), 0);
   assert.equal(runtime.queue.allocateControlOrder(), 0);
@@ -56,58 +56,58 @@ test("Runtime facade binds grouped operations to one bridge state", () => {
 });
 
 test("Runtime state helpers allocate queue order and manage typing loops", async () => {
-  const state = Runtime.createTelegramBridgeRuntimeState();
-  const typing = Runtime.createTelegramTypingLoop();
-  assert.equal(Runtime.allocateTelegramQueueItemOrder(state), 0);
-  assert.equal(Runtime.allocateTelegramQueueItemOrder(state), 1);
-  assert.equal(Runtime.allocateTelegramQueueControlOrder(state), 0);
-  Runtime.syncTelegramQueueRuntimeCounters(state, {
-    nextQueuedTelegramItemOrder: 10,
-    nextQueuedTelegramControlOrder: 20,
+  const state = Runtime.createBaleBridgeRuntimeState();
+  const typing = Runtime.createBaleTypingLoop();
+  assert.equal(Runtime.allocateBaleQueueItemOrder(state), 0);
+  assert.equal(Runtime.allocateBaleQueueItemOrder(state), 1);
+  assert.equal(Runtime.allocateBaleQueueControlOrder(state), 0);
+  Runtime.syncBaleQueueRuntimeCounters(state, {
+    nextQueuedBaleItemOrder: 10,
+    nextQueuedBaleControlOrder: 20,
   });
-  assert.equal(Runtime.allocateTelegramQueueItemOrder(state), 10);
-  assert.equal(Runtime.allocateTelegramQueueControlOrder(state), 20);
-  assert.equal(Runtime.hasTelegramDispatchPending(state), false);
-  assert.equal(Runtime.isTelegramCompactionInProgress(state), false);
-  assert.equal(Runtime.getActiveTelegramToolExecutions(state), 0);
+  assert.equal(Runtime.allocateBaleQueueItemOrder(state), 10);
+  assert.equal(Runtime.allocateBaleQueueControlOrder(state), 20);
+  assert.equal(Runtime.hasBaleDispatchPending(state), false);
+  assert.equal(Runtime.isBaleCompactionInProgress(state), false);
+  assert.equal(Runtime.getActiveBaleToolExecutions(state), 0);
   assert.equal(Runtime.shouldFoldQueuedPromptsIntoHistory(state), false);
-  Runtime.syncTelegramLifecycleRuntimeFlags(state, {
-    activeTelegramToolExecutions: 2,
-    telegramTurnDispatchPending: true,
+  Runtime.syncBaleLifecycleRuntimeFlags(state, {
+    activeBaleToolExecutions: 2,
+    baleTurnDispatchPending: true,
     compactionInProgress: true,
     foldQueuedPromptsIntoHistory: true,
   });
-  assert.equal(Runtime.hasTelegramDispatchPending(state), true);
-  assert.equal(Runtime.isTelegramCompactionInProgress(state), true);
-  assert.equal(Runtime.getActiveTelegramToolExecutions(state), 2);
+  assert.equal(Runtime.hasBaleDispatchPending(state), true);
+  assert.equal(Runtime.isBaleCompactionInProgress(state), true);
+  assert.equal(Runtime.getActiveBaleToolExecutions(state), 2);
   assert.equal(Runtime.shouldFoldQueuedPromptsIntoHistory(state), true);
-  Runtime.clearTelegramDispatchPending(state);
-  Runtime.setTelegramCompactionInProgress(state, false);
-  Runtime.resetActiveTelegramToolExecutions(state);
-  assert.equal(Runtime.hasTelegramDispatchPending(state), false);
-  assert.equal(Runtime.getActiveTelegramToolExecutions(state), 0);
-  Runtime.setActiveTelegramToolExecutions(state, 1);
+  Runtime.clearBaleDispatchPending(state);
+  Runtime.setBaleCompactionInProgress(state, false);
+  Runtime.resetActiveBaleToolExecutions(state);
+  assert.equal(Runtime.hasBaleDispatchPending(state), false);
+  assert.equal(Runtime.getActiveBaleToolExecutions(state), 0);
+  Runtime.setActiveBaleToolExecutions(state, 1);
   Runtime.setFoldQueuedPromptsIntoHistory(state, false);
-  assert.equal(Runtime.startTelegramSetup(state), true);
-  assert.equal(Runtime.startTelegramSetup(state), false);
-  assert.equal(Runtime.isTelegramSetupInProgress(state), true);
-  Runtime.finishTelegramSetup(state);
-  assert.equal(Runtime.isTelegramSetupInProgress(state), false);
+  assert.equal(Runtime.startBaleSetup(state), true);
+  assert.equal(Runtime.startBaleSetup(state), false);
+  assert.equal(Runtime.isBaleSetupInProgress(state), true);
+  Runtime.finishBaleSetup(state);
+  assert.equal(Runtime.isBaleSetupInProgress(state), false);
   let abortCount = 0;
-  assert.equal(Runtime.hasTelegramAbortHandler(state), false);
-  assert.equal(Runtime.abortTelegramTurn(state), false);
-  Runtime.setTelegramAbortHandler(state, () => {
+  assert.equal(Runtime.hasBaleAbortHandler(state), false);
+  assert.equal(Runtime.abortBaleTurn(state), false);
+  Runtime.setBaleAbortHandler(state, () => {
     abortCount += 1;
   });
-  assert.equal(Runtime.hasTelegramAbortHandler(state), true);
-  assert.equal(Runtime.abortTelegramTurn(state), true);
+  assert.equal(Runtime.hasBaleAbortHandler(state), true);
+  assert.equal(Runtime.abortBaleTurn(state), true);
   assert.equal(abortCount, 1);
-  assert.equal(typeof Runtime.getTelegramAbortHandler(state), "function");
-  Runtime.clearTelegramAbortHandler(state);
-  assert.equal(Runtime.hasTelegramAbortHandler(state), false);
-  assert.equal(Runtime.hasTelegramDispatchPending(state), false);
-  assert.equal(Runtime.isTelegramCompactionInProgress(state), false);
-  assert.equal(Runtime.getActiveTelegramToolExecutions(state), 1);
+  assert.equal(typeof Runtime.getBaleAbortHandler(state), "function");
+  Runtime.clearBaleAbortHandler(state);
+  assert.equal(Runtime.hasBaleAbortHandler(state), false);
+  assert.equal(Runtime.hasBaleDispatchPending(state), false);
+  assert.equal(Runtime.isBaleCompactionInProgress(state), false);
+  assert.equal(Runtime.getActiveBaleToolExecutions(state), 1);
   assert.equal(Runtime.shouldFoldQueuedPromptsIntoHistory(state), false);
   const typingActions: number[] = [];
   assert.equal(
@@ -149,7 +149,7 @@ test("Runtime state helpers allocate queue order and manage typing loops", async
 });
 
 test("Typing loop retargets chat-level activity into the active thread", async () => {
-  const typing = Runtime.createTelegramTypingLoop();
+  const typing = Runtime.createBaleTypingLoop();
   const typingActions: Array<{
     chatId: number;
     threadId?: number;
@@ -180,7 +180,7 @@ test("Typing loop retargets chat-level activity into the active thread", async (
   assert.equal(
     typing.start({
       chatId: 42,
-      target: createTelegramThreadTarget(42, 99),
+      target: createBaleThreadTarget(42, 99),
       intervalMs: 1000,
       sendTypingAction: async (chatId, options) => {
         recordTypingAction(chatId, options);
@@ -198,11 +198,11 @@ test("Typing loop retargets chat-level activity into the active thread", async (
 
 test("Typing keepalive retargets queued work without leaking ticks across threads", async (ctx) => {
   ctx.mock.timers.enable({ apis: ["setInterval"] });
-  const typing = Runtime.createTelegramTypingLoop();
+  const typing = Runtime.createBaleTypingLoop();
   const actions: string[] = [];
-  const createDeps = (threadId: number): Runtime.TelegramTypingLoopDeps => ({
+  const createDeps = (threadId: number): Runtime.BaleTypingLoopDeps => ({
     chatId: 42,
-    target: createTelegramThreadTarget(42, threadId),
+    target: createBaleThreadTarget(42, threadId),
     intervalMs: 1000,
     sendTypingAction: async (_chatId, options) => {
       actions.push(`thread:${options?.message_thread_id ?? "all"}`);
@@ -230,7 +230,7 @@ test("Typing keepalive retargets queued work without leaking ticks across thread
 });
 
 test("Typing loop sends chat actions only into the exact thread target", async () => {
-  const typing = Runtime.createTelegramTypingLoop();
+  const typing = Runtime.createBaleTypingLoop();
   const typingActions: Array<{
     chatId: number;
     threadId?: number;
@@ -238,7 +238,7 @@ test("Typing loop sends chat actions only into the exact thread target", async (
   assert.equal(
     typing.start({
       chatId: 42,
-      target: createTelegramThreadTarget(42, 99),
+      target: createBaleThreadTarget(42, 99),
       intervalMs: 1000,
       sendTypingAction: async (chatId, options) => {
         typingActions.push({
@@ -255,7 +255,7 @@ test("Typing loop sends chat actions only into the exact thread target", async (
 });
 
 test("Typing loop idle wait is bounded for slow in-flight chat actions", async () => {
-  const typing = Runtime.createTelegramTypingLoop();
+  const typing = Runtime.createBaleTypingLoop();
   typing.start({ chatId: 42, intervalMs: 60_000, sendTypingAction: () => new Promise(() => {}) });
   await flushMicrotasks();
   const startedAt = Date.now();
@@ -267,16 +267,16 @@ test("Typing loop idle wait is bounded for slow in-flight chat actions", async (
 });
 
 /** Folds events through the pure typing transition, keeping every effect and the last call result. */
-function runTypingMachine(events: Runtime.TelegramTypingEvent[]): {
-  state: Runtime.TelegramTypingMachineState;
-  effects: Runtime.TelegramTypingEffect[];
+function runTypingMachine(events: Runtime.BaleTypingEvent[]): {
+  state: Runtime.BaleTypingMachineState;
+  effects: Runtime.BaleTypingEffect[];
   result: boolean;
 } {
-  let state = Runtime.createTelegramTypingMachineState();
-  const effects: Runtime.TelegramTypingEffect[] = [];
+  let state = Runtime.createBaleTypingMachineState();
+  const effects: Runtime.BaleTypingEffect[] = [];
   let result = false;
   for (const event of events) {
-    const next = Runtime.transitionTelegramTypingLoop(state, event);
+    const next = Runtime.transitionBaleTypingLoop(state, event);
     state = next.state;
     effects.push(...next.effects);
     result = next.result;
@@ -284,7 +284,7 @@ function runTypingMachine(events: Runtime.TelegramTypingEvent[]): {
   return { state, effects, result };
 }
 
-const typingStart = (loopId: number, threadId?: number, continues = true): Extract<Runtime.TelegramTypingEvent, { type: "started" }> => ({
+const typingStart = (loopId: number, threadId?: number, continues = true): Extract<Runtime.BaleTypingEvent, { type: "started" }> => ({
   type: "started", loopId, chatId: 42, key: `42:${threadId ?? "all"}`, intervalMs: 3000, continues,
   ...(threadId === undefined ? {} : { threadParams: { message_thread_id: threadId } }),
 });
@@ -339,9 +339,9 @@ test("Typing machine ends the loop when its caller stops continuing or stop is r
 });
 
 test("Abort handler setter and agent-end resetter bind runtime cleanup", () => {
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   const events: string[] = [];
-  const setAbortHandler = Runtime.createTelegramContextAbortHandlerSetter(
+  const setAbortHandler = Runtime.createBaleContextAbortHandlerSetter(
     runtime.abort,
   );
   setAbortHandler({
@@ -350,7 +350,7 @@ test("Abort handler setter and agent-end resetter bind runtime cleanup", () => {
     },
   });
   assert.equal(runtime.abort.abortTurn(), true);
-  const reset = Runtime.createTelegramAgentEndResetter({
+  const reset = Runtime.createBaleAgentEndResetter({
     abort: runtime.abort,
     typing: runtime.typing,
     clearActiveTurn: () => {
@@ -372,9 +372,9 @@ test("Abort handler setter and agent-end resetter bind runtime cleanup", () => {
 });
 
 test("Prompt dispatch lifecycle owns dispatch flags, typing, and status", () => {
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   const events: string[] = [];
-  const lifecycle = Runtime.createTelegramPromptDispatchLifecycle<{
+  const lifecycle = Runtime.createBalePromptDispatchLifecycle<{
     id: string;
   }>({
     lifecycle: runtime.lifecycle,
@@ -403,9 +403,9 @@ test("Prompt dispatch lifecycle owns dispatch flags, typing, and status", () => 
 });
 
 test("Prompt dispatch lifecycle records stale status failures", () => {
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   const events: string[] = [];
-  const lifecycle = Runtime.createTelegramPromptDispatchLifecycle<{
+  const lifecycle = Runtime.createBalePromptDispatchLifecycle<{
     id: string;
   }>({
     lifecycle: runtime.lifecycle,
@@ -437,10 +437,10 @@ test("Prompt dispatch lifecycle records stale status failures", () => {
 });
 
 test("Prompt dispatch runtime binds typing starter and dispatch lifecycle", async () => {
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   const sentChatIds: number[] = [];
   const statuses: string[] = [];
-  const promptRuntime = Runtime.createTelegramPromptDispatchRuntime<{
+  const promptRuntime = Runtime.createBalePromptDispatchRuntime<{
     id: string;
   }>({
     failureLog: createPassthroughFailureLog(),
@@ -466,7 +466,7 @@ test("Prompt dispatch runtime binds typing starter and dispatch lifecycle", asyn
 
 test("Typing loop starter uses a conservative native keepalive interval", () => {
   let capturedIntervalMs = 0;
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter<{
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter<{
     id: string;
   }>({
     failureLog: createPassthroughFailureLog(),
@@ -489,10 +489,10 @@ test("Typing loop starter uses a conservative native keepalive interval", () => 
 });
 
 test("Typing loop starter sends one exact thread action", async () => {
-  const state = Runtime.createTelegramBridgeRuntimeState();
-  const runtime = Runtime.createTelegramBridgeRuntime(state);
+  const state = Runtime.createBaleBridgeRuntimeState();
+  const runtime = Runtime.createBaleBridgeRuntime(state);
   const actions: string[] = [];
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter<{
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter<{
     id: string;
   }>({
     failureLog: createPassthroughFailureLog(),
@@ -506,7 +506,7 @@ test("Typing loop starter sends one exact thread action", async () => {
   });
 
   startTypingLoop({ id: "ctx" }, 8, {
-    target: createTelegramThreadTarget(8, 44),
+    target: createBaleThreadTarget(8, 44),
   });
   await flushMicrotasks();
 
@@ -515,12 +515,12 @@ test("Typing loop starter sends one exact thread action", async () => {
 });
 
 test("Typing loop starter collapses one sustained presence failure into a failure and an outcome record", async () => {
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   const events: Array<{ category: string; details?: Record<string, unknown> }> = [];
   let failing = true;
   let attempts = 0;
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter<{ id: string }>({
-    failureLog: createTelegramFailureRunLog({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter<{ id: string }>({
+    failureLog: createBaleFailureRunLog({
       category: "typing",
       failurePhase: "typing-presence",
       outcomePhase: "typing-presence-recovered",
@@ -567,9 +567,9 @@ test("Typing loop starter collapses one sustained presence failure into a failur
 
 for (const threaded of [false, true]) {
   test(`Prompt dispatch starts typing in its exact queued destination (threaded=${threaded})`, async () => {
-    const runtime = Runtime.createTelegramBridgeRuntime();
+    const runtime = Runtime.createBaleBridgeRuntime();
     const calls: Array<{ chatId: number; threadId?: number }> = [];
-    const prompt = Runtime.createTelegramPromptDispatchRuntime({
+    const prompt = Runtime.createBalePromptDispatchRuntime({
    failureLog: createPassthroughFailureLog(),
    lifecycle: runtime.lifecycle, typing: runtime.typing,
       getDefaultChatId: () => 7, isThreadedMode: () => threaded,
@@ -585,8 +585,8 @@ for (const threaded of [false, true]) {
 
 for (const threadId of [undefined, 0, -1, 1.5, NaN]) {
   test(`Threaded typing refuses an unavailable or invalid Thread before starting (thread=${threadId})`, async () => {
-    const typing = Runtime.createTelegramTypingLoop(); let calls = 0;
-    const start = Runtime.createTelegramTypingLoopStarter({
+    const typing = Runtime.createBaleTypingLoop(); let calls = 0;
+    const start = Runtime.createBaleTypingLoopStarter({
    failureLog: createPassthroughFailureLog(),
    typing, getDefaultChatId: () => 7, isThreadedMode: () => true,
       sendTypingAction: async () => { calls++; }, updateStatus() {} });
@@ -599,9 +599,9 @@ for (const threadId of [undefined, 0, -1, 1.5, NaN]) {
 
 test("A Classic typing loop stops when Threaded Mode activates, without replacing a valid Thread loop", async (ctx) => {
   ctx.mock.timers.enable({ apis: ["setInterval"] });
-  const typing = Runtime.createTelegramTypingLoop(); let threaded = false;
+  const typing = Runtime.createBaleTypingLoop(); let threaded = false;
   const calls: Array<{ chatId: number; threadId?: number }> = [];
-  const start = Runtime.createTelegramTypingLoopStarter({
+  const start = Runtime.createBaleTypingLoopStarter({
    failureLog: createPassthroughFailureLog(),
    typing, getDefaultChatId: () => 7, isThreadedMode: () => threaded,
     sendTypingAction: async (chatId, options) => { calls.push({ chatId, threadId: options?.message_thread_id }); }, updateStatus() {} });
@@ -616,14 +616,14 @@ test("A Classic typing loop stops when Threaded Mode activates, without replacin
 
 test("Typing loop skips interval ticks while the previous action is in flight", async (ctx) => {
   ctx.mock.timers.enable({ apis: ["setInterval"] });
-  const state = Runtime.createTelegramBridgeRuntimeState();
-  const runtime = Runtime.createTelegramBridgeRuntime(state);
+  const state = Runtime.createBaleBridgeRuntimeState();
+  const runtime = Runtime.createBaleBridgeRuntime(state);
   let releaseAction: () => void = () => {};
   const pendingAction = new Promise<void>((resolve) => {
     releaseAction = resolve;
   });
   let calls = 0;
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -652,8 +652,8 @@ test("Typing loop skips interval ticks while the previous action is in flight", 
 });
 
 test("Typing loop records failures without changing bridge status", async () => {
-  const state = Runtime.createTelegramBridgeRuntimeState();
-  const runtime = Runtime.createTelegramBridgeRuntime(state);
+  const state = Runtime.createBaleBridgeRuntimeState();
+  const runtime = Runtime.createBaleBridgeRuntime(state);
   const sentChatIds: number[] = [];
   const statusErrors: string[] = [];
   const runtimeEvents: string[] = [];
@@ -665,7 +665,7 @@ test("Typing loop records failures without changing bridge status", async () => 
     const message = error instanceof Error ? error.message : String(error);
     runtimeEvents.push(`${category}:${message}:${details?.chatId}`);
   };
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter<{
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter<{
     id: string;
   }>({
     failureLog: createPassthroughFailureLog((error, details) =>
@@ -688,7 +688,7 @@ test("Typing loop records failures without changing bridge status", async () => 
   assert.deepEqual(statusErrors, []);
   assert.equal(runtime.typing.stop(), true);
   const failingStatusErrors: string[] = [];
-  const startFailingTypingLoop = Runtime.createTelegramTypingLoopStarter<{
+  const startFailingTypingLoop = Runtime.createBaleTypingLoopStarter<{
     id: string;
   }>({
     failureLog: createPassthroughFailureLog((error, details) =>
@@ -712,10 +712,10 @@ test("Typing loop records failures without changing bridge status", async () => 
   assert.equal(runtime.typing.stop(), true);
 });
 
-test("Typing loop does not start without Telegram transport authority", async () => {
-  const runtime = Runtime.createTelegramBridgeRuntime();
+test("Typing loop does not start without Bale transport authority", async () => {
+  const runtime = Runtime.createBaleBridgeRuntime();
   let calls = 0;
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -734,10 +734,10 @@ test("Typing loop does not start without Telegram transport authority", async ()
 
 test("Typing loop stops after authority loss even when a request never settles", async (ctx) => {
   ctx.mock.timers.enable({ apis: ["setInterval"] });
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   let available = true;
   let calls = 0;
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -762,10 +762,10 @@ test("Typing loop stops after authority loss even when a request never settles",
 
 test("Typing loop observes authority loss between successful timer ticks", async (ctx) => {
   ctx.mock.timers.enable({ apis: ["setInterval"] });
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   let available = true;
   let calls = 0;
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -789,9 +789,9 @@ test("Typing loop observes authority loss between successful timer ticks", async
 
 test("Typing loop replacement detaches a permanently pending old request", async (ctx) => {
   ctx.mock.timers.enable({ apis: ["setInterval"] });
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   const calls: number[] = [];
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -815,10 +815,10 @@ test("Typing loop replacement detaches a permanently pending old request", async
 
 test("Typing loop restarts after authority loss with an old request pending", async (ctx) => {
   ctx.mock.timers.enable({ apis: ["setInterval"] });
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   let available = true;
   const calls: number[] = [];
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -846,12 +846,12 @@ test("Typing loop restarts after authority loss with an old request pending", as
 
 test("Typing loop replacement fences late failures from the old loop", async (ctx) => {
   ctx.mock.timers.enable({ apis: ["setInterval"] });
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   let rejectOld: ((error: Error) => void) | undefined;
   const calls: number[] = [];
   const statusErrors: string[] = [];
   const runtimeEvents: string[] = [];
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -885,13 +885,13 @@ test("Typing loop replacement fences late failures from the old loop", async (ct
   ctx.mock.timers.reset();
 });
 
-test("Typing loop stops quietly when Telegram transport authority is lost", async () => {
-  const runtime = Runtime.createTelegramBridgeRuntime();
+test("Typing loop stops quietly when Bale transport authority is lost", async () => {
+  const runtime = Runtime.createBaleBridgeRuntime();
   let available = true;
   let rejectAction: ((error: Error) => void) | undefined;
   const statusErrors: string[] = [];
   const runtimeEvents: string[] = [];
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -911,7 +911,7 @@ test("Typing loop stops quietly when Telegram transport authority is lost", asyn
   startTypingLoop({ id: "ctx" });
   await flushMicrotasks();
   available = false;
-  rejectAction?.(new Error("Telegram bus follower is not registered."));
+  rejectAction?.(new Error("Bale bus follower is not registered."));
   await flushMicrotasks();
   assert.deepEqual(statusErrors, []);
   assert.deepEqual(runtimeEvents, []);
@@ -919,13 +919,13 @@ test("Typing loop stops quietly when Telegram transport authority is lost", asyn
 });
 
 test("Typing loop fences late failures across transport authority generations", async () => {
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   let authority: string | undefined = "A";
   let rejectOld: ((error: Error) => void) | undefined;
   const calls: number[] = [];
   const statusErrors: string[] = [];
   const runtimeEvents: string[] = [];
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -965,8 +965,8 @@ test("Typing loop fences late failures across transport authority generations", 
 for (const threaded of [false, true]) {
   test(`Stale context cannot start or replace current typing with the same transport epoch (threaded=${threaded})`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const typing = Runtime.createTelegramTypingLoop(), current = {}, stale = {}, calls: number[] = [];
-    const start = Runtime.createTelegramTypingLoopStarter({
+    const typing = Runtime.createBaleTypingLoop(), current = {}, stale = {}, calls: number[] = [];
+    const start = Runtime.createBaleTypingLoopStarter({
    failureLog: createPassthroughFailureLog(),
    typing, getDefaultChatId: () => 7,
       isThreadedMode: () => threaded, getTransportAuthority: () => "unchanged", isContextActive: ctx => ctx === current,
@@ -986,8 +986,8 @@ for (const threaded of [false, true]) {
 for (const pending of [false, true]) {
   test(`Typing stops after context loss under the same transport epoch (pending=${pending})`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const typing = Runtime.createTelegramTypingLoop(); let active = true, calls = 0;
-    const start = Runtime.createTelegramTypingLoopStarter({
+    const typing = Runtime.createBaleTypingLoop(); let active = true, calls = 0;
+    const start = Runtime.createBaleTypingLoopStarter({
    failureLog: createPassthroughFailureLog(),
    typing, getDefaultChatId: () => 7,
       isThreadedMode: () => true, getTransportAuthority: () => "unchanged", isContextActive: () => active,
@@ -1003,9 +1003,9 @@ for (const pending of [false, true]) {
 for (const pending of [false, true]) {
   test(`Typing captures session generation across reused context and late old failure (pending=${pending})`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const typing = Runtime.createTelegramTypingLoop(), ctx = {}, calls: number[] = [], failures: unknown[] = [];
+    const typing = Runtime.createBaleTypingLoop(), ctx = {}, calls: number[] = [], failures: unknown[] = [];
     let generation = 1, rejectOld: ((error: Error) => void) | undefined;
-    const start = Runtime.createTelegramTypingLoopStarter({
+    const start = Runtime.createBaleTypingLoopStarter({
    failureLog: createPassthroughFailureLog(),
    typing, getDefaultChatId: () => 7,
       isThreadedMode: () => true, getTransportAuthority: () => "unchanged", isContextActive: () => true,
@@ -1024,9 +1024,9 @@ for (const pending of [false, true]) {
 }
 
 for (const replace of [false, true]) test(`Context loss before the scheduled first action refuses sending (replacement=${replace})`, async () => {
-  const typing = Runtime.createTelegramTypingLoop(), old = {}, replacement = {}, calls: number[] = [];
+  const typing = Runtime.createBaleTypingLoop(), old = {}, replacement = {}, calls: number[] = [];
   let current = old;
-  const start = Runtime.createTelegramTypingLoopStarter({
+  const start = Runtime.createBaleTypingLoopStarter({
    failureLog: createPassthroughFailureLog(),
    typing, getDefaultChatId: () => 7,
     isContextActive: ctx => ctx === current, getTransportAuthority: () => "unchanged", isThreadedMode: () => true,
@@ -1042,10 +1042,10 @@ for (const replace of [false, true]) test(`Context loss before the scheduled fir
 for (const stage of ["before-issuance", "after-issuance"] as const) {
   test(`Repeated work presence preserves an in-flight typing action ${stage}`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const typing = Runtime.createTelegramTypingLoop(), ctx = {}, failures: unknown[] = [];
+    const typing = Runtime.createBaleTypingLoop(), ctx = {}, failures: unknown[] = [];
     let release!: () => void, issued = 0, completed = 0;
     const held = new Promise<void>(resolve => { release = resolve; });
-    const start = Runtime.createTelegramTypingLoopStarter({
+    const start = Runtime.createBaleTypingLoopStarter({
       failureLog: createPassthroughFailureLog(),
       typing, getDefaultChatId: () => 7, isContextActive: value => value === ctx,
       getSessionGeneration: () => 1, getTransportAuthority: () => "unchanged", isThreadedMode: () => true,
@@ -1073,11 +1073,11 @@ for (const stage of ["before-issuance", "after-issuance"] as const) {
 for (const withGeneration of [true, false]) {
   test(`Fresh SDK context wrappers ${withGeneration ? "preserve" : "replace"} presence ${withGeneration ? "within a session generation" : "without generation evidence"}`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const typing = Runtime.createTelegramTypingLoop(), sessionManager = {};
+    const typing = Runtime.createBaleTypingLoop(), sessionManager = {};
     const first = { sessionManager }, next = { sessionManager }, guards: Array<() => void> = [];
     let release!: () => void;
     const held = new Promise<void>(resolve => { release = resolve; });
-    const start = Runtime.createTelegramTypingLoopStarter<typeof first>({
+    const start = Runtime.createBaleTypingLoopStarter<typeof first>({
       failureLog: createPassthroughFailureLog(),
       typing, getDefaultChatId: () => 7, isContextActive: ctx => ctx.sessionManager === sessionManager,
       ...(withGeneration ? { getSessionGeneration: () => 1 } : {}),
@@ -1099,10 +1099,10 @@ for (const withGeneration of [true, false]) {
 for (const changed of ["context", "generation", "transport", "chat", "thread", "stopped"] as const) {
   test(`Ensuring work presence cannot retain an action after ${changed} changes`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const typing = Runtime.createTelegramTypingLoop(), firstContext = {}, guards: Array<() => void> = [];
+    const typing = Runtime.createBaleTypingLoop(), firstContext = {}, guards: Array<() => void> = [];
     let current = firstContext, generation = 1, authority = "first", release!: () => void;
     const held = new Promise<void>(resolve => { release = resolve; });
-    const start = Runtime.createTelegramTypingLoopStarter({
+    const start = Runtime.createBaleTypingLoopStarter({
       failureLog: createPassthroughFailureLog(),
       typing, getDefaultChatId: () => 7, isContextActive: ctx => ctx === current,
       getSessionGeneration: () => generation, getTransportAuthority: () => authority, isThreadedMode: () => true,
@@ -1127,9 +1127,9 @@ for (const changed of ["context", "generation", "transport", "chat", "thread", "
 for (const end of ["stop", "same-target-replacement"] as const) {
   test(`Typing transport guard cannot outlive its loop with unchanged context and epoch (${end})`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const typing = Runtime.createTelegramTypingLoop(), ctx = {}, guards: Array<() => void> = [], failures: unknown[] = [];
+    const typing = Runtime.createBaleTypingLoop(), ctx = {}, guards: Array<() => void> = [], failures: unknown[] = [];
     let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
-    const start = Runtime.createTelegramTypingLoopStarter({
+    const start = Runtime.createBaleTypingLoopStarter({
    failureLog: createPassthroughFailureLog(),
    typing, getDefaultChatId: () => 7,
       isContextActive: value => value === ctx, getSessionGeneration: () => 1, getTransportAuthority: () => "unchanged", isThreadedMode: () => true,
@@ -1148,12 +1148,12 @@ for (const end of ["stop", "same-target-replacement"] as const) {
 }
 
 test("Typing loop ignores late failures from a replaced session context", async () => {
-  const runtime = Runtime.createTelegramBridgeRuntime();
+  const runtime = Runtime.createBaleBridgeRuntime();
   let active = true;
   let rejectAction: ((error: Error) => void) | undefined;
   const statusErrors: string[] = [];
   const runtimeEvents: string[] = [];
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter({
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 7,
@@ -1181,8 +1181,8 @@ test("Typing loop ignores late failures from a replaced session context", async 
 });
 
 test("Typing loop failure diagnostics do not invoke status updates", async () => {
-  const state = Runtime.createTelegramBridgeRuntimeState();
-  const runtime = Runtime.createTelegramBridgeRuntime(state);
+  const state = Runtime.createBaleBridgeRuntimeState();
+  const runtime = Runtime.createBaleBridgeRuntime(state);
   const runtimeEvents: string[] = [];
   const recordTypingEvent = (
     category: string,
@@ -1194,7 +1194,7 @@ test("Typing loop failure diagnostics do not invoke status updates", async () =>
       `${category}:${message}:${details?.phase ?? details?.chatId}`,
     );
   };
-  const startTypingLoop = Runtime.createTelegramTypingLoopStarter<{
+  const startTypingLoop = Runtime.createBaleTypingLoopStarter<{
     id: string;
   }>({
     failureLog: createPassthroughFailureLog((error, details) =>

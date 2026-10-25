@@ -21,19 +21,19 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
-interface TelegramProcessBirthIdentityOptions {
+interface BaleProcessBirthIdentityOptions {
   platform?: NodeJS.Platform;
   readProcStat?: (pid: number) => string;
   readDarwinProcessStart?: (pid: number) => string;
   readWindowsProcessStart?: (pid: number) => string;
 }
 
-type TelegramProcessBirthProof =
+type BaleProcessBirthProof =
   { status: "proven"; identity: string } | { status: "unverifiable" };
 
-export type TelegramProcessLiveness = "alive" | "dead" | "unverifiable";
+export type BaleProcessLiveness = "alive" | "dead" | "unverifiable";
 
-interface TelegramProcessLivenessOptions extends TelegramProcessBirthIdentityOptions {
+interface BaleProcessLivenessOptions extends BaleProcessBirthIdentityOptions {
   isProcessAlive?: (pid: number) => boolean;
 }
 
@@ -65,12 +65,12 @@ function readWindowsProcessStart(pid: number): string {
 }
 
 /** The current process never changes birth, so its slow Windows proof is read once; other PIDs are never cached. */
-let ownWindowsBirthProof: TelegramProcessBirthProof | undefined;
+let ownWindowsBirthProof: BaleProcessBirthProof | undefined;
 
-function getTelegramProcessBirthProof(
+function getBaleProcessBirthProof(
   pid: number,
-  options: TelegramProcessBirthIdentityOptions = {},
-): TelegramProcessBirthProof {
+  options: BaleProcessBirthIdentityOptions = {},
+): BaleProcessBirthProof {
   if (!Number.isSafeInteger(pid) || pid <= 0) return { status: "unverifiable" };
   const platform = options.platform ?? getPlatform();
   if (platform === "linux") {
@@ -110,7 +110,7 @@ function getTelegramProcessBirthProof(
     const injected = options.readWindowsProcessStart;
     if (!injected && pid === process.pid && ownWindowsBirthProof)
       return ownWindowsBirthProof;
-    let proof: TelegramProcessBirthProof = { status: "unverifiable" };
+    let proof: BaleProcessBirthProof = { status: "unverifiable" };
     try {
       const ticks = (injected ?? readWindowsProcessStart)(pid);
       if (/^\d+$/u.test(ticks))
@@ -125,32 +125,32 @@ function getTelegramProcessBirthProof(
   return { status: "unverifiable" };
 }
 
-export function getTelegramProcessBirthIdentity(
+export function getBaleProcessBirthIdentity(
   pid: number,
   fallbackGeneration: number | string,
-  options: TelegramProcessBirthIdentityOptions = {},
+  options: BaleProcessBirthIdentityOptions = {},
 ): string {
-  const proof = getTelegramProcessBirthProof(pid, options);
+  const proof = getBaleProcessBirthProof(pid, options);
   return proof.status === "proven"
     ? proof.identity
     : `${pid}:generation:${fallbackGeneration}`;
 }
 
-export function getTelegramProcessLiveness(
+export function getBaleProcessLiveness(
   owner: { processId: number; processBirthId: string },
-  options: TelegramProcessLivenessOptions = {},
-): TelegramProcessLiveness {
+  options: BaleProcessLivenessOptions = {},
+): BaleProcessLiveness {
   const processAlive = options.isProcessAlive ?? isProcessAlive;
   if (!processAlive(owner.processId)) return "dead";
-  const proof = getTelegramProcessBirthProof(owner.processId, options);
+  const proof = getBaleProcessBirthProof(owner.processId, options);
   if (proof.status === "unverifiable") return "unverifiable";
   return proof.identity === owner.processBirthId ? "alive" : "dead";
 }
 
-export function getTelegramProcessBirthIdentityLiveness(
+export function getBaleProcessBirthIdentityLiveness(
   processBirthId: string,
-  options: TelegramProcessLivenessOptions = {},
-): TelegramProcessLiveness {
+  options: BaleProcessLivenessOptions = {},
+): BaleProcessLiveness {
   const match = /^(\d+):(start|generation):(.+)$/u.exec(processBirthId);
   if (!match) return "unverifiable";
   const processId = Number(match[1]);
@@ -158,7 +158,7 @@ export function getTelegramProcessBirthIdentityLiveness(
   const processAlive = options.isProcessAlive ?? isProcessAlive;
   if (!processAlive(processId)) return "dead";
   if (match[2] === "generation") return "unverifiable";
-  const proof = getTelegramProcessBirthProof(processId, options);
+  const proof = getBaleProcessBirthProof(processId, options);
   if (proof.status === "unverifiable") return "unverifiable";
   return proof.identity === processBirthId ? "alive" : "dead";
 }

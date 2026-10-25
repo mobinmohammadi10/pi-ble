@@ -1,6 +1,6 @@
 /**
- * Telegram durable inbound update journal
- * Zones: telegram inbound, filesystem authority, crash recovery
+ * Bale durable inbound update journal
+ * Zones: bale inbound, filesystem authority, crash recovery
  * Owns profile/bot-scoped raw updates, schema validation, deduplication,
  * bounded atomic publication, durable queue-receipt/failure state, and compaction.
  * It does not own polling, update execution, queue admission, or follower routing.
@@ -9,34 +9,34 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, closeSync, fstatSync, lstatSync, mkdirSync, opendirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmdirSync, rmSync, statSync, unlinkSync, writeFileSync, } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep, } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { TELEGRAM_STRICT_READ_FLAGS, renameTelegramPathWithRetry, withTelegramFileTransaction, } from "./locks.js";
-import { decodeTelegramSessionDirectoryName, getTelegramProfilePathSuffix, resolveTelegramRuntimeDir, TELEGRAM_DEFAULT_PROFILE_NAME, } from "./paths.js";
-import { getTelegramProcessLiveness, } from "./process-identity.js";
+import { BALE_STRICT_READ_FLAGS, renameBalePathWithRetry, withBaleFileTransaction, } from "./locks.js";
+import { decodeBaleSessionDirectoryName, getBaleProfilePathSuffix, resolveBaleRuntimeDir, BALE_DEFAULT_PROFILE_NAME, } from "./paths.js";
+import { getBaleProcessLiveness, } from "./process-identity.js";
 import { hasOnlyWireKeys as hasOnlyKeys, isNonEmptyWireString as isNonEmptyString, isWireRecord as isRecord, isNonNegativeWireInteger as isSafeNonNegativeInteger, } from "./wire.js";
-import { getTelegramWorkspaceAdmissionScopeKey, runWithTelegramWorkspaceAdmissions, } from "./workspace-admission.js";
-export const TELEGRAM_UPDATE_JOURNAL_VERSION = 1;
-export const TELEGRAM_UPDATE_JOURNAL_EXCLUSION_VERSION = 2;
-export const TELEGRAM_UPDATE_JOURNAL_CUSTODY_VERSION = 3;
+import { getBaleWorkspaceAdmissionScopeKey, runWithBaleWorkspaceAdmissions, } from "./workspace-admission.js";
+export const BALE_UPDATE_JOURNAL_VERSION = 1;
+export const BALE_UPDATE_JOURNAL_EXCLUSION_VERSION = 2;
+export const BALE_UPDATE_JOURNAL_CUSTODY_VERSION = 3;
 // Receipt and binding identities survive storage-schema upgrades.
-const TELEGRAM_UPDATE_JOURNAL_IDENTITY_VERSION = 1;
-const TELEGRAM_UPDATE_JOURNAL_MAX_ENTRIES = 10_000;
-const TELEGRAM_UPDATE_JOURNAL_MAX_BYTES = 32 * 1024 * 1024;
-const TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH = 128;
-export const TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH = 256;
-const TELEGRAM_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH = 256;
-const TELEGRAM_UPDATE_JOURNAL_INPUT_PROJECTION_HEADROOM_BYTES = 4 * 1024;
-const TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES = 64;
-const TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH = 128;
-const TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MIN_LENGTH = 32;
-const TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MAX_LENGTH = 256;
-export const TELEGRAM_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH = 128;
-export const TELEGRAM_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH = 512;
-function escapeTelegramJournalPathPattern(value) {
+const BALE_UPDATE_JOURNAL_IDENTITY_VERSION = 1;
+const BALE_UPDATE_JOURNAL_MAX_ENTRIES = 10_000;
+const BALE_UPDATE_JOURNAL_MAX_BYTES = 32 * 1024 * 1024;
+const BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH = 128;
+export const BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH = 256;
+const BALE_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH = 256;
+const BALE_UPDATE_JOURNAL_INPUT_PROJECTION_HEADROOM_BYTES = 4 * 1024;
+const BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES = 64;
+const BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH = 128;
+const BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MIN_LENGTH = 32;
+const BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MAX_LENGTH = 256;
+export const BALE_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH = 128;
+export const BALE_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH = 512;
+function escapeBaleJournalPathPattern(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 /** Read-only discovery for canonical follower journal snapshots and segment roots. */
-export function discoverTelegramFollowerJournalPaths(input) {
-    const suffix = escapeTelegramJournalPathPattern(getTelegramProfilePathSuffix(input.profileName));
+export function discoverBaleFollowerJournalPaths(input) {
+    const suffix = escapeBaleJournalPathPattern(getBaleProfilePathSuffix(input.profileName));
     const pattern = new RegExp(`^(follower-inbox-[a-f0-9]{16}${suffix}\\.json)(?:\\.segments)?$`, "u");
     let entries;
     try {
@@ -70,12 +70,12 @@ export function discoverTelegramFollowerJournalPaths(input) {
     return { paths: Array.from(paths).sort(), complete };
 }
 /** Bounded read-only session-family discovery, not writer closure or deletion authority. */
-export function discoverTelegramSessionJournalPaths(input) {
+export function discoverBaleSessionJournalPaths(input) {
     const maxEntries = input.maxDirectoryEntries ?? 10_000;
     if (!Number.isSafeInteger(maxEntries) || maxEntries < 1)
         return { paths: [], complete: false };
     const root = join(input.directory, "sessions");
-    const suffix = getTelegramProfilePathSuffix(input.profileName);
+    const suffix = getBaleProfilePathSuffix(input.profileName);
     const paths = new Set();
     let remaining = maxEntries;
     let complete = true;
@@ -115,7 +115,7 @@ export function discoverTelegramSessionJournalPaths(input) {
             if (!complete)
                 break;
             if (!session.isDirectory() ||
-                decodeTelegramSessionDirectoryName(session.name) === undefined) {
+                decodeBaleSessionDirectoryName(session.name) === undefined) {
                 complete = false;
                 break;
             }
@@ -155,28 +155,28 @@ export function discoverTelegramSessionJournalPaths(input) {
     return { paths: Array.from(paths).sort(), complete };
 }
 /** Transitional discovery covers both retained flat recipients and session-owned families. */
-export function discoverTelegramRecipientJournalPaths(input) {
-    const legacy = discoverTelegramFollowerJournalPaths(input);
-    const sessions = discoverTelegramSessionJournalPaths(input);
+export function discoverBaleRecipientJournalPaths(input) {
+    const legacy = discoverBaleFollowerJournalPaths(input);
+    const sessions = discoverBaleSessionJournalPaths(input);
     return {
         paths: Array.from(new Set([...legacy.paths, ...sessions.paths])).sort(),
         complete: legacy.complete && sessions.complete,
     };
 }
-const TELEGRAM_UPDATE_JOURNAL_TERMINAL_REASON_MAX_LENGTH = 256;
-export const TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT = 256;
-export const TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES = 4 * 1024 * 1024;
-export class TelegramUpdateJournalError extends Error {
+const BALE_UPDATE_JOURNAL_TERMINAL_REASON_MAX_LENGTH = 256;
+export const BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT = 256;
+export const BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES = 4 * 1024 * 1024;
+export class BaleUpdateJournalError extends Error {
     code;
     path;
     constructor(code, path, message, options = {}) {
         super(message, options);
-        this.name = "TelegramUpdateJournalError";
+        this.name = "BaleUpdateJournalError";
         this.code = code;
         this.path = path;
     }
 }
-const TELEGRAM_UPDATE_CHAT_CARRIERS = new Set([
+const BALE_UPDATE_CHAT_CARRIERS = new Set([
     "message",
     "edited_message",
     "channel_post",
@@ -214,7 +214,7 @@ function getUpdateAdmissionScope(update) {
     if (payloadKeys.length !== 1)
         return { kind: "profile" };
     const payloadKey = payloadKeys[0];
-    if (TELEGRAM_UPDATE_CHAT_CARRIERS.has(payloadKey)) {
+    if (BALE_UPDATE_CHAT_CARRIERS.has(payloadKey)) {
         return getUpdateCarrierScope(update[payloadKey]) ?? { kind: "profile" };
     }
     if (payloadKey === "callback_query") {
@@ -225,7 +225,7 @@ function getUpdateAdmissionScope(update) {
     }
     return { kind: "profile" };
 }
-export function getTelegramUpdateJournalAdmissionScopes(updates) {
+export function getBaleUpdateJournalAdmissionScopes(updates) {
     if (updates.length === 0)
         return [{ kind: "profile" }];
     const scopes = updates.map(getUpdateAdmissionScope);
@@ -239,16 +239,16 @@ export function getTelegramUpdateJournalAdmissionScopes(updates) {
     for (const scope of scopes) {
         if (scope.kind === "target" && chatIds.has(scope.target.chatId))
             continue;
-        unique.set(getTelegramWorkspaceAdmissionScopeKey(scope), scope);
+        unique.set(getBaleWorkspaceAdmissionScopeKey(scope), scope);
     }
     return Array.from(unique.entries())
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([, scope]) => scope);
 }
-function listTelegramUpdateJournalLegacyCustodyCandidates(snapshot) {
+function listBaleUpdateJournalLegacyCustodyCandidates(snapshot) {
     return snapshot.entries
         .flatMap((entry) => {
-        const evidence = createTelegramUpdateJournalLegacyCustodyEvidence(entry);
+        const evidence = createBaleUpdateJournalLegacyCustodyEvidence(entry);
         return evidence
             ? [
                 {
@@ -263,7 +263,7 @@ function listTelegramUpdateJournalLegacyCustodyCandidates(snapshot) {
     })
         .sort((left, right) => left.updateId - right.updateId);
 }
-export function createTelegramUpdateJournalLegacyCustodyEvidence(entry) {
+export function createBaleUpdateJournalLegacyCustodyEvidence(entry) {
     if ((entry.state !== "retry-wait" && entry.state !== "failed") ||
         !entry.failure ||
         entry.inputClaim ||
@@ -296,7 +296,7 @@ export function createTelegramUpdateJournalLegacyCustodyEvidence(entry) {
             .digest("hex"),
     };
 }
-export function normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority(value, expected) {
+export function normalizeBaleUpdateJournalLegacyCustodyDispositionAuthority(value, expected) {
     if (!isRecord(value))
         return undefined;
     const keys = [
@@ -310,11 +310,11 @@ export function normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority(
     ];
     if (Object.keys(value).some((key) => !keys.includes(key)) ||
         value.version !== 1 ||
-        !isBoundedString(value.dispositionId, TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
+        !isBoundedString(value.dispositionId, BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
         value.updateId !== expected.updateId ||
         value.evidenceSha256 !== expected.evidenceSha256 ||
         (value.action !== "requeue-v3" && value.action !== "discard") ||
-        !isBoundedString(value.operatorAuthorityId, TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
+        !isBoundedString(value.operatorAuthorityId, BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
         !isSafeNonNegativeInteger(value.authorizedAtMs))
         return undefined;
     return {
@@ -327,15 +327,15 @@ export function normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority(
         authorizedAtMs: value.authorizedAtMs,
     };
 }
-export const TELEGRAM_ROUTING_INPUT_TTL_MS = 60 * 60 * 1000;
-function isTelegramUpdateJournalRoutingChooser(value) {
+export const BALE_ROUTING_INPUT_TTL_MS = 60 * 60 * 1000;
+function isBaleUpdateJournalRoutingChooser(value) {
     return (isRecord(value) &&
         hasOnlyKeys(value, ["chatId", "threadId", "messageId"]) &&
         Number.isSafeInteger(value.chatId) &&
         (value.threadId === undefined || isSafePositiveInteger(value.threadId)) &&
         isSafePositiveInteger(value.messageId));
 }
-export function createTelegramUpdateJournalEntryDigest(entry) {
+export function createBaleUpdateJournalEntryDigest(entry) {
     return {
         updateId: entry.updateId,
         sourceSha256: createHash("sha256")
@@ -362,7 +362,7 @@ function inspectRoutingInputExpiry(file, journalBindingKey, updateId) {
 function inspectRoutingGroupExpiry(file, journalBindingKey, updateIds) {
     if (!Array.isArray(updateIds) ||
         !updateIds.length ||
-        updateIds.length > TELEGRAM_UPDATE_JOURNAL_MAX_ENTRIES ||
+        updateIds.length > BALE_UPDATE_JOURNAL_MAX_ENTRIES ||
         updateIds.some((id, index) => !isSafeNonNegativeInteger(id) ||
             (index > 0 && id <= updateIds[index - 1])))
         return undefined;
@@ -383,7 +383,7 @@ function inspectRoutingGroupExpiry(file, journalBindingKey, updateIds) {
     }));
 }
 function createJournalError(code, path, detail, cause) {
-    return new TelegramUpdateJournalError(code, path, `Telegram update journal ${detail}: ${path}`, cause === undefined ? undefined : { cause });
+    return new BaleUpdateJournalError(code, path, `Bale update journal ${detail}: ${path}`, cause === undefined ? undefined : { cause });
 }
 function isSafePositiveInteger(value) {
     return Number.isSafeInteger(value) && value > 0;
@@ -432,9 +432,9 @@ function validateJournalQueueOwnerIdentity(value, path) {
             "processBirthId",
             "sessionGeneration",
         ]) ||
-        !isBoundedString(value.instanceId, TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
+        !isBoundedString(value.instanceId, BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
         !isSafePositiveInteger(value.processId) ||
-        !isBoundedString(value.processBirthId, TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
+        !isBoundedString(value.processBirthId, BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
         !isSafePositiveInteger(value.sessionGeneration)) {
         throw createJournalError("invalid", path, "contains invalid queue owner identity");
     }
@@ -456,10 +456,10 @@ function validateJournalQueueOwner(value, path) {
             "acquiredAtMs",
             "handoffId",
         ]) ||
-        !isBoundedString(value.acquisitionId, TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
+        !isBoundedString(value.acquisitionId, BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
         !isSafeNonNegativeInteger(value.acquiredAtMs) ||
         (value.handoffId !== undefined &&
-            !isBoundedString(value.handoffId, TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH))) {
+            !isBoundedString(value.handoffId, BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH))) {
         throw createJournalError("invalid", path, "contains invalid queue receipt acquisition");
     }
     const identity = validateJournalQueueOwnerIdentity({
@@ -477,21 +477,21 @@ function validateJournalQueueOwner(value, path) {
             : {}),
     };
 }
-export function parseTelegramUpdateJournalQueueOwner(value) {
+export function parseBaleUpdateJournalQueueOwner(value) {
     try {
-        return validateJournalQueueOwner(value, "Telegram queue handoff acknowledgement");
+        return validateJournalQueueOwner(value, "Bale queue handoff acknowledgement");
     }
     catch {
         return undefined;
     }
 }
-export function isTelegramUpdateJournalQueueOwnerProcess(owner, identity) {
+export function isBaleUpdateJournalQueueOwnerProcess(owner, identity) {
     return (owner.instanceId === identity.instanceId &&
         owner.processId === identity.processId &&
         owner.processBirthId === identity.processBirthId);
 }
-export function areTelegramUpdateJournalQueueOwnersEqual(left, right) {
-    return (isTelegramUpdateJournalQueueOwnerProcess(left, right) &&
+export function areBaleUpdateJournalQueueOwnersEqual(left, right) {
+    return (isBaleUpdateJournalQueueOwnerProcess(left, right) &&
         left.sessionGeneration === right.sessionGeneration &&
         left.acquisitionId === right.acquisitionId &&
         left.acquiredAtMs === right.acquiredAtMs &&
@@ -500,7 +500,7 @@ export function areTelegramUpdateJournalQueueOwnersEqual(left, right) {
 function cloneJournalQueueOwner(owner) {
     return { ...owner };
 }
-function createTelegramUpdateQueueHandoffId(input) {
+function createBaleUpdateQueueHandoffId(input) {
     return `handoff-${createHash("sha256")
         .update(JSON.stringify({
         version: 1,
@@ -514,10 +514,10 @@ function createTelegramUpdateQueueHandoffId(input) {
         .digest("hex")
         .slice(0, 32)}`;
 }
-function isTelegramInputHandoffId(value) {
-    return (isBoundedString(value, TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH) && /^input-handoff-[a-f0-9]{32}$/u.test(value));
+function isBaleInputHandoffId(value) {
+    return (isBoundedString(value, BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH) && /^input-handoff-[a-f0-9]{32}$/u.test(value));
 }
-function createTelegramInputHandoffId(input) {
+function createBaleInputHandoffId(input) {
     return `input-handoff-${createHash("sha256")
         .update(JSON.stringify({
         version: 1,
@@ -534,7 +534,7 @@ function createTelegramInputHandoffId(input) {
 function validateJournalHandoff(value, path, kind) {
     if (!isRecord(value) ||
         !hasOnlyKeys(value, ["handoffId", "offeredAtMs", "recipientOwner"]) ||
-        !isBoundedString(value.handoffId, TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH) ||
+        !isBoundedString(value.handoffId, BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH) ||
         !isSafeNonNegativeInteger(value.offeredAtMs)) {
         throw createJournalError("invalid", path, `contains invalid ${kind} handoff metadata`);
     }
@@ -560,8 +560,8 @@ function validateJournalFailure(value, path) {
         ]) ||
         !isSafePositiveInteger(value.attemptCount) ||
         !isSafeNonNegativeInteger(value.failedAtMs) ||
-        !isBoundedString(value.failureClass, TELEGRAM_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH) ||
-        !isBoundedString(value.summary, TELEGRAM_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH)) {
+        !isBoundedString(value.failureClass, BALE_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH) ||
+        !isBoundedString(value.summary, BALE_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH)) {
         throw createJournalError("invalid", path, "contains invalid execution failure metadata");
     }
     return {
@@ -571,7 +571,7 @@ function validateJournalFailure(value, path) {
         summary: value.summary,
     };
 }
-function createTelegramUpdateTerminalFailureId(input) {
+function createBaleUpdateTerminalFailureId(input) {
     return `failure-${createHash("sha256")
         .update(JSON.stringify(input))
         .digest("hex")
@@ -589,13 +589,13 @@ function validateJournalOperatorDisposition(value, path) {
             "operatorAuthorityId",
             "authorizedAtMs",
         ]) ||
-            !isBoundedString(value.failureId, TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
+            !isBoundedString(value.failureId, BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
             !isSafeNonNegativeInteger(value.updateId) ||
             (value.action !== "requeue-v3" && value.action !== "discard") ||
             !isSafeNonNegativeInteger(value.committedAtMs) ||
             typeof value.evidenceSha256 !== "string" ||
             !/^[a-f0-9]{64}$/u.test(value.evidenceSha256) ||
-            !isBoundedString(value.operatorAuthorityId, TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
+            !isBoundedString(value.operatorAuthorityId, BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
             !isSafeNonNegativeInteger(value.authorizedAtMs) ||
             value.committedAtMs < value.authorizedAtMs)
             throw createJournalError("invalid", path, "contains invalid legacy custody disposition metadata");
@@ -621,15 +621,15 @@ function validateJournalOperatorDisposition(value, path) {
             "terminalAtMs",
             "terminalReason",
         ]) ||
-        !isBoundedString(value.failureId, TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
+        !isBoundedString(value.failureId, BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
         !isSafeNonNegativeInteger(value.updateId) ||
         (value.action !== "retry" && value.action !== "discard") ||
         !isSafeNonNegativeInteger(value.committedAtMs) ||
         !isSafePositiveInteger(value.attemptCount) ||
-        !isBoundedString(value.failureClass, TELEGRAM_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH) ||
+        !isBoundedString(value.failureClass, BALE_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH) ||
         !isSafeNonNegativeInteger(value.terminalAtMs) ||
         value.committedAtMs < value.terminalAtMs ||
-        !isBoundedString(value.terminalReason, TELEGRAM_UPDATE_JOURNAL_TERMINAL_REASON_MAX_LENGTH))
+        !isBoundedString(value.terminalReason, BALE_UPDATE_JOURNAL_TERMINAL_REASON_MAX_LENGTH))
         throw createJournalError("invalid", path, "contains invalid operator disposition metadata");
     return {
         failureId: value.failureId,
@@ -643,15 +643,15 @@ function validateJournalOperatorDisposition(value, path) {
     };
 }
 function journalRequiresExclusion(version) {
-    return (version === TELEGRAM_UPDATE_JOURNAL_EXCLUSION_VERSION ||
+    return (version === BALE_UPDATE_JOURNAL_EXCLUSION_VERSION ||
         journalHasCustodyFields(version));
 }
 function journalHasCustodyFields(version) {
-    return version === TELEGRAM_UPDATE_JOURNAL_CUSTODY_VERSION;
+    return version === BALE_UPDATE_JOURNAL_CUSTODY_VERSION;
 }
 /** Only legacy v1 carries routing-lifetime, scoped-ACK and pairing-free queue-receipt semantics. */
-export function isTelegramUpdateJournalLegacyFamilyVersion(version) {
-    return version === TELEGRAM_UPDATE_JOURNAL_VERSION;
+export function isBaleUpdateJournalLegacyFamilyVersion(version) {
+    return version === BALE_UPDATE_JOURNAL_VERSION;
 }
 function validateJournalInputClaim(value, path, updateId) {
     if (!isRecord(value) ||
@@ -663,7 +663,7 @@ function validateJournalInputClaim(value, path, updateId) {
             "executionUpdate",
         ]) ||
         (value.phase !== "ready" && value.phase !== "running") ||
-        !isBoundedString(value.recipientBindingKey, TELEGRAM_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH) ||
+        !isBoundedString(value.recipientBindingKey, BALE_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH) ||
         !value.recipientBindingKey.trim()) {
         throw createJournalError("invalid", path, "contains invalid input claim metadata");
     }
@@ -672,11 +672,11 @@ function validateJournalInputClaim(value, path, updateId) {
         ? undefined
         : validateJournalHandoff(value.handoff, path, "input");
     if ((owner.handoffId !== undefined &&
-        !isTelegramInputHandoffId(owner.handoffId)) ||
+        !isBaleInputHandoffId(owner.handoffId)) ||
         (handoff &&
-            (!isTelegramInputHandoffId(handoff.handoffId) ||
+            (!isBaleInputHandoffId(handoff.handoffId) ||
                 value.phase !== "ready" ||
-                isTelegramUpdateJournalQueueOwnerProcess(owner, handoff.recipientOwner)))) {
+                isBaleUpdateJournalQueueOwnerProcess(owner, handoff.recipientOwner)))) {
         throw createJournalError("invalid", path, "contains conflicting input handoff metadata");
     }
     const executionUpdate = value.executionUpdate === undefined
@@ -696,13 +696,13 @@ function validateJournalInputClaim(value, path, updateId) {
 function validateJournalInputProvenance(value, path, updateId) {
     if (!isRecord(value) ||
         !hasOnlyKeys(value, ["owner", "recipientBindingKey", "executionUpdate"]) ||
-        !isBoundedString(value.recipientBindingKey, TELEGRAM_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH) ||
+        !isBoundedString(value.recipientBindingKey, BALE_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH) ||
         !value.recipientBindingKey.trim()) {
         throw createJournalError("invalid", path, "contains invalid input queue provenance");
     }
     const owner = validateJournalQueueOwner(value.owner, path);
     if (owner.handoffId !== undefined &&
-        !isTelegramInputHandoffId(owner.handoffId)) {
+        !isBaleInputHandoffId(owner.handoffId)) {
         throw createJournalError("invalid", path, "contains invalid input queue provenance");
     }
     const executionUpdate = value.executionUpdate === undefined
@@ -729,7 +729,7 @@ function validateJournalEntry(value, path, version) {
             "updateId",
             "update",
             "admittedAtMs",
-            ...(isTelegramUpdateJournalLegacyFamilyVersion(version)
+            ...(isBaleUpdateJournalLegacyFamilyVersion(version)
                 ? ["routingInput"]
                 : []),
             "state",
@@ -771,13 +771,13 @@ function validateJournalEntry(value, path, version) {
                 "chooser",
             ]) ||
             (routing.chooser !== undefined &&
-                !isTelegramUpdateJournalRoutingChooser(routing.chooser)) ||
+                !isBaleUpdateJournalRoutingChooser(routing.chooser)) ||
             !isSafePositiveInteger(routing.operatorUserId) ||
             !isSafeNonNegativeInteger(routing.publishedAtMs) ||
             routing.publishedAtMs < value.admittedAtMs ||
             !isSafeNonNegativeInteger(routing.expiresAtMs) ||
             routing.expiresAtMs !==
-                routing.publishedAtMs + TELEGRAM_ROUTING_INPUT_TTL_MS ||
+                routing.publishedAtMs + BALE_ROUTING_INPUT_TTL_MS ||
             (routing.phase !== "waiting" && routing.phase !== "selected") ||
             (routing.phase === "waiting" && value.state === "queued")) {
             throw createJournalError("invalid", path, "contains invalid routing input lifetime");
@@ -860,9 +860,9 @@ function validateJournalEntry(value, path, version) {
     if (value.state === "failed" &&
         (!isSafeNonNegativeInteger(value.terminalAtMs) ||
             value.terminalAtMs < failure.failedAtMs ||
-            !isBoundedString(value.terminalReason, TELEGRAM_UPDATE_JOURNAL_TERMINAL_REASON_MAX_LENGTH) ||
+            !isBoundedString(value.terminalReason, BALE_UPDATE_JOURNAL_TERMINAL_REASON_MAX_LENGTH) ||
             (value.terminalFailureId !== undefined &&
-                !isBoundedString(value.terminalFailureId, TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH)) ||
+                !isBoundedString(value.terminalFailureId, BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH)) ||
             value.nextRetryAtMs !== undefined)) {
         throw createJournalError("invalid", path, "contains invalid terminal failure metadata");
     }
@@ -893,9 +893,9 @@ function validateJournalEntry(value, path, version) {
             : {}),
         ...(value.state === "failed"
             ? {
-                terminalFailureId: isBoundedString(value.terminalFailureId, TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH)
+                terminalFailureId: isBoundedString(value.terminalFailureId, BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH)
                     ? value.terminalFailureId
-                    : createTelegramUpdateTerminalFailureId({
+                    : createBaleUpdateTerminalFailureId({
                         updateId: value.updateId,
                         attemptCount: failure.attemptCount,
                         failedAtMs: failure.failedAtMs,
@@ -907,7 +907,7 @@ function validateJournalEntry(value, path, version) {
             : {}),
     };
 }
-function assertSupportedJournalVersion(value, path, version = TELEGRAM_UPDATE_JOURNAL_VERSION) {
+function assertSupportedJournalVersion(value, path, version = BALE_UPDATE_JOURNAL_VERSION) {
     if (isRecord(value) &&
         Number.isSafeInteger(value.version) &&
         value.version !== version) {
@@ -931,7 +931,7 @@ function validateJournalSourceCompletion(value, path) {
     };
 }
 function validateJournalSourceCompletions(value, path, version, allowEmpty = false) {
-    if (!isTelegramUpdateJournalLegacyFamilyVersion(version) ||
+    if (!isBaleUpdateJournalLegacyFamilyVersion(version) ||
         !Array.isArray(value) ||
         (!allowEmpty && !value.length)) {
         throw createJournalError("invalid", path, "has invalid source completion collection");
@@ -955,7 +955,7 @@ function assertJournalExclusionCursor(value, path, version) {
         throw createJournalError("pairing-evidence", path, "is missing its exclusion-mode admission cursor");
     }
 }
-function parseJournalFile(value, path, version = TELEGRAM_UPDATE_JOURNAL_VERSION) {
+function parseJournalFile(value, path, version = BALE_UPDATE_JOURNAL_VERSION) {
     assertSupportedJournalVersion(value, path, version);
     assertJournalExclusionCursor(value, path, version);
     if (!isRecord(value) ||
@@ -1003,7 +1003,7 @@ function parseJournalFile(value, path, version = TELEGRAM_UPDATE_JOURNAL_VERSION
                     (entry.queueOwner === undefined) ||
                 (existing.queueOwner !== undefined &&
                     entry.queueOwner !== undefined &&
-                    !areTelegramUpdateJournalQueueOwnersEqual(existing.queueOwner, entry.queueOwner)) ||
+                    !areBaleUpdateJournalQueueOwnersEqual(existing.queueOwner, entry.queueOwner)) ||
                 (existing.queueHandoff === undefined) !==
                     (entry.queueHandoff === undefined) ||
                 (existing.queueHandoff !== undefined &&
@@ -1122,7 +1122,7 @@ function assertJournalSourceCompletionContinuity(file, segment, path) {
                 entry.queueKind === source.queueKind &&
                 entry.queueHandoff === undefined &&
                 !!entry.queueOwner &&
-                areTelegramUpdateJournalQueueOwnersEqual(entry.queueOwner, source.queueOwner));
+                areBaleUpdateJournalQueueOwnersEqual(entry.queueOwner, source.queueOwner));
         queueRemovals.set(receiptId, valid);
         return valid;
     };
@@ -1134,13 +1134,13 @@ function assertJournalSourceCompletionContinuity(file, segment, path) {
             !source ||
             (source.state === "queued" && !queueWasRemoved(source)) ||
             source.state === "failed" ||
-            createTelegramUpdateJournalEntryDigest(source).sourceSha256 !==
+            createBaleUpdateJournalEntryDigest(source).sourceSha256 !==
                 completion.sourceSha256) {
             throw createJournalError("invalid", path, "source completion does not match its removal revision");
         }
     }
 }
-function parseJournalSegment(value, path, version = TELEGRAM_UPDATE_JOURNAL_VERSION) {
+function parseJournalSegment(value, path, version = BALE_UPDATE_JOURNAL_VERSION) {
     assertSupportedJournalVersion(value, path, version);
     assertJournalExclusionCursor(value, path, version);
     if (!isRecord(value) ||
@@ -1225,9 +1225,9 @@ function parseJournalSegment(value, path, version = TELEGRAM_UPDATE_JOURNAL_VERS
  * reconstructed collection; maxWork charges each raw/revalidated collection element.
  * JSON allocation is bounded by maxBytes before decoding; collections before codecs.
  */
-export function inspectTelegramInputCustodySourceStatus(input) {
+export function inspectBaleInputCustodySourceStatus(input) {
     try {
-        const evidence = inspectTelegramUpdateJournalFamily(input);
+        const evidence = inspectBaleUpdateJournalFamily(input);
         if (evidence.kind === "absent")
             return "absent";
         if (evidence.file.version === 3)
@@ -1240,12 +1240,12 @@ export function inspectTelegramInputCustodySourceStatus(input) {
         return "ambiguous";
     }
 }
-export function inspectTelegramUpdateJournalFamily(input) {
-    return acquireTelegramUpdateJournalFamily(input).evidence;
+export function inspectBaleUpdateJournalFamily(input) {
+    return acquireBaleUpdateJournalFamily(input).evidence;
 }
 /** Classifies private originals against exact discard tombstones; never replay or deletion authority. */
-export function inspectTelegramUpdateJournalRetention(input) {
-    const acquired = acquireTelegramUpdateJournalFamily(input, undefined, true);
+export function inspectBaleUpdateJournalRetention(input) {
+    const acquired = acquireBaleUpdateJournalFamily(input, undefined, true);
     return {
         evidence: acquired.evidence,
         retainedInputs: acquired.retainedInputs ?? [],
@@ -1261,18 +1261,18 @@ export function inspectTelegramUpdateJournalRetention(input) {
  * Files and the segment directory retain full inspection checks and bounded census.
  * Identity is never enriched; accounting is physical inspection work, not store capacity.
  */
-export function readTelegramUpdateJournalSource(input) {
+export function readBaleUpdateJournalSource(input) {
     const version = input.version;
     if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
         throw createJournalError("unsupported-version", input.path, "requires a selected source version");
     }
-    return acquireTelegramUpdateJournalFamily({
+    return acquireBaleUpdateJournalFamily({
         ...input,
         botIdentity: { ...input.botIdentity },
         limits: { ...input.limits },
     }, version).evidence;
 }
-function acquireTelegramUpdateJournalFamily(input, selectedVersion, inspectRetention = false) {
+function acquireBaleUpdateJournalFamily(input, selectedVersion, inspectRetention = false) {
     const { path, limits } = input;
     const acquiredSegments = [];
     let snapshotRevision = 0;
@@ -1367,7 +1367,7 @@ function acquireTelegramUpdateJournalFamily(input, selectedVersion, inspectReten
     const read = (target, before) => {
         if (before.size > BigInt(limits.maxBytes - bytes))
             capacity();
-        const fd = openSync(target, TELEGRAM_STRICT_READ_FLAGS);
+        const fd = openSync(target, BALE_STRICT_READ_FLAGS);
         try {
             const opened = fstatSync(fd, { bigint: true });
             if (!opened.isFile() || !same(before, opened))
@@ -1396,7 +1396,7 @@ function acquireTelegramUpdateJournalFamily(input, selectedVersion, inspectReten
             closeSync(fd);
         }
     };
-    const segmentDirectory = getTelegramUpdateJournalSegmentDirectory(path);
+    const segmentDirectory = getBaleUpdateJournalSegmentDirectory(path);
     const enumerate = (target = segmentDirectory, pattern = /^\d{16}\.json$/u, usedFiles = files) => {
         const names = [];
         const directory = opendirSync(target, { bufferSize: 1 });
@@ -1539,7 +1539,7 @@ function acquireTelegramUpdateJournalFamily(input, selectedVersion, inspectReten
             if (!file || file.version !== 1)
                 fail("private retention requires its exact v1 journal snapshot");
             const current = file;
-            const bindingKeys = new Set([expected, current.botIdentity].map((botIdentity) => createTelegramUpdateJournalBindingKey({
+            const bindingKeys = new Set([expected, current.botIdentity].map((botIdentity) => createBaleUpdateJournalBindingKey({
                 path,
                 profileName: input.profile,
                 botIdentity,
@@ -1631,11 +1631,11 @@ function acquireTelegramUpdateJournalFamily(input, selectedVersion, inspectReten
                 if (file.version !== selectedVersion) {
                     throw createJournalError("unsupported-version", path, "does not match the selected source version");
                 }
-                if (createTelegramUpdateJournalReceiptScope({
+                if (createBaleUpdateJournalReceiptScope({
                     profileName: input.profile,
                     botIdentity: expected,
                 }) !==
-                    createTelegramUpdateJournalReceiptScope({
+                    createBaleUpdateJournalReceiptScope({
                         profileName: file.profile,
                         botIdentity: file.botIdentity,
                     })) {
@@ -1658,19 +1658,19 @@ function acquireTelegramUpdateJournalFamily(input, selectedVersion, inspectReten
         };
     }
     catch (error) {
-        if (error instanceof TelegramUpdateJournalError)
+        if (error instanceof BaleUpdateJournalError)
             throw error;
         throw createJournalError("io", path, "could not establish strict journal evidence", error);
     }
 }
-export function inspectTelegramProfileJournalNamespace(input) {
-    return inspectTelegramJournalNamespace(input, false);
+export function inspectBaleProfileJournalNamespace(input) {
+    return inspectBaleJournalNamespace(input, false);
 }
 /** Read-only evidence over polling, retained flat recipients and role-neutral session journals. */
-export function inspectTelegramSessionJournalNamespace(input) {
-    return inspectTelegramJournalNamespace(input, true);
+export function inspectBaleSessionJournalNamespace(input) {
+    return inspectBaleJournalNamespace(input, true);
 }
-function inspectTelegramJournalNamespace(input, includeSessions) {
+function inspectBaleJournalNamespace(input, includeSessions) {
     const { directory, profile, limits } = input;
     const fail = (message) => {
         throw createJournalError("invalid", directory, message);
@@ -1716,7 +1716,7 @@ function inspectTelegramJournalNamespace(input, includeSessions) {
             !(parts.length === 1 ||
                 (parts.length === 3 &&
                     parts[0] === "sessions" &&
-                    decodeTelegramSessionDirectoryName(parts[1]) !== undefined)))
+                    decodeBaleSessionDirectoryName(parts[1]) !== undefined)))
             fail("requires a canonical polling journal path");
     }
     try {
@@ -1787,7 +1787,7 @@ function inspectTelegramJournalNamespace(input, includeSessions) {
                         fail("has a noncanonical session root");
                     requireType(target, true);
                     scan(target, (sessionName, sessionPath) => {
-                        if (decodeTelegramSessionDirectoryName(sessionName) === undefined)
+                        if (decodeBaleSessionDirectoryName(sessionName) === undefined)
                             fail("has a noncanonical session directory");
                         requireType(sessionPath, true);
                         session(sessionPath);
@@ -1842,7 +1842,7 @@ function inspectTelegramJournalNamespace(input, includeSessions) {
                 remaining.maxBytes <= 0 ||
                 remaining.maxWork <= 0)
                 capacity();
-            const acquire = () => acquireTelegramUpdateJournalFamily({
+            const acquire = () => acquireBaleUpdateJournalFamily({
                 directory,
                 path,
                 profile,
@@ -1894,13 +1894,13 @@ function inspectTelegramJournalNamespace(input, includeSessions) {
         };
     }
     catch (error) {
-        if (error instanceof TelegramUpdateJournalError)
+        if (error instanceof BaleUpdateJournalError)
             throw error;
         throw createJournalError("io", directory, "could not establish canonical namespace evidence", error);
     }
 }
 /** Whether an update addresses this private-chat Thread anywhere in its payload (message, callback, reaction, …). */
-export function doesTelegramJournalUpdateNameThread(update, target) {
+export function doesBaleJournalUpdateNameThread(update, target) {
     const matches = (value, depth) => {
         if (depth > 8 || !value || typeof value !== "object")
             return false;
@@ -1915,42 +1915,42 @@ export function doesTelegramJournalUpdateNameThread(update, target) {
     return matches(update, 0);
 }
 /** A button tap alone carries no input, so it never keeps a tab whose inputs are resolved (the in-flight Cancel itself). */
-export function isTelegramJournalLoneCallbackUpdate(update) {
+export function isBaleJournalLoneCallbackUpdate(update) {
     if (!update || typeof update !== "object")
         return false;
     const kinds = Object.keys(update).filter((key) => key !== "update_id");
     return kinds.length === 1 && kinds[0] === "callback_query";
 }
 /** Plain inbound kinds whose address is readable; anything else stays protective. */
-const TELEGRAM_CLEANUP_PLAIN_UPDATE_KINDS = [
+const BALE_CLEANUP_PLAIN_UPDATE_KINDS = [
     "message",
     "edited_message",
     "callback_query",
     "message_reaction",
 ];
 /** Complete-empty protection only; caller holds source serialization through consumption. Never deletion authority. */
-export function isTelegramThreadCleanupJournalNamespaceClear(input) {
+export function isBaleThreadCleanupJournalNamespaceClear(input) {
     if (!input.requiredJournalBindingKeys.length ||
         input.requiredJournalBindingKeys.length > input.limits.maxDirectoryEntries)
-        throw new Error("Telegram temporary cleanup requires bounded exact journal references.");
+        throw new Error("Bale temporary cleanup requires bounded exact journal references.");
     const requiredPaths = new Set();
     for (const key of input.requiredJournalBindingKeys) {
-        const path = getTelegramUpdateJournalBindingPath(key);
+        const path = getBaleUpdateJournalBindingPath(key);
         const identities = [
             input.botIdentity,
             { tokenSha256: input.botIdentity.tokenSha256 },
         ];
         if (!path ||
             !identities.some((botIdentity) => key ===
-                createTelegramUpdateJournalBindingKey({
+                createBaleUpdateJournalBindingKey({
                     path,
                     profileName: input.profile,
                     botIdentity,
                 })))
-            throw new Error("Telegram temporary cleanup has foreign or malformed journal references.");
+            throw new Error("Bale temporary cleanup has foreign or malformed journal references.");
         requiredPaths.add(path);
     }
-    const namespace = inspectTelegramSessionJournalNamespace(input);
+    const namespace = inspectBaleSessionJournalNamespace(input);
     if (namespace.sources.filter((source) => source.role === "polling").length !==
         1 ||
         namespace.retainedInputs?.some((original) => original.state !== "committed") ||
@@ -1959,7 +1959,7 @@ export function isTelegramThreadCleanupJournalNamespaceClear(input) {
     const cleanup = input.cleanup;
     const ownPaths = new Map();
     for (const own of cleanup?.ownInputs ?? []) {
-        const path = getTelegramUpdateJournalBindingPath(own.journalBindingKey);
+        const path = getBaleUpdateJournalBindingPath(own.journalBindingKey);
         if (!path)
             return false;
         const ids = ownPaths.get(path) ?? new Set();
@@ -1980,16 +1980,16 @@ export function isTelegramThreadCleanupJournalNamespaceClear(input) {
             !("inputProvenance" in entry) &&
             !entry.failure &&
             kinds.length === 1 &&
-            TELEGRAM_CLEANUP_PLAIN_UPDATE_KINDS.includes(kinds[0]) &&
-            (isTelegramJournalLoneCallbackUpdate(entry.update) ||
-                !doesTelegramJournalUpdateNameThread(entry.update, cleanup.target)) &&
+            BALE_CLEANUP_PLAIN_UPDATE_KINDS.includes(kinds[0]) &&
+            (isBaleJournalLoneCallbackUpdate(entry.update) ||
+                !doesBaleJournalUpdateNameThread(entry.update, cleanup.target)) &&
             !ownPaths.get(path)?.has(entry.updateId));
     };
     return namespace.sources.every((source) => source.evidence.kind === "absent" ||
         source.evidence.file.entries.every((entry) => isUnrelatedPlainInput(entry, source.path)));
 }
 /** Demand-driven recovery only; caller holds temporary-cleanup admission. Never a deletion grant. */
-export function recoverTelegramThreadCleanupDeadQueueOwners(input) {
+export function recoverBaleThreadCleanupDeadQueueOwners(input) {
     return input.withSourceSerialization(() => {
         const assertCurrent = () => {
             if (!input.isCurrent())
@@ -1999,18 +1999,18 @@ export function recoverTelegramThreadCleanupDeadQueueOwners(input) {
         if (!input.cleanup)
             return 0;
         // Validate exact references and complete namespace coverage before considering any mutation.
-        if (isTelegramThreadCleanupJournalNamespaceClear(input))
+        if (isBaleThreadCleanupJournalNamespaceClear(input))
             return 0;
-        const namespace = inspectTelegramSessionJournalNamespace(input);
+        const namespace = inspectBaleSessionJournalNamespace(input);
         if (namespace.retainedInputs?.some(value => value.state !== "committed") ||
-            input.requiredJournalBindingKeys.some(key => !namespace.sources.some(source => source.path === getTelegramUpdateJournalBindingPath(key) && source.evidence.kind === "present")))
+            input.requiredJournalBindingKeys.some(key => !namespace.sources.some(source => source.path === getBaleUpdateJournalBindingPath(key) && source.evidence.kind === "present")))
             return 0;
         const plans = [];
         for (const source of namespace.sources) {
             if (source.evidence.kind !== "present")
                 continue;
             const file = source.evidence.file;
-            if (file.version !== TELEGRAM_UPDATE_JOURNAL_VERSION)
+            if (file.version !== BALE_UPDATE_JOURNAL_VERSION)
                 continue;
             const groups = new Map();
             for (const entry of file.entries) {
@@ -2035,7 +2035,7 @@ export function recoverTelegramThreadCleanupDeadQueueOwners(input) {
                     } });
             }
         }
-        const liveness = input.getQueueProcessLiveness ?? getTelegramProcessLiveness;
+        const liveness = input.getQueueProcessLiveness ?? getBaleProcessLiveness;
         const dead = plans.filter(plan => {
             assertCurrent();
             const result = liveness(plan.recovery.deadOwner);
@@ -2046,7 +2046,7 @@ export function recoverTelegramThreadCleanupDeadQueueOwners(input) {
         for (const plan of dead) {
             assertCurrent();
             removed += input.withSourceReference(plan.path, () => {
-                const journal = createTelegramUpdateJournalStore({
+                const journal = createBaleUpdateJournalStore({
                     path: plan.path, profileName: input.profile, botIdentity: input.botIdentity,
                     queueRuntimeIdentity: input.recoveryOwner,
                     // This private synchronous store stays inside the cross-family serializer already held above.
@@ -2115,15 +2115,15 @@ function cloneFile(file) {
 function serializeJournalFile(file) {
     return `${JSON.stringify(file, null, 2)}\n`;
 }
-function getTelegramUpdateJournalSegmentDirectory(path) {
+function getBaleUpdateJournalSegmentDirectory(path) {
     return `${path}.segments`;
 }
-function getTelegramUpdateJournalSegmentPath(path, revision) {
-    return join(getTelegramUpdateJournalSegmentDirectory(path), `${String(revision).padStart(16, "0")}.json`);
+function getBaleUpdateJournalSegmentPath(path, revision) {
+    return join(getBaleUpdateJournalSegmentDirectory(path), `${String(revision).padStart(16, "0")}.json`);
 }
-function publishTelegramUpdateJournalSegmentUnlocked(path, segment, onPublicationBoundary) {
-    const segmentDirectory = getTelegramUpdateJournalSegmentDirectory(path);
-    const segmentPath = getTelegramUpdateJournalSegmentPath(path, segment.revision);
+function publishBaleUpdateJournalSegmentUnlocked(path, segment, onPublicationBoundary) {
+    const segmentDirectory = getBaleUpdateJournalSegmentDirectory(path);
+    const segmentPath = getBaleUpdateJournalSegmentPath(path, segment.revision);
     const serialized = `${JSON.stringify(segment, null, 2)}\n`;
     mkdirSync(segmentDirectory, { recursive: true, mode: 0o700 });
     const revisions = readdirSync(segmentDirectory)
@@ -2156,10 +2156,10 @@ function publishTelegramUpdateJournalSegmentUnlocked(path, segment, onPublicatio
         catch {
             // A compacted snapshot may already contain this revision.
         }
-        throw new Error("Telegram update journal segment revision conflicts.");
+        throw new Error("Bale update journal segment revision conflicts.");
     }
     if (latestRevision !== segment.previousRevision) {
-        throw new Error("Telegram update journal segment revision has a gap.");
+        throw new Error("Bale update journal segment revision has a gap.");
     }
     writeJournalFile(segmentPath, serialized, onPublicationBoundary);
     return {
@@ -2168,21 +2168,21 @@ function publishTelegramUpdateJournalSegmentUnlocked(path, segment, onPublicatio
         serializedBytes: Buffer.byteLength(serialized),
     };
 }
-export function publishTelegramUpdateJournalSegment(path, segment) {
-    if (segment.version !== TELEGRAM_UPDATE_JOURNAL_VERSION ||
+export function publishBaleUpdateJournalSegment(path, segment) {
+    if (segment.version !== BALE_UPDATE_JOURNAL_VERSION ||
         !isSafePositiveInteger(segment.revision) ||
         segment.previousRevision !== segment.revision - 1 ||
         !isNonEmptyString(segment.profile) ||
         !Array.isArray(segment.upsertedEntries) ||
         !Array.isArray(segment.removedUpdateIds)) {
-        throw new Error("Telegram update journal segment is invalid.");
+        throw new Error("Bale update journal segment is invalid.");
     }
-    return withTelegramFileTransaction(`${path}.transaction`, () => publishTelegramUpdateJournalSegmentUnlocked(path, segment));
+    return withBaleFileTransaction(`${path}.transaction`, () => publishBaleUpdateJournalSegmentUnlocked(path, segment));
 }
 function normalizeCapacityLimit(value, fallback, label) {
     const resolved = value ?? fallback;
     if (!Number.isSafeInteger(resolved) || resolved <= 0) {
-        throw new Error(`Telegram update journal ${label} must be a positive integer.`);
+        throw new Error(`Bale update journal ${label} must be a positive integer.`);
     }
     return resolved;
 }
@@ -2277,7 +2277,7 @@ function writeJournalFile(path, serialized, onPublicationBoundary, stagingPath =
         writeFileSync(tempPath, serialized, { encoding: "utf8", mode: 0o600 });
         chmodSync(tempPath, 0o600);
         onPublicationBoundary?.("after-write-before-rename", path);
-        if (!renameTelegramPathWithRetry(tempPath, path)) {
+        if (!renameBalePathWithRetry(tempPath, path)) {
             throw new Error("Temporary journal file disappeared before publication.");
         }
         chmodSync(path, 0o600);
@@ -2291,55 +2291,55 @@ function writeJournalFile(path, serialized, onPublicationBoundary, stagingPath =
         }
     }
 }
-export function createTelegramUpdateQueueHandoffToken() {
+export function createBaleUpdateQueueHandoffToken() {
     return randomBytes(32).toString("base64url");
 }
-export function createTelegramUpdateJournalBotIdentity(input) {
+export function createBaleUpdateJournalBotIdentity(input) {
     if (!input.botToken) {
-        throw new Error("Telegram update journal requires a configured bot token.");
+        throw new Error("Bale update journal requires a configured bot token.");
     }
     if (input.botId !== undefined && !isSafePositiveInteger(input.botId)) {
-        throw new Error("Telegram update journal bot id must be a safe integer.");
+        throw new Error("Bale update journal bot id must be a safe integer.");
     }
     return {
         ...(input.botId !== undefined ? { botId: input.botId } : {}),
         tokenSha256: createHash("sha256").update(input.botToken).digest("hex"),
     };
 }
-export function createTelegramUpdateJournalReceiptScope(input) {
-    const profile = (input.profileName ?? TELEGRAM_DEFAULT_PROFILE_NAME).trim();
+export function createBaleUpdateJournalReceiptScope(input) {
+    const profile = (input.profileName ?? BALE_DEFAULT_PROFILE_NAME).trim();
     if (!profile) {
-        throw new Error("Telegram update journal receipt scope requires a profile.");
+        throw new Error("Bale update journal receipt scope requires a profile.");
     }
     if (input.botIdentity.botId !== undefined &&
         !isSafePositiveInteger(input.botIdentity.botId)) {
-        throw new Error("Telegram update journal bot id must be a safe integer.");
+        throw new Error("Bale update journal bot id must be a safe integer.");
     }
     if (!/^[a-f0-9]{64}$/u.test(input.botIdentity.tokenSha256)) {
-        throw new Error("Telegram update journal receipt scope requires a SHA-256 token fingerprint.");
+        throw new Error("Bale update journal receipt scope requires a SHA-256 token fingerprint.");
     }
     return JSON.stringify({
-        version: TELEGRAM_UPDATE_JOURNAL_IDENTITY_VERSION,
+        version: BALE_UPDATE_JOURNAL_IDENTITY_VERSION,
         profile,
         bot: input.botIdentity.botId === undefined
             ? { tokenSha256: input.botIdentity.tokenSha256 }
             : { botId: input.botIdentity.botId },
     });
 }
-export function createTelegramUpdateJournalBindingKey(input) {
+export function createBaleUpdateJournalBindingKey(input) {
     if (!input.path) {
-        throw new Error("Telegram update journal binding requires a path.");
+        throw new Error("Bale update journal binding requires a path.");
     }
     return JSON.stringify({
-        version: TELEGRAM_UPDATE_JOURNAL_IDENTITY_VERSION,
+        version: BALE_UPDATE_JOURNAL_IDENTITY_VERSION,
         path: input.path,
-        receiptScope: createTelegramUpdateJournalReceiptScope(input),
+        receiptScope: createBaleUpdateJournalReceiptScope(input),
     });
 }
-export function getTelegramUpdateJournalBindingPath(journalBindingKey) {
+export function getBaleUpdateJournalBindingPath(journalBindingKey) {
     try {
         const value = JSON.parse(journalBindingKey);
-        return value.version === TELEGRAM_UPDATE_JOURNAL_IDENTITY_VERSION &&
+        return value.version === BALE_UPDATE_JOURNAL_IDENTITY_VERSION &&
             typeof value.path === "string" &&
             value.path.length > 0 &&
             typeof value.receiptScope === "string"
@@ -2350,7 +2350,7 @@ export function getTelegramUpdateJournalBindingPath(journalBindingKey) {
         return undefined;
     }
 }
-export function createTelegramUpdateJournalReceiptScopeResolver(deps) {
+export function createBaleUpdateJournalReceiptScopeResolver(deps) {
     let identityKey;
     let receiptScope;
     return () => {
@@ -2360,8 +2360,8 @@ export function createTelegramUpdateJournalReceiptScopeResolver(deps) {
             receiptScope = undefined;
             return undefined;
         }
-        const profileName = deps.getProfileName() ?? TELEGRAM_DEFAULT_PROFILE_NAME;
-        const botIdentity = createTelegramUpdateJournalBotIdentity({
+        const profileName = deps.getProfileName() ?? BALE_DEFAULT_PROFILE_NAME;
+        const botIdentity = createBaleUpdateJournalBotIdentity({
             botToken,
             botId: deps.getBotId(),
         });
@@ -2369,21 +2369,21 @@ export function createTelegramUpdateJournalReceiptScopeResolver(deps) {
         if (nextIdentityKey === identityKey && receiptScope)
             return receiptScope;
         identityKey = nextIdentityKey;
-        receiptScope = createTelegramUpdateJournalReceiptScope({
+        receiptScope = createBaleUpdateJournalReceiptScope({
             profileName,
             botIdentity,
         });
         return receiptScope;
     };
 }
-export function createTelegramUpdateJournalRuntimeBindingResolver(deps) {
+export function createBaleUpdateJournalRuntimeBindingResolver(deps) {
     return () => {
         const botToken = deps.getBotToken();
         if (!botToken)
             return undefined;
         const configuredProfileName = deps.getProfileName();
-        const profileName = configuredProfileName ?? TELEGRAM_DEFAULT_PROFILE_NAME;
-        const botIdentity = createTelegramUpdateJournalBotIdentity({
+        const profileName = configuredProfileName ?? BALE_DEFAULT_PROFILE_NAME;
+        const botIdentity = createBaleUpdateJournalBotIdentity({
             botToken,
             botId: deps.getBotId(),
         });
@@ -2393,9 +2393,9 @@ export function createTelegramUpdateJournalRuntimeBindingResolver(deps) {
             directory: dirname(path),
             limits: {
                 maxFiles: 1024,
-                maxBytes: TELEGRAM_UPDATE_JOURNAL_MAX_BYTES * 2,
-                maxEntries: TELEGRAM_UPDATE_JOURNAL_MAX_ENTRIES,
-                maxWork: TELEGRAM_UPDATE_JOURNAL_MAX_ENTRIES * 1024,
+                maxBytes: BALE_UPDATE_JOURNAL_MAX_BYTES * 2,
+                maxEntries: BALE_UPDATE_JOURNAL_MAX_ENTRIES,
+                maxWork: BALE_UPDATE_JOURNAL_MAX_ENTRIES * 1024,
             },
         };
         const options = {
@@ -2414,11 +2414,11 @@ export function createTelegramUpdateJournalRuntimeBindingResolver(deps) {
                 : {}),
             ...(deps.onRecovery ? { onRecovery: deps.onRecovery } : {}),
         };
-        const journal = createTelegramUpdateJournalStore(options);
-        // Scoped completion and receipt observation always use strict private handles; see TELEGRAM_STRICT_READ_FLAGS.
+        const journal = createBaleUpdateJournalStore(options);
+        // Scoped completion and receipt observation always use strict private handles; see BALE_STRICT_READ_FLAGS.
         const strict = deps.strictSourceAccess ?? true;
         const completionJournal = deps.withSourceSerialization
-            ? createTelegramUpdateJournalStore({
+            ? createBaleUpdateJournalStore({
                 ...options,
                 ...(strict ? { sourceAccess } : {}),
             })
@@ -2436,14 +2436,14 @@ export function createTelegramUpdateJournalRuntimeBindingResolver(deps) {
                 profileName,
                 botIdentity,
             }),
-            recoveryKey: createTelegramUpdateJournalBindingKey({
+            recoveryKey: createBaleUpdateJournalBindingKey({
                 path,
                 profileName,
                 botIdentity,
             }),
             readForProtection() {
                 // Protection must never turn corruption/recovery into empty-work evidence.
-                const evidence = inspectTelegramUpdateJournalFamily({
+                const evidence = inspectBaleUpdateJournalFamily({
                     ...sourceAccess,
                     path,
                     profile: profileName,
@@ -2471,7 +2471,7 @@ export function createTelegramUpdateJournalRuntimeBindingResolver(deps) {
                     inspectQueuedReceipt: observeQueuedReceipt,
                     isQueueReceiptCurrent(receipt, owner) {
                         if (receipt.journalBindingKey !==
-                            createTelegramUpdateJournalBindingKey({
+                            createBaleUpdateJournalBindingKey({
                                 path,
                                 profileName,
                                 botIdentity,
@@ -2489,20 +2489,20 @@ export function createTelegramUpdateJournalRuntimeBindingResolver(deps) {
         };
     };
 }
-export function createTelegramUpdateJournalReferenceRegistry(input = {}) {
+export function createBaleUpdateJournalReferenceRegistry(input = {}) {
     const maxActive = input.maxActive ?? 64;
     let sequence = 0;
     const active = new Map();
     return {
         acquire(reference) {
             if (!reference.recoveryKey || active.size >= maxActive)
-                throw new Error("Telegram update journal reference registry is unavailable or full.");
+                throw new Error("Bale update journal reference registry is unavailable or full.");
             const id = ++sequence;
             active.set(id, { ...reference });
             let released = false;
             return () => {
                 if (released || !active.delete(id))
-                    throw new Error("Telegram update journal reference lease is stale.");
+                    throw new Error("Bale update journal reference lease is stale.");
                 released = true;
             };
         },
@@ -2524,7 +2524,7 @@ export function createTelegramUpdateJournalReferenceRegistry(input = {}) {
         },
     };
 }
-export function withTelegramResolvedUpdateJournalReference(input) {
+export function withBaleResolvedUpdateJournalReference(input) {
     const binding = input.resolveBinding();
     if (!binding)
         return undefined;
@@ -2542,7 +2542,7 @@ function validateQueuedReceiptObservation(expected, path) {
         !isNonEmptyString(expected.receiptId) ||
         !Array.isArray(expected.sourceUpdateIds) ||
         expected.sourceUpdateIds.length === 0 ||
-        expected.sourceUpdateIds.length > TELEGRAM_UPDATE_JOURNAL_MAX_ENTRIES ||
+        expected.sourceUpdateIds.length > BALE_UPDATE_JOURNAL_MAX_ENTRIES ||
         expected.sourceUpdateIds.some((id, index) => !isSafeNonNegativeInteger(id) ||
             (index > 0 && id <= expected.sourceUpdateIds[index - 1]))) {
         throw createJournalError("invalid", path, "received invalid queue receipt observation authority");
@@ -2550,7 +2550,7 @@ function validateQueuedReceiptObservation(expected, path) {
     return validateJournalQueueOwner(expected.queueOwner, path);
 }
 function inspectJournalQueuedReceipt(file, expected, path) {
-    if (!isTelegramUpdateJournalLegacyFamilyVersion(file.version))
+    if (!isBaleUpdateJournalLegacyFamilyVersion(file.version))
         throw createJournalError("invalid", path, "queue receipt observation requires an exact legacy v1 source handle");
     const { queueOwner } = expected;
     const entries = file.entries.filter((entry) => entry.queueReceiptId === expected.receiptId);
@@ -2568,14 +2568,14 @@ function inspectJournalQueuedReceipt(file, expected, path) {
             sourceUpdateIds: [...expected.sourceUpdateIds],
             queueOwner: { ...queueOwner },
         },
-        sources: entries.map(createTelegramUpdateJournalEntryDigest),
+        sources: entries.map(createBaleUpdateJournalEntryDigest),
         queueOwnerSha256: createHash("sha256")
             .update(JSON.stringify(queueOwner))
             .digest("hex"),
     };
 }
 function inspectJournalSourceCompletion(file, completion, path) {
-    if (!isTelegramUpdateJournalLegacyFamilyVersion(file.version))
+    if (!isBaleUpdateJournalLegacyFamilyVersion(file.version))
         throw createJournalError("invalid", path, "source completion requires a legacy v1 source");
     const retained = file.sourceCompletions?.find((value) => value.updateId === completion.updateId);
     if (!retained)
@@ -2585,7 +2585,7 @@ function inspectJournalSourceCompletion(file, completion, path) {
     return { ...retained };
 }
 /** Operator-distinct authority: routing never treats it as an owner cancellation. */
-export const TELEGRAM_SESSION_ADOPTION_AUTHORITY_PREFIX = "session-successor:";
+export const BALE_SESSION_ADOPTION_AUTHORITY_PREFIX = "session-successor:";
 function isAdoptablePendingEntry(entry) {
     return (entry.state === "pending" &&
         !entry.inputClaim &&
@@ -2598,8 +2598,8 @@ function isAdoptablePendingEntry(entry) {
         !entry.failure &&
         entry.preApprovalExcluded !== true);
 }
-export function createTelegramUpdateJournalBindingRuntime(deps) {
-    const resolveLeader = createTelegramUpdateJournalRuntimeBindingResolver({
+export function createBaleUpdateJournalBindingRuntime(deps) {
+    const resolveLeader = createBaleUpdateJournalRuntimeBindingResolver({
         ...deps.base,
         getJournalPath: deps.getLeaderJournalPath,
     });
@@ -2624,7 +2624,7 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
         // Session-aware composition must not fall back to a process journal before preparation supplies its ID.
         if (!legacy && deps.getActiveFollowerSessionId && !sessionId)
             return () => undefined;
-        return createTelegramUpdateJournalRuntimeBindingResolver({
+        return createBaleUpdateJournalRuntimeBindingResolver({
             ...getSharedResolverPorts(),
             ...(includeQueueRuntimeIdentity && deps.base.getQueueRuntimeIdentity
                 ? { getQueueRuntimeIdentity: deps.base.getQueueRuntimeIdentity }
@@ -2637,16 +2637,16 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
     const resolveFollower = () => createFollowerResolver(deps.getActiveFollowerBindingKey(), true, deps.getActiveFollowerSessionId?.())();
     const resolveActive = () => deps.isFollowerRegistered() ? resolveFollower() : resolveLeader();
     const inspectHistoricalSource = (journalBindingKey, operation) => {
-        const path = getTelegramUpdateJournalBindingPath(journalBindingKey);
+        const path = getBaleUpdateJournalBindingPath(journalBindingKey);
         const token = deps.base.getBotToken(), botId = deps.base.getBotId();
-        const profile = deps.base.getProfileName() ?? TELEGRAM_DEFAULT_PROFILE_NAME;
+        const profile = deps.base.getProfileName() ?? BALE_DEFAULT_PROFILE_NAME;
         if (!path || !token)
             return undefined;
-        const botIdentity = createTelegramUpdateJournalBotIdentity({
+        const botIdentity = createBaleUpdateJournalBotIdentity({
             botToken: token,
             botId,
         });
-        const keys = [botIdentity, { tokenSha256: botIdentity.tokenSha256 }].map((identity) => createTelegramUpdateJournalBindingKey({
+        const keys = [botIdentity, { tokenSha256: botIdentity.tokenSha256 }].map((identity) => createBaleUpdateJournalBindingKey({
             path,
             profileName: profile,
             botIdentity: identity,
@@ -2656,7 +2656,7 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
         const getRoot = () => deps.getRuntimeDir?.() ?? dirname(deps.getLeaderJournalPath(profile));
         const root = getRoot();
         const parts = relative(root, path).split(sep);
-        const suffix = escapeTelegramJournalPathPattern(getTelegramProfilePathSuffix(profile));
+        const suffix = escapeBaleJournalPathPattern(getBaleProfilePathSuffix(profile));
         const flat = new RegExp(`^(?:inbox|follower-inbox-[a-f0-9]{16})${suffix}\\.json$`, "u");
         const session = new RegExp(`^(?:journal\\.[a-f0-9]{16}|inbox)${suffix}\\.json$`, "u");
         if (!isAbsolute(root) ||
@@ -2666,27 +2666,27 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
             !((parts.length === 1 && flat.test(parts[0])) ||
                 (parts.length === 3 &&
                     parts[0] === "sessions" &&
-                    decodeTelegramSessionDirectoryName(parts[1]) !== undefined &&
+                    decodeBaleSessionDirectoryName(parts[1]) !== undefined &&
                     session.test(parts[2]))))
             return undefined;
         const current = () => deps.base.getBotToken() === token &&
             deps.base.getBotId() === botId &&
-            (deps.base.getProfileName() ?? TELEGRAM_DEFAULT_PROFILE_NAME) ===
+            (deps.base.getProfileName() ?? BALE_DEFAULT_PROFILE_NAME) ===
                 profile &&
             getRoot() === root;
         const inspect = () => {
             if (!current())
                 return undefined;
-            const observed = inspectTelegramUpdateJournalRetention({
+            const observed = inspectBaleUpdateJournalRetention({
                 directory: root,
                 path,
                 profile,
                 botIdentity,
                 limits: {
                     maxFiles: 1024,
-                    maxBytes: TELEGRAM_UPDATE_JOURNAL_MAX_BYTES * 2,
-                    maxEntries: TELEGRAM_UPDATE_JOURNAL_MAX_ENTRIES,
-                    maxWork: TELEGRAM_UPDATE_JOURNAL_MAX_ENTRIES * 1024,
+                    maxBytes: BALE_UPDATE_JOURNAL_MAX_BYTES * 2,
+                    maxEntries: BALE_UPDATE_JOURNAL_MAX_ENTRIES,
+                    maxWork: BALE_UPDATE_JOURNAL_MAX_ENTRIES * 1024,
                 },
             });
             if (observed.evidence.kind !== "present" || !current())
@@ -2726,7 +2726,7 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
         },
         inspectSourceAbandonment(journalBindingKey, updateId) {
             if (!isSafeNonNegativeInteger(updateId))
-                throw new Error("Telegram abandonment proof requires an exact update ID.");
+                throw new Error("Bale abandonment proof requires an exact update ID.");
             return inspectHistoricalSource(journalBindingKey, (file, originals) => {
                 const original = originals.find((value) => value.updateId === updateId &&
                     value.state === "committed" &&
@@ -2750,11 +2750,11 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
             return inspectHistoricalSource(journalBindingKey, (file) => inspectRoutingGroupExpiry(file, journalBindingKey, updateIds));
         },
         inspectSourceCompletion(journalBindingKey, expected) {
-            const completion = validateJournalSourceCompletion(expected, getTelegramUpdateJournalBindingPath(journalBindingKey) ?? "journal");
+            const completion = validateJournalSourceCompletion(expected, getBaleUpdateJournalBindingPath(journalBindingKey) ?? "journal");
             return inspectHistoricalSource(journalBindingKey, (file, _originals, path) => inspectJournalSourceCompletion(file, completion, path));
         },
         inspectQueuedReceipt(journalBindingKey, expected) {
-            const queueOwner = validateQueuedReceiptObservation(expected, getTelegramUpdateJournalBindingPath(journalBindingKey) ?? "journal");
+            const queueOwner = validateQueuedReceiptObservation(expected, getBaleUpdateJournalBindingPath(journalBindingKey) ?? "journal");
             return inspectHistoricalSource(journalBindingKey, (file, _originals, path) => inspectJournalQueuedReceipt(file, { ...expected, queueOwner }, path));
         },
         adoptPredecessorPending(input) {
@@ -2764,11 +2764,11 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
                 !successorSessionId ||
                 predecessorSessionId === successorSessionId ||
                 typeof isCurrent !== "function") {
-                throw new Error("Telegram session adoption requires distinct exact session identities.");
+                throw new Error("Bale session adoption requires distinct exact session identities.");
             }
             const assertCurrent = () => {
                 if (!isCurrent())
-                    throw new Error("Telegram session adoption lost successor authority.");
+                    throw new Error("Bale session adoption lost successor authority.");
             };
             assertCurrent();
             const predecessor = createFollowerResolver(recipientBindingKey, false, predecessorSessionId)();
@@ -2776,7 +2776,7 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
             if (!predecessor?.readForProtection ||
                 !successor ||
                 predecessor.recoveryKey === successor.recoveryKey) {
-                throw new Error("Telegram session adoption requires exact predecessor and successor journals.");
+                throw new Error("Bale session adoption requires exact predecessor and successor journals.");
             }
             const result = {
                 adoptedUpdateIds: [],
@@ -2793,7 +2793,7 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
                 const committed = predecessor.journal.abandonPending({
                     journalBindingKey: predecessor.recoveryKey,
                     entry,
-                    operatorAuthorityId: `${TELEGRAM_SESSION_ADOPTION_AUTHORITY_PREFIX}${successorSessionId}`,
+                    operatorAuthorityId: `${BALE_SESSION_ADOPTION_AUTHORITY_PREFIX}${successorSessionId}`,
                     isCurrent,
                 });
                 if (committed.duplicate) {
@@ -2808,7 +2808,7 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
         },
         createRecipientResolver: (bindingKey, sessionId) => createFollowerResolver(bindingKey, false, sessionId),
         createLegacyRecipientResolver: (bindingKey) => createFollowerResolver(bindingKey, false, undefined, true),
-        createPathResolver: (path) => createTelegramUpdateJournalRuntimeBindingResolver({
+        createPathResolver: (path) => createBaleUpdateJournalRuntimeBindingResolver({
             ...getSharedResolverPorts(),
             getJournalPath: () => path,
         }),
@@ -2817,19 +2817,19 @@ export function createTelegramUpdateJournalBindingRuntime(deps) {
 }
 /**
  * Journal-owned cross-family source serializer, lock-only and never authorization. Its guard lives
- * in the runtime service directory, so journal work never touches `telegram.json` or its
+ * in the runtime service directory, so journal work never touches `bale.json` or its
  * transaction. Acquire Workspace admission and any sender (config) admission first; never acquire
  * owners inside it. Callbacks must be synchronous: a returned promise is unprotected after its
  * synchronous prefix.
  */
-export function createTelegramJournalSourceSerialization(getTransactionPath = () => join(resolveTelegramRuntimeDir(), "journals.transaction")) {
-    return (operation) => withTelegramFileTransaction(getTransactionPath(), operation);
+export function createBaleJournalSourceSerialization(getTransactionPath = () => join(resolveBaleRuntimeDir(), "journals.transaction")) {
+    return (operation) => withBaleFileTransaction(getTransactionPath(), operation);
 }
-export function createTelegramUpdateJournalStore(options) {
+export function createBaleUpdateJournalStore(options) {
     return createJournalStoreCore(options).journal;
 }
 /** Opt-in v3 only; does not migrate old files or expose legacy unowned mutation ports. */
-export function createTelegramInputJournalStore(options) {
+export function createBaleInputJournalStore(options) {
     const captured = { ...options };
     if (!captured.sourceAccess ||
         !captured.queueRuntimeIdentity ||
@@ -2838,7 +2838,7 @@ export function createTelegramInputJournalStore(options) {
         typeof captured.getInputContext !== "function" ||
         ("withPairedAdmission" in captured &&
             captured.withPairedAdmission !== undefined)) {
-        throw new Error("Telegram input custody requires strict serialized polling admission and runtime identity.");
+        throw new Error("Bale input custody requires strict serialized polling admission and runtime identity.");
     }
     return createJournalStoreCore({ ...captured, queueRuntimeIdentity: { ...captured.queueRuntimeIdentity } }, captured.getInputContext).input;
 }
@@ -2849,25 +2849,25 @@ function isExactQueuedReceiptEntry(entry, requestedIds, queueKind, owner) {
         entry.queueKind === queueKind &&
         !!entry.queueOwner &&
         entry.queueHandoff === undefined &&
-        areTelegramUpdateJournalQueueOwnersEqual(entry.queueOwner, owner));
+        areBaleUpdateJournalQueueOwnersEqual(entry.queueOwner, owner));
 }
 function createJournalStoreCore(options, getInputContext) {
     const path = options.path;
-    const profile = options.profileName ?? TELEGRAM_DEFAULT_PROFILE_NAME;
+    const profile = options.profileName ?? BALE_DEFAULT_PROFILE_NAME;
     if (!path)
-        throw new Error("Telegram update journal path is required.");
+        throw new Error("Bale update journal path is required.");
     if (!profile)
-        throw new Error("Telegram update journal profile is required.");
+        throw new Error("Bale update journal profile is required.");
     const expectedIdentity = validateBotIdentity(options.botIdentity, path);
     const queueRuntimeIdentity = options.queueRuntimeIdentity;
     if (queueRuntimeIdentity !== undefined &&
-        (!isBoundedString(queueRuntimeIdentity.instanceId, TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
+        (!isBoundedString(queueRuntimeIdentity.instanceId, BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
             !isSafePositiveInteger(queueRuntimeIdentity.processId) ||
-            !isBoundedString(queueRuntimeIdentity.processBirthId, TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH))) {
-        throw new Error("Telegram update journal queue process identity is invalid.");
+            !isBoundedString(queueRuntimeIdentity.processBirthId, BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH))) {
+        throw new Error("Bale update journal queue process identity is invalid.");
     }
-    const maxEntries = normalizeCapacityLimit(options.maxEntries, TELEGRAM_UPDATE_JOURNAL_MAX_ENTRIES, "entry limit");
-    const maxBytes = normalizeCapacityLimit(options.maxBytes, TELEGRAM_UPDATE_JOURNAL_MAX_BYTES, "byte limit");
+    const maxEntries = normalizeCapacityLimit(options.maxEntries, BALE_UPDATE_JOURNAL_MAX_ENTRIES, "entry limit");
+    const maxBytes = normalizeCapacityLimit(options.maxBytes, BALE_UPDATE_JOURNAL_MAX_BYTES, "byte limit");
     const getNowMs = options.getNowMs ?? Date.now;
     const onPublicationBoundary = options.onPublicationBoundary;
     const workspaceAdmission = options.workspaceAdmission;
@@ -2877,18 +2877,18 @@ function createJournalStoreCore(options, getInputContext) {
         limits: { ...options.sourceAccess.limits },
     };
     if (sourceAccess && !withSourceSerialization) {
-        throw new Error("Telegram journal source access requires source serialization.");
+        throw new Error("Bale journal source access requires source serialization.");
     }
     const withPairingAdmission = options.withPairingAdmission;
     const withPairedAdmission = options.withPairedAdmission;
     if (withPairingAdmission && withPairedAdmission) {
-        throw new Error("Telegram journal admission modes are mutually exclusive.");
+        throw new Error("Bale journal admission modes are mutually exclusive.");
     }
     const version = getInputContext
-        ? TELEGRAM_UPDATE_JOURNAL_CUSTODY_VERSION
+        ? BALE_UPDATE_JOURNAL_CUSTODY_VERSION
         : withPairingAdmission
-            ? TELEGRAM_UPDATE_JOURNAL_EXCLUSION_VERSION
-            : TELEGRAM_UPDATE_JOURNAL_VERSION;
+            ? BALE_UPDATE_JOURNAL_EXCLUSION_VERSION
+            : BALE_UPDATE_JOURNAL_VERSION;
     const notifyRecovery = (event) => {
         try {
             options.onRecovery?.(event);
@@ -2897,15 +2897,15 @@ function createJournalStoreCore(options, getInputContext) {
             // Recovery diagnostics must not break recovered journal authority.
         }
     };
-    const getQueueProcessLiveness = options.getQueueProcessLiveness ?? getTelegramProcessLiveness;
+    const getQueueProcessLiveness = options.getQueueProcessLiveness ?? getBaleProcessLiveness;
     const validateQueueHandoffInput = (input, operation) => {
         if ((input.queueKind !== "prompt" && input.queueKind !== "control") ||
             !isNonEmptyString(input.receiptId) ||
             !Array.isArray(input.sourceUpdateIds) ||
             input.sourceUpdateIds.length === 0 ||
-            !isBoundedString(input.handoffToken, TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MAX_LENGTH) ||
+            !isBoundedString(input.handoffToken, BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MAX_LENGTH) ||
             input.handoffToken.length <
-                TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MIN_LENGTH) {
+                BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MIN_LENGTH) {
             throw createJournalError("invalid", path, `received an invalid queue handoff ${operation}`);
         }
         const expectedOwner = validateJournalQueueOwner(input.expectedOwner, path);
@@ -2930,7 +2930,7 @@ function createJournalStoreCore(options, getInputContext) {
             expectedOwner,
             recipientOwner,
             requestedIds,
-            handoffId: createTelegramUpdateQueueHandoffId({
+            handoffId: createBaleUpdateQueueHandoffId({
                 handoffToken: input.handoffToken,
                 queueKind: input.queueKind,
                 receiptId: input.receiptId,
@@ -2983,10 +2983,10 @@ function createJournalStoreCore(options, getInputContext) {
             source = readFileSync(path, "utf8");
         }
         catch (error) {
-            if (error instanceof TelegramUpdateJournalError)
+            if (error instanceof BaleUpdateJournalError)
                 throw error;
             if (error?.code === "ENOENT") {
-                const segmentDirectory = getTelegramUpdateJournalSegmentDirectory(path);
+                const segmentDirectory = getBaleUpdateJournalSegmentDirectory(path);
                 let orphanedSegmentNames;
                 try {
                     orphanedSegmentNames = readdirSync(segmentDirectory).filter((name) => /^\d{16}\.json$/u.test(name));
@@ -3023,7 +3023,7 @@ function createJournalStoreCore(options, getInputContext) {
         let file = parseJournalFile(parsed, path, version);
         const storedProfile = file.profile;
         const storedIdentity = file.botIdentity;
-        const segmentDirectory = getTelegramUpdateJournalSegmentDirectory(path);
+        const segmentDirectory = getBaleUpdateJournalSegmentDirectory(path);
         let segmentNames = [];
         try {
             segmentNames = readdirSync(segmentDirectory).filter((name) => /^\d{16}\.json$/u.test(name));
@@ -3057,7 +3057,7 @@ function createJournalStoreCore(options, getInputContext) {
                 segment = parseJournalSegment(JSON.parse(readFileSync(segmentPath, "utf8")), segmentPath, version);
             }
             catch (error) {
-                if (error instanceof TelegramUpdateJournalError)
+                if (error instanceof BaleUpdateJournalError)
                     throw error;
                 throw createJournalError("invalid", segmentPath, "contains invalid JSON", error);
             }
@@ -3136,7 +3136,7 @@ function createJournalStoreCore(options, getInputContext) {
                 !allowReconciliation) {
                 throw createJournalError("identity-mismatch", path, storedProfile !== profile
                     ? `belongs to profile ${storedProfile}, not ${profile}`
-                    : "belongs to another Telegram bot identity");
+                    : "belongs to another Bale bot identity");
             }
             file = {
                 version,
@@ -3193,7 +3193,7 @@ function createJournalStoreCore(options, getInputContext) {
         }
         catch (error) {
             if (withPairingAdmission ||
-                !(error instanceof TelegramUpdateJournalError) ||
+                !(error instanceof BaleUpdateJournalError) ||
                 error.code !== "invalid") {
                 throw error;
             }
@@ -3206,7 +3206,7 @@ function createJournalStoreCore(options, getInputContext) {
                 if (snapshotError?.code !== "ENOENT")
                     throw error;
             }
-            const segmentDirectory = getTelegramUpdateJournalSegmentDirectory(path);
+            const segmentDirectory = getBaleUpdateJournalSegmentDirectory(path);
             let segmentNames;
             try {
                 segmentNames = readdirSync(segmentDirectory)
@@ -3262,7 +3262,7 @@ function createJournalStoreCore(options, getInputContext) {
                     }
                 }
                 catch (recoveryError) {
-                    if (recoveryError instanceof TelegramUpdateJournalError) {
+                    if (recoveryError instanceof BaleUpdateJournalError) {
                         if (recoveryError.code !== "invalid")
                             throw recoveryError;
                     }
@@ -3312,7 +3312,7 @@ function createJournalStoreCore(options, getInputContext) {
         }
     };
     const acquireSource = () => sourceAccess
-        ? acquireTelegramUpdateJournalFamily({
+        ? acquireBaleUpdateJournalFamily({
             ...sourceAccess,
             path,
             profile,
@@ -3334,10 +3334,10 @@ function createJournalStoreCore(options, getInputContext) {
             // The config continuation excludes participating writers through consumption.
             const source = acquireSource();
             const readSource = () => source ? readAcquiredSource(source) : readCurrent();
-            return withTelegramFileTransaction(`${path}.transaction`, () => operation(readSource));
+            return withBaleFileTransaction(`${path}.transaction`, () => operation(readSource));
         }
         catch (error) {
-            if (error instanceof TelegramUpdateJournalError)
+            if (error instanceof BaleUpdateJournalError)
                 throw error;
             throw createJournalError("io", path, "mutation failed", error);
         }
@@ -3359,9 +3359,9 @@ function createJournalStoreCore(options, getInputContext) {
             throw createJournalError("capacity", path, "publication would exceed source inspection resource limits");
         }
     };
-    const inputHeadroomText = "\0".repeat(TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH);
-    const inputBindingHeadroomText = "\0".repeat(TELEGRAM_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH);
-    const inputHandoffHeadroomText = "\0".repeat(TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH);
+    const inputHeadroomText = "\0".repeat(BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH);
+    const inputBindingHeadroomText = "\0".repeat(BALE_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH);
+    const inputHandoffHeadroomText = "\0".repeat(BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_ID_MAX_LENGTH);
     const getFileWork = (file) => file.entries.length +
         (file.operatorDispositions?.length ?? 0) +
         (file.sourceCompletions?.length ?? 0);
@@ -3402,7 +3402,7 @@ function createJournalStoreCore(options, getInputContext) {
         const initial = { file, projectionSlack: 0 };
         if (entry.inputClaim?.phase === "running")
             return [
-                advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId), TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
+                advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId), BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
             ];
         if (entry.state === "pending" &&
             entry.inputClaim?.phase === "ready" &&
@@ -3418,7 +3418,7 @@ function createJournalStoreCore(options, getInputContext) {
             };
             delete acceptedClaim.handoff;
             const acceptedEntry = { ...entry, inputClaim: acceptedClaim };
-            const acceptedState = advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId, acceptedEntry), TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES);
+            const acceptedState = advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId, acceptedEntry), BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES);
             return [
                 acceptedState,
                 ...createInputHeadroomTransitionPlan(acceptedState.file, acceptedEntry),
@@ -3429,10 +3429,10 @@ function createJournalStoreCore(options, getInputContext) {
                 ...entry,
                 inputClaim: { ...entry.inputClaim, phase: "running" },
             };
-            const runningState = advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId, runningEntry), TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES);
+            const runningState = advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId, runningEntry), BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES);
             return [
                 runningState,
-                advanceInputHeadroomState(runningState, replaceInputHeadroomEntry(runningState.file, entry.updateId), TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
+                advanceInputHeadroomState(runningState, replaceInputHeadroomEntry(runningState.file, entry.updateId), BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
             ];
         }
         if (entry.state === "pending" &&
@@ -3442,21 +3442,21 @@ function createJournalStoreCore(options, getInputContext) {
                 ...entry,
                 inputClaim: createInputHeadroomClaim(entry, "ready"),
             };
-            const readyState = advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId, readyEntry), TELEGRAM_UPDATE_JOURNAL_INPUT_PROJECTION_HEADROOM_BYTES);
+            const readyState = advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId, readyEntry), BALE_UPDATE_JOURNAL_INPUT_PROJECTION_HEADROOM_BYTES);
             const runningEntry = {
                 ...readyEntry,
                 inputClaim: { ...readyEntry.inputClaim, phase: "running" },
             };
-            const runningState = advanceInputHeadroomState(readyState, replaceInputHeadroomEntry(readyState.file, entry.updateId, runningEntry), TELEGRAM_UPDATE_JOURNAL_INPUT_PROJECTION_HEADROOM_BYTES);
+            const runningState = advanceInputHeadroomState(readyState, replaceInputHeadroomEntry(readyState.file, entry.updateId, runningEntry), BALE_UPDATE_JOURNAL_INPUT_PROJECTION_HEADROOM_BYTES);
             return [
                 readyState,
                 runningState,
-                advanceInputHeadroomState(runningState, replaceInputHeadroomEntry(runningState.file, entry.updateId), TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
+                advanceInputHeadroomState(runningState, replaceInputHeadroomEntry(runningState.file, entry.updateId), BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
             ];
         }
         return entry.preApprovalExcluded === true
             ? [
-                advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId), TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
+                advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId), BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
             ]
             : [];
     };
@@ -3467,7 +3467,7 @@ function createJournalStoreCore(options, getInputContext) {
         delete claim.handoff;
         const cancelledEntry = { ...entry, inputClaim: claim };
         const initial = { file, projectionSlack: 0 };
-        const cancelledState = advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId, cancelledEntry), TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES);
+        const cancelledState = advanceInputHeadroomState(initial, replaceInputHeadroomEntry(file, entry.updateId, cancelledEntry), BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES);
         return [
             cancelledState,
             ...createInputHeadroomTransitionPlan(cancelledState.file, cancelledEntry),
@@ -3487,7 +3487,7 @@ function createJournalStoreCore(options, getInputContext) {
             return [];
         const releasedEntry = cloneEntry(readyEntry);
         delete releasedEntry.inputClaim;
-        const releasedState = advanceInputHeadroomState(readyState, replaceInputHeadroomEntry(readyState.file, entry.updateId, releasedEntry), TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES);
+        const releasedState = advanceInputHeadroomState(readyState, replaceInputHeadroomEntry(readyState.file, entry.updateId, releasedEntry), BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES);
         const reacquisition = createInputHeadroomTransitionPlan(releasedState.file, releasedEntry);
         return [
             ...(readyState.file === file ? [] : [readyState]),
@@ -3502,7 +3502,7 @@ function createJournalStoreCore(options, getInputContext) {
         const requestedIds = new Set(entries.map((entry) => entry.updateId));
         const initial = { file, projectionSlack: 0 };
         return [
-            advanceInputHeadroomState(initial, file.entries.filter((entry) => !requestedIds.has(entry.updateId)), TELEGRAM_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
+            advanceInputHeadroomState(initial, file.entries.filter((entry) => !requestedIds.has(entry.updateId)), BALE_UPDATE_JOURNAL_INPUT_TRANSITION_HEADROOM_BYTES),
         ];
     };
     const getInputHeadroomTransitionPlans = (file, updateId) => {
@@ -3728,15 +3728,15 @@ function createJournalStoreCore(options, getInputContext) {
         const unapplied = source.segments.filter((item) => Number(item.name.slice(0, 16)) > source.snapshotRevision);
         const compact = forceCompact ||
             unapplied.length + 1 >=
-                TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT ||
+                BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT ||
             unapplied.reduce((sum, item) => sum + item.bytes, segmentBytes) >=
-                TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES;
+                BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES;
         if (compact) {
             assertSourceResources(accounting.files + 1, serializedBytes +
                 source.segments.reduce((sum, item) => sum + item.bytes, segmentBytes), fileWork +
                 source.segments.reduce((sum, item) => sum + item.work, segmentWork), collections);
         }
-        const segmentPath = getTelegramUpdateJournalSegmentPath(path, segment.revision);
+        const segmentPath = getBaleUpdateJournalSegmentPath(path, segment.revision);
         // A crash may retain staging, so keep it outside the strictly enumerated segment directory.
         writeJournalFile(segmentPath, segmentText, publicationBoundary, path);
         if (compact) {
@@ -3745,7 +3745,7 @@ function createJournalStoreCore(options, getInputContext) {
             const witness = file.botIdentity.botId === undefined
                 ? source.segments.find((item) => item.botId !== undefined)?.name
                 : undefined;
-            const segmentDirectory = getTelegramUpdateJournalSegmentDirectory(path);
+            const segmentDirectory = getBaleUpdateJournalSegmentDirectory(path);
             const names = [
                 ...source.segments.map((item) => item.name),
                 basename(segmentPath),
@@ -3860,9 +3860,9 @@ function createJournalStoreCore(options, getInputContext) {
                 assertInputProgressHeadroom(current, revisedFile, inputHeadroom, segment);
             return publishSourceSegment(current, file, segment, publicationBoundary, journalHasCustodyFields(version));
         }
-        publishTelegramUpdateJournalSegmentUnlocked(path, segment, publicationBoundary);
+        publishBaleUpdateJournalSegmentUnlocked(path, segment, publicationBoundary);
         const revisedFile = { ...file, revision };
-        const segmentDirectory = getTelegramUpdateJournalSegmentDirectory(path);
+        const segmentDirectory = getBaleUpdateJournalSegmentDirectory(path);
         const segmentNames = readdirSync(segmentDirectory).filter((name) => /^\d{16}\.json$/u.test(name));
         let snapshotRevision = 0;
         try {
@@ -3876,8 +3876,8 @@ function createJournalStoreCore(options, getInputContext) {
         const unappliedSegmentNames = segmentNames.filter((name) => Number(name.slice(0, 16)) > snapshotRevision);
         const segmentBytes = unappliedSegmentNames.reduce((total, name) => total + statSync(join(segmentDirectory, name)).size, 0);
         if (unappliedSegmentNames.length >=
-            TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT ||
-            segmentBytes >= TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES) {
+            BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT ||
+            segmentBytes >= BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES) {
             const compacted = serializeJournalFile(revisedFile);
             const compactedBytes = assertCapacity(revisedFile, compacted);
             writeJournalFile(path, compacted, publicationBoundary);
@@ -3939,7 +3939,7 @@ function createJournalStoreCore(options, getInputContext) {
                 expectedIds.add(expected.updateId);
                 const entry = current.file.entries.find((value) => value.updateId === expected.updateId);
                 if (!entry ||
-                    createTelegramUpdateJournalEntryDigest(entry).sourceSha256 !==
+                    createBaleUpdateJournalEntryDigest(entry).sourceSha256 !==
                         expected.sourceSha256) {
                     throw createJournalError("conflict", path, "exact completion source changed or disappeared");
                 }
@@ -4030,7 +4030,7 @@ function createJournalStoreCore(options, getInputContext) {
                     entry.queueKind !== receipt.queueKind ||
                     !entry.queueOwner ||
                     entry.queueHandoff !== undefined ||
-                    !areTelegramUpdateJournalQueueOwnersEqual(entry.queueOwner, queueOwner))) {
+                    !areBaleUpdateJournalQueueOwnersEqual(entry.queueOwner, queueOwner))) {
                 throw createJournalError("conflict", path, `cannot complete stale or foreign queue receipt ${receipt.receiptId}`);
             }
         }
@@ -4041,7 +4041,7 @@ function createJournalStoreCore(options, getInputContext) {
         if (completions) {
             const sources = new Map(removedEntries.map((entry) => [
                 entry.updateId,
-                createTelegramUpdateJournalEntryDigest(entry).sourceSha256,
+                createBaleUpdateJournalEntryDigest(entry).sourceSha256,
             ]));
             if (completions.some((completion) => sources.get(completion.updateId) !== completion.sourceSha256)) {
                 throw createJournalError("conflict", path, "queued completion source changed or belongs to another receipt");
@@ -4067,9 +4067,9 @@ function createJournalStoreCore(options, getInputContext) {
         };
     });
     const mutateRoutingInputs = (input, select, publishedAtMs, chooser) => runMutation((readCurrent) => {
-        if (!isTelegramUpdateJournalLegacyFamilyVersion(version))
+        if (!isBaleUpdateJournalLegacyFamilyVersion(version))
             throw createJournalError("unsupported-version", path, "routing input lifetime requires a private v1 source");
-        const binding = createTelegramUpdateJournalBindingKey({
+        const binding = createBaleUpdateJournalBindingKey({
             path,
             profileName: profile,
             botIdentity: expectedIdentity,
@@ -4094,7 +4094,7 @@ function createJournalStoreCore(options, getInputContext) {
         const current = sourceAccess ? readCurrent() : readCurrentStrict(false);
         const nowMs = select ? getNowMs() : publishedAtMs;
         if (!isSafeNonNegativeInteger(nowMs) ||
-            !Number.isSafeInteger(nowMs + TELEGRAM_ROUTING_INPUT_TTL_MS) ||
+            !Number.isSafeInteger(nowMs + BALE_ROUTING_INPUT_TTL_MS) ||
             (!select && nowMs > getNowMs()))
             throw createJournalError("invalid", path, "invalid routing input lifetime clock");
         let issued = false;
@@ -4158,7 +4158,7 @@ function createJournalStoreCore(options, getInputContext) {
                 routingInput: {
                     operatorUserId: input.operatorUserId,
                     publishedAtMs: nowMs,
-                    expiresAtMs: nowMs + TELEGRAM_ROUTING_INPUT_TTL_MS,
+                    expiresAtMs: nowMs + BALE_ROUTING_INPUT_TTL_MS,
                     phase: "waiting",
                     ...(chooser ? { chooser: { ...chooser } } : {}),
                 },
@@ -4332,11 +4332,11 @@ function createJournalStoreCore(options, getInputContext) {
                     operationHash.update(String(update.update_id)).update("\0");
                 }
                 operationHash.update(String(requestedAcceptedThroughUpdateId ?? "none"));
-                return runWithTelegramWorkspaceAdmissions({
+                return runWithBaleWorkspaceAdmissions({
                     ledger: workspaceAdmission,
                     operationId: `journal:${operationHash.digest("hex")}`,
                     operationKind: "journal.append",
-                    scopes: getTelegramUpdateJournalAdmissionScopes(canonicalUpdates),
+                    scopes: getBaleUpdateJournalAdmissionScopes(canonicalUpdates),
                     operation: append,
                 });
             };
@@ -4453,8 +4453,8 @@ function createJournalStoreCore(options, getInputContext) {
                 if (!isSafeNonNegativeInteger(input.updateId) ||
                     !isSafeNonNegativeInteger(input.expectedAttemptCount) ||
                     !isSafeNonNegativeInteger(input.failedAtMs) ||
-                    !isBoundedString(input.failureClass, TELEGRAM_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH) ||
-                    !isBoundedString(input.summary, TELEGRAM_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH) ||
+                    !isBoundedString(input.failureClass, BALE_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH) ||
+                    !isBoundedString(input.summary, BALE_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH) ||
                     (input.disposition !== "retry-wait" && input.disposition !== "failed")) {
                     throw createJournalError("invalid", path, "received invalid execution failure metadata");
                 }
@@ -4465,7 +4465,7 @@ function createJournalStoreCore(options, getInputContext) {
                     throw createJournalError("invalid", path, "received invalid retry-wait disposition");
                 }
                 if (input.disposition === "failed" &&
-                    (!isBoundedString(input.terminalReason, TELEGRAM_UPDATE_JOURNAL_TERMINAL_REASON_MAX_LENGTH) ||
+                    (!isBoundedString(input.terminalReason, BALE_UPDATE_JOURNAL_TERMINAL_REASON_MAX_LENGTH) ||
                         input.nextRetryAtMs !== undefined)) {
                     throw createJournalError("invalid", path, "received invalid terminal failure disposition");
                 }
@@ -4488,7 +4488,7 @@ function createJournalStoreCore(options, getInputContext) {
                     summary: input.summary,
                 };
                 const terminalFailureId = input.disposition === "failed"
-                    ? createTelegramUpdateTerminalFailureId({
+                    ? createBaleUpdateTerminalFailureId({
                         updateId: entry.updateId,
                         attemptCount: failure.attemptCount,
                         failedAtMs: failure.failedAtMs,
@@ -4528,7 +4528,7 @@ function createJournalStoreCore(options, getInputContext) {
         applyOperatorDisposition(input) {
             return runMutation((readCurrent) => {
                 if (!isSafeNonNegativeInteger(input.updateId) ||
-                    !isBoundedString(input.failureId, TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
+                    !isBoundedString(input.failureId, BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
                     (input.action !== "retry" && input.action !== "discard")) {
                     throw createJournalError("invalid", path, "received an invalid operator disposition");
                 }
@@ -4607,7 +4607,7 @@ function createJournalStoreCore(options, getInputContext) {
                     if (!("dispositionKind" in existing) ||
                         existing.dispositionKind !== "legacy-custody")
                         throw createJournalError("conflict", path, `legacy custody disposition ${authority.dispositionId} already has another authority`);
-                    const normalizedDuplicate = normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority(authority, {
+                    const normalizedDuplicate = normalizeBaleUpdateJournalLegacyCustodyDispositionAuthority(authority, {
                         updateId: existing.updateId,
                         state: "retry-wait",
                         attemptCount: 1,
@@ -4640,10 +4640,10 @@ function createJournalStoreCore(options, getInputContext) {
                     };
                 }
                 const entry = current.file.entries.find((candidate) => candidate.updateId === authority.updateId);
-                const evidence = entry && createTelegramUpdateJournalLegacyCustodyEvidence(entry);
+                const evidence = entry && createBaleUpdateJournalLegacyCustodyEvidence(entry);
                 if (!evidence)
                     throw createJournalError("conflict", path, `cannot dispose non-quarantined update ${authority.updateId}`);
-                const normalized = normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority(authority, evidence);
+                const normalized = normalizeBaleUpdateJournalLegacyCustodyDispositionAuthority(authority, evidence);
                 if (!normalized)
                     throw createJournalError("conflict", path, `legacy custody evidence changed for update ${authority.updateId}`);
                 let authorized = false;
@@ -4697,13 +4697,13 @@ function createJournalStoreCore(options, getInputContext) {
         offerQueuedHandoff(input) {
             return runMutation((readCurrent) => {
                 const { expectedOwner, recipientOwner, requestedIds, handoffId } = validateQueueHandoffInput(input, "offer");
-                if (isTelegramUpdateJournalQueueOwnerProcess(expectedOwner, recipientOwner)) {
+                if (isBaleUpdateJournalQueueOwnerProcess(expectedOwner, recipientOwner)) {
                     throw createJournalError("conflict", path, `cannot hand queue receipt ${input.receiptId} to the same runtime process`);
                 }
                 const current = readCurrent();
                 const receiptEntries = getExactQueuedReceiptEntries(current, input, requestedIds);
                 if (receiptEntries.some((entry) => !entry.queueOwner ||
-                    !areTelegramUpdateJournalQueueOwnersEqual(entry.queueOwner, expectedOwner))) {
+                    !areBaleUpdateJournalQueueOwnersEqual(entry.queueOwner, expectedOwner))) {
                     throw createJournalError("conflict", path, `cannot offer stale queue receipt ${input.receiptId}`);
                 }
                 const existingHandoff = receiptEntries[0]?.queueHandoff;
@@ -4751,9 +4751,9 @@ function createJournalStoreCore(options, getInputContext) {
                 const existingOwner = receiptEntries[0]?.queueOwner;
                 if (existingOwner &&
                     existingOwner.handoffId === handoffId &&
-                    isTelegramUpdateJournalQueueOwnerProcess(existingOwner, recipientOwner)) {
+                    isBaleUpdateJournalQueueOwnerProcess(existingOwner, recipientOwner)) {
                     if (receiptEntries.some((entry) => !entry.queueOwner ||
-                        !areTelegramUpdateJournalQueueOwnersEqual(entry.queueOwner, existingOwner) ||
+                        !areBaleUpdateJournalQueueOwnersEqual(entry.queueOwner, existingOwner) ||
                         entry.queueHandoff !== undefined)) {
                         throw createJournalError("conflict", path, `queue receipt ${input.receiptId} has inconsistent accepted handoff authority`);
                     }
@@ -4767,7 +4767,7 @@ function createJournalStoreCore(options, getInputContext) {
                     };
                 }
                 if (receiptEntries.some((entry) => !entry.queueOwner ||
-                    !areTelegramUpdateJournalQueueOwnersEqual(entry.queueOwner, expectedOwner) ||
+                    !areBaleUpdateJournalQueueOwnersEqual(entry.queueOwner, expectedOwner) ||
                     entry.queueHandoff?.handoffId !== handoffId ||
                     !isDeepStrictEqual(entry.queueHandoff.recipientOwner, recipientOwner))) {
                     throw createJournalError("conflict", path, `cannot accept stale or unauthenticated queue handoff ${input.receiptId}`);
@@ -4818,7 +4818,7 @@ function createJournalStoreCore(options, getInputContext) {
                 const current = readCurrent();
                 const receiptEntries = getExactQueuedReceiptEntries(current, input, requestedIds);
                 if (receiptEntries.some((entry) => !entry.queueOwner ||
-                    !areTelegramUpdateJournalQueueOwnersEqual(entry.queueOwner, expectedOwner))) {
+                    !areBaleUpdateJournalQueueOwnersEqual(entry.queueOwner, expectedOwner))) {
                     throw createJournalError("conflict", path, `cannot cancel stale queue handoff ${input.receiptId}`);
                 }
                 const existingHandoff = receiptEntries[0]?.queueHandoff;
@@ -4955,7 +4955,7 @@ function createJournalStoreCore(options, getInputContext) {
         },
         inspectAbandonedPending(updateId) {
             return runMutation((readCurrent) => {
-                if (!isTelegramUpdateJournalLegacyFamilyVersion(version)) {
+                if (!isBaleUpdateJournalLegacyFamilyVersion(version)) {
                     throw createJournalError("unsupported-version", path, "abandonment inspection requires the legacy v1 source");
                 }
                 if (!isSafeNonNegativeInteger(updateId))
@@ -4972,7 +4972,7 @@ function createJournalStoreCore(options, getInputContext) {
                     disposition.failureId !== `abandon-${disposition.evidenceSha256}` ||
                     current.file.entries.some((entry) => entry.updateId === updateId))
                     return undefined;
-                const journalBindingKey = createTelegramUpdateJournalBindingKey({
+                const journalBindingKey = createBaleUpdateJournalBindingKey({
                     path,
                     profileName: profile,
                     botIdentity: expectedIdentity,
@@ -5018,13 +5018,13 @@ function createJournalStoreCore(options, getInputContext) {
         },
         inspectPendingRetention(entry) {
             return runMutation(() => {
-                if (!isTelegramUpdateJournalLegacyFamilyVersion(version)) {
+                if (!isBaleUpdateJournalLegacyFamilyVersion(version)) {
                     throw createJournalError("unsupported-version", path, "pending retention requires the legacy v1 source");
                 }
                 const expected = validateJournalEntry(entry, path, version);
                 if (expected.state !== "pending")
                     throw createJournalError("conflict", path, "retention inspection requires a pending source");
-                const journalBindingKey = createTelegramUpdateJournalBindingKey({
+                const journalBindingKey = createBaleUpdateJournalBindingKey({
                     path,
                     profileName: profile,
                     botIdentity: expectedIdentity,
@@ -5047,10 +5047,10 @@ function createJournalStoreCore(options, getInputContext) {
         },
         abandonPending(input) {
             return runMutation((readCurrent) => {
-                if (!isTelegramUpdateJournalLegacyFamilyVersion(version)) {
+                if (!isBaleUpdateJournalLegacyFamilyVersion(version)) {
                     throw createJournalError("unsupported-version", path, "pending abandonment requires the legacy v1 source");
                 }
-                const journalBindingKey = createTelegramUpdateJournalBindingKey({
+                const journalBindingKey = createBaleUpdateJournalBindingKey({
                     path,
                     profileName: profile,
                     botIdentity: expectedIdentity,
@@ -5058,7 +5058,7 @@ function createJournalStoreCore(options, getInputContext) {
                 if (input.journalBindingKey !== journalBindingKey) {
                     throw createJournalError("identity-mismatch", path, "pending abandonment belongs to another source");
                 }
-                if (!isBoundedString(input.operatorAuthorityId, TELEGRAM_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
+                if (!isBoundedString(input.operatorAuthorityId, BALE_UPDATE_JOURNAL_FAILURE_ID_MAX_LENGTH) ||
                     !input.operatorAuthorityId.trim() ||
                     typeof input.isCurrent !== "function") {
                     throw createJournalError("invalid", path, "pending abandonment requires explicit operator authority");
@@ -5201,7 +5201,7 @@ function createJournalStoreCore(options, getInputContext) {
         inspectQueuedReceipt(expected) {
             return runMutationCore((readCurrent) => {
                 if (!sourceAccess ||
-                    !isTelegramUpdateJournalLegacyFamilyVersion(version)) {
+                    !isBaleUpdateJournalLegacyFamilyVersion(version)) {
                     throw createJournalError("invalid", path, "queue receipt observation requires an exact legacy v1 source handle");
                 }
                 const queueOwner = validateQueuedReceiptObservation(expected, path);
@@ -5219,11 +5219,11 @@ function createJournalStoreCore(options, getInputContext) {
             });
         },
     };
-    if (isTelegramUpdateJournalLegacyFamilyVersion(version))
+    if (isBaleUpdateJournalLegacyFamilyVersion(version))
         journal.routingInputs = {
             arm(input) {
                 if (input.chooser !== undefined &&
-                    !isTelegramUpdateJournalRoutingChooser(input.chooser))
+                    !isBaleUpdateJournalRoutingChooser(input.chooser))
                     throw createJournalError("invalid", path, "invalid routing input chooser location");
                 return mutateRoutingInputs(input, false, input.publishedAtMs, input.chooser).entries;
             },
@@ -5234,7 +5234,7 @@ function createJournalStoreCore(options, getInputContext) {
                 return runMutation((readCurrent) => {
                     if (!isSafeNonNegativeInteger(updateId))
                         throw createJournalError("invalid", path, "invalid routing expiry update ID");
-                    return inspectRoutingInputExpiry(readCurrent().file, createTelegramUpdateJournalBindingKey({
+                    return inspectRoutingInputExpiry(readCurrent().file, createBaleUpdateJournalBindingKey({
                         path,
                         profileName: profile,
                         botIdentity: expectedIdentity,
@@ -5242,7 +5242,7 @@ function createJournalStoreCore(options, getInputContext) {
                 });
             },
             inspectGroupExpiry(updateIds) {
-                return runMutation((readCurrent) => inspectRoutingGroupExpiry(readCurrent().file, createTelegramUpdateJournalBindingKey({
+                return runMutation((readCurrent) => inspectRoutingGroupExpiry(readCurrent().file, createBaleUpdateJournalBindingKey({
                     path,
                     profileName: profile,
                     botIdentity: expectedIdentity,
@@ -5251,7 +5251,7 @@ function createJournalStoreCore(options, getInputContext) {
             expire(input) {
                 return runMutation((readCurrent) => {
                     const original = validateJournalEntry(input.entry, path, version), lifetime = original.routingInput;
-                    const binding = createTelegramUpdateJournalBindingKey({
+                    const binding = createBaleUpdateJournalBindingKey({
                         path,
                         profileName: profile,
                         botIdentity: expectedIdentity,
@@ -5295,7 +5295,7 @@ function createJournalStoreCore(options, getInputContext) {
                             existing.failureId !== failureId ||
                             existing.evidenceSha256 !== evidenceSha256 ||
                             existing.operatorAuthorityId !==
-                                `telegram-owner:${input.operatorUserId}`)
+                                `bale-owner:${input.operatorUserId}`)
                             throw createJournalError("conflict", path, "routing source has contradictory expiry evidence");
                         assertCurrent();
                         return {
@@ -5317,7 +5317,7 @@ function createJournalStoreCore(options, getInputContext) {
                         committedAtMs: now,
                         authorizedAtMs: now,
                         evidenceSha256,
-                        operatorAuthorityId: `telegram-owner:${input.operatorUserId}`,
+                        operatorAuthorityId: `bale-owner:${input.operatorUserId}`,
                     };
                     const published = publishMutation(current, current.file.entries.filter((value) => value.updateId !== original.updateId), true, [...(current.file.operatorDispositions ?? []), disposition], current.file.acceptedThroughUpdateId, (boundary, target) => {
                         onPublicationBoundary?.(boundary, target);
@@ -5336,7 +5336,7 @@ function createJournalStoreCore(options, getInputContext) {
     if (!getInputContext)
         return { journal };
     // Strict source acquisition already requires this exact stored receipt scope.
-    const bindingKey = createTelegramUpdateJournalBindingKey({
+    const bindingKey = createBaleUpdateJournalBindingKey({
         path,
         profileName: profile,
         botIdentity: expectedIdentity,
@@ -5358,7 +5358,7 @@ function createJournalStoreCore(options, getInputContext) {
             throw createJournalError("conflict", path, "input custody belongs to another runtime");
         }
     };
-    const inputOwnerMatchesIdentity = (owner, identity) => isTelegramUpdateJournalQueueOwnerProcess(owner, identity) &&
+    const inputOwnerMatchesIdentity = (owner, identity) => isBaleUpdateJournalQueueOwnerProcess(owner, identity) &&
         owner.sessionGeneration === identity.sessionGeneration;
     const currentInputContext = () => {
         const observed = getInputContext();
@@ -5366,7 +5366,7 @@ function createJournalStoreCore(options, getInputContext) {
             throw createJournalError("conflict", path, "input execution context is unavailable");
         const owner = validateJournalQueueOwnerIdentity(observed.owner, path);
         const recipientBindingKey = observed.recipientBindingKey;
-        if (!isBoundedString(recipientBindingKey, TELEGRAM_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH) ||
+        if (!isBoundedString(recipientBindingKey, BALE_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH) ||
             !recipientBindingKey.trim()) {
             throw createJournalError("invalid", path, "input execution binding is invalid");
         }
@@ -5374,7 +5374,7 @@ function createJournalStoreCore(options, getInputContext) {
         return { owner, recipientBindingKey };
     };
     const runInputAdmission = (kind, operation) => workspaceAdmission
-        ? runWithTelegramWorkspaceAdmissions({
+        ? runWithBaleWorkspaceAdmissions({
             ledger: workspaceAdmission,
             operationId: `input:${randomUUID()}`,
             operationKind: `journal.input.${kind}`,
@@ -5431,20 +5431,20 @@ function createJournalStoreCore(options, getInputContext) {
     const normalizeInputHandoffOffer = (value) => {
         if (!isRecord(value) ||
             !hasOnlyKeys(value, ["receipt", "recipientOwner", "handoffToken"]) ||
-            !isBoundedString(value.handoffToken, TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MAX_LENGTH) ||
+            !isBoundedString(value.handoffToken, BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MAX_LENGTH) ||
             value.handoffToken.length <
-                TELEGRAM_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MIN_LENGTH) {
+                BALE_UPDATE_JOURNAL_QUEUE_HANDOFF_TOKEN_MIN_LENGTH) {
             throw createJournalError("invalid", path, "received invalid input handoff offer");
         }
         const receipt = normalizeInputReceipt(value.receipt);
         const recipientOwner = validateJournalQueueOwnerIdentity(value.recipientOwner, path);
-        if (isTelegramUpdateJournalQueueOwnerProcess(receipt.owner, recipientOwner)) {
+        if (isBaleUpdateJournalQueueOwnerProcess(receipt.owner, recipientOwner)) {
             throw createJournalError("conflict", path, "cannot transfer input custody to the same runtime process");
         }
         return { receipt, recipientOwner, handoffToken: value.handoffToken };
     };
     const normalizeInputHandoffId = (value, operation) => {
-        if (!isTelegramInputHandoffId(value)) {
+        if (!isBaleInputHandoffId(value)) {
             throw createJournalError("invalid", path, `received invalid input handoff ${operation}`);
         }
         return value;
@@ -5478,7 +5478,7 @@ function createJournalStoreCore(options, getInputContext) {
         if (!isRecord(value) ||
             !hasOnlyKeys(value, ["queueKind", "receiptId", "receipts"]) ||
             (value.queueKind !== "prompt" && value.queueKind !== "control") ||
-            !isBoundedString(value.receiptId, TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
+            !isBoundedString(value.receiptId, BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH) ||
             !value.receiptId.trim() ||
             !Array.isArray(value.receipts) ||
             value.receipts.length === 0) {
@@ -5496,7 +5496,7 @@ function createJournalStoreCore(options, getInputContext) {
         const entry = current.file.entries.find((candidate) => candidate.updateId === receipt.updateId);
         if (!entry?.inputClaim ||
             entry.state !== "pending" ||
-            !areTelegramUpdateJournalQueueOwnersEqual(entry.inputClaim.owner, receipt.owner)) {
+            !areBaleUpdateJournalQueueOwnersEqual(entry.inputClaim.owner, receipt.owner)) {
             throw createJournalError("conflict", path, "input receipt lost its exact acquisition or phase");
         }
         return entry;
@@ -5522,7 +5522,7 @@ function createJournalStoreCore(options, getInputContext) {
         }
         if (!entry.inputClaim)
             return { entry, unclaimed: true };
-        if (!areTelegramUpdateJournalQueueOwnersEqual(entry.inputClaim.owner, receipt.owner) ||
+        if (!areBaleUpdateJournalQueueOwnersEqual(entry.inputClaim.owner, receipt.owner) ||
             entry.inputClaim.phase !== "ready" ||
             (!allowOffered && entry.inputClaim.handoff !== undefined)) {
             throw createJournalError("conflict", path, "cannot release stale, running, or offered input authority");
@@ -5539,7 +5539,7 @@ function createJournalStoreCore(options, getInputContext) {
         appendBatch: journal.appendBatch,
         listLegacyCustodyCandidates() {
             const sourceAccess = options.sourceAccess;
-            const evidence = readTelegramUpdateJournalSource({
+            const evidence = readBaleUpdateJournalSource({
                 directory: sourceAccess.directory,
                 path,
                 profile,
@@ -5548,7 +5548,7 @@ function createJournalStoreCore(options, getInputContext) {
                 version,
             });
             return evidence.kind === "present"
-                ? listTelegramUpdateJournalLegacyCustodyCandidates(evidence.file)
+                ? listBaleUpdateJournalLegacyCustodyCandidates(evidence.file)
                 : [];
         },
         applyLegacyCustodyDisposition(value) {
@@ -5679,7 +5679,7 @@ function createJournalStoreCore(options, getInputContext) {
                         serializedBytes: current.serializedBytes,
                     };
                 }
-                const handoffId = createTelegramInputHandoffId({
+                const handoffId = createBaleInputHandoffId({
                     handoffToken,
                     journalBindingKey: bindingKey,
                     updateId: receipt.updateId,
@@ -5822,7 +5822,7 @@ function createJournalStoreCore(options, getInputContext) {
                                 entry.queueKind !== queueKind ||
                                 entry.queueHandoff !== undefined ||
                                 !entry.inputProvenance ||
-                                !areTelegramUpdateJournalQueueOwnersEqual(entry.inputProvenance.owner, receipt.owner) ||
+                                !areBaleUpdateJournalQueueOwnersEqual(entry.inputProvenance.owner, receipt.owner) ||
                                 entry.inputProvenance.recipientBindingKey !==
                                     context.recipientBindingKey);
                         })) {
@@ -5848,7 +5848,7 @@ function createJournalStoreCore(options, getInputContext) {
                         !entry.inputClaim ||
                         entry.inputClaim.phase !== "running" ||
                         entry.inputClaim.handoff ||
-                        !areTelegramUpdateJournalQueueOwnersEqual(entry.inputClaim.owner, receipt.owner) ||
+                        !areBaleUpdateJournalQueueOwnersEqual(entry.inputClaim.owner, receipt.owner) ||
                         entry.inputClaim.recipientBindingKey !== context.recipientBindingKey) {
                         throw createJournalError("conflict", path, "input queue transition lost exact running authority");
                     }
@@ -5906,7 +5906,7 @@ function createJournalStoreCore(options, getInputContext) {
                 ? undefined
                 : normalizeIncomingJournaledUpdate(value.executionUpdate, path);
             if (!isSafeNonNegativeInteger(updateId) ||
-                !isBoundedString(recipientBindingKey, TELEGRAM_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH) ||
+                !isBoundedString(recipientBindingKey, BALE_UPDATE_JOURNAL_INPUT_BINDING_MAX_LENGTH) ||
                 !recipientBindingKey.trim() ||
                 (executionUpdate && executionUpdate.update_id !== updateId)) {
                 throw createJournalError("invalid", path, "received invalid input acquisition identity");
@@ -5927,7 +5927,7 @@ function createJournalStoreCore(options, getInputContext) {
                 const projected = executionUpdate ?? entry.update;
                 const existing = entry.inputClaim;
                 if (existing) {
-                    if (!isTelegramUpdateJournalQueueOwnerProcess(existing.owner, identity) ||
+                    if (!isBaleUpdateJournalQueueOwnerProcess(existing.owner, identity) ||
                         existing.owner.sessionGeneration !== identity.sessionGeneration ||
                         existing.recipientBindingKey !== recipientBindingKey ||
                         !isDeepStrictEqual(existing.executionUpdate ?? entry.update, projected)) {
@@ -5959,7 +5959,7 @@ function createJournalStoreCore(options, getInputContext) {
                 };
                 const reservedEntries = replaceInputHeadroomEntry(current.file, updateId, reservedEntry);
                 const actualBytes = Buffer.byteLength(serializeJournalFile({ ...current.file, entries: claimedEntries }));
-                const reservedBytes = Buffer.byteLength(serializeJournalFile({ ...current.file, entries: reservedEntries })) + TELEGRAM_UPDATE_JOURNAL_INPUT_PROJECTION_HEADROOM_BYTES;
+                const reservedBytes = Buffer.byteLength(serializeJournalFile({ ...current.file, entries: reservedEntries })) + BALE_UPDATE_JOURNAL_INPUT_PROJECTION_HEADROOM_BYTES;
                 if (actualBytes > reservedBytes) {
                     throw createJournalError("capacity", path, "execution projection exceeds reserved input headroom");
                 }

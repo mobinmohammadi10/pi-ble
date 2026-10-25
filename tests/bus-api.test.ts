@@ -1,25 +1,25 @@
 /**
- * Regression tests for Telegram bus-aware API runtime
+ * Regression tests for Bale bus-aware API runtime
  * Verifies follower outbound API calls route through the local bus while leaders use direct transport
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTelegramBusAwareApiRuntime, createTelegramSelectedMenuTextApi } from "../lib/bus-api.ts";
-import { createTelegramExtensionSectionRegistry, handleTelegramSectionCallback, type TelegramSectionRuntimeDeps } from "../lib/sections.ts";
-import { createTelegramBusLeaderApiProxy } from "../lib/bus-leader.ts";
-import { callTelegram, createTelegramApiClient, createTelegramBridgeApiRuntime, setTelegramApiHttpsFetchForTesting, type TelegramBridgeApiRuntime, type TelegramApiCallOptions } from "../lib/telegram-api.ts";
-import { captureTelegramStaleTargetRequestRecovery, type TelegramSyncState } from "../lib/sync.ts";
-import type { TelegramTopicTargetRecord } from "../lib/threads.ts";
-import { createTelegramTypingLoop, createTelegramTypingLoopStarter } from "../lib/runtime.ts";
-import { createTelegramSessionContextStore } from "../lib/lifecycle.ts";
+import { createBaleBusAwareApiRuntime, createBaleSelectedMenuTextApi } from "../lib/bus-api.ts";
+import { createBaleExtensionSectionRegistry, handleBaleSectionCallback, type BaleSectionRuntimeDeps } from "../lib/sections.ts";
+import { createBaleBusLeaderApiProxy } from "../lib/bus-leader.ts";
+import { callBale, createBaleApiClient, createBaleBridgeApiRuntime, setBaleApiHttpsFetchForTesting, type BaleBridgeApiRuntime, type BaleApiCallOptions } from "../lib/bale-api.ts";
+import { captureBaleStaleTargetRequestRecovery, type BaleSyncState } from "../lib/sync.ts";
+import type { BaleTopicTargetRecord } from "../lib/threads.ts";
+import { createBaleTypingLoop, createBaleTypingLoopStarter } from "../lib/runtime.ts";
+import { createBaleSessionContextStore } from "../lib/lifecycle.ts";
 import { createPassthroughFailureLog } from "./fixtures/failure-log.ts";
 
 for (const direct of [true, false]) for (const threaded of [true, false]) for (const failure of ["http", "network"] as const) {
   test(`Typing cannot replay HTTP after its captured generation ends (direct=${direct}, threaded=${threaded}, failure=${failure})`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const context = createTelegramSessionContextStore<object>(), ctx = {}, typing = createTelegramTypingLoop();
+    const context = createBaleSessionContextStore<object>(), ctx = {}, typing = createBaleTypingLoop();
     context.set(ctx); const calls: unknown[] = [], payloads: unknown[] = [], errors: unknown[] = [];
     let finish!: () => void; const settled = new Promise<void>(resolve => { finish = resolve; });
     const previousFetch = globalThis.fetch;
@@ -32,17 +32,17 @@ for (const direct of [true, false]) for (const threaded of [true, false]) for (c
       }
       return new Response(JSON.stringify({ ok: true, result: true }), { status: 200 });
     };
-    const restoreHttps = setTelegramApiHttpsFetchForTesting(globalThis.fetch);
-    const directRuntime = createTelegramBridgeApiRuntime({ client: createTelegramApiClient(() => "123:fixture", { isThreadedMode: () => threaded }),
+    const restoreHttps = setBaleApiHttpsFetchForTesting(globalThis.fetch);
+    const directRuntime = createBaleBridgeApiRuntime({ client: createBaleApiClient(() => "123:fixture", { isThreadedMode: () => threaded }),
       tempDir: "/tmp", maxFileSizeBytes: 1, tempFileMaxAgeMs: 1, recordRuntimeEvent() {} });
-    const proxy = createTelegramBusLeaderApiProxy({ call: directRuntime.call, callMultipart: directRuntime.callMultipart, downloadFile: directRuntime.downloadFile });
-    const api = createTelegramBusAwareApiRuntime({ directRuntime, ownsDirect: () => direct,
+    const proxy = createBaleBusLeaderApiProxy({ call: directRuntime.call, callMultipart: directRuntime.callMultipart, downloadFile: directRuntime.downloadFile });
+    const api = createBaleBusAwareApiRuntime({ directRuntime, ownsDirect: () => direct,
       async callFollowerApi(method, args, localOptions) {
         localOptions?.assertAuthority?.();
         const wire = structuredClone(args); payloads.push(wire);
         return proxy(method, wire);
       } });
-    const start = createTelegramTypingLoopStarter({
+    const start = createBaleTypingLoopStarter({
       failureLog: createPassthroughFailureLog(error => errors.push(error)),
       typing, getDefaultChatId: () => 7,
       isContextActive: context.isCurrent, getSessionGeneration: context.getGeneration, getTransportAuthority: () => "unchanged", isThreadedMode: () => threaded,
@@ -68,9 +68,9 @@ for (const threaded of [true, false]) test(`Queued direct typing issuance rechec
   let current = true, fetches = 0;
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async () => { fetches++; return new Response(JSON.stringify({ ok: true, result: true }), { status: 200 }); };
-  const directRuntime = createTelegramBridgeApiRuntime({ client: createTelegramApiClient(() => "123:fixture", { isThreadedMode: () => threaded }),
+  const directRuntime = createBaleBridgeApiRuntime({ client: createBaleApiClient(() => "123:fixture", { isThreadedMode: () => threaded }),
     tempDir: "/tmp", maxFileSizeBytes: 1, tempFileMaxAgeMs: 1, recordRuntimeEvent() {} });
-  const api = createTelegramBusAwareApiRuntime({ directRuntime, ownsDirect: () => true, callFollowerApi: async () => assert.fail("No follower") });
+  const api = createBaleBusAwareApiRuntime({ directRuntime, ownsDirect: () => true, callFollowerApi: async () => assert.fail("No follower") });
   try {
     const task = api.sendTypingAction(7, { ...(threaded ? { message_thread_id: 42 } : {}), assertAuthority() { if (!current) throw new Error("Context ended"); } });
     current = false; await assert.rejects(task); assert.equal(fetches, 0);
@@ -82,10 +82,10 @@ test("Selected text API preparation proves availability without activating the f
   const config = { operationId: "operation", registrationGeneration: "generation", target: { chatId: 7, threadId: 42 },
     assertAuthority() { assertions++; throw new Error("Future recipient is not released"); },
     deliver: async () => assert.fail("No issuance") };
-  const api = createTelegramSelectedMenuTextApi(config);
+  const api = createBaleSelectedMenuTextApi(config);
   assert.equal(assertions, 0);
   for (const change of [{ deliver: undefined }, { assertAuthority: undefined }, { target: { chatId: 7, threadId: 0 } }, { operationId: "" }, { registrationGeneration: "" }]) {
-    assert.throws(() => createTelegramSelectedMenuTextApi({ ...config, ...change } as unknown as Parameters<typeof createTelegramSelectedMenuTextApi>[0]));
+    assert.throws(() => createBaleSelectedMenuTextApi({ ...config, ...change } as unknown as Parameters<typeof createBaleSelectedMenuTextApi>[0]));
   }
   assert.equal(assertions, 0);
   await assert.rejects(api.sendMessage({ chat_id: 7, message_thread_id: 42, text: "Status" }, { assertAuthority: config.assertAuthority }));
@@ -104,7 +104,7 @@ for (const edit of [false, true]) for (const fault of ["current", "callback", "c
         return { operationId: fault === "observation" ? "other" : "operation", registrationGeneration: "generation", recipient: { target: { chatId: 7, threadId: 42 }, sessionId: "session", sessionGeneration: 1,
           processId: 1, processBirthId: "birth", profileKey: "profile", journalBindingKey: "journal" }, effect: effect.kind, messageId: 11 };
       } };
-    const api = createTelegramSelectedMenuTextApi(config);
+    const api = createBaleSelectedMenuTextApi(config);
     const body: Record<string, unknown> = { chat_id: 7, message_thread_id: 42, text: "<b>Status</b>", parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "Queue", callback_data: "queue" }]] },
       ...(edit ? { message_id: 11 } : { reply_parameters: { message_id: 11, allow_sending_without_reply: true } }) };
     if (fault === "callback") options.assertAuthority = () => {};
@@ -133,7 +133,7 @@ for (const edit of [false, true]) for (const fault of ["current", "callback", "c
 for (const direct of [true, false]) {
   test(`Typed callback answers send authored toast text verbatim (direct=${direct})`, async () => {
     const calls: unknown[] = [];
-    const runtime = createTelegramBusAwareApiRuntime({ directRuntime: createDirectRuntime(calls), ownsDirect: () => direct,
+    const runtime = createBaleBusAwareApiRuntime({ directRuntime: createDirectRuntime(calls), ownsDirect: () => direct,
       async callFollowerApi(method, args) { calls.push({ method, args }); return { message_id: 1 }; } });
     // Each toast is written in its final form at its call site; the boundary never rewrites punctuation.
     const cases: Array<string | undefined> = [undefined, "", "✅ Saved", "⚠️ Wrote a period.", "Continue?", "Working…", "v1.2.3"];
@@ -159,16 +159,16 @@ for (const direct of [true, false]) {
 for (const direct of [true, false]) {
   test(`Companion section toasts reach the client exactly as the companion wrote them (direct=${direct})`, async () => {
     const calls: unknown[] = [], edited: string[] = [];
-    const runtime = createTelegramBusAwareApiRuntime({ directRuntime: createDirectRuntime(calls), ownsDirect: () => direct,
+    const runtime = createBaleBusAwareApiRuntime({ directRuntime: createDirectRuntime(calls), ownsDirect: () => direct,
       async callFollowerApi(method, args) { calls.push({ method, args }); return { message_id: 1 }; } });
-    const registry = createTelegramExtensionSectionRegistry();
+    const registry = createBaleExtensionSectionRegistry();
     registry.register({ id: "@fixture/companion", label: "Companion", render: () => ({ text: "Companion." }),
       async handleCallback(ctx) {
         await ctx.answerCallback(ctx.payload || undefined);
         await ctx.edit({ text: "An in-chat notice." });
         return "handled" as const;
       } });
-    const deps: TelegramSectionRuntimeDeps = {
+    const deps: BaleSectionRuntimeDeps = {
       answerCallbackQuery: runtime.answerCallbackQuery,
       editInteractiveMessage: async (_chat, _message, text) => { edited.push(text); },
       sendInteractiveMessage: async () => undefined, sendRichMessage: async () => undefined,
@@ -177,7 +177,7 @@ for (const direct of [true, false]) {
     for (const [text, expected] of [["✅ Saved", "✅ Saved"], ["⚠️ Operation failed.", "⚠️ Operation failed."],
       ["Continue?", "Continue?"], ["", undefined]] as const) {
       calls.length = 0;
-      assert.equal(await handleTelegramSectionCallback(registry, "0", "control", text, 100, 1, "companion-callback", deps), true);
+      assert.equal(await handleBaleSectionCallback(registry, "0", "control", text, 100, 1, "companion-callback", deps), true);
       assert.deepEqual(calls, direct ? [{ kind: "answer-callback", callbackQueryId: "companion-callback", text: expected }] :
         [{ method: "call", args: ["answerCallbackQuery", { callback_query_id: "companion-callback", ...(expected !== undefined ? { text: expected } : {}) }] }]);
       assert.equal(edited.at(-1), "An in-chat notice.");
@@ -190,16 +190,16 @@ for (const direct of [true, false]) {
     test(`Per-call API authority ${direct ? "stays local" : "cannot cross IPC"} for ${multipart ? "multipart" : "JSON"}`, async () => {
       const calls: unknown[] = [];
       let guardedDirectCalls = 0;
-      const options: TelegramApiCallOptions = { assertAuthority() {} };
-      const runtime = createTelegramBusAwareApiRuntime({ ownsDirect: () => direct,
+      const options: BaleApiCallOptions = { assertAuthority() {} };
+      const runtime = createBaleBusAwareApiRuntime({ ownsDirect: () => direct,
         directRuntime: { ...createDirectRuntime(calls),
-          async call<TResponse>(_method: string, _body: Record<string, unknown>, supplied?: TelegramApiCallOptions) {
+          async call<TResponse>(_method: string, _body: Record<string, unknown>, supplied?: BaleApiCallOptions) {
             assert.equal(supplied?.assertAuthority, options.assertAuthority);
             guardedDirectCalls++;
             return true as TResponse;
           },
           async callMultipart<TResponse>(_method: string, _fields: Record<string, string>, _field: string, _path: string,
-            _name: string, supplied?: TelegramApiCallOptions) {
+            _name: string, supplied?: BaleApiCallOptions) {
             assert.equal(supplied?.assertAuthority, options.assertAuthority);
             guardedDirectCalls++;
             return true as TResponse;
@@ -210,7 +210,7 @@ for (const direct of [true, false]) {
       const request = multipart ? runtime.callMultipart("sendDocument", { chat_id: "7" }, "document", "/unused", "fixture.txt", options)
         : runtime.call("sendMessage", { chat_id: 7, text: "menu" }, options);
       if (direct) assert.equal(await request, true);
-      else await assert.rejects(request, { name: "TelegramApiAuthorityError", requestIssued: false });
+      else await assert.rejects(request, { name: "BaleApiAuthorityError", requestIssued: false });
       assert.equal(guardedDirectCalls, direct ? 1 : 0);
       assert.deepEqual(calls, [], "A guarded effect is never serialized without its enforceable lifetime.");
     });
@@ -219,10 +219,10 @@ for (const direct of [true, false]) {
 
 for (const direct of [true, false]) {
   test(`Guarded BotFather typed API ${direct ? "preserves direct authority" : "refuses follower serialization"}`, async () => {
-    const calls: unknown[] = [], options: Pick<TelegramApiCallOptions, "assertAuthority"> = { assertAuthority() {} };
+    const calls: unknown[] = [], options: Pick<BaleApiCallOptions, "assertAuthority"> = { assertAuthority() {} };
     const commands = [{ command: "start", description: "Open menu" }];
     let guardedCalls = 0;
-    const runtime = createTelegramBusAwareApiRuntime({ ownsDirect: () => direct,
+    const runtime = createBaleBusAwareApiRuntime({ ownsDirect: () => direct,
       directRuntime: { ...createDirectRuntime(calls), async setMyCommands(value, supplied) {
         assert.equal(value, commands);
         assert.equal(supplied?.assertAuthority, options.assertAuthority);
@@ -232,7 +232,7 @@ for (const direct of [true, false]) {
       callFollowerApi: async () => assert.fail("A process-local lifetime cannot become a wire grant"),
     });
     if (direct) assert.equal(await runtime.setMyCommands(commands, options), true);
-    else await assert.rejects(runtime.setMyCommands(commands, options), { name: "TelegramApiAuthorityError", requestIssued: false });
+    else await assert.rejects(runtime.setMyCommands(commands, options), { name: "BaleApiAuthorityError", requestIssued: false });
     assert.equal(guardedCalls, direct ? 1 : 0);
     assert.deepEqual(calls, []);
   });
@@ -240,9 +240,9 @@ for (const direct of [true, false]) {
 
 for (const direct of [true, false]) {
   test(`Typed callback authority ${direct ? "forwards the exact local guard" : "refuses before follower IPC"}`, async () => {
-    const calls: unknown[] = [], options: Pick<TelegramApiCallOptions, "assertAuthority"> = { assertAuthority() {} };
+    const calls: unknown[] = [], options: Pick<BaleApiCallOptions, "assertAuthority"> = { assertAuthority() {} };
     let guardedCalls = 0;
-    const runtime = createTelegramBusAwareApiRuntime({ ownsDirect: () => direct,
+    const runtime = createBaleBusAwareApiRuntime({ ownsDirect: () => direct,
       directRuntime: { ...createDirectRuntime(calls), async answerCallbackQuery(id, text, supplied) {
         assert.equal(id, "captured-query");
         assert.equal(text, "✅ Saved");
@@ -253,7 +253,7 @@ for (const direct of [true, false]) {
     });
     const request = runtime.answerCallbackQuery("captured-query", "✅ Saved", options);
     if (direct) await request;
-    else await assert.rejects(request, { name: "TelegramApiAuthorityError", requestIssued: false });
+    else await assert.rejects(request, { name: "BaleApiAuthorityError", requestIssued: false });
     assert.equal(guardedCalls, direct ? 1 : 0);
     assert.deepEqual(calls, []);
   });
@@ -262,9 +262,9 @@ for (const direct of [true, false]) {
 for (const direct of [true, false]) {
   test(`Typed callback authority captures its guard before direct-owner observation (direct=${direct})`, async () => {
     const guard = () => {};
-    const options: Pick<TelegramApiCallOptions, "assertAuthority"> = { assertAuthority: guard };
+    const options: Pick<BaleApiCallOptions, "assertAuthority"> = { assertAuthority: guard };
     let guardedCalls = 0;
-    const runtime = createTelegramBusAwareApiRuntime({
+    const runtime = createBaleBusAwareApiRuntime({
       ownsDirect() { options.assertAuthority = undefined; return direct; },
       directRuntime: { ...createDirectRuntime([]), async answerCallbackQuery(_id, _text, supplied) {
         assert.equal(supplied?.assertAuthority, guard);
@@ -274,7 +274,7 @@ for (const direct of [true, false]) {
     });
     const request = runtime.answerCallbackQuery("captured-query", "✅ Saved", options);
     if (direct) await request;
-    else await assert.rejects(request, { name: "TelegramApiAuthorityError", requestIssued: false });
+    else await assert.rejects(request, { name: "BaleApiAuthorityError", requestIssued: false });
     assert.equal(guardedCalls, direct ? 1 : 0);
   });
 }
@@ -290,8 +290,8 @@ test("Direct bus delivery invalidates only exact still-current stale request tar
         let requests = 0;
         let invalidations = 0;
         let recovered = 0;
-        let state: TelegramSyncState = {};
-        let record: TelegramTopicTargetRecord | undefined = { profileKey: "leader", instanceId: "leader", target: { chatId: 100, threadId: 42 }, status: "active", createdAtMs: 1, updatedAtMs: 1 };
+        let state: BaleSyncState = {};
+        let record: BaleTopicTargetRecord | undefined = { profileKey: "leader", instanceId: "leader", target: { chatId: 100, threadId: 42 }, status: "active", createdAtMs: 1, updatedAtMs: 1 };
         globalThis.fetch = async () => {
           requests++;
           if (race === "epoch") epoch++;
@@ -300,14 +300,14 @@ test("Direct bus delivery invalidates only exact still-current stale request tar
           if (race === "binding") record = { ...record!, instanceId: "replacement", updatedAtMs: 2 };
           return new Response(JSON.stringify({ ok: false, description: race === "unconfirmed" ? "Bad Request: possibly message thread not found later" : "Bad Request: message thread not found" }), { status: race === "permission" ? 403 : 400 });
         };
-        const direct = createTelegramBridgeApiRuntime({
+        const direct = createBaleBridgeApiRuntime({
           client: {
-            ...createTelegramApiClient(() => "test-token"),
-            callMultipart: (method, fields) => callTelegram("test-token", method, fields),
+            ...createBaleApiClient(() => "test-token"),
+            callMultipart: (method, fields) => callBale("test-token", method, fields),
           },
           tempDir: "/unused", maxFileSizeBytes: 1, tempFileMaxAgeMs: 1,
           recordRuntimeEvent: () => {},
-          captureRequestErrorHandler: (body) => captureTelegramStaleTargetRequestRecovery(body, {
+          captureRequestErrorHandler: (body) => captureBaleStaleTargetRequestRecovery(body, {
             topicTargetStore: {
               load: async () => { if (race === "load") generation++; },
               list: () => record ? [record] : [],
@@ -326,7 +326,7 @@ test("Direct bus delivery invalidates only exact still-current stale request tar
             onRecovered: () => { recovered++; },
           }),
         });
-        const runtime = createTelegramBusAwareApiRuntime({ directRuntime: direct, ownsDirect: () => true, callFollowerApi: async () => assert.fail("unexpected follower call") });
+        const runtime = createBaleBusAwareApiRuntime({ directRuntime: direct, ownsDirect: () => true, callFollowerApi: async () => assert.fail("unexpected follower call") });
         await assert.rejects(async () => {
           const body = { chat_id: 100, message_thread_id: 42 };
           if (surface === "reply") return runtime.sendRichMessage({ ...body, rich_message: { markdown: "answer" } });
@@ -345,7 +345,7 @@ test("Direct bus delivery invalidates only exact still-current stale request tar
   }
 });
 
-function createDirectRuntime(calls: unknown[]): TelegramBridgeApiRuntime {
+function createDirectRuntime(calls: unknown[]): BaleBridgeApiRuntime {
   return {
     call: async <TResponse>(method: string, body: Record<string, unknown>) => {
       calls.push({ kind: "call", method, body });
@@ -439,10 +439,10 @@ function createDirectRuntime(calls: unknown[]): TelegramBridgeApiRuntime {
   };
 }
 
-test("Bus-aware API runtime uses direct transport while this instance owns Telegram", async () => {
+test("Bus-aware API runtime uses direct transport while this instance owns Bale", async () => {
   const directCalls: unknown[] = [];
   const busCalls: unknown[] = [];
-  const runtime = createTelegramBusAwareApiRuntime({
+  const runtime = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime(directCalls),
     ownsDirect: () => true,
     callFollowerApi: async (method, args) => {
@@ -468,7 +468,7 @@ test("Bus-aware API runtime uses direct transport while this instance owns Teleg
 
 test("Bus-aware API runtime keeps the guest ACK experiment on direct transport", async () => {
   const directCalls: unknown[] = [];
-  const direct = createTelegramBusAwareApiRuntime({
+  const direct = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime(directCalls),
     ownsDirect: () => true,
     callFollowerApi: async () => assert.fail("unexpected follower call"),
@@ -495,7 +495,7 @@ test("Bus-aware API runtime keeps the guest ACK experiment on direct transport",
   ]);
 
   const busCalls: unknown[] = [];
-  const follower = createTelegramBusAwareApiRuntime({
+  const follower = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime([]),
     ownsDirect: () => false,
     callFollowerApi: async (method, args) => {
@@ -519,7 +519,7 @@ test("Guest inline media edit forwards its guard only through current direct own
   let edits = 0;
   const guard = { assertAuthority() {} };
   const content = { media: { type: "document" as const, media: "cached-id" } };
-  const runtime = createTelegramBusAwareApiRuntime({
+  const runtime = createBaleBusAwareApiRuntime({
     directRuntime: {
       ...createDirectRuntime([]),
       editGuestInlineMessage: async (id, received, options) => {
@@ -541,7 +541,7 @@ test("Guest inline media edit forwards its guard only through current direct own
 test("Bus-aware polling methods fail closed without direct ownership", async () => {
   const directCalls: unknown[] = [];
   const busCalls: unknown[] = [];
-  const runtime = createTelegramBusAwareApiRuntime({
+  const runtime = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime(directCalls),
     ownsDirect: () => false,
     callFollowerApi: async (method, args) => {
@@ -565,7 +565,7 @@ test("Bus-aware polling methods fail closed without direct ownership", async () 
 test("Bus-aware API runtime routes follower outbound calls through the leader", async () => {
   const directCalls: unknown[] = [];
   const busCalls: unknown[] = [];
-  const runtime = createTelegramBusAwareApiRuntime({
+  const runtime = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime(directCalls),
     ownsDirect: () => false,
     callFollowerApi: async (method, args) => {
@@ -710,18 +710,18 @@ test("Bus-aware API runtime routes follower outbound calls through the leader", 
 
 test("Attachment source survives the bus-aware wrapper and the leader proxy into the scoped file name", async () => {
   const names: string[] = [];
-  const direct = createTelegramBridgeApiRuntime({
-    client: { ...createTelegramApiClient(() => "test-token"),
+  const direct = createBaleBridgeApiRuntime({
+    client: { ...createBaleApiClient(() => "test-token"),
       async downloadFile(_fileId, fileName) { names.push(fileName); return `/tmp/${fileName}`; } },
     tempDir: "/unused", maxFileSizeBytes: 1, tempFileMaxAgeMs: 1, getBotScope: () => "@pi_bot", recordRuntimeEvent: () => {},
   });
   const source = { kind: "voice", messageId: 175683, chat: { id: 7, type: "private" } };
-  const leader = createTelegramBusAwareApiRuntime({ directRuntime: direct, ownsDirect: () => true,
+  const leader = createBaleBusAwareApiRuntime({ directRuntime: direct, ownsDirect: () => true,
     callFollowerApi: async () => assert.fail("leader downloads directly") });
   assert.equal(await leader.downloadFile("file", "voice-175683.ogg", source), "/tmp/voice-pi_bot-175683.ogg");
-  const proxy = createTelegramBusLeaderApiProxy({ call: async () => true, callMultipart: async () => true,
+  const proxy = createBaleBusLeaderApiProxy({ call: async () => true, callMultipart: async () => true,
     downloadFile: direct.downloadFile });
-  const follower = createTelegramBusAwareApiRuntime({ directRuntime: direct, ownsDirect: () => false,
+  const follower = createBaleBusAwareApiRuntime({ directRuntime: direct, ownsDirect: () => false,
     callFollowerApi: (method, args) => proxy(method, structuredClone(args)) });
   assert.equal(await follower.downloadFile("file", "voice-9.ogg", { ...source, messageId: 9 }), "/tmp/voice-pi_bot-9.ogg");
   // A malformed follower source is ignored rather than trusted; the plain generated name remains.
@@ -733,7 +733,7 @@ test("Attachment source survives the bus-aware wrapper and the leader proxy into
 
 test("Bus-aware API runtime applies follower default thread to scoped actions", async () => {
   const busCalls: unknown[] = [];
-  const runtime = createTelegramBusAwareApiRuntime({
+  const runtime = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime([]),
     ownsDirect: () => false,
     getDefaultTarget: () => ({ chatId: 1, threadId: 5 }),
@@ -780,7 +780,7 @@ test("Bus-aware API runtime applies follower default thread to scoped actions", 
 
 test("Bus-aware API runtime marks follower sends to a different thread", async () => {
   const busCalls: unknown[] = [];
-  const runtime = createTelegramBusAwareApiRuntime({
+  const runtime = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime([]),
     ownsDirect: () => false,
     getDefaultTarget: () => ({ chatId: 1, threadId: 5 }),
@@ -808,7 +808,7 @@ test("Bus-aware API runtime marks follower sends to a different thread", async (
           chat_id: 1,
           message_thread_id: 7,
           rich_message: { markdown: "Cross-target" },
-          __piTelegramCrossTargetDelivery: true,
+          __piBaleCrossTargetDelivery: true,
         },
       ],
     },
@@ -828,7 +828,7 @@ test("Bus-aware API runtime marks follower sends to a different thread", async (
 
 test("Bus-aware API runtime routes follower multipart uploads through the leader", async () => {
   const busCalls: unknown[] = [];
-  const runtime = createTelegramBusAwareApiRuntime({
+  const runtime = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime([]),
     ownsDirect: () => false,
     callFollowerApi: async (method, args) => {
@@ -872,12 +872,12 @@ test("Bus-aware API runtime routes follower multipart uploads through the leader
 });
 
 test("follower editMessageText normalizes an unmodified-message rejection to unchanged", async () => {
-  const runtime = createTelegramBusAwareApiRuntime({
+  const runtime = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime([]),
     ownsDirect: () => false,
     callFollowerApi: async () => {
       throw new Error(
-        "Telegram API editMessageText failed: HTTP 400: Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+        "Bale API editMessageText failed: HTTP 400: Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
       );
     },
   });
@@ -891,11 +891,11 @@ test("follower editMessageText normalizes an unmodified-message rejection to unc
 });
 
 test("follower editMessageText rethrows non-unmodified failures", async () => {
-  const runtime = createTelegramBusAwareApiRuntime({
+  const runtime = createBaleBusAwareApiRuntime({
     directRuntime: createDirectRuntime([]),
     ownsDirect: () => false,
     callFollowerApi: async () => {
-      throw new Error("Telegram API editMessageText failed: HTTP 400: Bad Request: message text is empty");
+      throw new Error("Bale API editMessageText failed: HTTP 400: Bad Request: message text is empty");
     },
   });
   await assert.rejects(

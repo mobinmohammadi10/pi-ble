@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram reply delivery helpers
+ * Regression tests for Bale reply delivery helpers
  * Covers UI/compat rendered-message transport, chunk delivery, native/plain final reply sending, and guest placeholder rotation
  */
 
@@ -12,41 +12,41 @@ test.beforeEach(() => {
 });
 
 import {
-  buildTelegramGuestPlaceholderFrame,
-  buildTelegramReplyParameters,
-  withTelegramReplyParameters,
-  buildTelegramReplyTransport,
+  buildBaleGuestPlaceholderFrame,
+  buildBaleReplyParameters,
+  withBaleReplyParameters,
+  buildBaleReplyTransport,
   createGuestMarkdownReplySender,
-  createTelegramGuestPlaceholderRuntime,
-  createTelegramRenderedMessageDeliveryRuntime,
-  createTelegramRenderedMessageRuntime,
-  editTelegramRenderedMessage,
+  createBaleGuestPlaceholderRuntime,
+  createBaleRenderedMessageDeliveryRuntime,
+  createBaleRenderedMessageRuntime,
+  editBaleRenderedMessage,
   extractLatestAssistantMessageText,
   extractRunAssistantMessage,
   getAgentMessageText,
   isAssistantAgentMessage,
-  isTelegramMarkdownFenceClosing,
-  normalizeTelegramNativeMarkdown,
-  parseTelegramMarkdownFenceOpening,
+  isBaleMarkdownFenceClosing,
+  normalizeBaleNativeMarkdown,
+  parseBaleMarkdownFenceOpening,
   preserveTransportReplyDedupOnNextReset,
   resetTransportReplyDedup,
-  sendTelegramNativeMarkdownReply,
-  sendTelegramPlainReply,
-  sendTelegramRenderedChunks,
-  splitTelegramNativeMarkdown,
-  TELEGRAM_DISMISSED_GUEST_PLACEHOLDER_TEXT,
-  TELEGRAM_GUEST_PLACEHOLDER_FRAME_MS,
-  TELEGRAM_GUEST_PLACEHOLDER_FRAMES,
-  TELEGRAM_GUEST_PLACEHOLDER_MAX_MS,
-  TELEGRAM_GUEST_PLACEHOLDER_MIN_MS,
-  TELEGRAM_RICH_MESSAGE_MAX_BLOCKS,
-  TELEGRAM_RICH_MESSAGE_MAX_CHARS,
+  sendBaleNativeMarkdownReply,
+  sendBalePlainReply,
+  sendBaleRenderedChunks,
+  splitBaleNativeMarkdown,
+  BALE_DISMISSED_GUEST_PLACEHOLDER_TEXT,
+  BALE_GUEST_PLACEHOLDER_FRAME_MS,
+  BALE_GUEST_PLACEHOLDER_FRAMES,
+  BALE_GUEST_PLACEHOLDER_MAX_MS,
+  BALE_GUEST_PLACEHOLDER_MIN_MS,
+  BALE_RICH_MESSAGE_MAX_BLOCKS,
+  BALE_RICH_MESSAGE_MAX_CHARS,
 } from "../lib/replies.ts";
 import { createAgentStartDedupHook } from "../lib/lifecycle.ts";
-import { createTelegramActivityPublicationRuntime } from "../lib/activity.ts";
-import { createTelegramThreadTarget } from "../lib/target.ts";
-import { createDefaultTelegramBridgeApiRuntime, TelegramApiAuthorityError, TelegramApiCommitUnknownError, TelegramApiFollowerNotAllowedError } from "../lib/telegram-api.ts";
-import { createTelegramBusAwareApiRuntime } from "../lib/bus-api.ts";
+import { createBaleActivityPublicationRuntime } from "../lib/activity.ts";
+import { createBaleThreadTarget } from "../lib/target.ts";
+import { createDefaultBaleBridgeApiRuntime, BaleApiAuthorityError, BaleApiCommitUnknownError, BaleApiFollowerNotAllowedError } from "../lib/bale-api.ts";
+import { createBaleBusAwareApiRuntime } from "../lib/bus-api.ts";
 
 type RenderedFenceSurface = "plain" | "interactive" | "edit" | "html" | "native" | "rich";
 type RenderedFenceOptions = { target: { chatId: number; threadId: number }; replyToMessageId: number; assertAuthority: () => void };
@@ -58,21 +58,21 @@ function createRenderedFenceFixture(options: RenderedFenceOptions, ports: {
   direct?: boolean;
   native?: boolean;
 } = {}) {
-  const originalFetch = globalThis.fetch, networkFamily = process.env.PI_TELEGRAM_NETWORK_FAMILY;
-  delete process.env.PI_TELEGRAM_NETWORK_FAMILY;
+  const originalFetch = globalThis.fetch, networkFamily = process.env.PI_BALE_NETWORK_FAMILY;
+  delete process.env.PI_BALE_NETWORK_FAMILY;
   const requests: Array<{ method: string; body: Record<string, unknown> }> = [], owned: number[] = [], ipc: unknown[] = [];
   globalThis.fetch = async (input, init) => {
     requests.push({ method: String(input).split("/").at(-1)!, body: JSON.parse(String(init?.body)) });
     return ports.fetch ? ports.fetch() : new Response(JSON.stringify({ ok: true, result: { message_id: requests.length } }));
   };
-  const api = createTelegramBusAwareApiRuntime({
-    directRuntime: createDefaultTelegramBridgeApiRuntime({ getBotToken: () => "123:fixture", recordRuntimeEvent() {} }),
+  const api = createBaleBusAwareApiRuntime({
+    directRuntime: createDefaultBaleBridgeApiRuntime({ getBotToken: () => "123:fixture", recordRuntimeEvent() {} }),
     ownsDirect: () => ports.direct !== false,
     async callFollowerApi(method, args) { ipc.push({ method, args }); return { message_id: 99 }; },
   });
   const expectedAuthority = options.assertAuthority;
-  const runtime = createTelegramRenderedMessageDeliveryRuntime<unknown>({
-    renderTelegramMessage() { ports.render?.(); return [{ text: "first" }, { text: "tail" }]; },
+  const runtime = createBaleRenderedMessageDeliveryRuntime<unknown>({
+    renderBaleMessage() { ports.render?.(); return [{ text: "first" }, { text: "tail" }]; },
     getAssistantRenderingMode: () => ports.native ? "rich" : "html",
     sendMessage(body, supplied) { assert.equal(supplied?.assertAuthority, expectedAuthority); return api.sendMessage(body, supplied); },
     editMessage(body, supplied) { assert.equal(supplied?.assertAuthority, expectedAuthority); return api.editMessageText(body, supplied); },
@@ -82,8 +82,8 @@ function createRenderedFenceFixture(options: RenderedFenceOptions, ports: {
   return { requests, owned, ipc, runtime,
     restore() {
       globalThis.fetch = originalFetch;
-      if (networkFamily === undefined) delete process.env.PI_TELEGRAM_NETWORK_FAMILY;
-      else process.env.PI_TELEGRAM_NETWORK_FAMILY = networkFamily;
+      if (networkFamily === undefined) delete process.env.PI_BALE_NETWORK_FAMILY;
+      else process.env.PI_BALE_NETWORK_FAMILY = networkFamily;
     },
   };
 }
@@ -111,8 +111,8 @@ for (const surface of ["plain", "interactive", "edit", "html", "native", "rich"]
       try {
         const issued = issueRenderedFenceSurface(surface, f.runtime, options);
         if (revoke) {
-          await assert.rejects(issued, { name: "TelegramApiAuthorityError", requestIssued: true,
-            message: "Telegram API call authority is unavailable." });
+          await assert.rejects(issued, { name: "BaleApiAuthorityError", requestIssued: true,
+            message: "Bale API call authority is unavailable." });
           assert.equal(f.requests.length, 1);
           assert.deepEqual(f.owned, []);
         } else {
@@ -137,10 +137,10 @@ for (const surface of ["plain", "interactive", "edit", "html"] as const) {
       assertAuthority() { if (!current) throw new Error("recipient replaced"); } };
     const f = createRenderedFenceFixture(options, { render() { current = false; options.assertAuthority = () => {}; } });
     try {
-      await assert.rejects(issueRenderedFenceSurface(surface, f.runtime, options), { name: "TelegramApiAuthorityError", requestIssued: false });
+      await assert.rejects(issueRenderedFenceSurface(surface, f.runtime, options), { name: "BaleApiAuthorityError", requestIssued: false });
       assert.deepEqual(f.requests, []);
       assert.deepEqual(f.owned, []);
-      await withTelegramReplyParameters(7, 21, options.target, async (parameters) => assert.equal(parameters?.message_id, 21));
+      await withBaleReplyParameters(7, 21, options.target, async (parameters) => assert.equal(parameters?.message_id, 21));
     } finally { f.restore(); }
   });
 }
@@ -168,7 +168,7 @@ test("Rendered reply fence refuses final success after ownership publication rev
     assertAuthority() { if (!current) throw new Error("recipient replaced"); } };
   const f = createRenderedFenceFixture(options, { record() { current = false; } });
   try {
-    await assert.rejects(issueRenderedFenceSurface("rich", f.runtime, options), { name: "TelegramApiAuthorityError", requestIssued: true });
+    await assert.rejects(issueRenderedFenceSurface("rich", f.runtime, options), { name: "BaleApiAuthorityError", requestIssued: true });
     assert.equal(f.requests.length, 1);
     assert.deepEqual(f.owned, [1], "Previously current ownership is not undone or replayed.");
   } finally { f.restore(); }
@@ -177,10 +177,10 @@ test("Rendered reply fence refuses final success after ownership publication rev
 for (const issued of [false, true]) {
   test(`Rendered reply fence ${issued ? "retains issued" : "releases unissued"} reply anchor after authority refusal`, async () => {
     const target = { chatId: 7, threadId: 42 };
-    await assert.rejects(sendTelegramRenderedChunks(7, [{ text: "first" }], {
-      async sendMessage() { throw new TelegramApiAuthorityError(issued); }, async editMessage() {},
+    await assert.rejects(sendBaleRenderedChunks(7, [{ text: "first" }], {
+      async sendMessage() { throw new BaleApiAuthorityError(issued); }, async editMessage() {},
     }, { target, replyToMessageId: 21, assertAuthority() {} }), { requestIssued: issued });
-    await withTelegramReplyParameters(7, 21, target, async (parameters) => assert.equal(parameters?.message_id, issued ? undefined : 21));
+    await withBaleReplyParameters(7, 21, target, async (parameters) => assert.equal(parameters?.message_id, issued ? undefined : 21));
   });
 }
 
@@ -188,7 +188,7 @@ for (const boundary of ["adapter-return", "ownership-publication"] as const) {
   test(`Rendered reply fence rechecks at ${boundary} without issuing later chunks`, async () => {
     let current = true, calls = 0;
     const owned: number[] = [], options = { assertAuthority() { if (!current) throw new Error("recipient replaced"); } };
-    await assert.rejects(sendTelegramRenderedChunks(7, [{ text: "first" }, { text: "tail" }], {
+    await assert.rejects(sendBaleRenderedChunks(7, [{ text: "first" }, { text: "tail" }], {
       async sendMessage(_body, supplied) {
         assert.equal(supplied?.assertAuthority, options.assertAuthority);
         calls++;
@@ -197,7 +197,7 @@ for (const boundary of ["adapter-return", "ownership-publication"] as const) {
       },
       async editMessage() {},
       recordOwnership({ messageId }) { owned.push(messageId); current = false; options.assertAuthority = () => {}; },
-    }, options), { name: "TelegramApiAuthorityError", requestIssued: true });
+    }, options), { name: "BaleApiAuthorityError", requestIssued: true });
     assert.equal(calls, 1);
     assert.deepEqual(owned, boundary === "adapter-return" ? [] : [1]);
   });
@@ -208,7 +208,7 @@ for (const surface of ["interactive", "edit", "rich"] as const) {
     const options = { target: { chatId: 7, threadId: 42 }, replyToMessageId: 21, assertAuthority() {} };
     const f = createRenderedFenceFixture(options, { direct: false });
     try {
-      await assert.rejects(issueRenderedFenceSurface(surface, f.runtime, options), { name: "TelegramApiAuthorityError", requestIssued: false });
+      await assert.rejects(issueRenderedFenceSurface(surface, f.runtime, options), { name: "BaleApiAuthorityError", requestIssued: false });
       assert.deepEqual(f.requests, []); assert.deepEqual(f.owned, []); assert.deepEqual(f.ipc, []);
     } finally { f.restore(); }
   });
@@ -221,20 +221,20 @@ for (const surface of ["interactive", "native", "rich"] as const) {
       const options = { target, replyToMessageId: 21 };
       const requests: Array<{ method: string; body: Record<string, unknown> }> = [];
       const owned: Array<{ chatId: number; messageId: number; target?: { chatId: number; threadId?: number } }> = [];
-      let rejection: TelegramApiFollowerNotAllowedError | undefined;
+      let rejection: BaleApiFollowerNotAllowedError | undefined;
       const send = async (method: string, body: Record<string, unknown>) => {
         const index = requests.length;
         requests.push({ method, body: structuredClone(body) });
         if (index === refusedChunk) {
-          rejection = new TelegramApiFollowerNotAllowedError(
-            "Telegram bus API call is not allowed for this follower.", target, method,
+          rejection = new BaleApiFollowerNotAllowedError(
+            "Bale bus API call is not allowed for this follower.", target, method,
           );
           throw rejection;
         }
         return { message_id: 100 + index };
       };
-      const runtime = createTelegramRenderedMessageDeliveryRuntime<unknown>({
-        renderTelegramMessage: () => [{ text: "first" }, { text: "tail" }],
+      const runtime = createBaleRenderedMessageDeliveryRuntime<unknown>({
+        renderBaleMessage: () => [{ text: "first" }, { text: "tail" }],
         sendMessage: (body) => send("sendMessage", body),
         sendRichMessage: (body) => send("sendRichMessage", body),
         editMessage: async () => { throw new Error("Refusal must not become an edit"); },
@@ -335,7 +335,7 @@ test("Run assistant extraction never promotes tool-use prefaces or errors", () =
 
 test("Reply transport forwards send and edit operations through delivery helpers", async () => {
   const events: string[] = [];
-  const transport = buildTelegramReplyTransport({
+  const transport = buildBaleReplyTransport({
     sendMessage: async (body) => {
       events.push(`send:${body.chat_id}:${body.text}`);
       return { message_id: 5 };
@@ -352,7 +352,7 @@ test("Reply transport forwards send and edit operations through delivery helpers
 test("Reply delivery includes thread target on rendered chunks", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
   const ownership: Array<Record<string, unknown>> = [];
-  await sendTelegramRenderedChunks(
+  await sendBaleRenderedChunks(
     -1007,
     [{ text: "one" }, { text: "two" }],
     {
@@ -365,7 +365,7 @@ test("Reply delivery includes thread target on rendered chunks", async () => {
         ownership.push(input);
       },
     },
-    { target: createTelegramThreadTarget(-1007, 42) },
+    { target: createBaleThreadTarget(-1007, 42) },
   );
   assert.deepEqual(
     sentBodies.map((body) => body.message_thread_id),
@@ -375,14 +375,14 @@ test("Reply delivery includes thread target on rendered chunks", async () => {
     ownership.map((record) => record.messageId),
     [1, 2],
   );
-  assert.deepEqual(ownership[0]?.target, createTelegramThreadTarget(-1007, 42));
+  assert.deepEqual(ownership[0]?.target, createBaleThreadTarget(-1007, 42));
 });
 
 test("Reply delivery includes thread target on rendered edits and continuation chunks", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
   const editedBodies: Array<Record<string, unknown>> = [];
   const ownership: Array<Record<string, unknown>> = [];
-  await editTelegramRenderedMessage(
+  await editBaleRenderedMessage(
     -1007,
     9,
     [{ text: "one" }, { text: "two" }],
@@ -398,7 +398,7 @@ test("Reply delivery includes thread target on rendered edits and continuation c
         ownership.push(input);
       },
     },
-    { target: createTelegramThreadTarget(-1007, 42) },
+    { target: createBaleThreadTarget(-1007, 42) },
   );
   assert.equal(editedBodies[0]?.message_thread_id, 42);
   assert.equal(sentBodies[0]?.message_thread_id, 42);
@@ -410,7 +410,7 @@ test("Reply delivery includes thread target on rendered edits and continuation c
 
 test("Reply delivery sends chunks and applies reply markup only to the last chunk", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
-  const messageId = await sendTelegramRenderedChunks(
+  const messageId = await sendBaleRenderedChunks(
     7,
     [{ text: "one" }, { text: "two", parseMode: "HTML" }],
     {
@@ -440,11 +440,11 @@ test("Reply delivery sends chunks and applies reply markup only to the last chun
   ]);
 });
 
-test("Reply delivery rejects generated buttons above Telegram callback limit", async () => {
+test("Reply delivery rejects generated buttons above Bale callback limit", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
   await assert.rejects(
     () =>
-      sendTelegramRenderedChunks(
+      sendBaleRenderedChunks(
         7,
         [{ text: "one" }],
         {
@@ -469,7 +469,7 @@ test("Reply delivery rejects generated buttons above Telegram callback limit", a
 
 test("Reply delivery applies reply parameters only to the first chunk", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
-  await sendTelegramRenderedChunks(
+  await sendBaleRenderedChunks(
     7,
     [{ text: "one" }, { text: "two" }],
     {
@@ -491,7 +491,7 @@ test("Reply delivery applies reply parameters only to the first chunk", async ()
 test("Reply delivery edits the first chunk and sends remaining chunks separately", async () => {
   const editedBodies: Array<Record<string, unknown>> = [];
   const sentBodies: Array<Record<string, unknown>> = [];
-  const result = await editTelegramRenderedMessage(
+  const result = await editBaleRenderedMessage(
     7,
     99,
     [{ text: "first", parseMode: "HTML" }, { text: "second" }],
@@ -537,11 +537,11 @@ test("Reply runtime bundles text, native markdown, and UI/compat interactive del
   const sent: Array<Record<string, unknown>> = [];
   const richSent: Array<Record<string, unknown>> = [];
   const edited: Array<Record<string, unknown>> = [];
-  const runtime = createTelegramRenderedMessageRuntime({
-    renderTelegramMessage: (text, options) => [
+  const runtime = createBaleRenderedMessageRuntime({
+    renderBaleMessage: (text, options) => [
       { text: `${options?.mode ?? "plain"}:${text}` },
     ],
-    replyTransport: buildTelegramReplyTransport({
+    replyTransport: buildBaleReplyTransport({
       sendMessage: async (body) => {
         sent.push(body);
         return { message_id: sent.length };
@@ -611,9 +611,9 @@ test("Reply runtime bundles text, native markdown, and UI/compat interactive del
 
 test("Plain reply includes thread target on rendered messages", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
-  const runtime = createTelegramRenderedMessageRuntime({
-    renderTelegramMessage: (text) => [{ text }],
-    replyTransport: buildTelegramReplyTransport({
+  const runtime = createBaleRenderedMessageRuntime({
+    renderBaleMessage: (text) => [{ text }],
+    replyTransport: buildBaleReplyTransport({
       sendMessage: async (body) => {
         sentBodies.push(body);
         return { message_id: 1 };
@@ -623,7 +623,7 @@ test("Plain reply includes thread target on rendered messages", async () => {
     sendRichMessage: async () => ({ message_id: 77 }),
   });
   await runtime.sendTextReply(-1007, 9, "hello", {
-    target: createTelegramThreadTarget(-1007, 42),
+    target: createBaleThreadTarget(-1007, 42),
   });
   assert.equal(sentBodies[0]?.message_thread_id, 42);
   assert.deepEqual(sentBodies[0]?.reply_parameters, {
@@ -636,10 +636,10 @@ test("Plain reply includes thread target on rendered messages", async () => {
 test("Native Markdown reply anchors only the first rich chunk in thread targets", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
   const ownership: Array<Record<string, unknown>> = [];
-  const first = "a".repeat(TELEGRAM_RICH_MESSAGE_MAX_CHARS - 10);
+  const first = "a".repeat(BALE_RICH_MESSAGE_MAX_CHARS - 10);
   const second = "b".repeat(30);
-  const target = createTelegramThreadTarget(-1007, 42);
-  await sendTelegramNativeMarkdownReply(
+  const target = createBaleThreadTarget(-1007, 42);
+  await sendBaleNativeMarkdownReply(
     -1007,
     9,
     `${first}\n\n${second}`,
@@ -671,11 +671,11 @@ test("Native Markdown reply anchors only the first rich chunk in thread targets"
 test("Reply runtime can send markdown through native rich messages", async () => {
   const richBodies: Array<Record<string, unknown>> = [];
   const sentBodies: Array<Record<string, unknown>> = [];
-  const runtime = createTelegramRenderedMessageRuntime({
-    renderTelegramMessage: (text, options) => [
+  const runtime = createBaleRenderedMessageRuntime({
+    renderBaleMessage: (text, options) => [
       { text: `${options?.mode ?? "plain"}:${text}` },
     ],
-    replyTransport: buildTelegramReplyTransport({
+    replyTransport: buildBaleReplyTransport({
       sendMessage: async (body) => {
         sentBodies.push(body);
         return { message_id: sentBodies.length };
@@ -714,12 +714,12 @@ test("Reply runtime can send markdown through native rich messages", async () =>
 test("Reply runtime uses native rich messages for anchored thread markdown replies", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
   const richBodies: Array<Record<string, unknown>> = [];
-  const target = createTelegramThreadTarget(-1007, 42);
-  const runtime = createTelegramRenderedMessageRuntime({
-    renderTelegramMessage: (text, options) => [
+  const target = createBaleThreadTarget(-1007, 42);
+  const runtime = createBaleRenderedMessageRuntime({
+    renderBaleMessage: (text, options) => [
       { text: `${options?.mode ?? "plain"}:${text}`, parseMode: "HTML" },
     ],
-    replyTransport: buildTelegramReplyTransport({
+    replyTransport: buildBaleReplyTransport({
       sendMessage: async (body) => {
         sentBodies.push(body);
         return { message_id: sentBodies.length };
@@ -761,11 +761,11 @@ test("Reply runtime uses native rich messages for anchored thread markdown repli
 
 test("Reply runtime does not fall back to HTML when native rich message delivery fails", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
-  const runtime = createTelegramRenderedMessageRuntime({
-    renderTelegramMessage: (text, options) => [
+  const runtime = createBaleRenderedMessageRuntime({
+    renderBaleMessage: (text, options) => [
       { text: `${options?.mode ?? "plain"}:${text}`, parseMode: "HTML" },
     ],
-    replyTransport: buildTelegramReplyTransport({
+    replyTransport: buildBaleReplyTransport({
       sendMessage: async (body) => {
         sentBodies.push(body);
         return { message_id: sentBodies.length };
@@ -784,8 +784,8 @@ test("Reply runtime does not fall back to HTML when native rich message delivery
 
 test("Reply delivery runtime exposes transport and UI/compat rendered-message helpers", async () => {
   const sent: Array<Record<string, unknown>> = [];
-  const runtime = createTelegramRenderedMessageDeliveryRuntime({
-    renderTelegramMessage: (text, options) => [
+  const runtime = createBaleRenderedMessageDeliveryRuntime({
+    renderBaleMessage: (text, options) => [
       { text: `${options?.mode ?? "plain"}:${text}` },
     ],
     sendMessage: async (body) => {
@@ -836,7 +836,7 @@ test("Guest replies answer with native Rich Markdown content", async () => {
 test("Native Markdown delivery normalizes space-after-marker blockquotes outside code", () => {
   const markdown = "> quoted\n\n```md\n> quoted code\n```";
   assert.equal(
-    normalizeTelegramNativeMarkdown(markdown),
+    normalizeBaleNativeMarkdown(markdown),
     ">quoted\n\n```md\n> quoted code\n```",
   );
 });
@@ -850,7 +850,7 @@ test("Native Markdown delivery neutralizes indented list markers that break Rich
     "END",
   ].join("\n");
   assert.equal(
-    normalizeTelegramNativeMarkdown(markdown),
+    normalizeBaleNativeMarkdown(markdown),
     [
       "**HEAD**",
       "",
@@ -863,7 +863,7 @@ test("Native Markdown delivery neutralizes indented list markers that break Rich
 
 test("Native Markdown delivery preserves top-level list markers", () => {
   assert.equal(
-    normalizeTelegramNativeMarkdown("- plain\n  - nested\n\t- tabbed"),
+    normalizeBaleNativeMarkdown("- plain\n  - nested\n\t- tabbed"),
     "- plain\n\u00A0\u00A0- nested\n\u00A0\u00A0- tabbed",
   );
 });
@@ -883,7 +883,7 @@ test("Native Markdown delivery converts multiline display math to math fences", 
     "```",
   ].join("\n");
   assert.equal(
-    normalizeTelegramNativeMarkdown(markdown),
+    normalizeBaleNativeMarkdown(markdown),
     [
       "Block math:",
       "",
@@ -931,9 +931,9 @@ test("Native Markdown delivery preserves Bot API 10.2 structured blocks", async 
     .replace("$$\nE = mc^2\n$$", "```math\nE = mc^2\n```")
     .replace("> quoted evidence", ">quoted evidence");
 
-  assert.equal(normalizeTelegramNativeMarkdown(source), expected);
+  assert.equal(normalizeBaleNativeMarkdown(source), expected);
   const bodies: Array<Record<string, unknown>> = [];
-  await sendTelegramNativeMarkdownReply(7, undefined, source, {
+  await sendBaleNativeMarkdownReply(7, undefined, source, {
     sendRichMessage: async (body) => {
       bodies.push(body);
       return { message_id: 1 };
@@ -952,7 +952,7 @@ test("Native Markdown delivery preserves Bot API 10.2 structured blocks", async 
 
 test("Native Markdown delivery ignores math delimiters inside fences when pairing", () => {
   const markdown = ["$$", "```md", "$$", "```"].join("\n");
-  assert.equal(normalizeTelegramNativeMarkdown(markdown), markdown);
+  assert.equal(normalizeBaleNativeMarkdown(markdown), markdown);
 });
 
 test("Native Markdown splitter keeps truncation-risk fixture intact", () => {
@@ -963,7 +963,7 @@ test("Native Markdown splitter keeps truncation-risk fixture intact", () => {
     "",
     "END",
   ].join("\n");
-  const chunks = splitTelegramNativeMarkdown(markdown);
+  const chunks = splitBaleNativeMarkdown(markdown);
   assert.equal(chunks.length, 1);
   assert.match(chunks[0] ?? "", /inline\.code/);
   assert.match(chunks[0] ?? "", /END$/);
@@ -971,7 +971,7 @@ test("Native Markdown splitter keeps truncation-risk fixture intact", () => {
 
 test("Native Markdown delivery sends normalized risky fixture without losing tail text", async () => {
   const bodies: Array<Record<string, unknown>> = [];
-  await sendTelegramNativeMarkdownReply(
+  await sendBaleNativeMarkdownReply(
     7,
     undefined,
     [
@@ -1009,7 +1009,7 @@ test("Native Markdown delivery escapes dollar ticker atoms outside code", () => 
     "```",
   ].join("\n");
   assert.equal(
-    normalizeTelegramNativeMarkdown(markdown),
+    normalizeBaleNativeMarkdown(markdown),
     [
       "Токен \\$BLDR может ломать math parsing.",
       "Bold ticker **\\$BTC** тоже ломает rich parsing.",
@@ -1023,28 +1023,28 @@ test("Native Markdown delivery escapes dollar ticker atoms outside code", () => 
 });
 
 test("Native Markdown splitter prefers paragraph boundaries", () => {
-  const first = "a".repeat(TELEGRAM_RICH_MESSAGE_MAX_CHARS - 10);
+  const first = "a".repeat(BALE_RICH_MESSAGE_MAX_CHARS - 10);
   const second = "b".repeat(30);
-  const chunks = splitTelegramNativeMarkdown(`${first}\n\n${second}`);
+  const chunks = splitBaleNativeMarkdown(`${first}\n\n${second}`);
   assert.deepEqual(chunks, [first, second]);
   assert.ok(
-    chunks.every((chunk) => chunk.length <= TELEGRAM_RICH_MESSAGE_MAX_CHARS),
+    chunks.every((chunk) => chunk.length <= BALE_RICH_MESSAGE_MAX_CHARS),
   );
 });
 
 test("Native Markdown splitter falls back to hard limits for long atoms", () => {
-  const chunks = splitTelegramNativeMarkdown(
-    "x".repeat(TELEGRAM_RICH_MESSAGE_MAX_CHARS + 5),
+  const chunks = splitBaleNativeMarkdown(
+    "x".repeat(BALE_RICH_MESSAGE_MAX_CHARS + 5),
   );
   assert.equal(chunks.length, 2);
-  assert.equal(chunks[0]?.length, TELEGRAM_RICH_MESSAGE_MAX_CHARS);
+  assert.equal(chunks[0]?.length, BALE_RICH_MESSAGE_MAX_CHARS);
   assert.equal(chunks[1], "xxxxx");
 });
 
 test("Native Markdown splitter keeps fenced code blocks together when possible", () => {
   const codeBlock = `\`\`\`ts\n${"x\n\n".repeat(100)}\`\`\``;
-  const prefix = "a".repeat(TELEGRAM_RICH_MESSAGE_MAX_CHARS - codeBlock.length);
-  const chunks = splitTelegramNativeMarkdown(
+  const prefix = "a".repeat(BALE_RICH_MESSAGE_MAX_CHARS - codeBlock.length);
+  const chunks = splitBaleNativeMarkdown(
     `${prefix}\n\n${codeBlock}\n\ntail`,
   );
   assert.equal(chunks.length, 2);
@@ -1052,40 +1052,40 @@ test("Native Markdown splitter keeps fenced code blocks together when possible",
 });
 
 test("Native Markdown splitter rewraps oversized fenced code blocks", () => {
-  const chunks = splitTelegramNativeMarkdown(
-    `\`\`\`ts\n${"x".repeat(TELEGRAM_RICH_MESSAGE_MAX_CHARS + 500)}\n\`\`\``,
+  const chunks = splitBaleNativeMarkdown(
+    `\`\`\`ts\n${"x".repeat(BALE_RICH_MESSAGE_MAX_CHARS + 500)}\n\`\`\``,
   );
   assert.ok(chunks.length > 1);
   assert.ok(
-    chunks.every((chunk) => chunk.length <= TELEGRAM_RICH_MESSAGE_MAX_CHARS),
+    chunks.every((chunk) => chunk.length <= BALE_RICH_MESSAGE_MAX_CHARS),
   );
   assert.ok(chunks.every((chunk) => chunk.startsWith("```ts\n")));
   assert.ok(chunks.every((chunk) => chunk.endsWith("\n```")));
   const contentLength = chunks
     .map((chunk) => chunk.split("\n").slice(1, -1).join("\n").length)
     .reduce((sum, length) => sum + length, 0);
-  assert.equal(contentLength, TELEGRAM_RICH_MESSAGE_MAX_CHARS + 500);
+  assert.equal(contentLength, BALE_RICH_MESSAGE_MAX_CHARS + 500);
 });
 
 test("Native Markdown splitter rewraps oversized display math blocks", () => {
-  const chunks = splitTelegramNativeMarkdown(
-    `$$\n${"x".repeat(TELEGRAM_RICH_MESSAGE_MAX_CHARS + 500)}\n$$`,
+  const chunks = splitBaleNativeMarkdown(
+    `$$\n${"x".repeat(BALE_RICH_MESSAGE_MAX_CHARS + 500)}\n$$`,
   );
   assert.ok(chunks.length > 1);
   assert.ok(
-    chunks.every((chunk) => chunk.length <= TELEGRAM_RICH_MESSAGE_MAX_CHARS),
+    chunks.every((chunk) => chunk.length <= BALE_RICH_MESSAGE_MAX_CHARS),
   );
   assert.ok(chunks.every((chunk) => chunk.startsWith("```math\n")));
   assert.ok(chunks.every((chunk) => chunk.endsWith("\n```")));
 });
 
 test("Native Markdown splitter rewraps oversized inline formatting blocks", () => {
-  const chunks = splitTelegramNativeMarkdown(
-    `**${"x".repeat(TELEGRAM_RICH_MESSAGE_MAX_CHARS + 500)}**`,
+  const chunks = splitBaleNativeMarkdown(
+    `**${"x".repeat(BALE_RICH_MESSAGE_MAX_CHARS + 500)}**`,
   );
   assert.ok(chunks.length > 1);
   assert.ok(
-    chunks.every((chunk) => chunk.length <= TELEGRAM_RICH_MESSAGE_MAX_CHARS),
+    chunks.every((chunk) => chunk.length <= BALE_RICH_MESSAGE_MAX_CHARS),
   );
   assert.ok(chunks.every((chunk) => chunk.startsWith("**")));
   assert.ok(chunks.every((chunk) => chunk.endsWith("**")));
@@ -1093,25 +1093,25 @@ test("Native Markdown splitter rewraps oversized inline formatting blocks", () =
     chunks
       .map((chunk) => chunk.slice(2, -2).length)
       .reduce((sum, length) => sum + length, 0),
-    TELEGRAM_RICH_MESSAGE_MAX_CHARS + 500,
+    BALE_RICH_MESSAGE_MAX_CHARS + 500,
   );
 });
 
 test("Native Markdown splitter respects the rich-message block limit for lists", () => {
   const markdown = Array.from(
-    { length: TELEGRAM_RICH_MESSAGE_MAX_BLOCKS + 5 },
+    { length: BALE_RICH_MESSAGE_MAX_BLOCKS + 5 },
     (_, index) => `- item ${index + 1}`,
   ).join("\n");
-  const chunks = splitTelegramNativeMarkdown(markdown);
+  const chunks = splitBaleNativeMarkdown(markdown);
   assert.equal(chunks.length, 2);
-  assert.equal(chunks[0]?.split("\n").length, TELEGRAM_RICH_MESSAGE_MAX_BLOCKS);
+  assert.equal(chunks[0]?.split("\n").length, BALE_RICH_MESSAGE_MAX_BLOCKS);
   assert.equal(chunks[1]?.split("\n").length, 5);
 });
 
 test("Native Markdown delivery attaches reply metadata first and markup last", async () => {
   const bodies: Array<Record<string, unknown>> = [];
-  const markdown = `${"a".repeat(TELEGRAM_RICH_MESSAGE_MAX_CHARS - 10)}\n\n${"b".repeat(30)}`;
-  const lastId = await sendTelegramNativeMarkdownReply(
+  const markdown = `${"a".repeat(BALE_RICH_MESSAGE_MAX_CHARS - 10)}\n\n${"b".repeat(30)}`;
+  const lastId = await sendBaleNativeMarkdownReply(
     7,
     42,
     markdown,
@@ -1141,7 +1141,7 @@ test("Native Markdown delivery attaches reply metadata first and markup last", a
   });
   assert.deepEqual(
     (bodies[0]?.rich_message as { markdown?: string })?.markdown,
-    "a".repeat(TELEGRAM_RICH_MESSAGE_MAX_CHARS - 10),
+    "a".repeat(BALE_RICH_MESSAGE_MAX_CHARS - 10),
   );
   assert.deepEqual(
     (bodies[1]?.rich_message as { markdown?: string })?.markdown,
@@ -1151,10 +1151,10 @@ test("Native Markdown delivery attaches reply metadata first and markup last", a
 
 test("Reply runtime sends plain replies using the requested parse mode", async () => {
   const sent: string[] = [];
-  const messageId = await sendTelegramPlainReply(
+  const messageId = await sendBalePlainReply(
     "hello",
     {
-      renderTelegramMessage: (_text, options) => [
+      renderBaleMessage: (_text, options) => [
         { text: options?.mode === "html" ? "html" : "plain" },
       ],
       sendRenderedChunks: async (chunks) => {
@@ -1170,8 +1170,8 @@ test("Reply runtime sends plain replies using the requested parse mode", async (
 
 for (const unknownAck of [false, true]) {
   test(`Reply anchor ${unknownAck ? "is retained after unknown ACK" : "survives a rejected send"}`, async () => {
-    const error = unknownAck ? new TelegramApiCommitUnknownError("sendVoice", new Error("Lost ACK")) : new Error("Rejected upload");
-    await assert.rejects(withTelegramReplyParameters(7, 21, undefined, async (parameters) => {
+    const error = unknownAck ? new BaleApiCommitUnknownError("sendVoice", new Error("Lost ACK")) : new Error("Rejected upload");
+    await assert.rejects(withBaleReplyParameters(7, 21, undefined, async (parameters) => {
       assert.equal(parameters?.message_id, 21);
       throw error;
     }), (caught) => caught === error);
@@ -1179,7 +1179,7 @@ for (const unknownAck of [false, true]) {
     resetTransportReplyDedup();
     const anchors: Array<number | undefined> = [];
     for (const text of ["Fallback", "Following answer"]) {
-      await sendTelegramNativeMarkdownReply(7, 21, text, {
+      await sendBaleNativeMarkdownReply(7, 21, text, {
         sendRichMessage: async (body) => { anchors.push(body.reply_parameters?.message_id); return { message_id: 100 }; },
       });
     }
@@ -1189,7 +1189,7 @@ for (const unknownAck of [false, true]) {
 
 test("A later chunk failure does not release an already delivered prompt anchor", async () => {
   let count = 0;
-  await assert.rejects(sendTelegramRenderedChunks(7, [{ text: "First" }, { text: "Second" }], {
+  await assert.rejects(sendBaleRenderedChunks(7, [{ text: "First" }, { text: "Second" }], {
     sendMessage: async (body) => {
       count += 1;
       assert.equal(body.reply_parameters?.message_id, count === 1 ? 21 : undefined);
@@ -1198,14 +1198,14 @@ test("A later chunk failure does not release an already delivered prompt anchor"
     },
     editMessage: async () => {},
   }, { replyToMessageId: 21 }), /Second chunk rejected/);
-  await withTelegramReplyParameters(7, 21, undefined, async (parameters) => { assert.equal(parameters, undefined); });
+  await withBaleReplyParameters(7, 21, undefined, async (parameters) => { assert.equal(parameters, undefined); });
 });
 
 test("Starting a new turn resets quoting behind the previous turn's queued final", async () => {
-  const publication = createTelegramActivityPublicationRuntime();
+  const publication = createBaleActivityPublicationRuntime();
   const anchors: Array<number | undefined> = [];
   const reply = async () => {
-    await sendTelegramNativeMarkdownReply(7, 21, "Answer", {
+    await sendBaleNativeMarkdownReply(7, 21, "Answer", {
       sendRichMessage: async (body) => { anchors.push(body.reply_parameters?.message_id); return { message_id: 100 }; },
     });
   };
@@ -1227,12 +1227,12 @@ test("Starting a new turn resets quoting behind the previous turn's queued final
 
 test("Late rejected reply cannot release a replacement generation's anchor", async () => {
   let reject!: (error: Error) => void;
-  const original = withTelegramReplyParameters(7, 21, undefined, () => new Promise<void>((_resolve, fail) => { reject = fail; }));
+  const original = withBaleReplyParameters(7, 21, undefined, () => new Promise<void>((_resolve, fail) => { reject = fail; }));
   const rejected = assert.rejects(original, /Old failure/);
   resetTransportReplyDedup();
-  await withTelegramReplyParameters(7, 21, undefined, async () => {});
+  await withBaleReplyParameters(7, 21, undefined, async () => {});
   reject(new Error("Old failure")); await rejected;
-  await withTelegramReplyParameters(7, 21, undefined, async (parameters) => { assert.equal(parameters, undefined); });
+  await withBaleReplyParameters(7, 21, undefined, async (parameters) => { assert.equal(parameters, undefined); });
 });
 
 for (const native of [false, true]) {
@@ -1244,8 +1244,8 @@ for (const native of [false, true]) {
       return { message_id: 100 };
     };
     const reply = () => native
-      ? sendTelegramNativeMarkdownReply(7, 21, "Answer", { sendRichMessage: send })
-      : sendTelegramRenderedChunks(7, [{ text: "Answer" }], { sendMessage: send, editMessage: async () => {} }, { replyToMessageId: 21 });
+      ? sendBaleNativeMarkdownReply(7, 21, "Answer", { sendRichMessage: send })
+      : sendBaleRenderedChunks(7, [{ text: "Answer" }], { sendMessage: send, editMessage: async () => {} }, { replyToMessageId: 21 });
     await assert.rejects(reply(), /Rejected send/);
     await reply(); await reply();
     assert.deepEqual(anchors, [21, 21, undefined]);
@@ -1253,36 +1253,36 @@ for (const native of [false, true]) {
 }
 
 test("Transport reply dedup scopes repeated prompt message ids by chat and thread", () => {
-  assert.equal(buildTelegramReplyParameters(1, 0), undefined);
-  assert.deepEqual(buildTelegramReplyParameters(1, 42), {
+  assert.equal(buildBaleReplyParameters(1, 0), undefined);
+  assert.deepEqual(buildBaleReplyParameters(1, 42), {
     message_id: 42,
     allow_sending_without_reply: true,
   });
-  assert.equal(buildTelegramReplyParameters(1, 42), undefined);
-  assert.deepEqual(buildTelegramReplyParameters(2, 42), {
+  assert.equal(buildBaleReplyParameters(1, 42), undefined);
+  assert.deepEqual(buildBaleReplyParameters(2, 42), {
     message_id: 42,
     allow_sending_without_reply: true,
   });
   assert.deepEqual(
-    buildTelegramReplyParameters(1, 42, { chatId: 1, threadId: 10 }),
+    buildBaleReplyParameters(1, 42, { chatId: 1, threadId: 10 }),
     {
       message_id: 42,
       allow_sending_without_reply: true,
     },
   );
   assert.equal(
-    buildTelegramReplyParameters(1, 42, { chatId: 1, threadId: 10 }),
+    buildBaleReplyParameters(1, 42, { chatId: 1, threadId: 10 }),
     undefined,
   );
   assert.deepEqual(
-    buildTelegramReplyParameters(1, 42, { chatId: 1, threadId: 11 }),
+    buildBaleReplyParameters(1, 42, { chatId: 1, threadId: 11 }),
     {
       message_id: 42,
       allow_sending_without_reply: true,
     },
   );
   resetTransportReplyDedup();
-  assert.deepEqual(buildTelegramReplyParameters(1, 42), {
+  assert.deepEqual(buildBaleReplyParameters(1, 42), {
     message_id: 42,
     allow_sending_without_reply: true,
   });
@@ -1290,15 +1290,15 @@ test("Transport reply dedup scopes repeated prompt message ids by chat and threa
 
 test("Transport reply dedup preserves a dispatch notice through one agent-start reset", () => {
   const target = { chatId: 1, threadId: 10 };
-  assert.deepEqual(buildTelegramReplyParameters(1, 42, target), {
+  assert.deepEqual(buildBaleReplyParameters(1, 42, target), {
     message_id: 42,
     allow_sending_without_reply: true,
   });
   preserveTransportReplyDedupOnNextReset(1, 42, target);
   resetTransportReplyDedup();
-  assert.equal(buildTelegramReplyParameters(1, 42, target), undefined);
+  assert.equal(buildBaleReplyParameters(1, 42, target), undefined);
   resetTransportReplyDedup();
-  assert.deepEqual(buildTelegramReplyParameters(1, 42, target), {
+  assert.deepEqual(buildBaleReplyParameters(1, 42, target), {
     message_id: 42,
     allow_sending_without_reply: true,
   });
@@ -1342,46 +1342,46 @@ function createGuestPlaceholderTimers() {
 }
 
 test("Guest placeholder frames step the globe every frame and grow the dots every two seconds", () => {
-  assert.equal(TELEGRAM_GUEST_PLACEHOLDER_FRAME_MS, 1_000);
-  assert.equal(TELEGRAM_GUEST_PLACEHOLDER_FRAMES.length, 6);
+  assert.equal(BALE_GUEST_PLACEHOLDER_FRAME_MS, 1_000);
+  assert.equal(BALE_GUEST_PLACEHOLDER_FRAMES.length, 6);
   assert.equal(
-    buildTelegramGuestPlaceholderFrame(0),
+    buildBaleGuestPlaceholderFrame(0),
     "<b>🌎 Working on it.</b>",
   );
   assert.equal(
-    buildTelegramGuestPlaceholderFrame(1),
+    buildBaleGuestPlaceholderFrame(1),
     "<b>🌍 Working on it.</b>",
   );
   assert.equal(
-    buildTelegramGuestPlaceholderFrame(2),
+    buildBaleGuestPlaceholderFrame(2),
     "<b>🌏 Working on it..</b>",
   );
   assert.equal(
-    buildTelegramGuestPlaceholderFrame(3),
+    buildBaleGuestPlaceholderFrame(3),
     "<b>🌎 Working on it..</b>",
   );
   assert.equal(
-    buildTelegramGuestPlaceholderFrame(4),
+    buildBaleGuestPlaceholderFrame(4),
     "<b>🌍 Working on it...</b>",
   );
   assert.equal(
-    buildTelegramGuestPlaceholderFrame(5),
+    buildBaleGuestPlaceholderFrame(5),
     "<b>🌏 Working on it...</b>",
   );
   assert.equal(
-    buildTelegramGuestPlaceholderFrame(6),
-    buildTelegramGuestPlaceholderFrame(0),
+    buildBaleGuestPlaceholderFrame(6),
+    buildBaleGuestPlaceholderFrame(0),
   );
   assert.equal(
-    buildTelegramGuestPlaceholderFrame(-1),
-    buildTelegramGuestPlaceholderFrame(5),
+    buildBaleGuestPlaceholderFrame(-1),
+    buildBaleGuestPlaceholderFrame(5),
   );
 });
 
 test("Guest placeholder runtime edits the inline message once per interval", async () => {
   const edits: Array<[string, string]> = [];
   const timers = createGuestPlaceholderTimers();
-  const runtime = createTelegramGuestPlaceholderRuntime({
+  const runtime = createBaleGuestPlaceholderRuntime({
     editGuestInlineMessage: async (inlineMessageId, content) => {
       edits.push([inlineMessageId, content.text]);
     },
@@ -1407,7 +1407,7 @@ test("Guest placeholder runtime edits the inline message once per interval", asy
 test("Guest placeholder dismissal stops rotation and visually clears the inline message", async () => {
   const edits: Array<[string, string, string]> = [];
   const timers = createGuestPlaceholderTimers();
-  const runtime = createTelegramGuestPlaceholderRuntime({
+  const runtime = createBaleGuestPlaceholderRuntime({
     editGuestInlineMessage: async (inlineMessageId, content) => {
       edits.push([inlineMessageId, content.text, content.parseMode]);
     },
@@ -1419,7 +1419,7 @@ test("Guest placeholder dismissal stops rotation and visually clears the inline 
   assert.equal(timers.pendingCount(), 0);
   assert.deepEqual(edits, [[
     "inline-1",
-    TELEGRAM_DISMISSED_GUEST_PLACEHOLDER_TEXT,
+    BALE_DISMISSED_GUEST_PLACEHOLDER_TEXT,
     "HTML",
   ]]);
 });
@@ -1428,7 +1428,7 @@ test("Guest placeholder rotation completes whole cycles for at least 20 seconds 
   const edits: string[] = [];
   const events: Array<Record<string, unknown>> = [];
   const timers = createGuestPlaceholderTimers();
-  const runtime = createTelegramGuestPlaceholderRuntime({
+  const runtime = createBaleGuestPlaceholderRuntime({
     editGuestInlineMessage: async (_inlineMessageId, content) => {
       edits.push(content.text);
     },
@@ -1439,8 +1439,8 @@ test("Guest placeholder rotation completes whole cycles for at least 20 seconds 
     clearTimer: timers.clearTimer,
     now: timers.now,
   });
-  assert.equal(TELEGRAM_GUEST_PLACEHOLDER_MIN_MS, 20_000);
-  assert.equal(TELEGRAM_GUEST_PLACEHOLDER_MAX_MS, 26_000);
+  assert.equal(BALE_GUEST_PLACEHOLDER_MIN_MS, 20_000);
+  assert.equal(BALE_GUEST_PLACEHOLDER_MAX_MS, 26_000);
   runtime.start("inline-1");
   for (let fired = 0; fired < 40 && timers.pendingCount() > 0; fired += 1) {
     await timers.fire();
@@ -1465,7 +1465,7 @@ test("Guest placeholder rotation still finishes a whole cycle when frames run sl
   const edits: string[] = [];
   const events: Array<Record<string, unknown>> = [];
   const timers = createGuestPlaceholderTimers();
-  const runtime = createTelegramGuestPlaceholderRuntime({
+  const runtime = createBaleGuestPlaceholderRuntime({
     editGuestInlineMessage: async (_inlineMessageId, content) => {
       edits.push(content.text);
     },
@@ -1500,7 +1500,7 @@ test("Guest placeholder safety bound stops a slow stream mid-cycle instead of re
   const edits: string[] = [];
   const events: Array<Record<string, unknown>> = [];
   const timers = createGuestPlaceholderTimers();
-  const runtime = createTelegramGuestPlaceholderRuntime({
+  const runtime = createBaleGuestPlaceholderRuntime({
     editGuestInlineMessage: async (_inlineMessageId, content) => {
       edits.push(content.text);
       timers.advance(1_800);
@@ -1534,7 +1534,7 @@ test("Guest placeholder stop waits for the in-flight frame and cancels the loop"
   const edits: string[] = [];
   let releaseEdit: (() => void) | undefined;
   const timers = createGuestPlaceholderTimers();
-  const runtime = createTelegramGuestPlaceholderRuntime({
+  const runtime = createBaleGuestPlaceholderRuntime({
     editGuestInlineMessage: async (_inlineMessageId, content) => {
       edits.push(content.text);
       await new Promise<void>((resolve) => {
@@ -1565,7 +1565,7 @@ test("Guest placeholder edit failures stay fail-open and honor retry_after", asy
   const events: Array<Record<string, unknown>> = [];
   const timers = createGuestPlaceholderTimers();
   let attempts = 0;
-  const runtime = createTelegramGuestPlaceholderRuntime({
+  const runtime = createBaleGuestPlaceholderRuntime({
     editGuestInlineMessage: async () => {
       attempts += 1;
       if (attempts === 1) {
@@ -1595,7 +1595,7 @@ test("Guest placeholder edit failures stay fail-open and honor retry_after", asy
 
 test("Guest placeholder stopAll cancels every pending loop", async () => {
   const timers = createGuestPlaceholderTimers();
-  const runtime = createTelegramGuestPlaceholderRuntime({
+  const runtime = createBaleGuestPlaceholderRuntime({
     editGuestInlineMessage: async () => {},
     setTimer: timers.setTimer,
     clearTimer: timers.clearTimer,
@@ -1609,12 +1609,12 @@ test("Guest placeholder stopAll cancels every pending loop", async () => {
 });
 
 test("Markdown fences open on three markers and close only on a long-enough matching run", () => {
-  assert.equal(parseTelegramMarkdownFenceOpening("plain"), undefined);
-  assert.equal(parseTelegramMarkdownFenceOpening("    ```"), undefined);
-  const fence = parseTelegramMarkdownFenceOpening("  ````ts");
+  assert.equal(parseBaleMarkdownFenceOpening("plain"), undefined);
+  assert.equal(parseBaleMarkdownFenceOpening("    ```"), undefined);
+  const fence = parseBaleMarkdownFenceOpening("  ````ts");
   assert.deepEqual(fence, { marker: "`", length: 4 });
-  assert.equal(isTelegramMarkdownFenceClosing("```", fence!), false);
-  assert.equal(isTelegramMarkdownFenceClosing("~~~~", fence!), false);
-  assert.equal(isTelegramMarkdownFenceClosing("````` ", fence!), true);
-  assert.equal(isTelegramMarkdownFenceClosing("```` code", fence!), false);
+  assert.equal(isBaleMarkdownFenceClosing("```", fence!), false);
+  assert.equal(isBaleMarkdownFenceClosing("~~~~", fence!), false);
+  assert.equal(isBaleMarkdownFenceClosing("````` ", fence!), true);
+  assert.equal(isBaleMarkdownFenceClosing("```` code", fence!), false);
 });

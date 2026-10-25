@@ -1,5 +1,5 @@
 /**
- * Regression tests for the Telegram time-injection runtime
+ * Regression tests for the Bale time-injection runtime
  * Covers injection mode gating, interval bookkeeping per chat, and timezone formatting
  */
 
@@ -7,16 +7,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  resolveTelegramTimeConfig,
-  type ResolvedTelegramTimeConfig,
+  resolveBaleTimeConfig,
+  type ResolvedBaleTimeConfig,
 } from "../lib/config.ts";
 import {
   createTimeInjectionRuntime,
-  formatTelegramTimeInjectionLine,
+  formatBaleTimeInjectionLine,
 } from "../lib/time-injection.ts";
 
-function makeRuntime(config: Partial<ResolvedTelegramTimeConfig>) {
-  const resolved: ResolvedTelegramTimeConfig = {
+function makeRuntime(config: Partial<ResolvedBaleTimeConfig>) {
+  const resolved: ResolvedBaleTimeConfig = {
     injectionMode: config.injectionMode ?? "hidden",
     interval: config.interval ?? 60 * 60 * 1000,
     timezone: config.timezone ?? "UTC",
@@ -25,7 +25,7 @@ function makeRuntime(config: Partial<ResolvedTelegramTimeConfig>) {
 }
 
 test("Time config resolves defaults when keys are missing", () => {
-  const resolved = resolveTelegramTimeConfig(undefined);
+  const resolved = resolveBaleTimeConfig(undefined);
   assert.equal(resolved.injectionMode, "interval");
   assert.equal(resolved.interval, 60 * 60 * 1000);
   assert.equal(typeof resolved.timezone, "string");
@@ -33,12 +33,12 @@ test("Time config resolves defaults when keys are missing", () => {
 });
 
 test("Time config rejects invalid assistant time injection mode", () => {
-  const resolved = resolveTelegramTimeConfig(undefined, "off" as never);
+  const resolved = resolveBaleTimeConfig(undefined, "off" as never);
   assert.equal(resolved.injectionMode, "hidden");
 });
 
 test("Time config rejects non-positive interval", () => {
-  const resolved = resolveTelegramTimeConfig({ interval: 0 }, "interval");
+  const resolved = resolveBaleTimeConfig({ interval: 0 }, "interval");
   assert.equal(resolved.interval, 60 * 60 * 1000);
   assert.equal(resolved.injectionMode, "interval");
 });
@@ -89,12 +89,12 @@ test("Time injection runtime tracks interval state per chatId", () => {
 test("Time injection formatting honours the requested timezone", () => {
   const now = new Date("2026-05-16T14:32:10Z");
   assert.equal(
-    formatTelegramTimeInjectionLine(now, "UTC"),
+    formatBaleTimeInjectionLine(now, "UTC"),
     "2026-05-16 14:32:10 UTC",
   );
   // Europe/Berlin is UTC+2 in May (CEST)
   assert.equal(
-    formatTelegramTimeInjectionLine(now, "Europe/Berlin"),
+    formatBaleTimeInjectionLine(now, "Europe/Berlin"),
     "2026-05-16 16:32:10 Europe/Berlin",
   );
 });

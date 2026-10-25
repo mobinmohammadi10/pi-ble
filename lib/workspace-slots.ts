@@ -1,34 +1,34 @@
 /**
  * Workspace slot allocation policy
- * Zones: telegram, workspace identity
+ * Zones: bale, workspace identity
  * Owns bounded profile-wide letter selection and inactivity ordering.
- * Excludes liveness discovery, persistence, routing, and Telegram deletion;
+ * Excludes liveness discovery, persistence, routing, and Bale deletion;
  * a selection is a proposal, never authority to retire a binding.
  */
 
-export const TELEGRAM_WORKSPACE_SLOTS = "abcdefghijklmnopqrstuvwxyz";
+export const BALE_WORKSPACE_SLOTS = "abcdefghijklmnopqrstuvwxyz";
 
-export class TelegramWorkspaceSlotUnavailableError extends Error {
+export class BaleWorkspaceSlotUnavailableError extends Error {
   constructor() {
-    super("Telegram Workspace slot reservation is unavailable.");
-    this.name = "TelegramWorkspaceSlotUnavailableError";
+    super("Bale Workspace slot reservation is unavailable.");
+    this.name = "BaleWorkspaceSlotUnavailableError";
   }
 }
 
-export interface TelegramWorkspaceSlotOccupancy {
+export interface BaleWorkspaceSlotOccupancy {
   bindingKey: string;
   slot: string;
   inactiveSinceMs?: number;
   protection: "eligible" | "protected" | "unknown";
 }
 
-export type TelegramWorkspaceSlotAllocation =
+export type BaleWorkspaceSlotAllocation =
   | { kind: "free"; slot: string }
-  | { kind: "reclaim"; candidate: TelegramWorkspaceSlotOccupancy }
+  | { kind: "reclaim"; candidate: BaleWorkspaceSlotOccupancy }
   | { kind: "blocked"; reason: "invalid-state" | "protected-capacity" };
 
 /** A binding whose letter may be reassigned without touching its Thread, journals or accepted work. */
-export interface TelegramWorkspaceReusableSlot {
+export interface BaleWorkspaceReusableSlot {
   bindingKey: string;
   /** Uppercase display letter currently held by the binding. */
   slot: string;
@@ -44,9 +44,9 @@ export interface TelegramWorkspaceReusableSlot {
  * ignores accepted-work protection because reuse deletes nothing.
  * Returns undefined for an empty or malformed candidate set.
  */
-export function selectTelegramWorkspaceReusableSlot(
-  candidates: readonly TelegramWorkspaceReusableSlot[],
-): TelegramWorkspaceReusableSlot | undefined {
+export function selectBaleWorkspaceReusableSlot(
+  candidates: readonly BaleWorkspaceReusableSlot[],
+): BaleWorkspaceReusableSlot | undefined {
   const slots = new Set<string>();
   const keys = new Set<string>();
   for (const candidate of candidates) {
@@ -76,7 +76,7 @@ function isSlot(slot: string): boolean {
 }
 
 function isValidSnapshot(
-  bindings: readonly TelegramWorkspaceSlotOccupancy[],
+  bindings: readonly BaleWorkspaceSlotOccupancy[],
   reservedSlots: readonly string[],
   nowMs: number,
 ): boolean {
@@ -98,10 +98,10 @@ function isValidSnapshot(
 }
 
 function eligibleByInactivity(
-  bindings: readonly TelegramWorkspaceSlotOccupancy[],
+  bindings: readonly BaleWorkspaceSlotOccupancy[],
   reservedSlots: readonly string[],
   nowMs: number,
-): TelegramWorkspaceSlotOccupancy[] {
+): BaleWorkspaceSlotOccupancy[] {
   const reserved = new Set(reservedSlots);
   return bindings
     .filter(
@@ -121,11 +121,11 @@ function eligibleByInactivity(
 }
 
 /** Caller must recheck exact ownership and protected work before retirement. */
-export function planTelegramWorkspaceSlotAllocation(input: {
-  bindings: readonly TelegramWorkspaceSlotOccupancy[];
+export function planBaleWorkspaceSlotAllocation(input: {
+  bindings: readonly BaleWorkspaceSlotOccupancy[];
   reservedSlots: readonly string[];
   nowMs: number;
-}): TelegramWorkspaceSlotAllocation {
+}): BaleWorkspaceSlotAllocation {
   const { bindings, reservedSlots, nowMs } = input;
   if (!isValidSnapshot(bindings, reservedSlots, nowMs)) {
     return { kind: "blocked", reason: "invalid-state" };
@@ -134,7 +134,7 @@ export function planTelegramWorkspaceSlotAllocation(input: {
     ...bindings.map((binding) => binding.slot),
     ...reservedSlots,
   ]);
-  for (const slot of TELEGRAM_WORKSPACE_SLOTS) {
+  for (const slot of BALE_WORKSPACE_SLOTS) {
     if (!occupied.has(slot)) return { kind: "free", slot };
   }
   const candidate = eligibleByInactivity(bindings, reservedSlots, nowMs)[0];

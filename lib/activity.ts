@@ -1,39 +1,39 @@
 /**
- * Telegram activity lifecycle normalization and extension dispatch
+ * Bale activity lifecycle normalization and extension dispatch
  * Zones: pi agent lifecycle, extension API, operational delivery
- * Owns stable handler registration, evidence-based activity/source identity, assistant segment and reasoning normalization, ordered public-output projection, executed-tool and compaction events, isolated non-blocking queues, shutdown fencing, diagnostics, and fresh delivery contexts; excludes Pi hook wiring, Telegram rendering implementation, raw transport clients, and consumer-extension behavior
+ * Owns stable handler registration, evidence-based activity/source identity, assistant segment and reasoning normalization, ordered public-output projection, executed-tool and compaction events, isolated non-blocking queues, shutdown fencing, diagnostics, and fresh delivery contexts; excludes Pi hook wiring, Bale rendering implementation, raw transport clients, and consumer-extension behavior
  */
 
 import {
-  deleteTelegramView,
-  editTelegramView,
-  sendTelegramChatAction,
-  sendTelegramView,
-  type TelegramDeliveryChatAction,
-  type TelegramDeliveryHandle,
-  type TelegramDeliveryResult,
-  type TelegramDeliveryScope,
-  type TelegramDeliveryTarget,
-  type TelegramDeliveryView,
+  deleteBaleView,
+  editBaleView,
+  sendBaleChatAction,
+  sendBaleView,
+  type BaleDeliveryChatAction,
+  type BaleDeliveryHandle,
+  type BaleDeliveryResult,
+  type BaleDeliveryScope,
+  type BaleDeliveryTarget,
+  type BaleDeliveryView,
 } from "./delivery.ts";
 
-const TELEGRAM_ACTIVITY_REGISTRY_KEY = "__piTelegramActivityRegistry__";
+const BALE_ACTIVITY_REGISTRY_KEY = "__piBaleActivityRegistry__";
 
-export type TelegramActivitySource =
-  "telegram" | "local" | "autonomous" | "unknown";
+export type BaleActivitySource =
+  "bale" | "local" | "autonomous" | "unknown";
 
-export type TelegramActivityTarget = Readonly<TelegramDeliveryTarget>;
+export type BaleActivityTarget = Readonly<BaleDeliveryTarget>;
 
-export interface TelegramActivityEnvelope {
+export interface BaleActivityEnvelope {
   activityId: string;
   sequence: number;
-  source: TelegramActivitySource;
-  target?: TelegramActivityTarget;
+  source: BaleActivitySource;
+  target?: BaleActivityTarget;
   replyToMessageId?: number;
   timestamp: number;
 }
 
-export type TelegramActivityPayload =
+export type BaleActivityPayload =
   | { type: "agent-start" }
   | {
       type: "assistant-text-delta";
@@ -92,81 +92,81 @@ export type TelegramActivityPayload =
   | { type: "agent-end" }
   | { type: "agent-settled" };
 
-export type TelegramActivityEvent = TelegramActivityEnvelope &
-  TelegramActivityPayload;
+export type BaleActivityEvent = BaleActivityEnvelope &
+  BaleActivityPayload;
 
-export type TelegramAssistantSegmentEvent = TelegramActivityEnvelope &
-  Extract<TelegramActivityPayload, { type: "assistant-segment" }>;
+export type BaleAssistantSegmentEvent = BaleActivityEnvelope &
+  Extract<BaleActivityPayload, { type: "assistant-segment" }>;
 
-export interface TelegramActivityContext {
+export interface BaleActivityContext {
   activityId: string;
   sequence: number;
-  source: TelegramActivitySource;
-  defaultScope: TelegramDeliveryScope;
+  source: BaleActivitySource;
+  defaultScope: BaleDeliveryScope;
   send: (
-    view: TelegramDeliveryView,
+    view: BaleDeliveryView,
     options?: {
-      scope?: TelegramDeliveryScope;
+      scope?: BaleDeliveryScope;
       replyToMessageId?: number;
     },
-  ) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+  ) => Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
   edit: (
-    handle: TelegramDeliveryHandle,
-    view: TelegramDeliveryView,
-  ) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+    handle: BaleDeliveryHandle,
+    view: BaleDeliveryView,
+  ) => Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
   delete: (
-    handle: TelegramDeliveryHandle,
-  ) => Promise<TelegramDeliveryResult<void>>;
+    handle: BaleDeliveryHandle,
+  ) => Promise<BaleDeliveryResult<void>>;
   chatAction: (
-    action: TelegramDeliveryChatAction,
-    options?: { scope?: TelegramDeliveryScope },
-  ) => Promise<TelegramDeliveryResult<void>>;
+    action: BaleDeliveryChatAction,
+    options?: { scope?: BaleDeliveryScope },
+  ) => Promise<BaleDeliveryResult<void>>;
 }
 
-export interface TelegramActivityHandlerRegistration {
+export interface BaleActivityHandlerRegistration {
   id: string;
   order?: number;
   handle: (
-    event: TelegramActivityEvent,
-    ctx: TelegramActivityContext,
+    event: BaleActivityEvent,
+    ctx: BaleActivityContext,
   ) => void | Promise<void>;
 }
 
-interface RegisteredTelegramActivityHandler extends TelegramActivityHandlerRegistration {
+interface RegisteredBaleActivityHandler extends BaleActivityHandlerRegistration {
   id: string;
   order: number;
 }
 
-interface TelegramActivityRegistry {
-  handlers: Map<string, RegisteredTelegramActivityHandler>;
+interface BaleActivityRegistry {
+  handlers: Map<string, RegisteredBaleActivityHandler>;
 }
 
-function getOrCreateTelegramActivityRegistry(): TelegramActivityRegistry {
+function getOrCreateBaleActivityRegistry(): BaleActivityRegistry {
   const globals = globalThis as Record<string, unknown>;
-  const existing = globals[TELEGRAM_ACTIVITY_REGISTRY_KEY];
+  const existing = globals[BALE_ACTIVITY_REGISTRY_KEY];
   if (
     existing &&
     typeof existing === "object" &&
     "handlers" in existing &&
     existing.handlers instanceof Map
   ) {
-    return existing as TelegramActivityRegistry;
+    return existing as BaleActivityRegistry;
   }
-  const registry: TelegramActivityRegistry = { handlers: new Map() };
-  globals[TELEGRAM_ACTIVITY_REGISTRY_KEY] = registry;
+  const registry: BaleActivityRegistry = { handlers: new Map() };
+  globals[BALE_ACTIVITY_REGISTRY_KEY] = registry;
   return registry;
 }
 
-export function registerTelegramActivityHandler(
-  registration: TelegramActivityHandlerRegistration,
+export function registerBaleActivityHandler(
+  registration: BaleActivityHandlerRegistration,
 ): () => void {
   const id = registration.id.trim();
-  if (!id) throw new Error("Telegram activity handler id is required.");
-  const registry = getOrCreateTelegramActivityRegistry();
+  if (!id) throw new Error("Bale activity handler id is required.");
+  const registry = getOrCreateBaleActivityRegistry();
   if (registry.handlers.has(id)) {
-    throw new Error(`Telegram activity handler is already registered: ${id}`);
+    throw new Error(`Bale activity handler is already registered: ${id}`);
   }
-  const handler: RegisteredTelegramActivityHandler = {
+  const handler: RegisteredBaleActivityHandler = {
     ...registration,
     id,
     order: registration.order ?? 0,
@@ -178,21 +178,21 @@ export function registerTelegramActivityHandler(
 }
 
 /** @internal */
-export function clearTelegramActivityHandlers(): void {
-  getOrCreateTelegramActivityRegistry().handlers.clear();
+export function clearBaleActivityHandlers(): void {
+  getOrCreateBaleActivityRegistry().handlers.clear();
 }
 
-function getTelegramActivityHandlers(): RegisteredTelegramActivityHandler[] {
+function getBaleActivityHandlers(): RegisteredBaleActivityHandler[] {
   return Array.from(
-    getOrCreateTelegramActivityRegistry().handlers.values(),
+    getOrCreateBaleActivityRegistry().handlers.values(),
   ).sort(function (left, right) {
     return left.order - right.order || left.id.localeCompare(right.id);
   });
 }
 
 function cloneActivityTarget(
-  target: TelegramActivityTarget,
-): TelegramActivityTarget {
+  target: BaleActivityTarget,
+): BaleActivityTarget {
   return Object.freeze(
     target.threadId === undefined
       ? { chatId: target.chatId }
@@ -200,20 +200,20 @@ function cloneActivityTarget(
   );
 }
 
-function createTelegramActivityContext(
-  event: TelegramActivityEvent,
+function createBaleActivityContext(
+  event: BaleActivityEvent,
   isActive: () => boolean,
-): TelegramActivityContext {
-  const defaultScope: TelegramDeliveryScope = event.target
+): BaleActivityContext {
+  const defaultScope: BaleDeliveryScope = event.target
     ? { kind: "target", target: cloneActivityTarget(event.target) }
-    : event.source === "telegram"
+    : event.source === "bale"
       ? { kind: "active-turn" }
       : { kind: "instance" };
-  const inactive = <T>(): Promise<TelegramDeliveryResult<T>> =>
+  const inactive = <T>(): Promise<BaleDeliveryResult<T>> =>
     Promise.resolve({
       ok: false,
       reason: "runtime-unavailable",
-      message: "Telegram activity context belongs to an inactive session.",
+      message: "Bale activity context belongs to an inactive session.",
     });
   return {
     activityId: event.activityId,
@@ -222,37 +222,37 @@ function createTelegramActivityContext(
     defaultScope,
     send(view, options) {
       if (!isActive()) return inactive();
-      return sendTelegramView(view, {
+      return sendBaleView(view, {
         scope: options?.scope ?? defaultScope,
         replyToMessageId: options?.replyToMessageId,
       });
     },
     edit(handle, view) {
-      return isActive() ? editTelegramView(handle, view) : inactive();
+      return isActive() ? editBaleView(handle, view) : inactive();
     },
     delete(handle) {
-      return isActive() ? deleteTelegramView(handle) : inactive();
+      return isActive() ? deleteBaleView(handle) : inactive();
     },
     chatAction(action, options) {
       if (!isActive()) return inactive();
-      return sendTelegramChatAction(action, {
+      return sendBaleChatAction(action, {
         scope: options?.scope ?? defaultScope,
       });
     },
   };
 }
 
-interface TelegramActivityHandlerQueue {
+interface BaleActivityHandlerQueue {
   notifyDrained?: () => void;
-  registration: RegisteredTelegramActivityHandler;
-  events: TelegramActivityEvent[];
+  registration: RegisteredBaleActivityHandler;
+  events: BaleActivityEvent[];
   running: boolean;
   active: boolean;
 }
 
 function canCoalesceActivityEvents(
-  previous: TelegramActivityEvent,
-  next: TelegramActivityEvent,
+  previous: BaleActivityEvent,
+  next: BaleActivityEvent,
 ): boolean {
   if (previous.activityId !== next.activityId || previous.type !== next.type) {
     return false;
@@ -273,9 +273,9 @@ function canCoalesceActivityEvents(
 }
 
 function coalesceActivityEvents(
-  previous: TelegramActivityEvent,
-  next: TelegramActivityEvent,
-): TelegramActivityEvent {
+  previous: BaleActivityEvent,
+  next: BaleActivityEvent,
+): BaleActivityEvent {
   if (
     previous.type === "assistant-text-delta" &&
     next.type === "assistant-text-delta"
@@ -302,27 +302,27 @@ function captureActivityDrainObserver(capture?: () => (() => void) | undefined):
 }
 
 /** @internal */
-export interface TelegramActivityDispatcher {
+export interface BaleActivityDispatcher {
   hasPending?: () => boolean;
-  dispatch: (event: TelegramActivityEvent) => void;
+  dispatch: (event: BaleActivityEvent) => void;
   stop: () => void;
 }
 
 /** @internal */
-export function createTelegramActivityDispatcher(
+export function createBaleActivityDispatcher(
   deps: {
     captureDrain?: () => (() => void) | undefined;
     recordFailure?: (
       handlerId: string,
-      event: TelegramActivityEvent,
+      event: BaleActivityEvent,
       error: unknown,
     ) => void;
   } = {},
-): TelegramActivityDispatcher {
-  const queues = new Map<string, TelegramActivityHandlerQueue>();
+): BaleActivityDispatcher {
+  const queues = new Map<string, BaleActivityHandlerQueue>();
   let stopped = false;
   const hasPending = () => Array.from(queues.values()).some(queue => queue.active && (queue.running || queue.events.length > 0));
-  const drain = async (queue: TelegramActivityHandlerQueue): Promise<void> => {
+  const drain = async (queue: BaleActivityHandlerQueue): Promise<void> => {
     if (queue.running || !queue.active) return;
     queue.running = true;
     try {
@@ -330,7 +330,7 @@ export function createTelegramActivityDispatcher(
         const event = queue.events.shift();
         if (!event) break;
         if (
-          getOrCreateTelegramActivityRegistry().handlers.get(
+          getOrCreateBaleActivityRegistry().handlers.get(
             queue.registration.id,
           ) !== queue.registration
         ) {
@@ -341,12 +341,12 @@ export function createTelegramActivityDispatcher(
         try {
           await queue.registration.handle(
             event,
-            createTelegramActivityContext(
+            createBaleActivityContext(
               event,
               () =>
                 queue.active &&
                 !stopped &&
-                getOrCreateTelegramActivityRegistry().handlers.get(
+                getOrCreateBaleActivityRegistry().handlers.get(
                   queue.registration.id,
                 ) === queue.registration,
             ),
@@ -364,7 +364,7 @@ export function createTelegramActivityDispatcher(
     hasPending,
     dispatch(event) {
       if (stopped) return;
-      for (const registration of getTelegramActivityHandlers()) {
+      for (const registration of getBaleActivityHandlers()) {
         let queue = queues.get(registration.id);
         if (!queue || queue.registration !== registration) {
           queue = {
@@ -403,34 +403,34 @@ export function createTelegramActivityDispatcher(
 }
 
 /** @internal */
-export function createTelegramActivityBridgeRuntime(deps: {
+export function createBaleActivityBridgeRuntime(deps: {
   generation: string;
   captureDrain?: () => (() => void) | undefined;
-  observeEvent?: (event: TelegramActivityEvent) => void;
+  observeEvent?: (event: BaleActivityEvent) => void;
   recordFailure?: (
     handlerId: string,
-    event: TelegramActivityEvent,
+    event: BaleActivityEvent,
     error: unknown,
   ) => void;
   now?: () => number;
-}): TelegramActivityRuntime {
+}): BaleActivityRuntime {
   let generationSequence = 0;
-  let runtime: TelegramActivityRuntime | undefined;
-  const getRuntime = (): TelegramActivityRuntime | undefined => runtime;
+  let runtime: BaleActivityRuntime | undefined;
+  const getRuntime = (): BaleActivityRuntime | undefined => runtime;
   return {
     hasPending: () => getRuntime()?.hasPending?.(),
     onSessionStart() {
       runtime?.onSessionShutdown();
-      runtime = createTelegramActivityRuntime({
+      runtime = createBaleActivityRuntime({
         generation: `${deps.generation}:${++generationSequence}`,
-        dispatcher: createTelegramActivityDispatcher({
+        dispatcher: createBaleActivityDispatcher({
           captureDrain: deps.captureDrain,
           recordFailure: deps.recordFailure,
         }),
         observeEvent: deps.observeEvent,
         recordObserverFailure: deps.recordFailure
           ? (event, error) =>
-              deps.recordFailure!("@llblab/pi-telegram/proactive", event, error)
+              deps.recordFailure!("@llblab/pi-bale/proactive", event, error)
           : undefined,
         now: deps.now,
       });
@@ -484,10 +484,10 @@ export function createTelegramActivityBridgeRuntime(deps: {
   };
 }
 
-export type TelegramActivityInputSource =
+export type BaleActivityInputSource =
   "interactive" | "rpc" | "extension" | "unknown";
 
-export type TelegramAssistantStreamEvent =
+export type BaleAssistantStreamEvent =
   | { type: "start" }
   | { type: "text_start"; contentIndex: number }
   | { type: "text_delta"; contentIndex: number; delta: string }
@@ -502,15 +502,15 @@ export type TelegramAssistantStreamEvent =
   | { type: "error" };
 
 /** @internal */
-export interface TelegramActivityRuntime {
+export interface BaleActivityRuntime {
   hasPending?: () => boolean | undefined;
   onSessionStart?: () => void;
-  recordInputSource: (source: TelegramActivityInputSource) => void;
+  recordInputSource: (source: BaleActivityInputSource) => void;
   onAgentStart: (
-    activeTelegramTarget?: TelegramActivityTarget,
+    activeBaleTarget?: BaleActivityTarget,
     replyToMessageId?: number,
   ) => void;
-  onAssistantEvent: (event: TelegramAssistantStreamEvent) => void;
+  onAssistantEvent: (event: BaleAssistantStreamEvent) => void;
   onAssistantMessageEnd: (stopReason?: string) => void;
   onToolStart: (event: {
     toolCallId: string;
@@ -551,49 +551,49 @@ interface PendingAssistantSegment {
 }
 
 /** @internal */
-export function createTelegramActivityRuntime(deps: {
+export function createBaleActivityRuntime(deps: {
   generation: string;
-  dispatcher: TelegramActivityDispatcher;
-  observeEvent?: (event: TelegramActivityEvent) => void;
+  dispatcher: BaleActivityDispatcher;
+  observeEvent?: (event: BaleActivityEvent) => void;
   recordObserverFailure?: (
-    event: TelegramActivityEvent,
+    event: BaleActivityEvent,
     error: unknown,
   ) => void;
   now?: () => number;
-}): TelegramActivityRuntime {
+}): BaleActivityRuntime {
   const now = deps.now ?? Date.now;
   let nextActivityNumber = 0;
   let activityId: string | undefined;
-  let activitySource: TelegramActivitySource = "unknown";
-  let activityTarget: TelegramActivityTarget | undefined;
+  let activitySource: BaleActivitySource = "unknown";
+  let activityTarget: BaleActivityTarget | undefined;
   let activityReplyToMessageId: number | undefined;
   let sequence = 0;
-  let pendingInputSource: TelegramActivityInputSource = "unknown";
+  let pendingInputSource: BaleActivityInputSource = "unknown";
   let pendingAssistantSegment: PendingAssistantSegment | undefined;
   let compactionInProgress = false;
   let compactionOwnedActivity = false;
   let uiPromptInProgress = false;
   const ensureActivity = (
-    activeTelegramTarget?: TelegramActivityTarget,
+    activeBaleTarget?: BaleActivityTarget,
   ): string => {
     if (activityId) return activityId;
     nextActivityNumber += 1;
     activityId = `${deps.generation}:${nextActivityNumber}`;
-    activitySource = activeTelegramTarget
-      ? "telegram"
+    activitySource = activeBaleTarget
+      ? "bale"
       : pendingInputSource === "interactive" || pendingInputSource === "rpc"
         ? "local"
         : pendingInputSource === "extension"
           ? "autonomous"
           : "unknown";
-    activityTarget = activeTelegramTarget
-      ? cloneActivityTarget(activeTelegramTarget)
+    activityTarget = activeBaleTarget
+      ? cloneActivityTarget(activeBaleTarget)
       : undefined;
     sequence = 0;
     pendingInputSource = "unknown";
     return activityId;
   };
-  const emit = (event: TelegramActivityPayload): void => {
+  const emit = (event: BaleActivityPayload): void => {
     const currentActivityId = ensureActivity();
     sequence += 1;
     const normalizedEvent = {
@@ -606,7 +606,7 @@ export function createTelegramActivityRuntime(deps: {
         ? { replyToMessageId: activityReplyToMessageId }
         : {}),
       timestamp: now(),
-    } as TelegramActivityEvent;
+    } as BaleActivityEvent;
     try {
       deps.observeEvent?.(normalizedEvent);
     } catch (error) {
@@ -650,11 +650,11 @@ export function createTelegramActivityRuntime(deps: {
     recordInputSource(source) {
       pendingInputSource = source;
     },
-    onAgentStart(activeTelegramTarget, replyToMessageId) {
+    onAgentStart(activeBaleTarget, replyToMessageId) {
       abandonCompaction();
-      ensureActivity(activeTelegramTarget);
+      ensureActivity(activeBaleTarget);
       activityReplyToMessageId =
-        activitySource === "telegram" ? replyToMessageId : undefined;
+        activitySource === "bale" ? replyToMessageId : undefined;
       emit({ type: "agent-start" });
     },
     onAssistantEvent(event) {
@@ -765,34 +765,34 @@ export function createTelegramActivityRuntime(deps: {
 
 // --- Ordered Bridge-Owned Publication ---
 
-export interface TelegramActivityPublicationReservation {
+export interface BaleActivityPublicationReservation {
   publish: (task: () => Promise<void>) => Promise<void>;
   cancel: () => void;
 }
 
-export interface TelegramActivityPublicationWork {
+export interface BaleActivityPublicationWork {
   settle(outcome: "settled" | "unconfirmed"): void;
 }
 
-export interface TelegramActivityPublicationRuntime {
+export interface BaleActivityPublicationRuntime {
   enqueue: (task: () => Promise<void>) => Promise<void>;
-  reserve: () => TelegramActivityPublicationReservation;
+  reserve: () => BaleActivityPublicationReservation;
   hasPending: () => boolean;
   /** Observation only; detached work never occupies the ordered publication tail. */
-  beginWork: () => TelegramActivityPublicationWork;
+  beginWork: () => BaleActivityPublicationWork;
   hasUnconfirmed: () => boolean;
   reset: () => void;
 }
 
-export function createTelegramActivityPublicationRuntime(deps: {
+export function createBaleActivityPublicationRuntime(deps: {
   captureDrain?: () => (() => void) | undefined;
-} = {}): TelegramActivityPublicationRuntime {
+} = {}): BaleActivityPublicationRuntime {
   let generation = 0;
   let tail = Promise.resolve();
   let outstanding = 0,
     unconfirmed = false;
   const pending = new Set<() => void>();
-  const reserve = (): TelegramActivityPublicationReservation => {
+  const reserve = (): BaleActivityPublicationReservation => {
     const admittedGeneration = generation;
     const notifyDrained = captureActivityDrainObserver(deps.captureDrain);
     let state: "pending" | "published" | "cancelled" = "pending";
@@ -865,47 +865,47 @@ export function createTelegramActivityPublicationRuntime(deps: {
 
 // --- Public Assistant Output Projection ---
 
-export interface TelegramAssistantOutputRuntime {
+export interface BaleAssistantOutputRuntime {
   start: () => void;
   beginTurn: () => void;
-  accept: (event: TelegramAssistantSegmentEvent) => void;
-  hasAdmittedTelegramIntermediate: (text: string) => boolean;
+  accept: (event: BaleAssistantSegmentEvent) => void;
+  hasAdmittedBaleIntermediate: (text: string) => boolean;
   waitForIdle: () => Promise<void>;
   stop: () => void;
 }
 
-export interface TelegramAssistantOutputPreparation {
+export interface BaleAssistantOutputPreparation {
   wait: () => Promise<void>;
   settle: () => void;
 }
 
-export function createTelegramAssistantOutputRuntime<
+export function createBaleAssistantOutputRuntime<
   TAuthority = undefined,
 >(deps: {
   prepareSend?: (
-    event: TelegramAssistantSegmentEvent,
-  ) => TelegramAssistantOutputPreparation | undefined;
-  enqueue?: TelegramActivityPublicationRuntime["enqueue"];
+    event: BaleAssistantSegmentEvent,
+  ) => BaleAssistantOutputPreparation | undefined;
+  enqueue?: BaleActivityPublicationRuntime["enqueue"];
   captureAuthority?: () => TAuthority;
   isAuthorityActive?: (authority: TAuthority) => boolean;
-  canDeliver: (event: TelegramAssistantSegmentEvent) => boolean;
+  canDeliver: (event: BaleAssistantSegmentEvent) => boolean;
   send: (
-    event: TelegramAssistantSegmentEvent,
+    event: BaleAssistantSegmentEvent,
     authority: TAuthority,
     isAuthorityActive: () => boolean,
   ) => Promise<void>;
   recordFailure?: (
-    event: TelegramAssistantSegmentEvent,
+    event: BaleAssistantSegmentEvent,
     error: unknown,
   ) => void;
-}): TelegramAssistantOutputRuntime {
+}): BaleAssistantOutputRuntime {
   let generation = 0;
   let running = false;
   let tail: Promise<void> = Promise.resolve();
   const admitted = new Set<string>();
-  const admittedTelegramIntermediateText = new Set<string>();
-  const isEligibleEvent = (event: TelegramAssistantSegmentEvent): boolean =>
-    (event.source === "telegram" && event.placement === "intermediate") ||
+  const admittedBaleIntermediateText = new Set<string>();
+  const isEligibleEvent = (event: BaleAssistantSegmentEvent): boolean =>
+    (event.source === "bale" && event.placement === "intermediate") ||
     event.source === "local" ||
     event.source === "autonomous" ||
     event.source === "unknown";
@@ -915,19 +915,19 @@ export function createTelegramAssistantOutputRuntime<
       generation += 1;
       running = true;
       admitted.clear();
-      admittedTelegramIntermediateText.clear();
+      admittedBaleIntermediateText.clear();
       tail = Promise.resolve();
     },
     beginTurn() {
-      admittedTelegramIntermediateText.clear();
+      admittedBaleIntermediateText.clear();
     },
     accept(event) {
       if (!running || !isEligibleEvent(event) || !event.text.trim()) return;
       const key = `${event.activityId}:${event.sequence}`;
       if (admitted.has(key)) return;
       admitted.add(key);
-      if (event.source === "telegram" && event.placement === "intermediate") {
-        admittedTelegramIntermediateText.add(event.text.trim());
+      if (event.source === "bale" && event.placement === "intermediate") {
+        admittedBaleIntermediateText.add(event.text.trim());
       }
       const admittedGeneration = generation;
       const admittedAuthority = deps.captureAuthority?.();
@@ -955,8 +955,8 @@ export function createTelegramAssistantOutputRuntime<
         }
       }).finally(() => preparation?.settle());
     },
-    hasAdmittedTelegramIntermediate(text) {
-      return admittedTelegramIntermediateText.has(text.trim());
+    hasAdmittedBaleIntermediate(text) {
+      return admittedBaleIntermediateText.has(text.trim());
     },
     waitForIdle() {
       return tail;
@@ -965,7 +965,7 @@ export function createTelegramAssistantOutputRuntime<
       generation += 1;
       running = false;
       admitted.clear();
-      admittedTelegramIntermediateText.clear();
+      admittedBaleIntermediateText.clear();
     },
   };
 }

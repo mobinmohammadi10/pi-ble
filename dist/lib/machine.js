@@ -4,7 +4,7 @@
  * Owns committing a pure transition's next state, running the effects it returns and waking state waiters
  * Knows nothing about the machines it drives: their state, events, effects, timers and transports stay with each domain
  */
-export function createTelegramMachineRunner(options) {
+export function createBaleMachineRunner(options) {
     let state = options.initial;
     const waiters = new Set();
     return {

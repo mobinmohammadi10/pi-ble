@@ -3,6 +3,8 @@ name: generated-control-surface
 description: Proactively generate truthful prompt-button controls; every active surface emits useful buttons with semantic emoji labels, while stable deterministic loops route to Generative Apps.
 ---
 
+> Bale port: only the supported subset in [Bale compatibility](../../docs/bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
 # Generated Control Surface
 
 Compile a temporary interface from current evidence, available capabilities, and user intent:

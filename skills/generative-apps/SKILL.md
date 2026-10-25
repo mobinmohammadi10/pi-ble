@@ -1,7 +1,9 @@
 ---
 name: generative-apps
-description: Design, author, review, install, replace, invoke, or debug reusable Generative Apps that combine generated button interfaces, deterministic bound methods, and optional model-mediated prompts. Use for standalone applications and bounded view/controller adapters rendered through pi-telegram; prefer Generated Control Surface when no reusable deterministic program is earned.
+description: Design, author, review, install, replace, invoke, or debug reusable Generative Apps that combine generated button interfaces, deterministic bound methods, and optional model-mediated prompts. Use for standalone applications and bounded view/controller adapters rendered through pi-bale; prefer Generated Control Surface when no reusable deterministic program is earned.
 ---
+
+> Bale port: only the supported subset in [Bale compatibility](../../docs/bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
 
 # Generative Apps
 
@@ -20,7 +22,7 @@ bound method  → deterministic local transition
 ordinary prompt → model interpretation, explanation, teaching, or adaptation
 ```
 
-This is broader than one Telegram implementation. Telegram is the first renderer; a future TUI or web renderer may reuse the concept once a second implementation proves the common contract. Keep renderer-specific wire and lifecycle details with the owning runtime.
+This is broader than one Bale implementation. Bale is the first renderer; a future TUI or web renderer may reuse the concept once a second implementation proves the common contract. Keep renderer-specific wire and lifecycle details with the owning runtime.
 
 Generative Apps complement `generated-control-surface`:
 
@@ -29,7 +31,7 @@ Generated Control Surface → current context → model → one ephemeral surfac
 Generative App             → model → reusable program → many evolving surfaces
 ```
 
-Both Skills use the same logical button matrix and `label + prompt` interaction model. An app may place groups beside their related content using the transport's in-body button blocks or keep whole-view controls in the footer; placement does not change binding, disabled state, or method authority. The Telegram runtime owns its full JSON/CML notation and callback routing; this Skill owns reusable program judgment, while `generated-control-surface` owns ephemeral agent-authored composition. Shared rendering needs no third button Skill and does not collapse those responsibilities.
+Both Skills use the same logical button matrix and `label + prompt` interaction model. An app may place groups beside their related content using the transport's in-body button blocks or keep whole-view controls in the footer; placement does not change binding, disabled state, or method authority. The Bale runtime owns its full JSON/CML notation and callback routing; this Skill owns reusable program judgment, while `generated-control-surface` owns ephemeral agent-authored composition. Shared rendering needs no third button Skill and does not collapse those responsibilities.
 
 An app may mix deterministic `app::method` controls and ordinary prompts in one view, including one control group. Compact and named cells may coexist under the shared transport grammar; neither representation nor placement creates another action plane. Compile only the stable transitions that benefit from inference bypass; keep explanation, interpretation, teaching, and adaptation on the model-mediated plane. When no reusable state or deterministic loop earns a script, load and use `generated-control-surface` instead.
 
@@ -47,7 +49,7 @@ This Skill owns agent operating judgment:
 
 This Skill also owns the transport-independent concept, vocabulary, application shapes, hybrid action model, and relationship to Generated Control Surface.
 
-[`../../docs/generative-apps.md`](../../docs/generative-apps.md) owns only the concrete `pi-telegram` runtime reference: Telegram wire syntax, managed layout, executable ABI, state timeline, generation/revision fencing, worker execution, locking, installation transactions, callback routing, lifecycle behavior, and current limitations. Do not duplicate those implementation details here.
+[`../../docs/generative-apps.md`](../../docs/generative-apps.md) owns only the concrete `pi-bale` runtime reference: Bale wire syntax, managed layout, executable ABI, state timeline, generation/revision fencing, worker execution, locking, installation transactions, callback routing, lifecycle behavior, and current limitations. Do not duplicate those implementation details here.
 
 ## When To Use
 
@@ -85,9 +87,9 @@ ordinary prompt          → model-mediated interpretation or explanation
 ```
 
 6. Review state fields, arguments, process calls, rendered values, secrets, destructive effects, and failure paths.
-7. Install with `telegram_bind({ app, script, argument })`.
+7. Install with `bale_bind({ app, script, argument })`.
 8. Replace the same logical app only with explicit `replace: true`; never create `-v2` identities merely to reload code.
-9. Invoke read-only diagnostics with `telegram_bind({ app, method, argument, display: false })` when agent-side evidence is needed.
+9. Invoke read-only diagnostics with `bale_bind({ app, method, argument, display: false })` when agent-side evidence is needed.
 10. Keep the maintained source with its capability owner; managed `genapps/` state is runtime installation, not source ownership.
 
 ## Safety Rules
@@ -97,7 +99,7 @@ ordinary prompt          → model-mediated interpretation or explanation
 - Keep credentials and unrelated private state out of source, state, output, and diagnostics.
 - Route consequences requiring contextual judgment through an ordinary model prompt.
 - Fail closed on unavailable owners, stale actions, malformed state, absent methods, process failures, or uncertain effects.
-- Treat `refreshAfterMs` validation, output-only `refresh`, scheduling after a successful hinted explicit `telegram_bind` delivery, same-handle rescheduling after a current-surface bound action, Delivery edit-failure classification, known unavailable-message invalidation with bounded classified diagnostics, session/runtime live-surface cancellation, and exact direct classic/leader/authenticated-follower target retention as implemented. The Bot API has no ordinary private-message deletion update; `deleted_business_messages` is limited to connected business accounts. Do not claim removal, voice output, proactive deletion-update invalidation, or other behavior still marked incomplete in the runtime document.
+- Treat `refreshAfterMs` validation, output-only `refresh`, scheduling after a successful hinted explicit `bale_bind` delivery, same-handle rescheduling after a current-surface bound action, Delivery edit-failure classification, known unavailable-message invalidation with bounded classified diagnostics, session/runtime live-surface cancellation, and exact direct classic/leader/authenticated-follower target retention as implemented. The Bot API has no ordinary private-message deletion update; `deleted_business_messages` is limited to connected business accounts. Do not claim removal, voice output, proactive deletion-update invalidation, or other behavior still marked incomplete in the runtime document.
 
 ## Validation
 

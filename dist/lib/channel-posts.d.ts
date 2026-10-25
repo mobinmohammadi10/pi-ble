@@ -1,41 +1,41 @@
 /**
- * Durable journal for Telegram channel posts authored by this agent path
- * Zones: telegram outbound, filesystem authority
+ * Durable journal for Bale channel posts authored by this agent path
+ * Zones: bale outbound, filesystem authority
  * Owns publication intent, outcome-unknown fencing, confirmed post identity, and bounded local listing
  */
 import type { ExtensionAPI } from "./pi.ts";
-export type TelegramChannelPostMediaKind = "photo" | "video";
-export interface TelegramChannelPostMediaIntent {
-    kind: TelegramChannelPostMediaKind;
+export type BaleChannelPostMediaKind = "photo" | "video";
+export interface BaleChannelPostMediaIntent {
+    kind: BaleChannelPostMediaKind;
     fileName: string;
     sizeBytes: number;
     sha256: string;
 }
 /** Safe, content-free local validation failure for channel media publication intent. */
-export declare class TelegramChannelPostValidationError extends Error {
+export declare class BaleChannelPostValidationError extends Error {
     constructor(message: string);
 }
-export declare function isTelegramChannelPostValidationError(error: unknown): error is TelegramChannelPostValidationError;
-export declare function resolveTelegramChannelPostMediaKind(path: string): TelegramChannelPostMediaKind | undefined;
-export declare function assertTelegramChannelPostMediaSize(kind: TelegramChannelPostMediaKind, sizeBytes: number): void;
-export declare function inspectTelegramChannelPostMedia(path: string): Promise<TelegramChannelPostMediaIntent>;
-export declare function getTelegramChannelPostCaptionLength(caption: string): number;
-export declare function assertTelegramChannelPostCaptionWithinLimit(caption: string): void;
+export declare function isBaleChannelPostValidationError(error: unknown): error is BaleChannelPostValidationError;
+export declare function resolveBaleChannelPostMediaKind(path: string): BaleChannelPostMediaKind | undefined;
+export declare function assertBaleChannelPostMediaSize(kind: BaleChannelPostMediaKind, sizeBytes: number): void;
+export declare function inspectBaleChannelPostMedia(path: string): Promise<BaleChannelPostMediaIntent>;
+export declare function getBaleChannelPostCaptionLength(caption: string): number;
+export declare function assertBaleChannelPostCaptionWithinLimit(caption: string): void;
 type ChannelPostJournalCode = "invalid" | "conflict" | "capacity" | "io";
-export declare class TelegramChannelPostJournalError extends Error {
+export declare class BaleChannelPostJournalError extends Error {
     readonly code: ChannelPostJournalCode;
     constructor(code: ChannelPostJournalCode, message: string, cause?: unknown);
 }
-export type TelegramChannelPostAddress = number | `@${string}`;
-interface TelegramChannelPostRecordBase {
+export type BaleChannelPostAddress = number | `@${string}`;
+interface BaleChannelPostRecordBase {
     operationId: string;
-    requestedChannel: TelegramChannelPostAddress;
+    requestedChannel: BaleChannelPostAddress;
     markdown: string;
-    media?: TelegramChannelPostMediaIntent;
+    media?: BaleChannelPostMediaIntent;
     createdAtMs: number;
     updatedAtMs: number;
 }
-interface TelegramPublishedChannelPostIdentity {
+interface BalePublishedChannelPostIdentity {
     issuedAtMs: number;
     publishedAtMs: number;
     channelId: number;
@@ -44,28 +44,28 @@ interface TelegramPublishedChannelPostIdentity {
     channelTitle?: string;
     lastMutationId?: string;
 }
-export type TelegramChannelPostRecord = TelegramChannelPostRecordBase & ({
+export type BaleChannelPostRecord = BaleChannelPostRecordBase & ({
     state: "prepared";
 } | {
     state: "outcome-unknown";
     issuedAtMs: number;
 } | ({
     state: "published";
-} & TelegramPublishedChannelPostIdentity) | ({
+} & BalePublishedChannelPostIdentity) | ({
     state: "edit-outcome-unknown";
     mutationId: string;
     attemptedMarkdown: string;
     mutationIssuedAtMs: number;
-} & TelegramPublishedChannelPostIdentity) | ({
+} & BalePublishedChannelPostIdentity) | ({
     state: "delete-outcome-unknown";
     mutationId: string;
     mutationIssuedAtMs: number;
-} & TelegramPublishedChannelPostIdentity) | ({
+} & BalePublishedChannelPostIdentity) | ({
     state: "deleted";
     mutationId: string;
     deletedAtMs: number;
-} & TelegramPublishedChannelPostIdentity));
-export interface TelegramChannelPostJournalStoreOptions {
+} & BalePublishedChannelPostIdentity));
+export interface BaleChannelPostJournalStoreOptions {
     path: string;
     runtimeDir?: string;
     profileName: string;
@@ -74,20 +74,20 @@ export interface TelegramChannelPostJournalStoreOptions {
     maxBytes?: number;
     getNowMs?: () => number;
 }
-export interface TelegramChannelPostJournalStore {
+export interface BaleChannelPostJournalStore {
     prepare(input: {
         operationId: string;
-        channel: TelegramChannelPostAddress;
+        channel: BaleChannelPostAddress;
         markdown: string;
-        media?: TelegramChannelPostMediaIntent;
+        media?: BaleChannelPostMediaIntent;
     }): {
         prepared: boolean;
-        record: TelegramChannelPostRecord;
+        record: BaleChannelPostRecord;
     };
-    get(operationId: string): TelegramChannelPostRecord | undefined;
+    get(operationId: string): BaleChannelPostRecord | undefined;
     beginPublication(operationId: string): {
         began: boolean;
-        record: TelegramChannelPostRecord;
+        record: BaleChannelPostRecord;
     };
     confirmPublished(input: {
         operationId: string;
@@ -97,7 +97,7 @@ export interface TelegramChannelPostJournalStore {
         channelTitle?: string;
     }): {
         confirmed: boolean;
-        record: TelegramChannelPostRecord;
+        record: BaleChannelPostRecord;
     };
     beginEdit(input: {
         operationId: string;
@@ -105,69 +105,69 @@ export interface TelegramChannelPostJournalStore {
         markdown: string;
     }): {
         began: boolean;
-        record: TelegramChannelPostRecord;
+        record: BaleChannelPostRecord;
     };
     confirmEdited(input: {
         operationId: string;
         mutationId: string;
     }): {
         confirmed: boolean;
-        record: TelegramChannelPostRecord;
+        record: BaleChannelPostRecord;
     };
     beginDelete(input: {
         operationId: string;
         mutationId: string;
     }): {
         began: boolean;
-        record: TelegramChannelPostRecord;
+        record: BaleChannelPostRecord;
     };
     confirmDeleted(input: {
         operationId: string;
         mutationId: string;
     }): {
         confirmed: boolean;
-        record: TelegramChannelPostRecord;
+        record: BaleChannelPostRecord;
     };
     list(input?: {
-        channel?: TelegramChannelPostAddress;
+        channel?: BaleChannelPostAddress;
         limit?: number;
-    }): TelegramChannelPostRecord[];
+    }): BaleChannelPostRecord[];
 }
-export declare function publishTelegramChannelPost(input: {
-    store: TelegramChannelPostJournalStore;
+export declare function publishBaleChannelPost(input: {
+    store: BaleChannelPostJournalStore;
     operationId: string;
-    channel: TelegramChannelPostAddress;
+    channel: BaleChannelPostAddress;
     markdown: string;
-    media?: TelegramChannelPostMediaIntent;
-    observeChannel(channel: TelegramChannelPostAddress): Promise<{
+    media?: BaleChannelPostMediaIntent;
+    observeChannel(channel: BaleChannelPostAddress): Promise<{
         id: number;
         type: string;
         username?: string;
         title?: string;
     }>;
-    send(channel: TelegramChannelPostAddress, markdown: string): Promise<{
+    send(channel: BaleChannelPostAddress, markdown: string): Promise<{
         messageId: number;
         chat: {
             id: number;
             type: string;
         };
     }>;
-}): Promise<TelegramChannelPostRecord>;
-export declare function registerTelegramChannelPostMutationTool(pi: ExtensionAPI, deps: {
+}): Promise<BaleChannelPostRecord>;
+export declare function registerBaleChannelPostMutationTool(pi: ExtensionAPI, deps: {
     mutate(input: {
         action: "edit" | "delete";
         operationId: string;
         mutationId: string;
         markdown?: string;
-    }): Promise<TelegramChannelPostRecord>;
+    }): Promise<BaleChannelPostRecord>;
 }): void;
-export declare function registerTelegramChannelPostListTool(pi: ExtensionAPI, deps: {
-    list: TelegramChannelPostJournalStore["list"];
+export declare function registerBaleChannelPostListTool(pi: ExtensionAPI, deps: {
+    list: BaleChannelPostJournalStore["list"];
 }): void;
 /** The profile's channel-post journal in the shared runtime directory, bound to the active bot token. */
-export declare function openTelegramChannelPostJournalStore(input: {
+export declare function openBaleChannelPostJournalStore(input: {
     profileName: string;
     botToken: string;
-}): TelegramChannelPostJournalStore;
-export declare function createTelegramChannelPostJournalStore(options: TelegramChannelPostJournalStoreOptions): TelegramChannelPostJournalStore;
+}): BaleChannelPostJournalStore;
+export declare function createBaleChannelPostJournalStore(options: BaleChannelPostJournalStoreOptions): BaleChannelPostJournalStore;
 export {};

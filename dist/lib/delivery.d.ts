@@ -1,19 +1,19 @@
 /**
- * Telegram target-aware operational delivery and logical message lifecycle
- * Zones: telegram delivery, extension API, runtime binding
- * Owns the public extension delivery contract, authorized scope resolution, operational rendering adapter, per-target serialization, chunk reconciliation, generation-fenced logical handles, and process-local runtime membrane; composes the established reply renderer with bus-aware Telegram API ports and excludes bot clients, Pi contexts, and consumer-extension policy
+ * Bale target-aware operational delivery and logical message lifecycle
+ * Zones: bale delivery, extension API, runtime binding
+ * Owns the public extension delivery contract, authorized scope resolution, operational rendering adapter, per-target serialization, chunk reconciliation, generation-fenced logical handles, and process-local runtime membrane; composes the established reply renderer with bus-aware Bale API ports and excludes bot clients, Pi contexts, and consumer-extension policy
  */
-import { type TelegramInlineKeyboardMarkup } from "./keyboard.ts";
-import { type TelegramTarget } from "./target.ts";
-import { type TelegramBridgeApiRuntime } from "./telegram-api.ts";
-export type TelegramDeliveryParseMode = "plain" | "html" | "markdown";
-export interface TelegramDeliveryView {
+import { type BaleInlineKeyboardMarkup } from "./keyboard.ts";
+import { type BaleTarget } from "./target.ts";
+import { type BaleBridgeApiRuntime } from "./bale-api.ts";
+export type BaleDeliveryParseMode = "plain" | "html" | "markdown";
+export interface BaleDeliveryView {
     text: string;
-    parseMode?: TelegramDeliveryParseMode;
-    replyMarkup?: TelegramInlineKeyboardMarkup;
+    parseMode?: BaleDeliveryParseMode;
+    replyMarkup?: BaleInlineKeyboardMarkup;
 }
-export type TelegramDeliveryTarget = TelegramTarget;
-export type TelegramDeliveryScope = {
+export type BaleDeliveryTarget = BaleTarget;
+export type BaleDeliveryScope = {
     kind: "active-turn";
 } | {
     kind: "instance";
@@ -21,145 +21,145 @@ export type TelegramDeliveryScope = {
     kind: "aggregate";
 } | {
     kind: "target";
-    target: TelegramDeliveryTarget;
+    target: BaleDeliveryTarget;
 };
-export interface TelegramDeliveryHandle {
-    readonly target: TelegramDeliveryTarget;
+export interface BaleDeliveryHandle {
+    readonly target: BaleDeliveryTarget;
     readonly messageIds: readonly number[];
     readonly generation: string;
 }
-export type TelegramDeliveryFailureReason = "runtime-unavailable" | "target-unavailable" | "target-unauthorized" | "stale-handle" | "invalid-view" | "commit-unknown" | "message-unavailable" | "rate-limited" | "transport-retryable" | "transport-failed";
-export type TelegramDeliveryResult<T> = {
+export type BaleDeliveryFailureReason = "runtime-unavailable" | "target-unavailable" | "target-unauthorized" | "stale-handle" | "invalid-view" | "commit-unknown" | "message-unavailable" | "rate-limited" | "transport-retryable" | "transport-failed";
+export type BaleDeliveryResult<T> = {
     ok: true;
     value: T;
 } | {
     ok: false;
-    reason: TelegramDeliveryFailureReason;
+    reason: BaleDeliveryFailureReason;
     message: string;
-    /** Exact Telegram flood-control delay when supplied by the API. */
+    /** Exact Bale flood-control delay when supplied by the API. */
     retryAfterMs?: number;
     /** Successfully materialized state that callers may edit or delete to recover. */
     partial?: T;
 };
-export interface SendTelegramViewOptions {
-    scope: TelegramDeliveryScope;
+export interface SendBaleViewOptions {
+    scope: BaleDeliveryScope;
     replyToMessageId?: number;
 }
-export type TelegramDeliveryChatAction = "typing" | "upload_document" | "upload_photo" | "record_voice";
+export type BaleDeliveryChatAction = "typing" | "upload_document" | "upload_photo" | "record_voice";
 /** @internal */
-export interface TelegramDeliveryRuntime {
+export interface BaleDeliveryRuntime {
     readonly generation: string;
-    hasPendingTarget?: (target: TelegramDeliveryTarget) => boolean;
+    hasPendingTarget?: (target: BaleDeliveryTarget) => boolean;
     shutdown: () => void;
-    sendView: (view: TelegramDeliveryView, options: SendTelegramViewOptions) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
-    editView: (handle: TelegramDeliveryHandle, view: TelegramDeliveryView) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
-    deleteView: (handle: TelegramDeliveryHandle) => Promise<TelegramDeliveryResult<void>>;
-    sendChatAction: (action: TelegramDeliveryChatAction, scope: TelegramDeliveryScope) => Promise<TelegramDeliveryResult<void>>;
+    sendView: (view: BaleDeliveryView, options: SendBaleViewOptions) => Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
+    editView: (handle: BaleDeliveryHandle, view: BaleDeliveryView) => Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
+    deleteView: (handle: BaleDeliveryHandle) => Promise<BaleDeliveryResult<void>>;
+    sendChatAction: (action: BaleDeliveryChatAction, scope: BaleDeliveryScope) => Promise<BaleDeliveryResult<void>>;
 }
 /** @internal */
-export interface TelegramDeliveryTargetResolverDeps {
-    getActiveTurnTarget: () => TelegramDeliveryTarget | undefined;
-    getInstanceTarget: () => TelegramDeliveryTarget | undefined;
-    getAggregateTarget: () => TelegramDeliveryTarget | undefined;
-    isExplicitTargetAuthorized: (target: TelegramDeliveryTarget) => boolean;
+export interface BaleDeliveryTargetResolverDeps {
+    getActiveTurnTarget: () => BaleDeliveryTarget | undefined;
+    getInstanceTarget: () => BaleDeliveryTarget | undefined;
+    getAggregateTarget: () => BaleDeliveryTarget | undefined;
+    isExplicitTargetAuthorized: (target: BaleDeliveryTarget) => boolean;
 }
 /** @internal */
-export interface TelegramDeliveryRenderedChunk {
+export interface BaleDeliveryRenderedChunk {
     text: string;
-    parseMode: TelegramDeliveryParseMode;
+    parseMode: BaleDeliveryParseMode;
 }
 /** @internal */
-export interface TelegramDeliveryTransportOptions {
+export interface BaleDeliveryTransportOptions {
     replyToMessageId?: number;
-    replyMarkup?: TelegramInlineKeyboardMarkup | null;
+    replyMarkup?: BaleInlineKeyboardMarkup | null;
 }
 /** @internal */
-export interface TelegramDeliveryRuntimeDeps extends TelegramDeliveryTargetResolverDeps {
+export interface BaleDeliveryRuntimeDeps extends BaleDeliveryTargetResolverDeps {
     generation: string;
     captureDrain?: () => (() => void) | undefined;
-    renderView: (view: TelegramDeliveryView) => readonly TelegramDeliveryRenderedChunk[];
-    sendChunk: (target: TelegramDeliveryTarget, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<number>;
-    editChunk: (target: TelegramDeliveryTarget, messageId: number, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<void>;
-    deleteMessage: (target: TelegramDeliveryTarget, messageId: number) => Promise<void>;
-    sendChatAction: (target: TelegramDeliveryTarget, action: TelegramDeliveryChatAction) => Promise<void>;
-    recordFailure?: (operation: "send" | "edit" | "delete" | "chat-action", error: unknown, target?: TelegramDeliveryTarget) => void;
+    renderView: (view: BaleDeliveryView) => readonly BaleDeliveryRenderedChunk[];
+    sendChunk: (target: BaleDeliveryTarget, chunk: BaleDeliveryRenderedChunk, options: BaleDeliveryTransportOptions) => Promise<number>;
+    editChunk: (target: BaleDeliveryTarget, messageId: number, chunk: BaleDeliveryRenderedChunk, options: BaleDeliveryTransportOptions) => Promise<void>;
+    deleteMessage: (target: BaleDeliveryTarget, messageId: number) => Promise<void>;
+    sendChatAction: (target: BaleDeliveryTarget, action: BaleDeliveryChatAction) => Promise<void>;
+    recordFailure?: (operation: "send" | "edit" | "delete" | "chat-action", error: unknown, target?: BaleDeliveryTarget) => void;
 }
 /** @internal */
-export interface TelegramBridgeDeliveryRuntimeDeps {
+export interface BaleBridgeDeliveryRuntimeDeps {
     generation: string;
     captureDrain?: () => (() => void) | undefined;
-    getTargetPolicyView: () => TelegramDeliveryTargetPolicyView;
-    getActiveTurnTarget: () => TelegramDeliveryTarget | undefined;
+    getTargetPolicyView: () => BaleDeliveryTargetPolicyView;
+    getActiveTurnTarget: () => BaleDeliveryTarget | undefined;
     isTransportActive?: () => boolean;
-    api: Pick<TelegramBridgeApiRuntime, "sendMessage" | "editMessageText" | "deleteMessage" | "sendChatAction">;
+    api: Pick<BaleBridgeApiRuntime, "sendMessage" | "editMessageText" | "deleteMessage" | "sendChatAction">;
     recordOwnership: (input: {
         chatId: number;
         messageId: number;
-        target: TelegramDeliveryTarget;
+        target: BaleDeliveryTarget;
     }) => void;
-    recordFailure?: TelegramDeliveryRuntimeDeps["recordFailure"];
+    recordFailure?: BaleDeliveryRuntimeDeps["recordFailure"];
 }
 /** @internal */
-export declare function createTelegramDeliveryLifecycleHooks(createRuntime: () => TelegramDeliveryRuntime): {
+export declare function createBaleDeliveryLifecycleHooks(createRuntime: () => BaleDeliveryRuntime): {
     onSessionStart: () => Promise<void>;
     onSessionShutdown: () => Promise<void>;
-    hasPendingTarget: (target: TelegramDeliveryTarget) => boolean | undefined;
+    hasPendingTarget: (target: BaleDeliveryTarget) => boolean | undefined;
 };
-export declare function createTelegramDeliveryGenerationSeed(instanceId: string): string;
+export declare function createBaleDeliveryGenerationSeed(instanceId: string): string;
 /** @internal */
-export declare function createTelegramBridgeDeliveryLifecycleHooks<TTransportStamp>(deps: Omit<TelegramBridgeDeliveryRuntimeDeps, "generation" | "isTransportActive"> & {
+export declare function createBaleBridgeDeliveryLifecycleHooks<TTransportStamp>(deps: Omit<BaleBridgeDeliveryRuntimeDeps, "generation" | "isTransportActive"> & {
     generationSeed: string;
     getTransportStamp?: () => TTransportStamp;
     isTransportStampActive?: (stamp: TTransportStamp) => boolean;
-}): ReturnType<typeof createTelegramDeliveryLifecycleHooks>;
+}): ReturnType<typeof createBaleDeliveryLifecycleHooks>;
 /** @internal */
-export interface TelegramDeliveryTargetPolicyView {
+export interface BaleDeliveryTargetPolicyView {
     canDeliver: boolean;
     ownsDirect: boolean;
     threaded?: boolean;
     allowedChatId?: number;
-    followerTarget?: TelegramDeliveryTarget;
-    leaderTarget?: TelegramDeliveryTarget;
-    liveTargets?: readonly TelegramDeliveryTarget[];
+    followerTarget?: BaleDeliveryTarget;
+    leaderTarget?: BaleDeliveryTarget;
+    liveTargets?: readonly BaleDeliveryTarget[];
 }
 /** @internal */
-export interface TelegramDeliveryTargetPolicyRuntime {
-    getTargetPolicyView(): TelegramDeliveryTargetPolicyView;
-    getActiveTurnTarget(): TelegramDeliveryTarget | undefined;
+export interface BaleDeliveryTargetPolicyRuntime {
+    getTargetPolicyView(): BaleDeliveryTargetPolicyView;
+    getActiveTurnTarget(): BaleDeliveryTarget | undefined;
 }
 /** @internal */
-export declare function createTelegramDeliveryTargetPolicyRuntime(deps: {
+export declare function createBaleDeliveryTargetPolicyRuntime(deps: {
     ownsDirect(): boolean;
     isThreadedMode?(): boolean;
     isFollowerRegistered(): boolean;
     getAllowedChatId(): number | undefined;
-    getFollowerTarget(): TelegramDeliveryTarget | undefined;
-    getLeaderTarget(): TelegramDeliveryTarget | undefined;
+    getFollowerTarget(): BaleDeliveryTarget | undefined;
+    getLeaderTarget(): BaleDeliveryTarget | undefined;
     listThreadRecords(): readonly {
-        target: TelegramDeliveryTarget;
+        target: BaleDeliveryTarget;
     }[];
-    getActiveTurnTarget(): TelegramDeliveryTarget | undefined;
+    getActiveTurnTarget(): BaleDeliveryTarget | undefined;
     getActiveGuestQueryId(): string | undefined;
-}): TelegramDeliveryTargetPolicyRuntime;
+}): BaleDeliveryTargetPolicyRuntime;
 /** @internal */
-export declare function resolveTelegramDeliveryInstanceTarget(view: TelegramDeliveryTargetPolicyView): TelegramDeliveryTarget | undefined;
+export declare function resolveBaleDeliveryInstanceTarget(view: BaleDeliveryTargetPolicyView): BaleDeliveryTarget | undefined;
 /** @internal */
-export declare function resolveTelegramDeliveryAggregateTarget(view: TelegramDeliveryTargetPolicyView): TelegramDeliveryTarget | undefined;
+export declare function resolveBaleDeliveryAggregateTarget(view: BaleDeliveryTargetPolicyView): BaleDeliveryTarget | undefined;
 /** @internal */
-export declare function isTelegramDeliveryExplicitTargetAuthorized(candidate: TelegramDeliveryTarget, view: TelegramDeliveryTargetPolicyView): boolean;
+export declare function isBaleDeliveryExplicitTargetAuthorized(candidate: BaleDeliveryTarget, view: BaleDeliveryTargetPolicyView): boolean;
 /** @internal */
-export declare function createTelegramDeliveryRuntime(deps: TelegramDeliveryRuntimeDeps): TelegramDeliveryRuntime;
+export declare function createBaleDeliveryRuntime(deps: BaleDeliveryRuntimeDeps): BaleDeliveryRuntime;
 /** @internal */
-export declare function createTelegramBridgeDeliveryRuntime(deps: TelegramBridgeDeliveryRuntimeDeps): TelegramDeliveryRuntime;
+export declare function createBaleBridgeDeliveryRuntime(deps: BaleBridgeDeliveryRuntimeDeps): BaleDeliveryRuntime;
 /** @internal */
-export declare function bindTelegramDeliveryRuntime(runtime: TelegramDeliveryRuntime): () => void;
+export declare function bindBaleDeliveryRuntime(runtime: BaleDeliveryRuntime): () => void;
 /** @internal */
-export declare function clearTelegramDeliveryRuntime(): void;
+export declare function clearBaleDeliveryRuntime(): void;
 /** @internal */
-export declare function isTelegramDeliveryHandleCurrent(handle: TelegramDeliveryHandle): boolean;
-export declare function sendTelegramView(view: TelegramDeliveryView, options: SendTelegramViewOptions): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
-export declare function editTelegramView(handle: TelegramDeliveryHandle, view: TelegramDeliveryView): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
-export declare function deleteTelegramView(handle: TelegramDeliveryHandle): Promise<TelegramDeliveryResult<void>>;
-export declare function sendTelegramChatAction(action: TelegramDeliveryChatAction, options: {
-    scope: TelegramDeliveryScope;
-}): Promise<TelegramDeliveryResult<void>>;
+export declare function isBaleDeliveryHandleCurrent(handle: BaleDeliveryHandle): boolean;
+export declare function sendBaleView(view: BaleDeliveryView, options: SendBaleViewOptions): Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
+export declare function editBaleView(handle: BaleDeliveryHandle, view: BaleDeliveryView): Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
+export declare function deleteBaleView(handle: BaleDeliveryHandle): Promise<BaleDeliveryResult<void>>;
+export declare function sendBaleChatAction(action: BaleDeliveryChatAction, options: {
+    scope: BaleDeliveryScope;
+}): Promise<BaleDeliveryResult<void>>;

@@ -1,22 +1,22 @@
 /**
- * Telegram reply delivery helpers
- * Zones: telegram outbound, native rich markdown, UI/compat rendering transport
+ * Bale reply delivery helpers
+ * Zones: bale outbound, native rich markdown, UI/compat rendering transport
  * Owns native assistant replies, rendered UI delivery, guest placeholder rotation, reply transport wiring, and plain text replies
  */
-import { renderTelegramMessage, type TelegramRenderedChunk, type TelegramRenderMode } from "./rendering.ts";
-import { type TelegramTarget } from "./target.ts";
-import type { TelegramApiCallOptions, TelegramInputRichMessage, TelegramReplyParameters, TelegramSendRichMessageBody, TelegramSentMessage } from "./telegram-api.ts";
-export { renderTelegramMessage, type TelegramRenderedChunk, type TelegramRenderMode, };
-export declare function renderTelegramMarkdownToHtmlDraft(markdown: string): string;
-export declare const TELEGRAM_RICH_MESSAGE_MAX_CHARS = 32768;
-export declare const TELEGRAM_RICH_MESSAGE_MAX_BLOCKS = 500;
+import { renderBaleMessage, type BaleRenderedChunk, type BaleRenderMode } from "./rendering.ts";
+import { type BaleTarget } from "./target.ts";
+import type { BaleApiCallOptions, BaleInputRichMessage, BaleReplyParameters, BaleSendRichMessageBody, BaleSentMessage } from "./bale-api.ts";
+export { renderBaleMessage, type BaleRenderedChunk, type BaleRenderMode, };
+export declare function renderBaleMarkdownToHtmlDraft(markdown: string): string;
+export declare const BALE_RICH_MESSAGE_MAX_CHARS = 32768;
+export declare const BALE_RICH_MESSAGE_MAX_BLOCKS = 500;
 export declare function resetTransportReplyDedup(): void;
 /** Keeps a successfully published transition notice as the first reply of the
  * next agent turn. The following agent-start reset consumes this one-shot
  * preservation, so later messages in that turn do not repeat the reply header. */
-export declare function preserveTransportReplyDedupOnNextReset(chatId: number, messageId: number, target?: TelegramTarget): void;
-export declare function buildTelegramReplyParameters(chatId: number, messageId: number | undefined, target?: TelegramTarget): TelegramReplyParameters | undefined;
-export declare function withTelegramReplyParameters<T>(chatId: number, messageId: number | undefined, target: TelegramTarget | undefined, send: (parameters: TelegramReplyParameters | undefined) => Promise<T>): Promise<T>;
+export declare function preserveTransportReplyDedupOnNextReset(chatId: number, messageId: number, target?: BaleTarget): void;
+export declare function buildBaleReplyParameters(chatId: number, messageId: number | undefined, target?: BaleTarget): BaleReplyParameters | undefined;
+export declare function withBaleReplyParameters<T>(chatId: number, messageId: number | undefined, target: BaleTarget | undefined, send: (parameters: BaleReplyParameters | undefined) => Promise<T>): Promise<T>;
 export declare function isAssistantAgentMessage(message: unknown): boolean;
 export declare function getAgentMessageText(message: unknown): string;
 export declare function extractLatestAssistantMessageText(messages: readonly unknown[]): {
@@ -38,111 +38,111 @@ export declare function extractRunAssistantMessage(messages: readonly unknown[])
     errorMessage?: string;
     recoveredFromEarlier?: boolean;
 };
-export interface TelegramReplyOwnershipRecorder {
+export interface BaleReplyOwnershipRecorder {
     record: (input: {
         chatId: number;
         messageId: number;
-        target?: TelegramTarget;
+        target?: BaleTarget;
     }) => void;
 }
-export interface TelegramReplyDeliveryDeps<TReplyMarkup> {
-    recordOwnership?: TelegramReplyOwnershipRecorder["record"];
+export interface BaleReplyDeliveryDeps<TReplyMarkup> {
+    recordOwnership?: BaleReplyOwnershipRecorder["record"];
     sendMessage: (body: {
         chat_id: number;
         text: string;
         parse_mode?: "HTML";
         reply_markup?: TReplyMarkup;
-        reply_parameters?: TelegramReplyParameters;
+        reply_parameters?: BaleReplyParameters;
         reply_to_message_id?: number;
         message_thread_id?: number;
-    }, options?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<TelegramSentMessage>;
+    }, options?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<BaleSentMessage>;
     editMessage: (body: {
         chat_id: number;
         message_id: number;
         text?: string;
-        rich_message?: TelegramInputRichMessage;
+        rich_message?: BaleInputRichMessage;
         parse_mode?: "HTML";
         reply_markup?: TReplyMarkup;
         message_thread_id?: number;
-    }, options?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<unknown>;
+    }, options?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<unknown>;
 }
-export interface TelegramReplyTargetOptions extends Pick<TelegramApiCallOptions, "assertAuthority"> {
-    target?: TelegramTarget;
+export interface BaleReplyTargetOptions extends Pick<BaleApiCallOptions, "assertAuthority"> {
+    target?: BaleTarget;
     replyToMessageId?: number;
 }
-export interface TelegramReplyTransport<TReplyMarkup> {
-    sendRenderedChunks: (chatId: number, chunks: TelegramRenderedChunk[], options?: TelegramReplyTargetOptions & {
+export interface BaleReplyTransport<TReplyMarkup> {
+    sendRenderedChunks: (chatId: number, chunks: BaleRenderedChunk[], options?: BaleReplyTargetOptions & {
         replyMarkup?: TReplyMarkup;
     }) => Promise<number | undefined>;
-    editRenderedMessage: (chatId: number, messageId: number, chunks: TelegramRenderedChunk[], options?: TelegramReplyTargetOptions & {
+    editRenderedMessage: (chatId: number, messageId: number, chunks: BaleRenderedChunk[], options?: BaleReplyTargetOptions & {
         replyMarkup?: TReplyMarkup;
     }) => Promise<number | undefined>;
 }
-export declare function buildTelegramReplyTransport<TReplyMarkup>(deps: TelegramReplyDeliveryDeps<TReplyMarkup>): TelegramReplyTransport<TReplyMarkup>;
-export declare function sendTelegramRenderedChunks<TReplyMarkup>(chatId: number, chunks: TelegramRenderedChunk[], deps: TelegramReplyDeliveryDeps<TReplyMarkup>, options?: TelegramReplyTargetOptions & {
+export declare function buildBaleReplyTransport<TReplyMarkup>(deps: BaleReplyDeliveryDeps<TReplyMarkup>): BaleReplyTransport<TReplyMarkup>;
+export declare function sendBaleRenderedChunks<TReplyMarkup>(chatId: number, chunks: BaleRenderedChunk[], deps: BaleReplyDeliveryDeps<TReplyMarkup>, options?: BaleReplyTargetOptions & {
     replyMarkup?: TReplyMarkup;
 }): Promise<number | undefined>;
-export declare function editTelegramRenderedMessage<TReplyMarkup>(chatId: number, messageId: number, chunks: TelegramRenderedChunk[], deps: TelegramReplyDeliveryDeps<TReplyMarkup>, options?: TelegramReplyTargetOptions & {
+export declare function editBaleRenderedMessage<TReplyMarkup>(chatId: number, messageId: number, chunks: BaleRenderedChunk[], deps: BaleReplyDeliveryDeps<TReplyMarkup>, options?: BaleReplyTargetOptions & {
     replyMarkup?: TReplyMarkup;
 }): Promise<number | undefined>;
-export interface TelegramTextReplyOptions extends TelegramReplyTargetOptions {
+export interface BaleTextReplyOptions extends BaleReplyTargetOptions {
     parseMode?: "HTML";
 }
-export interface TelegramReplyRuntimeDeps<TReplyMarkup = unknown> {
-    renderTelegramMessage: (text: string, options?: {
-        mode?: TelegramRenderMode;
-    }) => TelegramRenderedChunk[];
-    sendRenderedChunks: (chunks: TelegramRenderedChunk[], options?: {
+export interface BaleReplyRuntimeDeps<TReplyMarkup = unknown> {
+    renderBaleMessage: (text: string, options?: {
+        mode?: BaleRenderMode;
+    }) => BaleRenderedChunk[];
+    sendRenderedChunks: (chunks: BaleRenderedChunk[], options?: {
         replyMarkup?: TReplyMarkup;
-    } & TelegramReplyTargetOptions) => Promise<number | undefined>;
+    } & BaleReplyTargetOptions) => Promise<number | undefined>;
 }
-export declare function sendTelegramPlainReply(text: string, deps: TelegramReplyRuntimeDeps, options?: TelegramTextReplyOptions): Promise<number | undefined>;
+export declare function sendBalePlainReply(text: string, deps: BaleReplyRuntimeDeps, options?: BaleTextReplyOptions): Promise<number | undefined>;
 /** An open fenced code block: its marker character and the minimum closing run length. */
-export interface TelegramMarkdownFence {
+export interface BaleMarkdownFence {
     marker: "`" | "~";
     length: number;
 }
-export declare function parseTelegramMarkdownFenceOpening(line: string): TelegramMarkdownFence | undefined;
-export declare function isTelegramMarkdownFenceClosing(line: string, fence: TelegramMarkdownFence): boolean;
-export declare function normalizeTelegramNativeMarkdown(markdown: string): string;
-export declare function splitTelegramNativeMarkdown(markdown: string): string[];
-export declare function sendTelegramNativeMarkdownReply<TReplyMarkup = unknown>(chatId: number, replyToMessageId: number | undefined, markdown: string, deps: {
-    recordOwnership?: TelegramReplyOwnershipRecorder["record"];
-    sendRichMessage: (body: TelegramSendRichMessageBody, options?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<TelegramSentMessage>;
-}, options?: TelegramReplyTargetOptions & {
+export declare function parseBaleMarkdownFenceOpening(line: string): BaleMarkdownFence | undefined;
+export declare function isBaleMarkdownFenceClosing(line: string, fence: BaleMarkdownFence): boolean;
+export declare function normalizeBaleNativeMarkdown(markdown: string): string;
+export declare function splitBaleNativeMarkdown(markdown: string): string[];
+export declare function sendBaleNativeMarkdownReply<TReplyMarkup = unknown>(chatId: number, replyToMessageId: number | undefined, markdown: string, deps: {
+    recordOwnership?: BaleReplyOwnershipRecorder["record"];
+    sendRichMessage: (body: BaleSendRichMessageBody, options?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<BaleSentMessage>;
+}, options?: BaleReplyTargetOptions & {
     replyMarkup?: TReplyMarkup;
 }): Promise<number | undefined>;
-export type TelegramAssistantRenderingMode = "rich" | "html";
-export interface TelegramRenderedMessageRuntimeDeps<TReplyMarkup> {
-    renderTelegramMessage: (text: string, options?: {
-        mode?: TelegramRenderMode;
-    }) => TelegramRenderedChunk[];
-    replyTransport: TelegramReplyTransport<TReplyMarkup>;
-    recordOwnership?: TelegramReplyOwnershipRecorder["record"];
-    getAssistantRenderingMode?: () => TelegramAssistantRenderingMode;
-    sendRichMessage: (body: TelegramSendRichMessageBody, options?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<TelegramSentMessage>;
+export type BaleAssistantRenderingMode = "rich" | "html";
+export interface BaleRenderedMessageRuntimeDeps<TReplyMarkup> {
+    renderBaleMessage: (text: string, options?: {
+        mode?: BaleRenderMode;
+    }) => BaleRenderedChunk[];
+    replyTransport: BaleReplyTransport<TReplyMarkup>;
+    recordOwnership?: BaleReplyOwnershipRecorder["record"];
+    getAssistantRenderingMode?: () => BaleAssistantRenderingMode;
+    sendRichMessage: (body: BaleSendRichMessageBody, options?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<BaleSentMessage>;
 }
-export interface TelegramRenderedMessageRuntime<TReplyMarkup> {
-    sendTextReply: (chatId: number, replyToMessageId: number | undefined, text: string, options?: TelegramTextReplyOptions) => Promise<number | undefined>;
-    sendMarkdownReply: (chatId: number, replyToMessageId: number | undefined, markdown: string, options?: TelegramReplyTargetOptions & {
+export interface BaleRenderedMessageRuntime<TReplyMarkup> {
+    sendTextReply: (chatId: number, replyToMessageId: number | undefined, text: string, options?: BaleTextReplyOptions) => Promise<number | undefined>;
+    sendMarkdownReply: (chatId: number, replyToMessageId: number | undefined, markdown: string, options?: BaleReplyTargetOptions & {
         replyMarkup?: TReplyMarkup;
     }) => Promise<number | undefined>;
-    editInteractiveMessage: (chatId: number, messageId: number, text: string, mode: TelegramRenderMode, replyMarkup: TReplyMarkup, options?: TelegramReplyTargetOptions) => Promise<void>;
-    sendInteractiveMessage: (chatId: number, text: string, mode: TelegramRenderMode, replyMarkup: TReplyMarkup, options?: TelegramReplyTargetOptions) => Promise<number | undefined>;
-    sendSectionRichMessage: (chatId: number, message: TelegramInputRichMessage, options?: TelegramReplyTargetOptions) => Promise<number>;
+    editInteractiveMessage: (chatId: number, messageId: number, text: string, mode: BaleRenderMode, replyMarkup: TReplyMarkup, options?: BaleReplyTargetOptions) => Promise<void>;
+    sendInteractiveMessage: (chatId: number, text: string, mode: BaleRenderMode, replyMarkup: TReplyMarkup, options?: BaleReplyTargetOptions) => Promise<number | undefined>;
+    sendSectionRichMessage: (chatId: number, message: BaleInputRichMessage, options?: BaleReplyTargetOptions) => Promise<number>;
 }
-export interface TelegramRenderedMessageDeliveryRuntime<TReplyMarkup> extends TelegramRenderedMessageRuntime<TReplyMarkup> {
-    replyTransport: TelegramReplyTransport<TReplyMarkup>;
+export interface BaleRenderedMessageDeliveryRuntime<TReplyMarkup> extends BaleRenderedMessageRuntime<TReplyMarkup> {
+    replyTransport: BaleReplyTransport<TReplyMarkup>;
 }
-export interface TelegramRenderedMessageDeliveryRuntimeDeps<TReplyMarkup> extends TelegramReplyDeliveryDeps<TReplyMarkup> {
-    renderTelegramMessage?: (text: string, options?: {
-        mode?: TelegramRenderMode;
-    }) => TelegramRenderedChunk[];
-    getAssistantRenderingMode?: () => TelegramAssistantRenderingMode;
-    sendRichMessage: (body: TelegramSendRichMessageBody, options?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<TelegramSentMessage>;
+export interface BaleRenderedMessageDeliveryRuntimeDeps<TReplyMarkup> extends BaleReplyDeliveryDeps<TReplyMarkup> {
+    renderBaleMessage?: (text: string, options?: {
+        mode?: BaleRenderMode;
+    }) => BaleRenderedChunk[];
+    getAssistantRenderingMode?: () => BaleAssistantRenderingMode;
+    sendRichMessage: (body: BaleSendRichMessageBody, options?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<BaleSentMessage>;
 }
-export declare function createTelegramRenderedMessageDeliveryRuntime<TReplyMarkup>(deps: TelegramRenderedMessageDeliveryRuntimeDeps<TReplyMarkup>): TelegramRenderedMessageDeliveryRuntime<TReplyMarkup>;
-export declare function createTelegramRenderedMessageRuntime<TReplyMarkup>(deps: TelegramRenderedMessageRuntimeDeps<TReplyMarkup>): TelegramRenderedMessageRuntime<TReplyMarkup>;
+export declare function createBaleRenderedMessageDeliveryRuntime<TReplyMarkup>(deps: BaleRenderedMessageDeliveryRuntimeDeps<TReplyMarkup>): BaleRenderedMessageDeliveryRuntime<TReplyMarkup>;
+export declare function createBaleRenderedMessageRuntime<TReplyMarkup>(deps: BaleRenderedMessageRuntimeDeps<TReplyMarkup>): BaleRenderedMessageRuntime<TReplyMarkup>;
 /**
  * Guest reply sender: answers guest queries with native Rich Markdown content.
  * Guest queries use InlineQueryResult input_message_content rather than chat
@@ -151,7 +151,7 @@ export declare function createTelegramRenderedMessageRuntime<TReplyMarkup>(deps:
 export declare function createGuestMarkdownReplySender(deps: {
     answerGuestQuery: (guestQueryId: string, text?: string, options?: {
         parseMode?: string;
-        richMessage?: TelegramInputRichMessage;
+        richMessage?: BaleInputRichMessage;
     }) => Promise<void>;
 }): (guestQueryId: string, markdown: string) => Promise<void>;
 /**
@@ -161,7 +161,7 @@ export declare function createGuestMarkdownReplySender(deps: {
  */
 export declare function createGuestMarkdownReplyEditor(deps: {
     editGuestInlineMessage: (inlineMessageId: string, content: {
-        richMessage?: TelegramInputRichMessage;
+        richMessage?: BaleInputRichMessage;
         text?: string;
     }, options?: {
         assertAuthority?: () => void;
@@ -175,20 +175,20 @@ export declare function createGuestMarkdownReplyEditor(deps: {
  * the globe every second while the trailing dots grow once every two seconds.
  *
  * Rotation completes whole six-frame cycles and only stops once at least
- * `TELEGRAM_GUEST_PLACEHOLDER_MIN_MS` has elapsed, so a pending answer holds
+ * `BALE_GUEST_PLACEHOLDER_MIN_MS` has elapsed, so a pending answer holds
  * the finished cycle's last frame (`🌏 Working on it...`) instead of whatever
- * step a hard time cap happens to cut. The `TELEGRAM_GUEST_PLACEHOLDER_MAX_MS`
+ * step a hard time cap happens to cut. The `BALE_GUEST_PLACEHOLDER_MAX_MS`
  * safety bound keeps the edit stream clear of the first flood-control
  * rejections measured in live guest runs (+26.5 s at ~53 edits, +27.8 s at
  * ~28 edits): rotation caps at 23 edits and never starts a frame after 26 s.
  */
-export declare const TELEGRAM_GUEST_PLACEHOLDER_FRAME_MS = 1000;
-export declare const TELEGRAM_GUEST_PLACEHOLDER_MIN_MS = 20000;
-export declare const TELEGRAM_GUEST_PLACEHOLDER_MAX_MS = 26000;
-export declare const TELEGRAM_GUEST_PLACEHOLDER_FRAMES: readonly ["<b>🌎 Working on it.</b>", "<b>🌍 Working on it.</b>", "<b>🌏 Working on it..</b>", "<b>🌎 Working on it..</b>", "<b>🌍 Working on it...</b>", "<b>🌏 Working on it...</b>"];
-export declare const TELEGRAM_DISMISSED_GUEST_PLACEHOLDER_TEXT = "\u2063";
-export declare function buildTelegramGuestPlaceholderFrame(step: number): string;
-export interface TelegramGuestPlaceholderRuntimeDeps {
+export declare const BALE_GUEST_PLACEHOLDER_FRAME_MS = 1000;
+export declare const BALE_GUEST_PLACEHOLDER_MIN_MS = 20000;
+export declare const BALE_GUEST_PLACEHOLDER_MAX_MS = 26000;
+export declare const BALE_GUEST_PLACEHOLDER_FRAMES: readonly ["<b>🌎 Working on it.</b>", "<b>🌍 Working on it.</b>", "<b>🌏 Working on it..</b>", "<b>🌎 Working on it..</b>", "<b>🌍 Working on it...</b>", "<b>🌏 Working on it...</b>"];
+export declare const BALE_DISMISSED_GUEST_PLACEHOLDER_TEXT = "\u2063";
+export declare function buildBaleGuestPlaceholderFrame(step: number): string;
+export interface BaleGuestPlaceholderRuntimeDeps {
     editGuestInlineMessage: (inlineMessageId: string, content: {
         text: string;
         parseMode: "HTML";
@@ -201,7 +201,7 @@ export interface TelegramGuestPlaceholderRuntimeDeps {
     setTimer?: (callback: () => void, ms: number) => ReturnType<typeof setTimeout>;
     clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
 }
-export interface TelegramGuestPlaceholderRuntime {
+export interface BaleGuestPlaceholderRuntime {
     /** Starts the frame loop on an answered guest inline message. */
     start: (inlineMessageId: string) => void;
     /** Cancels the loop and waits for any in-flight frame edit before returning. */
@@ -211,4 +211,4 @@ export interface TelegramGuestPlaceholderRuntime {
     /** Stops rotation and visually clears the inline placeholder. */
     dismiss: (inlineMessageId: string) => Promise<void>;
 }
-export declare function createTelegramGuestPlaceholderRuntime(deps: TelegramGuestPlaceholderRuntimeDeps): TelegramGuestPlaceholderRuntime;
+export declare function createBaleGuestPlaceholderRuntime(deps: BaleGuestPlaceholderRuntimeDeps): BaleGuestPlaceholderRuntime;

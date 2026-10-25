@@ -89,9 +89,9 @@ try {
     candidate,
   ]);
 
-  mkdirSync(join(candidate, "pi-telegram"), { recursive: true });
+  mkdirSync(join(candidate, "pi-bale"), { recursive: true });
   writeFileSync(
-    join(candidate, "pi-telegram", "index.js"),
+    join(candidate, "pi-bale", "index.js"),
     'export { default } from "../index.js";\n',
     "utf8",
   );
@@ -102,11 +102,11 @@ try {
     join("lib", "generative-app-worker.mjs"),
     join(candidate, "lib", "generative-app-worker.mjs"),
   );
-  run(process.execPath, ["--check", join(candidate, "pi-telegram", "index.js")]);
+  run(process.execPath, ["--check", join(candidate, "pi-bale", "index.js")]);
 
   if (checkOnly) {
     assertTreesEqual(DIST_DIR, candidate);
-    console.log("pi-telegram: dist is current");
+    console.log("pi-bale: dist is current");
   } else {
     replaceDist(candidate);
   }

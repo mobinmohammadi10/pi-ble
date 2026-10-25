@@ -1,7 +1,7 @@
 /**
  * Workspace retirement preparation tests
- * Zones: telegram, workspace identity, lifecycle
- * Mirrors lib/workspace-retirement.ts and excludes live Telegram deletion.
+ * Zones: bale, workspace identity, lifecycle
+ * Mirrors lib/workspace-retirement.ts and excludes live Bale deletion.
  */
 
 import assert from "node:assert/strict";
@@ -13,72 +13,72 @@ import { dirname, basename, join } from "node:path";
 import test from "node:test";
 
 import {
-  createTelegramTopicTargetStore,
-  createTelegramWorkspaceBindingIdentity,
-  type TelegramTopicTargetStore,
-  type TelegramWorkspaceExternalProtectionEvidence,
-  type TelegramWorkspaceThreadBinding,
+  createBaleTopicTargetStore,
+  createBaleWorkspaceBindingIdentity,
+  type BaleTopicTargetStore,
+  type BaleWorkspaceExternalProtectionEvidence,
+  type BaleWorkspaceThreadBinding,
 } from "../lib/threads.ts";
 import {
-  adoptTelegramWorkspaceRetirementIntent,
-  captureTelegramWorkspaceExternalProtection,
-  captureTelegramWorkspaceJournalProtectionSources,
-  createTelegramWorkspaceDeadOwnerQueueReclaimer,
-  createTelegramWorkspaceExternalProtectionCapture,
-  createTelegramWorkspaceProtectionObserver,
-  createTelegramWorkspaceJournalEvidencePruner,
-  isCurrentTelegramWorkspaceBinding,
-  createTelegramWorkspaceOperationGate,
-  createTelegramWorkspaceOperationRuntime,
-  createTelegramWorkspaceSlotRotation,
-  executeTelegramWorkspaceRetirement,
-  prepareTelegramWorkspaceRetirement,
-  pruneTelegramWorkspaceJournalEvidence,
-  resolveTelegramWorkspaceAcceptedWorkProtection,
-  runTelegramWorkspaceRetirementLifecycle,
+  adoptBaleWorkspaceRetirementIntent,
+  captureBaleWorkspaceExternalProtection,
+  captureBaleWorkspaceJournalProtectionSources,
+  createBaleWorkspaceDeadOwnerQueueReclaimer,
+  createBaleWorkspaceExternalProtectionCapture,
+  createBaleWorkspaceProtectionObserver,
+  createBaleWorkspaceJournalEvidencePruner,
+  isCurrentBaleWorkspaceBinding,
+  createBaleWorkspaceOperationGate,
+  createBaleWorkspaceOperationRuntime,
+  createBaleWorkspaceSlotRotation,
+  executeBaleWorkspaceRetirement,
+  prepareBaleWorkspaceRetirement,
+  pruneBaleWorkspaceJournalEvidence,
+  resolveBaleWorkspaceAcceptedWorkProtection,
+  runBaleWorkspaceRetirementLifecycle,
 } from "../lib/workspace-retirement.ts";
 import {
-  createDefaultTelegramBridgeApiRuntime,
-  setTelegramApiHttpsFetchForTesting,
-  TelegramApiStaleTargetError,
-} from "../lib/telegram-api.ts";
-import { TelegramWorkspaceSlotUnavailableError } from "../lib/workspace-slots.ts";
-import { resolveTelegramSessionJournalPath, resolveTelegramFollowerJournalPath, resolveTelegramSessionPollingJournalPath, resolveTelegramTempDir } from "../lib/paths.ts";
-import { createTelegramWorkspaceAdmissionLedger } from "../lib/workspace-admission.ts";
+  createDefaultBaleBridgeApiRuntime,
+  setBaleApiHttpsFetchForTesting,
+  BaleApiStaleTargetError,
+} from "../lib/bale-api.ts";
+import { BaleWorkspaceSlotUnavailableError } from "../lib/workspace-slots.ts";
+import { resolveBaleSessionJournalPath, resolveBaleFollowerJournalPath, resolveBaleSessionPollingJournalPath, resolveBaleTempDir } from "../lib/paths.ts";
+import { createBaleWorkspaceAdmissionLedger } from "../lib/workspace-admission.ts";
 import {
-  createTelegramUpdateJournalBotIdentity,
-  createTelegramUpdateJournalBindingKey,
-  createTelegramUpdateJournalBindingRuntime,
-  createTelegramUpdateJournalStore,
-  createTelegramUpdateJournalReferenceRegistry,
-  inspectTelegramUpdateJournalFamily,
-  inspectTelegramSessionJournalNamespace,
-  type TelegramUpdateJournalEntry,
+  createBaleUpdateJournalBotIdentity,
+  createBaleUpdateJournalBindingKey,
+  createBaleUpdateJournalBindingRuntime,
+  createBaleUpdateJournalStore,
+  createBaleUpdateJournalReferenceRegistry,
+  inspectBaleUpdateJournalFamily,
+  inspectBaleSessionJournalNamespace,
+  type BaleUpdateJournalEntry,
 } from "../lib/journal.ts";
 
 for (const state of ["empty", "untracked-pending", "committed-original", "uncommitted-original", "missing-original", "corrupt-session", "retained-only", "missing-resolver"] as const) {
   test(`Production protection requires fresh strict session namespace evidence (${state})`, { skip: process.platform === "win32" }, async () => {
     const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-namespace-protection-")));
-    const directory = join(agentDir, "tmp", "pi-telegram");
+    const directory = join(agentDir, "tmp", "pi-bale");
     const sessionDir = join(directory, "sessions", "session");
     const path = join(sessionDir, "journal.aaaaaaaaaaaaaaaa.json");
-    const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "fixture:namespace-protection", botId: 7 });
-    const binding: TelegramWorkspaceThreadBinding = { ...createTelegramWorkspaceBindingIdentity("/recipient", 0, "session")!,
+    const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "fixture:namespace-protection", botId: 7 });
+    const binding: BaleWorkspaceThreadBinding = { ...createBaleWorkspaceBindingIdentity("/recipient", 0, "session")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", updatedAtMs: 1, journalBindingsComplete: true };
     const limits = { maxDirectoryEntries: 100, maxFiles: 100, maxBytes: 1_000_000, maxEntries: 100, maxWork: 10_000 };
     try {
       await mkdir(sessionDir, { recursive: true });
-      const journal = createTelegramUpdateJournalStore({ path, botIdentity });
+      const journal = createBaleUpdateJournalStore({ path, botIdentity });
       journal.appendBatch([{ update_id: 1, message: { message_id: 1, message_thread_id: 42,
         chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false }, text: "Untracked accepted work" } }]);
       if (state.endsWith("-original")) {
         const { exists: _exists, serializedBytes: _bytes, ...beforeCancel } = journal.read();
         const cancellation = journal.abandonPending({ entry: beforeCancel.entries[0]!, operatorAuthorityId: "owner:7", isCurrent: () => true,
-          journalBindingKey: createTelegramUpdateJournalBindingKey({ path, botIdentity }) });
+          journalBindingKey: createBaleUpdateJournalBindingKey({ path, botIdentity }) });
         if (state === "uncommitted-original") {
           await writeFile(path, JSON.stringify(beforeCancel));
           await rm(`${path}.segments`, { recursive: true, force: true });
-          assert.deepEqual(inspectTelegramSessionJournalNamespace({ directory, profile: "default", botIdentity, limits })
+          assert.deepEqual(inspectBaleSessionJournalNamespace({ directory, profile: "default", botIdentity, limits })
             .retainedInputs?.map(original => original.state), ["uncommitted"], "Protection must refuse a valid uncommitted original, not a malformed fixture");
         } else if (state === "missing-original") await rm(cancellation.retainedPath);
       } else if (state !== "untracked-pending") journal.removeCompleted([1]);
@@ -91,10 +91,10 @@ for (const state of ["empty", "untracked-pending", "committed-original", "uncomm
         .sort((left, right) => join(left.parentPath, left.name).localeCompare(join(right.parentPath, right.name)))
         .map(async entry => [join(entry.parentPath, entry.name), entry.isFile() ? await readFile(join(entry.parentPath, entry.name)) : "directory"]));
       const before = await bytes();
-      const references = createTelegramUpdateJournalReferenceRegistry();
+      const references = createBaleUpdateJournalReferenceRegistry();
       let inspections = 0;
       let resolutions = 0;
-      const capture = createTelegramWorkspaceExternalProtectionCapture({
+      const capture = createBaleWorkspaceExternalProtectionCapture({
         listFollowers: () => [], getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
         getJournalWriterProtection: () => "clear", getDeliveryAuthorityProtection: () => "clear",
         resolveLeaderJournal: () => ({ journal: { read: () => ({ entries: [] }) } }),
@@ -102,7 +102,7 @@ for (const state of ["empty", "untracked-pending", "committed-original", "uncomm
         discoverFollowerJournals() { assert.fail("Strict projection must not fall back to unbounded legacy discovery"); },
         inspectJournalNamespace() {
           inspections++;
-          return inspectTelegramSessionJournalNamespace({ directory, profile: "default", botIdentity, limits });
+          return inspectBaleSessionJournalNamespace({ directory, profile: "default", botIdentity, limits });
         },
         ...(state === "missing-resolver" ? {} : { createJournalPathResolver(discovered: string) {
           resolutions++;
@@ -111,7 +111,7 @@ for (const state of ["empty", "untracked-pending", "committed-original", "uncomm
             journal: { read() { assert.fail("Protection must never repair or replay"); } },
             readForProtection() {
               assert.deepEqual(references.list(), [{ referenceClass: "workspace-retirement", recoveryKey: path }]);
-              const evidence = inspectTelegramUpdateJournalFamily({ directory, path, profile: "default", botIdentity, limits });
+              const evidence = inspectBaleUpdateJournalFamily({ directory, path, profile: "default", botIdentity, limits });
               if (evidence.kind !== "present") throw new Error("Missing discovered evidence");
               return { entries: evidence.file.entries };
             } });
@@ -136,14 +136,14 @@ for (const state of ["empty", "untracked-pending", "committed-original", "uncomm
 }
 
 test("Strict namespace protection refuses a missing result or omitted polling evidence", () => {
-  const binding: TelegramWorkspaceThreadBinding = { ...createTelegramWorkspaceBindingIdentity("/recipient", 0, "session")!,
+  const binding: BaleWorkspaceThreadBinding = { ...createBaleWorkspaceBindingIdentity("/recipient", 0, "session")!,
     target: { chatId: 7, threadId: 42 }, slot: "A", updatedAtMs: 1, journalBindingsComplete: true };
   for (const invalid of [undefined, { sources: [], accounting: { directoryEntries: 0, files: 0, bytes: 0, work: 0 } }]) {
-    const capture = createTelegramWorkspaceExternalProtectionCapture({
+    const capture = createBaleWorkspaceExternalProtectionCapture({
       listFollowers: () => [], getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
       resolveLeaderJournal: () => ({ journal: { read: () => ({ entries: [] }) } }),
       createFollowerJournalResolver: () => () => undefined,
-      inspectJournalNamespace: () => invalid as ReturnType<typeof inspectTelegramSessionJournalNamespace>,
+      inspectJournalNamespace: () => invalid as ReturnType<typeof inspectBaleSessionJournalNamespace>,
       discoverFollowerJournals() { assert.fail("Invalid strict evidence cannot fall back to weaker discovery"); },
       createJournalPathResolver: () => () => undefined,
     });
@@ -155,9 +155,9 @@ for (const scope of ["binding", "shared", "discovered"] as const) for (const ava
   test(`Strict journal capture preserves rerouted accepted work (${scope}, ${availability})`, async () => {
     const directory = await mkdtemp(join(tmpdir(), "pi-restore-provenance-"));
     const path = join(directory, "inbox.json");
-    const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "fixture:provenance", botId: 7 });
+    const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "fixture:provenance", botId: 7 });
     const owner = { instanceId: "recipient", processId: process.pid, processBirthId: `${process.pid}:recipient`, sessionGeneration: 2 };
-    const journal = createTelegramUpdateJournalStore({ path, profileName: "default", botIdentity,
+    const journal = createBaleUpdateJournalStore({ path, profileName: "default", botIdentity,
       queueRuntimeIdentity: owner, getQueueProcessLiveness: () => "alive" });
     try {
       journal.appendBatch([{ update_id: 100, message: { message_id: 100, message_thread_id: 77,
@@ -171,21 +171,21 @@ for (const scope of ["binding", "shared", "discovered"] as const) for (const ava
         .sort((left, right) => join(left.parentPath, left.name).localeCompare(join(right.parentPath, right.name)))
         .map(async entry => { const name = join(entry.parentPath, entry.name); return [name, entry.isFile() ? await readFile(name) : "directory"]; }));
       const before = await bytes();
-      const references = createTelegramUpdateJournalReferenceRegistry();
+      const references = createBaleUpdateJournalReferenceRegistry();
       const source = { recoveryKey: path,
         journal: { read() { assert.fail("Protection must not invoke a repairing reader"); } },
         readForProtection() {
           assert.deepEqual(references.list(), [{ referenceClass: "workspace-retirement", recoveryKey: path }]);
-          const evidence = inspectTelegramUpdateJournalFamily({ directory, path, profile: "default", botIdentity,
+          const evidence = inspectBaleUpdateJournalFamily({ directory, path, profile: "default", botIdentity,
             limits: { maxFiles: 128, maxBytes: 1_000_000, maxEntries: 128, maxWork: 10_000 } });
           if (evidence.kind !== "present") throw new Error("Journal protection evidence unavailable");
           return { entries: evidence.file.entries };
         } };
       const empty = { recoveryKey: "fixture:empty-shared", journal: { read: () => ({ entries: [] }) } };
-      const binding: TelegramWorkspaceThreadBinding = { ...createTelegramWorkspaceBindingIdentity("/recipient", 0, "session")!,
+      const binding: BaleWorkspaceThreadBinding = { ...createBaleWorkspaceBindingIdentity("/recipient", 0, "session")!,
         target: { chatId: 7, threadId: 42 }, slot: "A", updatedAtMs: 1,
         journalBindingKeys: scope === "binding" ? ["manual:recipient"] : [], journalBindingsComplete: scope === "discovered" || availability === "empty-incomplete" ? undefined : true };
-      const capture = createTelegramWorkspaceExternalProtectionCapture({ listFollowers: () => [],
+      const capture = createBaleWorkspaceExternalProtectionCapture({ listFollowers: () => [],
         getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
         resolveLeaderJournal: () => scope === "shared" ? source : empty,
         createFollowerJournalResolver(key) { assert.equal(key, "manual:recipient"); return () => source; },
@@ -213,7 +213,7 @@ const clearExternalProtection = () => ({
 });
 
 function createRetirementAdmission(path: string, owner = "executor") {
-  return createTelegramWorkspaceAdmissionLedger({
+  return createBaleWorkspaceAdmissionLedger({
     path,
     profileKey: "default",
     owner: {
@@ -225,14 +225,14 @@ function createRetirementAdmission(path: string, owner = "executor") {
 }
 
 function addBinding(
-  store: ReturnType<typeof createTelegramTopicTargetStore>,
+  store: ReturnType<typeof createBaleTopicTargetStore>,
   index: number,
   inactiveSinceMs: number,
   sessionId?: string,
 ): void {
   const slot = String.fromCharCode("A".charCodeAt(0) + index);
   store.upsertWorkspaceBinding({
-    ...createTelegramWorkspaceBindingIdentity(
+    ...createBaleWorkspaceBindingIdentity(
       `/repo/${index}`, 0, sessionId)!,
     target: { chatId: 7, threadId: 40 + index },
     slot,
@@ -243,7 +243,7 @@ function addBinding(
 }
 
 test("Workspace operation gate serializes effects and recovers after failure", async () => {
-  const gate = createTelegramWorkspaceOperationGate();
+  const gate = createBaleWorkspaceOperationGate();
   const events: string[] = [];
   let release: (() => void) | undefined;
   const blocker = new Promise<void>((resolve) => { release = resolve; });
@@ -264,7 +264,7 @@ test("Workspace operation gate serializes effects and recovers after failure", a
 });
 
 test("Journal evidence enumeration reads shared and historical follower journals and preserves incomplete legacy state", () => {
-  const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+  const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
     target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2,
     journalBindingKeys: ["manual:old", "manual:new"], journalBindingsComplete: true as const };
   const entries = new Map<string, Array<{ update: unknown }>>([
@@ -273,7 +273,7 @@ test("Journal evidence enumeration reads shared and historical follower journals
     ["manual:new", [{ update: { undecodable: true } }]],
   ]);
   const references: string[] = [];
-  const capture = (candidate: TelegramWorkspaceThreadBinding) => captureTelegramWorkspaceJournalProtectionSources({
+  const capture = (candidate: BaleWorkspaceThreadBinding) => captureBaleWorkspaceJournalProtectionSources({
     binding: candidate,
     resolveLeader: () => ({ recoveryKey: "leader",
       journal: { read: () => ({ entries: entries.get("leader")! }) } }),
@@ -294,11 +294,11 @@ test("Journal evidence enumeration reads shared and historical follower journals
     { kind: "binding", bindingKey: binding.bindingKey, journalBindingKey: "manual:old" },
     { kind: "binding", bindingKey: binding.bindingKey, journalBindingKey: "manual:new" },
   ]);
-  assert.equal(resolveTelegramWorkspaceAcceptedWorkProtection({ binding,
+  assert.equal(resolveBaleWorkspaceAcceptedWorkProtection({ binding,
     localAcceptedTargets: [], journalSources: complete.sources,
     sourcesComplete: complete.complete }), "protected");
   assert.equal(capture({ ...binding, journalBindingsComplete: undefined }).complete, false);
-  const legacy = captureTelegramWorkspaceJournalProtectionSources({
+  const legacy = captureBaleWorkspaceJournalProtectionSources({
     binding: { ...binding, journalBindingsComplete: undefined },
     resolveLeader: () => ({ journal: { read: () => ({ entries: [] }) } }),
     createFollowerResolver: () => () => ({ journal: { read: () => ({ entries: [] }) } }),
@@ -312,10 +312,10 @@ test("Journal evidence enumeration reads shared and historical follower journals
   assert.equal(legacy.complete, true);
   assert.deepEqual(legacy.sources.at(-1)?.scope,
     { kind: "discovered", path: "/journals/follower-inbox-legacy.json" });
-  assert.equal(resolveTelegramWorkspaceAcceptedWorkProtection({ binding,
+  assert.equal(resolveBaleWorkspaceAcceptedWorkProtection({ binding,
     localAcceptedTargets: [], journalSources: legacy.sources,
     sourcesComplete: legacy.complete }), "protected");
-  const unreadable = captureTelegramWorkspaceJournalProtectionSources({
+  const unreadable = captureBaleWorkspaceJournalProtectionSources({
     binding,
     resolveLeader: () => { throw new Error("journal unavailable"); },
     createFollowerResolver: () => () => undefined,
@@ -325,7 +325,7 @@ test("Journal evidence enumeration reads shared and historical follower journals
 });
 
 test("Session-qualified journal protection reads both session addresses and refuses unavailable resolution", () => {
-  const binding = { ...createTelegramWorkspaceBindingIdentity("/repo", 0, "new-session")!,
+  const binding = { ...createBaleWorkspaceBindingIdentity("/repo", 0, "new-session")!,
     target: { chatId: 7, threadId: 42 }, slot: "A", updatedAtMs: 1,
     journalSources: [{ sessionId: "old-session", recipientBindingKey: "manual:same" },
       { sessionId: "new-session", recipientBindingKey: "manual:same" }], journalBindingsComplete: true as const };
@@ -334,12 +334,12 @@ test("Session-qualified journal protection reads both session addresses and refu
     createFollowerResolver: () => () => { throw new Error("Session custody must not use a key-only resolver"); },
     discovery: { paths: [], complete: true, createResolver: () => () => undefined },
   };
-  const unavailable = captureTelegramWorkspaceJournalProtectionSources(base);
+  const unavailable = captureBaleWorkspaceJournalProtectionSources(base);
   assert.equal(unavailable.complete, false, "An empty flat discovery cannot certify exact session sources");
-  assert.equal(resolveTelegramWorkspaceAcceptedWorkProtection({ binding, localAcceptedTargets: [],
+  assert.equal(resolveBaleWorkspaceAcceptedWorkProtection({ binding, localAcceptedTargets: [],
     journalSources: unavailable.sources, sourcesComplete: unavailable.complete }), "unknown");
   const reads: string[] = [];
-  const resolved = captureTelegramWorkspaceJournalProtectionSources({ ...base,
+  const resolved = captureBaleWorkspaceJournalProtectionSources({ ...base,
     createSessionResolver(key, sessionId) {
       assert.equal(key, "manual:same");
       return () => ({ journal: { read() {
@@ -353,13 +353,13 @@ test("Session-qualified journal protection reads both session addresses and refu
   assert.deepEqual(resolved.sources.slice(1).map(source => source.scope), binding.journalSources.map(source => ({
     kind: "binding", bindingKey: binding.bindingKey, journalBindingKey: source.recipientBindingKey, sessionId: source.sessionId,
   })));
-  assert.equal(resolveTelegramWorkspaceAcceptedWorkProtection({ binding, localAcceptedTargets: [],
+  assert.equal(resolveBaleWorkspaceAcceptedWorkProtection({ binding, localAcceptedTargets: [],
     journalSources: resolved.sources, sourcesComplete: resolved.complete }), "protected",
     "Exact binding custody remains protected even when its input cannot be projected to the new target");
 });
 
 test("External protection includes exact session sources and their process writers without repairing reads", () => {
-  const binding = { ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session-new")!,
+  const binding = { ...createBaleWorkspaceBindingIdentity("/repo", 0, "session-new")!,
     target: { chatId: 7, threadId: 42 }, slot: "A", updatedAtMs: 1,
     journalSources: [{ sessionId: "session-old", recipientBindingKey: "manual:writer" },
       { sessionId: "session-new", recipientBindingKey: "manual:writer" }], journalBindingsComplete: true as const };
@@ -368,7 +368,7 @@ test("External protection includes exact session sources and their process write
   let writer: "clear" | "protected" | "unknown" = "clear";
   const writerKeys: string[] = [];
   const reads: string[] = [];
-  const references = createTelegramUpdateJournalReferenceRegistry();
+  const references = createBaleUpdateJournalReferenceRegistry();
   const deps = {
     listFollowers: () => [], getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
     resolveLeaderJournal: () => ({ journal: { read: () => ({ entries: [] }) } }),
@@ -376,7 +376,7 @@ test("External protection includes exact session sources and their process write
     getJournalWriterProtection(key: string) { writerKeys.push(key); return writer; },
     getDeliveryAuthorityProtection: () => "clear" as const,
   };
-  const capture = createTelegramWorkspaceExternalProtectionCapture({ ...deps,
+  const capture = createBaleWorkspaceExternalProtectionCapture({ ...deps,
     createSessionJournalResolver(key, sessionId) {
       assert.equal(key, "manual:writer");
       return () => available ? { recoveryKey: sessionId,
@@ -405,24 +405,24 @@ test("External protection includes exact session sources and their process write
   assert.equal(capture(binding).liveOwner, "unknown");
   available = false;
   assert.equal(capture(binding).acceptedWork, "unknown");
-  assert.equal(createTelegramWorkspaceExternalProtectionCapture(deps)(binding).acceptedWork, "unknown",
+  assert.equal(createBaleWorkspaceExternalProtectionCapture(deps)(binding).acceptedWork, "unknown",
     "Missing session composition cannot silently use the flat recipient resolver");
 });
 
 test("Journal pruning removes only proven-empty known keys under exact profile and leader authority", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-journal-prune-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-journal-prune-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => 500 });
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => 500 });
     const admission = createRetirementAdmission(
       join(dir, "workspace-admission.json"),
       "journal-prune",
     );
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2,
       journalBindingKeys: ["manual:empty", "manual:busy"], journalBindingsComplete: true as const };
     store.upsertWorkspaceBinding(binding);
-    const capture = captureTelegramWorkspaceJournalProtectionSources({
+    const capture = captureBaleWorkspaceJournalProtectionSources({
       binding,
       resolveLeader: () => ({ journal: { read: () => ({ entries: [] }) } }),
       createFollowerResolver: (key) => () => ({ journal: { read: () => ({
@@ -440,7 +440,7 @@ test("Journal pruning removes only proven-empty known keys under exact profile a
     });
     assert.equal(fence.kind, "acquired");
     await assert.rejects(
-      pruneTelegramWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
+      pruneBaleWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
         store, binding, capture: () => capture, admission,
         getJournalWriterProtection: () => "clear",
         getLeaderEpoch: () => 1, getProfileKey: () => "default",
@@ -454,14 +454,14 @@ test("Journal pruning removes only proven-empty known keys under exact profile a
     if (fence.kind === "acquired") {
       admission.releaseUnissuedRetirementFence(fence.fence);
     }
-    assert.deepEqual(await pruneTelegramWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
+    assert.deepEqual(await pruneBaleWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
       store, binding, capture: () => capture, admission,
       getJournalWriterProtection: () => "unknown",
       getLeaderEpoch: () => 1, getProfileKey: () => "default",
     }), { kind: "blocked", reason: "writer-not-quiescent" });
     assert.deepEqual(store.getWorkspaceBinding("/repo")?.journalBindingKeys,
       ["manual:empty", "manual:busy"]);
-    const result = await pruneTelegramWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
+    const result = await pruneBaleWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
       store, binding, capture: () => capture, admission,
       getJournalWriterProtection: () => "clear",
       getLeaderEpoch: () => 1, getProfileKey: () => "default",
@@ -471,31 +471,31 @@ test("Journal pruning removes only proven-empty known keys under exact profile a
     assert.deepEqual(result.removedKeys, ["manual:empty"]);
     assert.deepEqual(result.binding.journalBindingKeys, ["manual:busy"]);
     assert.equal(result.binding.updatedAtMs, 500);
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.deepEqual(restored.getWorkspaceBinding("/repo")?.journalBindingKeys, ["manual:busy"]);
-    const legacy = { ...createTelegramWorkspaceBindingIdentity("/legacy")!,
+    const legacy = { ...createBaleWorkspaceBindingIdentity("/legacy")!,
       target: { chatId: 7, threadId: 43 }, slot: "B", inactiveSinceMs: 1, updatedAtMs: 2,
       journalBindingKeys: ["manual:known"] };
     store.upsertWorkspaceBinding(legacy);
-    const incomplete = captureTelegramWorkspaceJournalProtectionSources({
+    const incomplete = captureBaleWorkspaceJournalProtectionSources({
       binding: legacy,
       resolveLeader: () => ({ journal: { read: () => ({ entries: [] }) } }),
       createFollowerResolver: () => () => ({ journal: { read: () => ({ entries: [] }) } }),
     });
-    assert.deepEqual(await pruneTelegramWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
+    assert.deepEqual(await pruneBaleWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
       store, binding: legacy, capture: () => incomplete, admission,
       getJournalWriterProtection: () => "clear",
       getLeaderEpoch: () => 1, getProfileKey: () => "default",
     }), { kind: "blocked", reason: "incomplete-evidence" });
-    const discovered = captureTelegramWorkspaceJournalProtectionSources({
+    const discovered = captureBaleWorkspaceJournalProtectionSources({
       binding: legacy,
       resolveLeader: () => ({ journal: { read: () => ({ entries: [] }) } }),
       createFollowerResolver: () => () => ({ journal: { read: () => ({ entries: [] }) } }),
       discovery: { paths: ["/legacy/follower.json"], complete: true,
         createResolver: () => () => ({ journal: { read: () => ({ entries: [] }) } }) },
     });
-    const legacyPrune = await pruneTelegramWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
+    const legacyPrune = await pruneBaleWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
       store, binding: legacy, capture: () => discovered, admission,
       getJournalWriterProtection: () => "clear",
       getLeaderEpoch: () => 1, getProfileKey: () => "default",
@@ -515,25 +515,25 @@ for (const scenario of ["subset", "late-pending", "unavailable", "corrupt", "wro
       const key = "manual:same", liveKey = "manual:live";
       const journalSources = [{ sessionId: "old", recipientBindingKey: key },
         { sessionId: "new", recipientBindingKey: key }, { sessionId: "live", recipientBindingKey: liveKey }];
-      const binding: TelegramWorkspaceThreadBinding = { ...createTelegramWorkspaceBindingIdentity("/repo/prune", 0, "new")!,
+      const binding: BaleWorkspaceThreadBinding = { ...createBaleWorkspaceBindingIdentity("/repo/prune", 0, "new")!,
         target: { chatId: 7, threadId: 42 }, slot: "A", updatedAtMs: 1,
         journalBindingKeys: [key], journalSources, journalBindingsComplete: true };
-      const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "7:session-prune" });
-      const paths = [resolveTelegramFollowerJournalPath(key, dir, "work"),
-        ...journalSources.map(source => resolveTelegramSessionJournalPath(source.sessionId, source.recipientBindingKey, dir, "work"))];
+      const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "7:session-prune" });
+      const paths = [resolveBaleFollowerJournalPath(key, dir, "work"),
+        ...journalSources.map(source => resolveBaleSessionJournalPath(source.sessionId, source.recipientBindingKey, dir, "work"))];
       const journals = paths.map((path, index) => {
-        const journal = createTelegramUpdateJournalStore({ path, profileName: "work", botIdentity });
+        const journal = createBaleUpdateJournalStore({ path, profileName: "work", botIdentity });
         journal.appendBatch([{ update_id: index + 1, message: { chat: { id: 7 }, text: `source-${index}` } }]);
         if (index !== 2) journal.removeCompleted([index + 1]);
         return journal;
       });
       if (scenario === "corrupt") await writeFile(paths[2]!, "{broken");
-      const sourceImage = async () => Promise.all((await readdir(join(dir, "tmp", "pi-telegram"), { recursive: true, withFileTypes: true }))
+      const sourceImage = async () => Promise.all((await readdir(join(dir, "tmp", "pi-bale"), { recursive: true, withFileTypes: true }))
         .filter(entry => entry.isFile()).sort((left, right) => join(left.parentPath, left.name).localeCompare(join(right.parentPath, right.name)))
         .map(async entry => [join(entry.parentPath, entry.name), await readFile(join(entry.parentPath, entry.name))]));
       let expectedImage = sourceImage();
       let permitPublication = true, interruptCommit = false, changedPath = false;
-      const store = createTelegramTopicTargetStore({
+      const store = createBaleTopicTargetStore({
         path: () => join(dir, changedPath ? "new-profile-state.json" : "state.json"),
         getNowMs: () => 500, canPersist: () => permitPublication,
         commitPersist(commit) {
@@ -560,12 +560,12 @@ for (const scenario of ["subset", "late-pending", "unavailable", "corrupt", "wro
       }
       const readSource = (index: number) => ({ readForProtection() {
         const path = paths[index]!;
-        const evidence = inspectTelegramUpdateJournalFamily({ directory: dirname(path), path, profile: "work", botIdentity,
+        const evidence = inspectBaleUpdateJournalFamily({ directory: dirname(path), path, profile: "work", botIdentity,
           limits: { maxFiles: 128, maxBytes: 1_000_000, maxEntries: 128, maxWork: 10_000 } });
         if (evidence.kind !== "present") throw new Error("fixture source unavailable");
         return { entries: evidence.file.entries };
       }, journal: { read() { assert.fail("pruning must use strict non-repairing source reads"); } } });
-      const invoke = () => pruneTelegramWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
+      const invoke = () => pruneBaleWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
         store, binding,
         admission: { releaseAdmission: admission.releaseAdmission,
           acquireAdmission(input) {
@@ -580,7 +580,7 @@ for (const scenario of ["subset", "late-pending", "unavailable", "corrupt", "wro
         capture() {
           captures++;
           assert.equal(admission.read().leases.length, 1, "capture is evaluated inside admission");
-          const capture = captureTelegramWorkspaceJournalProtectionSources({ binding,
+          const capture = captureBaleWorkspaceJournalProtectionSources({ binding,
             resolveLeader: () => ({ journal: { read: () => ({ entries: [] }) } }),
             createFollowerResolver: observed => { assert.equal(observed, key); return () => readSource(0); },
             createSessionResolver(observed, sessionId) {
@@ -606,7 +606,7 @@ for (const scenario of ["subset", "late-pending", "unavailable", "corrupt", "wro
       else if (scenario === "pre-commit-authority-loss" || scenario === "pre-commit-path-drift") {
         await assert.rejects(invoke(), /lost its exact frame or authority/);
         assert.deepEqual(await readFile(join(dir, "state.json")), stateBefore, "commit-time drift refuses the actual rename");
-        const cold = createTelegramTopicTargetStore({ path: join(dir, "state.json") }); await cold.load();
+        const cold = createBaleTopicTargetStore({ path: join(dir, "state.json") }); await cold.load();
         assert.deepEqual(cold.getWorkspaceBinding("/repo/prune", "a", "new")?.journalSources, journalSources);
         await assert.rejects(readFile(join(dir, "new-profile-state.json")), { code: "ENOENT" });
       } else if (scenario === "lost-publication-result") {
@@ -622,7 +622,7 @@ for (const scenario of ["subset", "late-pending", "unavailable", "corrupt", "wro
           assert.deepEqual(outcome.removedSources ?? [], scenario === "subset" ? [journalSources[0]] : []);
           const retained = scenario === "subset" ? journalSources.slice(1) : journalSources;
           assert.deepEqual(outcome.binding.journalSources, retained, "busy and live-writer addresses stay intact");
-          const cold = createTelegramTopicTargetStore({ path: join(dir, "state.json") }); await cold.load();
+          const cold = createBaleTopicTargetStore({ path: join(dir, "state.json") }); await cold.load();
           assert.deepEqual(cold.getWorkspaceBinding("/repo/prune", "a", "new")?.journalSources, retained);
           assert.deepEqual(cold.getWorkspaceBinding("/repo/prune", "a", "new")?.journalBindingKeys, [], "Complete empty evidence stays explicit");
         } else {
@@ -632,7 +632,7 @@ for (const scenario of ["subset", "late-pending", "unavailable", "corrupt", "wro
         }
       }
       if (scenario === "post-publication-loss" || scenario === "lost-publication-result") {
-        const cold = createTelegramTopicTargetStore({ path: join(dir, "state.json") }); await cold.load();
+        const cold = createBaleTopicTargetStore({ path: join(dir, "state.json") }); await cold.load();
         assert.deepEqual(cold.getWorkspaceBinding("/repo/prune", "a", "new")?.journalSources, journalSources.slice(1),
           "a published subset is retained, never compensated after authority loss");
         assert.deepEqual(cold.getWorkspaceBinding("/repo/prune", "a", "new")?.journalBindingKeys, [], "Published complete empty keys survive cold reload");
@@ -650,13 +650,13 @@ for (const scenario of ["subset", "late-pending", "unavailable", "corrupt", "wro
 }
 
 test("Journal pruning admission spans durable binding publication", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-journal-prune-admission-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-journal-prune-admission-"));
   const admission = createRetirementAdmission(
     join(dir, "workspace-admission.json"),
     "journal-prune-publication",
   );
   const binding = {
-    ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    ...createBaleWorkspaceBindingIdentity("/repo")!,
     target: { chatId: 7, threadId: 42 },
     slot: "A",
     inactiveSinceMs: 1,
@@ -672,7 +672,7 @@ test("Journal pruning admission spans durable binding publication", async () => 
   const started = new Promise<void>((resolve) => {
     entered = resolve;
   });
-  const pruning = pruneTelegramWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
+  const pruning = pruneBaleWorkspaceJournalEvidence({ runExclusive: async operation => operation(),
     store: {
       commitWorkspaceJournalEvidence(expected, journalBindingKeys, complete) {
         return {
@@ -734,11 +734,11 @@ test("Journal pruning admission spans durable binding publication", async () => 
 });
 
 test("Accepted-work evidence protects exact local and journal targets and fails closed on incomplete sources", () => {
-  const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+  const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
     target: { chatId: 7, threadId: 42 }, slot: "A", threadName: "Anchor",
     inactiveSinceMs: 1, updatedAtMs: 2 };
-  const resolve = (overrides: Partial<Parameters<typeof resolveTelegramWorkspaceAcceptedWorkProtection>[0]> = {}) =>
-    resolveTelegramWorkspaceAcceptedWorkProtection({
+  const resolve = (overrides: Partial<Parameters<typeof resolveBaleWorkspaceAcceptedWorkProtection>[0]> = {}) =>
+    resolveBaleWorkspaceAcceptedWorkProtection({
       binding, localAcceptedTargets: [], journalSources: [], sourcesComplete: true,
       ...overrides,
     });
@@ -761,11 +761,11 @@ test("Accepted-work evidence protects exact local and journal targets and fails 
 });
 
 test("External protection composition keeps incomplete queues, journals, registries, and delivery unknown", () => {
-  const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+  const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
     target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2,
     journalBindingKeys: [], journalBindingsComplete: true as const };
-  const capture = (overrides: Partial<Parameters<typeof captureTelegramWorkspaceExternalProtection>[0]> = {}) =>
-    captureTelegramWorkspaceExternalProtection({
+  const capture = (overrides: Partial<Parameters<typeof captureBaleWorkspaceExternalProtection>[0]> = {}) =>
+    captureBaleWorkspaceExternalProtection({
       binding,
       getLiveOwnerProtection: () => "clear",
       getLocalAcceptedTargets: () => ({ targets: [], complete: true }),
@@ -790,7 +790,7 @@ test("External protection composition keeps incomplete queues, journals, registr
     getDeliveryAuthorityProtection: () => { throw new Error("delivery unavailable"); },
   }), { liveOwner: "unknown", acceptedWork: "unknown", deliveryAuthority: "unknown" });
   let discoveries = 0;
-  const assembled = createTelegramWorkspaceExternalProtectionCapture({
+  const assembled = createBaleWorkspaceExternalProtectionCapture({
     listFollowers: () => [{ target: binding.target }],
     getActiveTurnTarget: () => undefined,
     getQueuedItems: () => [{ chatId: 7 }],
@@ -804,7 +804,7 @@ test("External protection composition keeps incomplete queues, journals, registr
   assert.equal(discoveries, 0);
   assembled({ ...binding, journalBindingsComplete: undefined });
   assert.equal(discoveries, 1);
-  const writerAware = createTelegramWorkspaceExternalProtectionCapture({
+  const writerAware = createBaleWorkspaceExternalProtectionCapture({
     listFollowers: () => [], getActiveTurnTarget: () => undefined,
     getQueuedItems: () => [],
     resolveLeaderJournal: () => ({ journal: { read: () => ({ entries: [] }) } }),
@@ -817,17 +817,17 @@ test("External protection composition keeps incomplete queues, journals, registr
 });
 
 test("Successor leader adopts only the exact protected intent and persistence failure retains the old epoch", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-adoption-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-adoption-"));
   const path = join(dir, "state.json");
   const admission = createRetirementAdmission(join(dir, "admission.json"), "successor");
   let canCommit = true;
   try {
-    const store = createTelegramTopicTargetStore({ path, commitPersist(commit) {
+    const store = createBaleTopicTargetStore({ path, commitPersist(commit) {
       if (!canCommit) return false;
       commit();
       return true;
     } });
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2 };
     store.upsertWorkspaceBinding(binding);
     const intent = { id: "retire:a", reason: "pressure" as const, profileKey: "default",
@@ -840,24 +840,24 @@ test("Successor leader adopts only the exact protected intent and persistence fa
       runExclusive: async <T>(operation: () => Promise<T>) => operation(),
     };
     canCommit = false;
-    await assert.rejects(adoptTelegramWorkspaceRetirementIntent(base),
+    await assert.rejects(adoptBaleWorkspaceRetirementIntent(base),
       /lost exact transport ownership/);
     assert.deepEqual(store.listWorkspaceRetirementIntents(), [intent]);
     canCommit = true;
-    const adopted = await adoptTelegramWorkspaceRetirementIntent(base);
+    const adopted = await adoptBaleWorkspaceRetirementIntent(base);
     assert.equal(adopted.kind, "adopted");
     if (adopted.kind !== "adopted") return;
     assert.equal(adopted.intent.leaderEpoch, 2);
     assert.equal(adopted.intent.requestedAtMs, 3);
-    assert.deepEqual(await adoptTelegramWorkspaceRetirementIntent({ ...base,
+    assert.deepEqual(await adoptBaleWorkspaceRetirementIntent({ ...base,
       intent: adopted.intent, getProfileKey: () => "other",
     }), { kind: "blocked", reason: "profile-changed" });
-    assert.deepEqual(await executeTelegramWorkspaceRetirement({
+    assert.deepEqual(await executeBaleWorkspaceRetirement({
       store, intent, getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => 2, getProfileKey: () => "default", admission,
       runExclusive: base.runExclusive, async deleteForumTopic() { throw new Error("must not delete old epoch"); },
     }), { kind: "retained", reason: "authority-changed" });
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.deepEqual(restored.listWorkspaceRetirementIntents(), [adopted.intent]);
   } finally {
@@ -866,15 +866,15 @@ test("Successor leader adopts only the exact protected intent and persistence fa
 });
 
 test("Explicit lifecycle prepares and executes one pressure retirement", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-lifecycle-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-lifecycle-"));
   try {
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
     const admission = createRetirementAdmission(join(dir, "admission.json"));
     for (let index = 0; index < 26; index++) addBinding(store, index, index + 1);
     const binding = store.getWorkspaceBinding("/repo/0")!;
     let gates = 0;
     let deletions = 0;
-    const run = () => runTelegramWorkspaceRetirementLifecycle({
+    const run = () => runBaleWorkspaceRetirementLifecycle({
       store, getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => 1, getProfileKey: () => "default",
       getNowMs: () => 1000,
@@ -903,10 +903,10 @@ test("Pressure rotation reclaims exact queued custody only after native dead-own
     t.skip("Strict no-follow journal-family inspection is unavailable on Windows.");
     return;
   }
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-dead-owner-reclamation-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-dead-owner-reclamation-")));
   try {
     const admission = createRetirementAdmission(join(dir, "admission.json"));
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"),
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json"),
       getExternalReservedSlots: admission.listReservedSlots });
     for (let index = 0; index < 26; index++) addBinding(store, index, index + 1);
     const initial = store.getWorkspaceBinding("/repo/0")!;
@@ -914,7 +914,7 @@ test("Pressure rotation reclaims exact queued custody only after native dead-own
     assert.ok(store.commitWorkspaceJournalEvidence(initial, [journalBindingKey], true));
     await store.persist();
 
-    const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "7:fixture" });
+    const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "7:fixture" });
     const recoveryOwner = { instanceId: "leader", processId: process.pid,
       processBirthId: `${process.pid}:leader`, sessionGeneration: 2 };
     const deadOwner = { instanceId: "dead-follower",
@@ -922,11 +922,11 @@ test("Pressure rotation reclaims exact queued custody only after native dead-own
       sessionGeneration: 1 };
     const createJournal = (name: string, queueRuntimeIdentity = recoveryOwner) => {
       const path = join(dir, name);
-      const journal = createTelegramUpdateJournalStore({ path, profileName: "default", botIdentity,
+      const journal = createBaleUpdateJournalStore({ path, profileName: "default", botIdentity,
         queueRuntimeIdentity, workspaceAdmission: admission,
         getQueueProcessLiveness: owner => owner.processId === deadOwner.processId ? "dead" : "alive" });
       return { recoveryKey: path, journal, readForProtection: () => {
-        const evidence = inspectTelegramUpdateJournalFamily({ directory: dir, path,
+        const evidence = inspectBaleUpdateJournalFamily({ directory: dir, path,
           profile: "default", botIdentity,
           limits: { maxFiles: 128, maxBytes: 1_000_000, maxEntries: 128, maxWork: 10_000 } });
         if (evidence.kind !== "present") throw new Error("fixture journal disappeared");
@@ -949,17 +949,17 @@ test("Pressure rotation reclaims exact queued custody only after native dead-own
       sourceUpdateIds: [1], owner: deadOwner });
     const follower = createJournal("follower-inbox-dead000000000000.json");
 
-    const capture = createTelegramWorkspaceExternalProtectionCapture({
+    const capture = createBaleWorkspaceExternalProtectionCapture({
       listFollowers: () => [], getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
       resolveLeaderJournal: () => leader,
       createFollowerJournalResolver: key => () => key === journalBindingKey ? follower : undefined,
       getJournalWriterProtection: () => "clear", getDeliveryAuthorityProtection: () => "clear",
     });
-    const getProtection = (binding: TelegramWorkspaceThreadBinding): TelegramWorkspaceExternalProtectionEvidence =>
+    const getProtection = (binding: BaleWorkspaceThreadBinding): BaleWorkspaceExternalProtectionEvidence =>
       binding.bindingKey === initial.bindingKey ? capture(binding) : {
         liveOwner: "protected", acceptedWork: "clear", deliveryAuthority: "clear",
       };
-    const reclaim = createTelegramWorkspaceDeadOwnerQueueReclaimer({
+    const reclaim = createBaleWorkspaceDeadOwnerQueueReclaimer({
       getExternalProtection: getProtection, getActiveTurnTarget: () => undefined,
       getQueuedItems: () => [], resolveLeaderJournal: () => leader,
       createFollowerJournalResolver: key => () => key === journalBindingKey ? follower : undefined,
@@ -974,8 +974,8 @@ test("Pressure rotation reclaims exact queued custody only after native dead-own
     let deletions = 0;
     let effects = 0;
     const reclamations: unknown[] = [];
-    const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
-    const rotation = createTelegramWorkspaceSlotRotation({
+    const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
+    const rotation = createBaleWorkspaceSlotRotation({
       store, getAdmission: () => admission, getLeaderEpoch: () => 1,
       runExclusive: operations.runExclusive,
       getExternalProtection: getProtection, recordEvent() {},
@@ -992,7 +992,7 @@ test("Pressure rotation reclaims exact queued custody only after native dead-own
     });
     const slot = await rotation(async () => {
       const claimed = store.claimWorkspaceIdentity("/fresh", "fresh");
-      if (!claimed) throw new TelegramWorkspaceSlotUnavailableError();
+      if (!claimed) throw new BaleWorkspaceSlotUnavailableError();
       effects++;
       return claimed.slot;
     });
@@ -1012,19 +1012,19 @@ for (const scenario of ["queued", "pending", "delivery-protected", "corrupt", "e
     const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-pressure-metadata-")));
     try {
       const admission = createRetirementAdmission(join(dir, "admission.json"));
-      const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), getExternalReservedSlots: admission.listReservedSlots });
+      const store = createBaleTopicTargetStore({ path: join(dir, "state.json"), getExternalReservedSlots: admission.listReservedSlots });
       for (let i = 0; i < (scenario === "no-pressure" ? 25 : 26); i++) addBinding(store, i, i + 1);
       const initial = store.getWorkspaceBinding("/repo/0")!, key = "manual:metadata-fixture";
       const addresses = ["old", "new"].map(sessionId => ({ sessionId, recipientBindingKey: key }));
       assert.ok(store.commitWorkspaceJournalEvidence(initial, [], true, []));
       store.upsertWorkspaceBinding({ ...initial, journalSources: addresses }); await store.persist();
-      const token = "7:metadata-fixture", botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: token });
+      const token = "7:metadata-fixture", botIdentity = createBaleUpdateJournalBotIdentity({ botToken: token });
       const recoveryOwner = { instanceId: "leader", processId: process.pid, processBirthId: `${process.pid}:leader`, sessionGeneration: 2 };
       const deadOwner = { instanceId: "dead", processId: process.pid + 1_000_000, processBirthId: `${process.pid + 1_000_000}:dead`, sessionGeneration: 1 };
-      const pollingPath = resolveTelegramSessionPollingJournalPath("host", dir, "work");
-      const paths = [pollingPath, ...addresses.map(source => resolveTelegramSessionJournalPath(source.sessionId, key, dir, "work"))];
+      const pollingPath = resolveBaleSessionPollingJournalPath("host", dir, "work");
+      const paths = [pollingPath, ...addresses.map(source => resolveBaleSessionJournalPath(source.sessionId, key, dir, "work"))];
       const journals = paths.map((path, i) => {
-        const journal = createTelegramUpdateJournalStore({ path, profileName: "work", botIdentity, queueRuntimeIdentity: deadOwner });
+        const journal = createBaleUpdateJournalStore({ path, profileName: "work", botIdentity, queueRuntimeIdentity: deadOwner });
         journal.appendBatch([{ update_id: i === 2 ? 44 : i + 1, message: { message_id: i + 1, chat: { id: 7, type: "private" },
           from: { id: 7, is_bot: false }, message_thread_id: initial.target.threadId, text: "isolated metadata fixture" } }]);
         if (i !== 2 || scenario === "delivery-protected") journal.removeCompleted([i === 2 ? 44 : i + 1]);
@@ -1033,25 +1033,25 @@ for (const scenario of ["queued", "pending", "delivery-protected", "corrupt", "e
       });
       if (scenario === "corrupt") await writeFile(paths[2]!, "{broken");
       const oldImage = await readFile(paths[1]!);
-      const references = createTelegramUpdateJournalReferenceRegistry();
-      const bindings = createTelegramUpdateJournalBindingRuntime({
+      const references = createBaleUpdateJournalReferenceRegistry();
+      const bindings = createBaleUpdateJournalBindingRuntime({
         base: { getProfileName: () => "work", getBotToken: () => token, getBotId: () => 7,
           getQueueRuntimeIdentity: () => recoveryOwner, getWorkspaceAdmission: () => admission,
           withSourceSerialization(operation) { return operation(); } },
-        getLeaderJournalPath: () => pollingPath, getRuntimeDir: () => resolveTelegramTempDir(dir),
+        getLeaderJournalPath: () => pollingPath, getRuntimeDir: () => resolveBaleTempDir(dir),
         getFollowerJournalPath: (recipient, profile, sessionId) => sessionId
-          ? resolveTelegramSessionJournalPath(sessionId, recipient, dir, profile)
-          : resolveTelegramFollowerJournalPath(recipient, dir, profile),
+          ? resolveBaleSessionJournalPath(sessionId, recipient, dir, profile)
+          : resolveBaleFollowerJournalPath(recipient, dir, profile),
         getActiveFollowerBindingKey: () => key, getActiveFollowerSessionId: () => "new", isFollowerRegistered: () => false,
       });
       let epoch = 1, inGate = false, observingPrune = false, captures = 0, prunes = 0, reclaimed = 0, deletions = 0, allocations = 0;
-      const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
+      const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
       const gate = async <T>(operation: () => Promise<T>): Promise<T> => {
         assert.equal(inGate, false, "no nested non-reentrant gate");
         if (observingPrune) assert.equal(admission.read().leases.length, 1, "admission precedes the shared gate");
         return operations.runExclusive(async () => { inGate = true; try { return await operation(); } finally { inGate = false; } });
       };
-      const observer = createTelegramWorkspaceProtectionObserver({
+      const observer = createBaleWorkspaceProtectionObserver({
         listFollowers: () => store.listWorkspaceBindings().filter(binding => binding.bindingKey !== initial.bindingKey).map(binding => ({ target: binding.target })),
         getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
         resolveLeaderJournal: bindings.resolveLeader, createFollowerJournalResolver: bindings.createLegacyRecipientResolver,
@@ -1059,7 +1059,7 @@ for (const scenario of ["queued", "pending", "delivery-protected", "corrupt", "e
         getJournalWriterProtection: () => "clear", getDeliveryAuthorityProtection: () => scenario === "delivery-protected" ? "protected" : "clear",
         inspectJournalNamespace() {
           if (observingPrune) { captures++; assert.equal(inGate, true); assert.equal(admission.read().leases.length, 1); }
-          return inspectTelegramSessionJournalNamespace({ directory: resolveTelegramTempDir(dir), profile: "work", pollingPath, botIdentity,
+          return inspectBaleSessionJournalNamespace({ directory: resolveBaleTempDir(dir), profile: "work", pollingPath, botIdentity,
             limits: { maxDirectoryEntries: 1000, maxFiles: 256, maxBytes: 1_000_000, maxEntries: 1000, maxWork: 10_000 } });
         },
         withJournalReference(binding, operation) {
@@ -1076,15 +1076,15 @@ for (const scenario of ["queued", "pending", "delivery-protected", "corrupt", "e
           assert.equal(await publish(expected, isCurrent), true); epoch = 2; return true;
         };
       }
-      const prune = createTelegramWorkspaceJournalEvidencePruner({ store, getAdmission: () => admission, getLeaderEpoch: () => epoch,
+      const prune = createBaleWorkspaceJournalEvidencePruner({ store, getAdmission: () => admission, getLeaderEpoch: () => epoch,
         runExclusive: gate, protection: observer });
-      const reclaim = createTelegramWorkspaceDeadOwnerQueueReclaimer({ getExternalProtection: observer.capture,
+      const reclaim = createBaleWorkspaceDeadOwnerQueueReclaimer({ getExternalProtection: observer.capture,
         getActiveTurnTarget: () => undefined, getQueuedItems: () => [], resolveLeaderJournal: bindings.resolveLeader,
         createFollowerJournalResolver: bindings.createLegacyRecipientResolver, createSessionJournalResolver: bindings.createRecipientResolver,
         getRecoveryOwner: () => recoveryOwner, getQueueOwnerLiveness: () => "dead",
-        isBindingCurrent: binding => isCurrentTelegramWorkspaceBinding(store, binding),
+        isBindingCurrent: binding => isCurrentBaleWorkspaceBinding(store, binding),
       });
-      const rotation = createTelegramWorkspaceSlotRotation({ store, getAdmission: () => admission, getLeaderEpoch: () => epoch,
+      const rotation = createBaleWorkspaceSlotRotation({ store, getAdmission: () => admission, getLeaderEpoch: () => epoch,
         runExclusive: gate, getExternalProtection: observer.capture, recordEvent() {},
         async pruneJournalEvidence(binding, isCurrent) {
           prunes++; observingPrune = true; try { return await prune(binding, isCurrent); } finally { observingPrune = false; }
@@ -1099,7 +1099,7 @@ for (const scenario of ["queued", "pending", "delivery-protected", "corrupt", "e
       });
       const attempt = () => rotation(async () => {
         const claim = store.claimWorkspaceIdentity("/fresh", "fresh");
-        if (!claim) throw new TelegramWorkspaceSlotUnavailableError();
+        if (!claim) throw new BaleWorkspaceSlotUnavailableError();
         allocations++; return claim.slot;
       });
       if (scenario === "queued" || scenario === "no-pressure") assert.equal(await attempt(), scenario === "queued" ? "A" : "Z");
@@ -1110,7 +1110,7 @@ for (const scenario of ["queued", "pending", "delivery-protected", "corrupt", "e
       assert.equal(deletions, scenario === "queued" ? 1 : 0);
       assert.equal(allocations, scenario === "epoch-loss" ? 0 : 1);
       assert.equal(reclaimed, scenario === "queued" || scenario === "pending" ? 1 : 0);
-      const cold = createTelegramTopicTargetStore({ path: join(dir, "state.json") }); await cold.load();
+      const cold = createBaleTopicTargetStore({ path: join(dir, "state.json") }); await cold.load();
       if (scenario === "queued") assert.equal(cold.getWorkspaceBinding("/repo/0"), undefined);
       else if (scenario !== "no-pressure" && scenario !== "epoch-loss") {
         assert.equal(cold.getWorkspaceBinding("/repo/0")?.slot, undefined, "reuse strips only the letter");
@@ -1128,14 +1128,14 @@ for (const scenario of ["queued", "pending", "delivery-protected", "corrupt", "e
 }
 
 test("One occupancy snapshot reads binding-independent journal evidence once; separate snapshots stay fresh", () => {
-  const store = createTelegramTopicTargetStore({ path: join(tmpdir(), "pi-snapshot-reuse-unpersisted.json") });
+  const store = createBaleTopicTargetStore({ path: join(tmpdir(), "pi-snapshot-reuse-unpersisted.json") });
   for (let i = 0; i < 26; i++) addBinding(store, i, i + 1);
   const discovered = ["/ns/a.json", "/ns/b.json"];
   const reads = new Map<string, number>(), count = (key: string) => reads.set(key, (reads.get(key) ?? 0) + 1);
   let inspections = 0, discoveredEntries: { update: unknown }[] = [];
   const reader = (key: string, entries: () => { update: unknown }[]) =>
     () => ({ journal: { read: () => { count(key); return { entries: entries(), exists: true }; } } });
-  const observer = createTelegramWorkspaceProtectionObserver({
+  const observer = createBaleWorkspaceProtectionObserver({
     listFollowers: () => [], getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
     resolveLeaderJournal: reader("leader", () => []),
     createFollowerJournalResolver: () => () => undefined,
@@ -1167,8 +1167,8 @@ test("One occupancy snapshot reads binding-independent journal evidence once; se
 });
 
 test("Dead-owner reclamation refuses replacement and partial custody, then resumes interrupted exact groups", async (t) => {
-  const binding: TelegramWorkspaceThreadBinding = {
-    ...createTelegramWorkspaceBindingIdentity("/repo/dead-owner")!,
+  const binding: BaleWorkspaceThreadBinding = {
+    ...createBaleWorkspaceBindingIdentity("/repo/dead-owner")!,
     target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2,
     journalBindingsComplete: true,
   };
@@ -1176,14 +1176,14 @@ test("Dead-owner reclamation refuses replacement and partial custody, then resum
     sessionGeneration: 1, acquisitionId: "acquire-dead", acquiredAtMs: 1 };
   const recoveryOwner = { instanceId: "leader", processId: 555, processBirthId: "555:start:leader",
     sessionGeneration: 2 };
-  const entry = (updateId: number, threadId: number, receiptId: string): TelegramUpdateJournalEntry => ({
+  const entry = (updateId: number, threadId: number, receiptId: string): BaleUpdateJournalEntry => ({
     updateId, admittedAtMs: 1, state: "queued", queueKind: "prompt", queueReceiptId: receiptId,
     queueOwner: owner, update: { update_id: updateId, message: { message_id: updateId,
       message_thread_id: threadId, chat: { id: 7, type: "private" },
       from: { id: 7, is_bot: false }, text: `update-${updateId}` } },
   });
   const createHarness = (input: {
-    initialEntries: TelegramUpdateJournalEntry[];
+    initialEntries: BaleUpdateJournalEntry[];
     getLiveOwner?: (call: number) => "clear" | "protected" | "unknown";
     liveness?: "alive" | "dead" | "unverifiable";
     recover?: (call: number) => "recovered" | "owner-alive" | "owner-unverifiable" | "throw";
@@ -1195,7 +1195,7 @@ test("Dead-owner reclamation refuses replacement and partial custody, then resum
       recoveryKey: "fixture-source",
       readForProtection: () => ({ entries }),
       journal: { recoverDeadQueueOwner(recovery: Parameters<ReturnType<
-        typeof createTelegramUpdateJournalStore>["recoverDeadQueueOwner"]>[0]) {
+        typeof createBaleUpdateJournalStore>["recoverDeadQueueOwner"]>[0]) {
         recoveryCalls++;
         const outcome = input.recover?.(recoveryCalls) ?? "recovered";
         if (outcome === "throw") throw new Error("interrupted publication");
@@ -1207,7 +1207,7 @@ test("Dead-owner reclamation refuses replacement and partial custody, then resum
           recoveredUpdateIds: [...recovery.sourceUpdateIds], entryCount: entries.length, serializedBytes: 1 };
       } },
     };
-    const getExternalProtection = (): TelegramWorkspaceExternalProtectionEvidence => {
+    const getExternalProtection = (): BaleWorkspaceExternalProtectionEvidence => {
       protectionCalls++;
       const acceptedWork = entries.some((candidate) =>
         (candidate.update as { message?: { message_thread_id?: number } }).message
@@ -1216,7 +1216,7 @@ test("Dead-owner reclamation refuses replacement and partial custody, then resum
       return { liveOwner: input.getLiveOwner?.(protectionCalls) ?? "clear",
         acceptedWork, deliveryAuthority: "clear" };
     };
-    const reclaim = createTelegramWorkspaceDeadOwnerQueueReclaimer({
+    const reclaim = createBaleWorkspaceDeadOwnerQueueReclaimer({
       getExternalProtection, getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
       resolveLeaderJournal: () => source, createFollowerJournalResolver: () => () => undefined,
       getRecoveryOwner: () => recoveryOwner,
@@ -1276,36 +1276,36 @@ test("Dead-owner reclamation refuses replacement and partial custody, then resum
 for (const scenario of ["dead", "unavailable", "corrupt", "pending", "alive", "authority-loss", "partial-publication"] as const) {
   test(`Session-qualified dead-owner reclamation resolves exact native journal families (${scenario})`, { skip: process.platform === "win32" }, async () => {
     const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-session-dead-owner-")));
-    const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "7:session-pressure" });
+    const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "7:session-pressure" });
     const recoveryOwner = { instanceId: "leader", processId: 555, processBirthId: "555:leader", sessionGeneration: 2 };
     const recipientBindingKey = "manual:retained";
     const journalSources = ["session-old", "session-new"].map(sessionId => ({ sessionId, recipientBindingKey }));
-    const binding: TelegramWorkspaceThreadBinding = { ...createTelegramWorkspaceBindingIdentity("/repo/session-pressure", 0, "session-new")!,
+    const binding: BaleWorkspaceThreadBinding = { ...createBaleWorkspaceBindingIdentity("/repo/session-pressure", 0, "session-new")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2,
       journalBindingsComplete: true, journalSources };
     let current = true, interrupt = false;
     const mutations: number[] = [], resolved: string[] = [];
     try {
       const sources = journalSources.map(({ sessionId }, index) => {
-        const path = resolveTelegramSessionJournalPath(sessionId, recipientBindingKey, dir, "work");
+        const path = resolveBaleSessionJournalPath(sessionId, recipientBindingKey, dir, "work");
         const owner = { instanceId: `dead-${index}`, processId: 1001 + index,
           processBirthId: `${1001 + index}:dead`, sessionGeneration: 1 };
-        const writer = createTelegramUpdateJournalStore({ path, profileName: "work", botIdentity,
+        const writer = createBaleUpdateJournalStore({ path, profileName: "work", botIdentity,
           queueRuntimeIdentity: owner, getQueueProcessLiveness: () => "dead" });
         writer.appendBatch([{ update_id: index + 1, message: { message_id: index + 1, message_thread_id: 42,
           chat: { id: 7, type: "private" }, text: `retained-${sessionId}` } }]);
         if (scenario !== "pending" || index === 0) writer.markQueued({ queueKind: "prompt", receiptId: "same-receipt-name",
           sourceUpdateIds: [index + 1], owner });
-        const journal = createTelegramUpdateJournalStore({ path, profileName: "work", botIdentity,
+        const journal = createBaleUpdateJournalStore({ path, profileName: "work", botIdentity,
           queueRuntimeIdentity: recoveryOwner, getQueueProcessLiveness: () => "dead",
           onPublicationBoundary(point) {
             if (index === 1 && interrupt && point === "after-write-before-rename") {
               interrupt = false; throw new Error("fixture session publication interrupted");
             }
           } });
-        return { path, recoveryKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity }),
+        return { path, recoveryKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity }),
           readForProtection() {
-            const evidence = inspectTelegramUpdateJournalFamily({ directory: dirname(path), path, profile: "work", botIdentity,
+            const evidence = inspectBaleUpdateJournalFamily({ directory: dirname(path), path, profile: "work", botIdentity,
               limits: { maxFiles: 128, maxBytes: 1_000_000, maxEntries: 128, maxWork: 10_000 } });
             if (evidence.kind !== "present") throw new Error("fixture exact session source unavailable");
             return { entries: evidence.file.entries };
@@ -1318,9 +1318,9 @@ for (const scenario of ["dead", "unavailable", "corrupt", "pending", "alive", "a
       if (scenario === "corrupt") await writeFile(sources[1]!.path, "{broken");
       const before = await Promise.all(sources.map(source => readFile(source.path, "utf8")));
       interrupt = scenario === "partial-publication";
-      const reclaim = createTelegramWorkspaceDeadOwnerQueueReclaimer({
+      const reclaim = createBaleWorkspaceDeadOwnerQueueReclaimer({
         getExternalProtection() {
-          let acceptedWork: TelegramWorkspaceExternalProtectionEvidence["acceptedWork"];
+          let acceptedWork: BaleWorkspaceExternalProtectionEvidence["acceptedWork"];
           try { acceptedWork = sources.some(source => source.readForProtection().entries.length > 0) ? "protected" : "clear"; }
           catch { acceptedWork = "unknown"; }
           return { liveOwner: "clear", acceptedWork, deliveryAuthority: "clear" };
@@ -1369,22 +1369,22 @@ test("Dead-owner pressure reclamation retries an interrupted native journal publ
     t.skip("Strict no-follow journal-family inspection is unavailable on Windows.");
     return;
   }
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-dead-owner-publication-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-dead-owner-publication-")));
   try {
     const path = join(dir, "inbox.json");
-    const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "7:publication" });
+    const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "7:publication" });
     const deadOwner = { instanceId: "dead", processId: 444,
       processBirthId: "444:start:dead", sessionGeneration: 1 };
     const recoveryOwner = { instanceId: "leader", processId: 555,
       processBirthId: "555:start:leader", sessionGeneration: 2 };
-    const writer = createTelegramUpdateJournalStore({ path, profileName: "default", botIdentity,
+    const writer = createBaleUpdateJournalStore({ path, profileName: "default", botIdentity,
       queueRuntimeIdentity: deadOwner, getQueueProcessLiveness: () => "dead" });
     writer.appendBatch([{ update_id: 1, message: { message_id: 1, message_thread_id: 42,
       chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false }, text: "once" } }], 1);
     writer.markQueued({ queueKind: "prompt", receiptId: "receipt", sourceUpdateIds: [1], owner: deadOwner });
     let interrupt = true;
     let effects = 0;
-    const journal = createTelegramUpdateJournalStore({ path, profileName: "default", botIdentity,
+    const journal = createBaleUpdateJournalStore({ path, profileName: "default", botIdentity,
       queueRuntimeIdentity: recoveryOwner, getQueueProcessLiveness: () => "dead",
       onPublicationBoundary(boundary) {
         if (interrupt && boundary === "after-write-before-rename") {
@@ -1393,24 +1393,24 @@ test("Dead-owner pressure reclamation retries an interrupted native journal publ
         }
       } });
     const inspect = () => {
-      const evidence = inspectTelegramUpdateJournalFamily({ directory: dir, path,
+      const evidence = inspectBaleUpdateJournalFamily({ directory: dir, path,
         profile: "default", botIdentity,
         limits: { maxFiles: 128, maxBytes: 1_000_000, maxEntries: 128, maxWork: 10_000 } });
       if (evidence.kind !== "present") throw new Error("fixture journal disappeared");
       return { entries: evidence.file.entries };
     };
     const source = { recoveryKey: path, journal, readForProtection: inspect };
-    const binding: TelegramWorkspaceThreadBinding = {
-      ...createTelegramWorkspaceBindingIdentity("/repo/publication")!,
+    const binding: BaleWorkspaceThreadBinding = {
+      ...createBaleWorkspaceBindingIdentity("/repo/publication")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2,
       journalBindingsComplete: true,
     };
-    const getExternalProtection = (): TelegramWorkspaceExternalProtectionEvidence => ({
+    const getExternalProtection = (): BaleWorkspaceExternalProtectionEvidence => ({
       liveOwner: "clear",
       acceptedWork: inspect().entries.length ? "protected" : "clear",
       deliveryAuthority: "clear",
     });
-    const reclaim = createTelegramWorkspaceDeadOwnerQueueReclaimer({
+    const reclaim = createBaleWorkspaceDeadOwnerQueueReclaimer({
       getExternalProtection, getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
       resolveLeaderJournal: () => source, createFollowerJournalResolver: () => () => undefined,
       getRecoveryOwner: () => recoveryOwner, getQueueOwnerLiveness: () => "dead",
@@ -1431,10 +1431,10 @@ test("Dead-owner pressure reclamation retries an interrupted native journal publ
   }
 });
 
-test("Slot rotation cancels proven Telegram rejection but retains ambiguous deletion without replay", async (t) => {
+test("Slot rotation cancels proven Bale rejection but retains ambiguous deletion without replay", async (t) => {
   for (const outcome of ["rejected", "malformed", "forged", "server", "network", "false"] as const) {
     await t.test(outcome, async (t) => {
-      const dir = await mkdtemp(join(tmpdir(), "pi-telegram-rotation-rejection-"));
+      const dir = await mkdtemp(join(tmpdir(), "pi-bale-rotation-rejection-"));
       const attempts: string[] = [];
       t.mock.method(Date, "now", () => 1000);
       let requests = 0;
@@ -1451,28 +1451,28 @@ test("Slot rotation cancels proven Telegram rejection but retains ambiguous dele
         }), { status });
       };
       t.mock.method(globalThis, "fetch", fetch);
-      const restoreFetch = setTelegramApiHttpsFetchForTesting(fetch);
+      const restoreFetch = setBaleApiHttpsFetchForTesting(fetch);
       try {
-        const admission = createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
+        const admission = createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
           profileKey: "default", owner: { processId: process.pid, processBirthId: `${process.pid}:rejection` },
           getNowMs: () => 1000, getProcessLiveness: () => "alive" });
-        const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000,
+        const store = createBaleTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000,
           getExternalReservedSlots: admission.listReservedSlots });
         for (let index = 0; index < 26; index++) addBinding(store, index, index + 1);
         await store.persist();
-        const api = createDefaultTelegramBridgeApiRuntime({
+        const api = createDefaultBaleBridgeApiRuntime({
           getBotToken: () => "123:fixture", recordRuntimeEvent() {}, workspaceAdmission: admission,
         });
-        const rotation = createTelegramWorkspaceSlotRotation({
+        const rotation = createBaleWorkspaceSlotRotation({
           store, getAdmission: () => admission, getLeaderEpoch: () => 1,
-          runExclusive: createTelegramWorkspaceOperationGate().runExclusive,
+          runExclusive: createBaleWorkspaceOperationGate().runExclusive,
           getExternalProtection: clearExternalProtection, recordEvent() {},
           deleteThread(authorize) {
             attempts.push(admission.read().fence!.operationId);
             return api.deleteWorkspaceThread(authorize);
           },
         });
-        await assert.rejects(rotation(async () => { throw new TelegramWorkspaceSlotUnavailableError(); }),
+        await assert.rejects(rotation(async () => { throw new BaleWorkspaceSlotUnavailableError(); }),
           outcome === "rejected" ? /delete-rejected/ : /delete-unconfirmed/);
         assert.equal(requests, 1);
         assert.equal(store.listWorkspaceBindings().length, 26);
@@ -1488,7 +1488,7 @@ test("Slot rotation cancels proven Telegram rejection but retains ambiguous dele
           success = true;
           assert.equal(await rotation(async () => {
             const claim = store.claimWorkspaceIdentity("/fresh", "fresh");
-            if (!claim) throw new TelegramWorkspaceSlotUnavailableError();
+            if (!claim) throw new BaleWorkspaceSlotUnavailableError();
             return claim.slot;
           }), "A");
           assert.equal(requests, 2);
@@ -1509,7 +1509,7 @@ test("Slot rotation cancels proven Telegram rejection but retains ambiguous dele
 test("Rejected rotation recovery finishes each durable cancellation prefix without another delete", async (t) => {
   for (const fault of ["rejection", "withdrawal", "withdrawal-same-store", "withdrawal-ack", "authority", "release", "release-ack"] as const) {
     await t.test(fault, async (t) => {
-      const dir = await mkdtemp(join(tmpdir(), "pi-telegram-rejection-recovery-"));
+      const dir = await mkdtemp(join(tmpdir(), "pi-bale-rejection-recovery-"));
       const path = join(dir, "state.json");
       const admissionPath = join(dir, "admission.json");
       let requests = 0;
@@ -1520,7 +1520,7 @@ test("Rejected rotation recovery finishes each durable cancellation prefix witho
         return new Response(JSON.stringify({ ok: false, error_code: 429, description: "Too Many Requests" }), { status: 429 });
       };
       t.mock.method(globalThis, "fetch", fetch);
-      const restoreFetch = setTelegramApiHttpsFetchForTesting(fetch);
+      const restoreFetch = setBaleApiHttpsFetchForTesting(fetch);
       try {
         const ledger = createRetirementAdmission(admissionPath);
         const admission = { ...ledger,
@@ -1536,7 +1536,7 @@ test("Rejected rotation recovery finishes each durable cancellation prefix witho
             return result;
           },
         };
-        const backing = createTelegramTopicTargetStore({ path, getExternalReservedSlots: ledger.listReservedSlots });
+        const backing = createBaleTopicTargetStore({ path, getExternalReservedSlots: ledger.listReservedSlots });
         const store = { ...backing, async persist() {
           const cancelling = ledger.read().fence?.phase === "deletion-rejected";
           if (fail && cancelling && (fault === "withdrawal" || fault === "withdrawal-same-store")) {
@@ -1549,31 +1549,31 @@ test("Rejected rotation recovery finishes each durable cancellation prefix witho
         for (let index = 0; index < 26; index++) addBinding(store, index, index + 1);
         await store.persist();
         const bindings = store.listWorkspaceBindings();
-        const api = createDefaultTelegramBridgeApiRuntime({
+        const api = createDefaultBaleBridgeApiRuntime({
           getBotToken: () => "123:fixture", recordRuntimeEvent() {}, workspaceAdmission: admission,
         });
-        const rotation = createTelegramWorkspaceSlotRotation({
+        const rotation = createBaleWorkspaceSlotRotation({
           store, getAdmission: () => admission, getLeaderEpoch: () => epoch,
-          runExclusive: createTelegramWorkspaceOperationGate().runExclusive,
+          runExclusive: createBaleWorkspaceOperationGate().runExclusive,
           getExternalProtection: clearExternalProtection, recordEvent() {}, deleteThread: api.deleteWorkspaceThread,
         });
-        await assert.rejects(rotation(async () => { throw new TelegramWorkspaceSlotUnavailableError(); }),
+        await assert.rejects(rotation(async () => { throw new BaleWorkspaceSlotUnavailableError(); }),
           /interrupted|fence-release-unconfirmed|delete-rejected|authority-changed/);
         assert.equal(requests, 1);
         assert.equal(ledger.read().fence?.phase, fault === "release-ack" ? undefined : "deletion-rejected");
         fail = false;
         const successorAdmission = createRetirementAdmission(admissionPath, "successor");
-        const successorStore = fault === "withdrawal-same-store" ? store : createTelegramTopicTargetStore({ path,
+        const successorStore = fault === "withdrawal-same-store" ? store : createBaleTopicTargetStore({ path,
           getExternalReservedSlots: successorAdmission.listReservedSlots });
-        const successor = createTelegramWorkspaceSlotRotation({
+        const successor = createBaleWorkspaceSlotRotation({
           store: successorStore, getAdmission: () => successorAdmission, getLeaderEpoch: () => 2,
-          runExclusive: createTelegramWorkspaceOperationGate().runExclusive,
+          runExclusive: createBaleWorkspaceOperationGate().runExclusive,
           getExternalProtection() { throw new Error("Cancellation must not require deletion eligibility"); },
           recordEvent() {}, async deleteThread() { throw new Error("Deletion must not replay during cancellation"); },
         });
         assert.equal(await successor(async () => "restored binding"), "restored binding");
         assert.equal(successorAdmission.read().fence, undefined);
-        const restored = createTelegramTopicTargetStore({ path });
+        const restored = createBaleTopicTargetStore({ path });
         await restored.load();
         assert.deepEqual(restored.listWorkspaceRetirementIntents(), []);
         assert.deepEqual(restored.listWorkspaceBindings(), bindings);
@@ -1587,28 +1587,28 @@ test("Rejected rotation recovery finishes each durable cancellation prefix witho
 });
 
 test("Slot rotation recovers a committed binding removal before fence completion without deleting again", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-rotation-commit-ready-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-rotation-commit-ready-"));
   try {
     const path = join(dir, "state.json");
     const admission = createRetirementAdmission(join(dir, "admission.json"));
-    const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
-    const store = createTelegramTopicTargetStore({ path, getExternalReservedSlots: admission.listReservedSlots });
+    const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
+    const store = createBaleTopicTargetStore({ path, getExternalReservedSlots: admission.listReservedSlots });
     for (let index = 0; index < 26; index++) addBinding(store, index, index + 1);
     await store.persist();
     let deletions = 0;
-    const rotation = createTelegramWorkspaceSlotRotation({
+    const rotation = createBaleWorkspaceSlotRotation({
       store, getAdmission: () => ({ ...admission, completeRetirementFence() { throw new Error("interrupted completion"); } }),
       runExclusive: operations.runExclusive, getLeaderEpoch: () => 1,
       getExternalProtection: clearExternalProtection, recordEvent() {},
       async deleteThread(authorize) { authorize(); deletions++; },
     });
-    await assert.rejects(rotation(async () => { throw new TelegramWorkspaceSlotUnavailableError(); }), /fence-release-unconfirmed/);
+    await assert.rejects(rotation(async () => { throw new BaleWorkspaceSlotUnavailableError(); }), /fence-release-unconfirmed/);
     assert.equal(deletions, 1);
     assert.equal(store.listWorkspaceBindings().length, 25);
     assert.deepEqual(store.listWorkspaceRetirementIntents(), []);
     assert.equal(admission.read().fence?.phase, "commit-ready");
-    const reopened = createTelegramTopicTargetStore({ path, getExternalReservedSlots: admission.listReservedSlots });
-    const successor = createTelegramWorkspaceSlotRotation({
+    const reopened = createBaleTopicTargetStore({ path, getExternalReservedSlots: admission.listReservedSlots });
+    const successor = createBaleWorkspaceSlotRotation({
       store: reopened, getAdmission: () => admission, runExclusive: operations.runExclusive,
       getLeaderEpoch: () => 2, getExternalProtection: clearExternalProtection, recordEvent() {},
       async deleteThread() { throw new Error("must not delete twice"); },
@@ -1621,18 +1621,18 @@ test("Slot rotation recovers a committed binding removal before fence completion
 });
 
 test("Slot rotation retires an exact stale active target after confirmed deletion", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-rotation-stale-active-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-rotation-stale-active-"));
   try {
     const path = join(dir, "state.json");
     const admissionPath = join(dir, "admission.json");
     const admission = createRetirementAdmission(admissionPath);
-    const store = createTelegramTopicTargetStore({ path, getExternalReservedSlots: admission.listReservedSlots });
+    const store = createBaleTopicTargetStore({ path, getExternalReservedSlots: admission.listReservedSlots });
     for (let index = 0; index < 26; index++) addBinding(store, index, index + 1);
     await store.persist();
     let deletions = 0;
-    const first = createTelegramWorkspaceSlotRotation({
+    const first = createBaleWorkspaceSlotRotation({
       store, getAdmission: () => admission,
-      runExclusive: createTelegramWorkspaceOperationGate().runExclusive,
+      runExclusive: createBaleWorkspaceOperationGate().runExclusive,
       getLeaderEpoch: () => 1, getExternalProtection: clearExternalProtection, recordEvent() {},
       async deleteThread(authorize) {
         const target = authorize();
@@ -1643,7 +1643,7 @@ test("Slot rotation retires an exact stale active target after confirmed deletio
     });
     assert.equal(await first(async () => {
       const claim = store.claimWorkspaceIdentity("/fresh", "new");
-      if (!claim) throw new TelegramWorkspaceSlotUnavailableError();
+      if (!claim) throw new BaleWorkspaceSlotUnavailableError();
       return claim.slot;
     }), "A");
     assert.equal(deletions, 1, "confirmed deletion must not replay");
@@ -1655,12 +1655,12 @@ test("Slot rotation retires an exact stale active target after confirmed deletio
 });
 
 test("Slot rotation recovers a retained commit-ready target projection under successor authority", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-rotation-stale-recovery-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-rotation-stale-recovery-"));
   try {
     const path = join(dir, "state.json");
     const admissionPath = join(dir, "admission.json");
     const originalAdmission = createRetirementAdmission(admissionPath);
-    const store = createTelegramTopicTargetStore({ path,
+    const store = createBaleTopicTargetStore({ path,
       getExternalReservedSlots: originalAdmission.listReservedSlots });
     for (let index = 0; index < 26; index++) addBinding(store, index, index + 1);
     const binding = store.listWorkspaceBindings().find((candidate) => candidate.slot === "A")!;
@@ -1681,9 +1681,9 @@ test("Slot rotation recovers a retained commit-ready target projection under suc
       status: "active", slot: "A", createdAtMs: 1, updatedAtMs: 2 });
 
     const successorAdmission = createRetirementAdmission(admissionPath, "successor");
-    const successor = createTelegramWorkspaceSlotRotation({
+    const successor = createBaleWorkspaceSlotRotation({
       store, getAdmission: () => successorAdmission,
-      runExclusive: createTelegramWorkspaceOperationGate().runExclusive,
+      runExclusive: createBaleWorkspaceOperationGate().runExclusive,
       getLeaderEpoch: () => 2, getExternalProtection: clearExternalProtection, recordEvent() {},
       async deleteThread() { throw new Error("confirmed deletion must not replay"); },
     });
@@ -1695,22 +1695,22 @@ test("Slot rotation recovers a retained commit-ready target projection under suc
 });
 
 test("Slot rotation validates leader authority again at deletion issuance", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-rotation-epoch-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-rotation-epoch-"));
   try {
     const admission = createRetirementAdmission(join(dir, "admission.json"));
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
     for (let index = 0; index < 26; index++) addBinding(store, index, index + 1);
     await store.persist();
     let epoch = 1;
     let issued = 0;
-    const rotate = createTelegramWorkspaceSlotRotation({
-      store, getAdmission: () => admission, runExclusive: createTelegramWorkspaceOperationGate().runExclusive,
+    const rotate = createBaleWorkspaceSlotRotation({
+      store, getAdmission: () => admission, runExclusive: createBaleWorkspaceOperationGate().runExclusive,
       getLeaderEpoch: () => epoch, getExternalProtection: clearExternalProtection, recordEvent() {},
       async deleteThread(authorize) { epoch = 2; authorize(); issued++; },
     });
     await assert.rejects(rotate(async () => { throw new Error("unrelated failure"); }), /unrelated failure/);
     assert.equal(admission.read().fence, undefined);
-    await assert.rejects(rotate(async () => { throw new TelegramWorkspaceSlotUnavailableError(); }), /delete-unconfirmed/);
+    await assert.rejects(rotate(async () => { throw new BaleWorkspaceSlotUnavailableError(); }), /delete-unconfirmed/);
     assert.equal(issued, 0);
     assert.equal(store.listWorkspaceBindings().length, 26);
     assert.equal(admission.read().fence?.phase, "deletion-issued");
@@ -1718,11 +1718,11 @@ test("Slot rotation validates leader authority again at deletion issuance", asyn
 });
 
 test("Retirement waits for active admission and releases an unissued fence on late protection", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-fence-race-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-fence-race-"));
   try {
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
     const admission = createRetirementAdmission(join(dir, "admission.json"));
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2 };
     store.upsertWorkspaceBinding(binding);
     const intent = { id: "retire:race", reason: "pressure" as const,
@@ -1736,10 +1736,10 @@ test("Retirement waits for active admission and releases an unissued fence on la
     assert.equal(leaseResult.kind, "acquired");
     let deletions = 0;
     const execute = (
-      getExternalProtection: () => TelegramWorkspaceExternalProtectionEvidence =
+      getExternalProtection: () => BaleWorkspaceExternalProtectionEvidence =
         clearExternalProtection,
     ) =>
-      executeTelegramWorkspaceRetirement({
+      executeBaleWorkspaceRetirement({
         store, intent, admission, getExternalProtection,
         getLeaderEpoch: () => 1, getProfileKey: () => "default",
         runExclusive: async <T>(operation: () => Promise<T>) => operation(),
@@ -1767,11 +1767,11 @@ test("Retirement waits for active admission and releases an unissued fence on la
 });
 
 test("Retirement execution retains unknown deletion without issuing a second request", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-retained-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-retained-"));
   try {
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
     const admission = createRetirementAdmission(join(dir, "admission.json"));
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2 };
     store.upsertWorkspaceBinding(binding);
     const intent = { id: "retire:a", reason: "pressure" as const, profileKey: "default",
@@ -1783,7 +1783,7 @@ test("Retirement execution retains unknown deletion without issuing a second req
       runExclusive: async <T>(operation: () => Promise<T>) => operation(),
     };
     let deletionCalls = 0;
-    assert.deepEqual(await executeTelegramWorkspaceRetirement({ ...base,
+    assert.deepEqual(await executeBaleWorkspaceRetirement({ ...base,
       async deleteForumTopic(permit) {
         deletionCalls++;
         assert.equal(permit.retirementIntentId, intent.id);
@@ -1800,14 +1800,14 @@ test("Retirement execution retains unknown deletion without issuing a second req
     assert.equal(admission.read().fence?.phase, "deletion-issued");
     assert.equal(store.getWorkspaceBinding("/repo")?.slot, "A");
     assert.deepEqual(store.listWorkspaceRetirementIntents(), [intent]);
-    assert.deepEqual(await executeTelegramWorkspaceRetirement({ ...base,
+    assert.deepEqual(await executeBaleWorkspaceRetirement({ ...base,
       async deleteForumTopic() { throw new Error("must not issue twice"); },
       confirmTargetAbsent: async () => "unknown",
     }), { kind: "retained", reason: "delete-unconfirmed" });
     assert.equal(deletionCalls, 1);
     assert.equal(store.claimWorkspaceIdentity("/fresh", "fresh")?.slot, "B");
     store.releaseWorkspaceClaim("fresh");
-    assert.deepEqual(await executeTelegramWorkspaceRetirement({ ...base,
+    assert.deepEqual(await executeBaleWorkspaceRetirement({ ...base,
       async deleteForumTopic() { throw new Error("must not issue twice"); },
       async confirmTargetAbsent() {
         assert.equal(store.claimWorkspaceIdentity("/repo", "racer"), undefined);
@@ -1824,22 +1824,22 @@ test("Retirement execution retains unknown deletion without issuing a second req
 });
 
 test("Closed-but-existing topic evidence retains an issued retirement fence", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-closed-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-closed-"));
   try {
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
     const admission = createRetirementAdmission(join(dir, "admission.json"));
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2 };
     store.upsertWorkspaceBinding(binding);
     const intent = { id: "retire:closed", reason: "pressure" as const,
       profileKey: "default", binding, leaderEpoch: 1, requestedAtMs: 3 };
     store.upsertWorkspaceRetirementIntent(intent);
-    assert.deepEqual(await executeTelegramWorkspaceRetirement({
+    assert.deepEqual(await executeBaleWorkspaceRetirement({
       store, intent, admission, getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => 1, getProfileKey: () => "default",
       runExclusive: async <T>(operation: () => Promise<T>) => operation(),
       async deleteForumTopic() {
-        throw new TelegramApiStaleTargetError("forum topic closed",
+        throw new BaleApiStaleTargetError("forum topic closed",
           { chatId: 7, threadId: 42 });
       },
     }), { kind: "retained", reason: "delete-unconfirmed" });
@@ -1853,12 +1853,12 @@ test("Closed-but-existing topic evidence retains an issued retirement fence", as
 test("Killed executor leaves durable intent for successor already-absence recovery", {
   skip: process.platform === "win32",
 }, async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-kill-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-kill-"));
   const path = join(dir, "state.json");
   const admissionPath = join(dir, "admission.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const store = createBaleTopicTargetStore({ path });
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2 };
     store.upsertWorkspaceBinding(binding);
     const intent = { id: "retire:a", reason: "pressure" as const, profileKey: "default",
@@ -1866,18 +1866,18 @@ test("Killed executor leaves durable intent for successor already-absence recove
     store.upsertWorkspaceRetirementIntent(intent);
     await store.persist();
     const script = `
-      import { createTelegramTopicTargetStore } from './lib/threads.ts';
-      import { executeTelegramWorkspaceRetirement } from './lib/workspace-retirement.ts';
-      import { createTelegramWorkspaceAdmissionLedger } from './lib/workspace-admission.ts';
-      const store = createTelegramTopicTargetStore({ path: process.argv[1] });
-      const admission = createTelegramWorkspaceAdmissionLedger({
+      import { createBaleTopicTargetStore } from './lib/threads.ts';
+      import { executeBaleWorkspaceRetirement } from './lib/workspace-retirement.ts';
+      import { createBaleWorkspaceAdmissionLedger } from './lib/workspace-admission.ts';
+      const store = createBaleTopicTargetStore({ path: process.argv[1] });
+      const admission = createBaleWorkspaceAdmissionLedger({
         path: process.argv[2], profileKey: 'default',
         owner: { processId: process.pid, processBirthId: process.pid + ':retirement-child' },
         getProcessLiveness: () => 'alive',
       });
       await store.load();
       const intent = store.listWorkspaceRetirementIntents()[0];
-      await executeTelegramWorkspaceRetirement({
+      await executeBaleWorkspaceRetirement({
         store, intent, admission,
         getExternalProtection: () => ({ liveOwner: 'clear', acceptedWork: 'clear', deliveryAuthority: 'clear' }),
         getLeaderEpoch: () => 1, getProfileKey: () => 'default',
@@ -1904,19 +1904,19 @@ test("Killed executor leaves durable intent for successor already-absence recove
     const exited = once(child, "exit");
     child.kill("SIGKILL");
     await exited;
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     const successorAdmission = createRetirementAdmission(admissionPath, "successor");
     await restored.load();
     assert.equal(restored.getWorkspaceBinding("/repo")?.slot, "A");
     assert.deepEqual(restored.listWorkspaceRetirementIntents(), [intent]);
     const runExclusive = async <T>(operation: () => Promise<T>) => operation();
-    const adoption = await adoptTelegramWorkspaceRetirementIntent({
+    const adoption = await adoptBaleWorkspaceRetirementIntent({
       store: restored, intent, getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => 2, getProfileKey: () => "default", runExclusive,
     });
     assert.equal(adoption.kind, "adopted");
     if (adoption.kind !== "adopted") return;
-    assert.deepEqual(await executeTelegramWorkspaceRetirement({
+    assert.deepEqual(await executeBaleWorkspaceRetirement({
       store: restored, intent: adoption.intent, admission: successorAdmission,
       getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => 2, getProfileKey: () => "default", runExclusive,
@@ -1929,11 +1929,11 @@ test("Killed executor leaves durable intent for successor already-absence recove
 });
 
 test("Policy disable after deletion retains intent for successor adoption and already-absence retry", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-leadership-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-leadership-"));
   try {
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
     const admission = createRetirementAdmission(join(dir, "admission.json"));
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2 };
     store.upsertWorkspaceBinding(binding);
     const intent = { id: "retire:a", reason: "pressure" as const, profileKey: "default",
@@ -1942,7 +1942,7 @@ test("Policy disable after deletion retains intent for successor adoption and al
     let epoch = 1;
     let cleanupEnabled = true;
     const runExclusive = async <T>(operation: () => Promise<T>) => operation();
-    assert.deepEqual(await executeTelegramWorkspaceRetirement({
+    assert.deepEqual(await executeBaleWorkspaceRetirement({
       store, intent, admission, getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => epoch, getProfileKey: () => "default",
       isCurrent: () => cleanupEnabled, runExclusive,
@@ -1952,13 +1952,13 @@ test("Policy disable after deletion retains intent for successor adoption and al
     assert.deepEqual(store.listWorkspaceRetirementIntents(), [intent]);
     cleanupEnabled = true;
     epoch = 2;
-    const adoption = await adoptTelegramWorkspaceRetirementIntent({
+    const adoption = await adoptBaleWorkspaceRetirementIntent({
       store, intent, getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => epoch, getProfileKey: () => "default", runExclusive,
     });
     assert.equal(adoption.kind, "adopted");
     if (adoption.kind !== "adopted") return;
-    assert.deepEqual(await executeTelegramWorkspaceRetirement({
+    assert.deepEqual(await executeBaleWorkspaceRetirement({
       store, intent: adoption.intent, admission, getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => epoch, getProfileKey: () => "default", runExclusive,
       async deleteForumTopic() { throw new Error("must not reissue committed deletion"); },
@@ -1969,17 +1969,17 @@ test("Policy disable after deletion retains intent for successor adoption and al
 });
 
 test("Ambiguous persistence after durable rename reloads committed retirement without replay", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-ambiguous-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-ambiguous-"));
   const path = join(dir, "state.json");
   const admission = createRetirementAdmission(join(dir, "admission.json"));
   let ambiguous = false;
   try {
-    const store = createTelegramTopicTargetStore({ path, commitPersist(commit) {
+    const store = createBaleTopicTargetStore({ path, commitPersist(commit) {
       commit();
       if (ambiguous) throw new Error("publication acknowledgement lost");
       return true;
     } });
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2 };
     store.upsertWorkspaceBinding(binding);
     const intent = { id: "retire:a", reason: "pressure" as const, profileKey: "default",
@@ -1988,7 +1988,7 @@ test("Ambiguous persistence after durable rename reloads committed retirement wi
     await store.persist();
     ambiguous = true;
     let calls = 0;
-    assert.deepEqual(await executeTelegramWorkspaceRetirement({
+    assert.deepEqual(await executeBaleWorkspaceRetirement({
       store, intent, admission, getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => 1, getProfileKey: () => "default",
       runExclusive: async <T>(operation: () => Promise<T>) => operation(),
@@ -1997,7 +1997,7 @@ test("Ambiguous persistence after durable rename reloads committed retirement wi
     assert.equal(calls, 1);
     assert.equal(store.getWorkspaceBinding("/repo"), undefined);
     assert.deepEqual(store.listWorkspaceRetirementIntents(), []);
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.equal(restored.getWorkspaceBinding("/repo"), undefined);
     assert.deepEqual(restored.listWorkspaceRetirementIntents(), []);
@@ -2007,17 +2007,17 @@ test("Ambiguous persistence after durable rename reloads committed retirement wi
 });
 
 test("Confirmed deletion releases a slot only after durable exact retirement and retries failed persistence", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-commit-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-commit-"));
   const path = join(dir, "state.json");
   const admission = createRetirementAdmission(join(dir, "admission.json"));
   let canCommit = true;
   try {
-    const store = createTelegramTopicTargetStore({ path, commitPersist(commit) {
+    const store = createBaleTopicTargetStore({ path, commitPersist(commit) {
       if (!canCommit) return false;
       commit();
       return true;
     } });
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", inactiveSinceMs: 1, updatedAtMs: 2 };
     store.upsertWorkspaceBinding(binding);
     const intent = { id: "retire:a", reason: "pressure" as const, profileKey: "default",
@@ -2026,7 +2026,7 @@ test("Confirmed deletion releases a slot only after durable exact retirement and
     await store.persist();
     canCommit = false;
     let calls = 0;
-    const execute = () => executeTelegramWorkspaceRetirement({
+    const execute = () => executeBaleWorkspaceRetirement({
       store, intent, admission, getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => 1, getProfileKey: () => "default",
       runExclusive: async <T>(operation: () => Promise<T>) => operation(),
@@ -2048,7 +2048,7 @@ test("Confirmed deletion releases a slot only after durable exact retirement and
     assert.equal(store.claimWorkspaceIdentity("/fresh", "fresh")?.slot, "A");
     assert.equal(calls, 1);
     assert.equal(admission.read().fence, undefined);
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.equal(restored.getWorkspaceBinding("/repo"), undefined);
     assert.deepEqual(restored.listWorkspaceRetirementIntents(), []);
@@ -2058,10 +2058,10 @@ test("Confirmed deletion releases a slot only after durable exact retirement and
 });
 
 test("Pressure preparation persists the oldest eligible exact intent and resumes it idempotently", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-pressure-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-pressure-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
     for (let index = 0; index < 26; index++) {
       addBinding(store, index, index === 5 ? 10 : 20 + index,
         index === 5 ? "session-a" : undefined);
@@ -2074,7 +2074,7 @@ test("Pressure preparation persists the oldest eligible exact intent and resumes
       getProfileKey: () => "default",
       getNowMs: () => 1000,
     };
-    const prepared = await prepareTelegramWorkspaceRetirement(deps);
+    const prepared = await prepareBaleWorkspaceRetirement(deps);
     assert.equal(prepared.kind, "ready");
     if (prepared.kind !== "ready") return;
     assert.equal(prepared.intent.binding.cwd, "/repo/5");
@@ -2083,9 +2083,9 @@ test("Pressure preparation persists the oldest eligible exact intent and resumes
     assert.equal(prepared.intent.binding.sessionId, "session-a");
     assert.equal(prepared.intent.profileKey, "default");
     assert.equal(prepared.intent.leaderEpoch, "leader:1");
-    assert.deepEqual(await prepareTelegramWorkspaceRetirement(deps), prepared);
+    assert.deepEqual(await prepareBaleWorkspaceRetirement(deps), prepared);
     assert.equal(store.listWorkspaceRetirementIntents().length, 1);
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.deepEqual(restored.listWorkspaceRetirementIntents(), [prepared.intent]);
     assert.equal(restored.getWorkspaceBinding("/repo/5"), undefined);
@@ -2097,13 +2097,13 @@ test("Pressure preparation persists the oldest eligible exact intent and resumes
 });
 
 test("Pressure preparation counts standalone reservations", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-pressure-reservation-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-pressure-reservation-"));
   try {
-    const capacity = createTelegramTopicTargetStore({ path: join(dir, "capacity.json"), getNowMs: () => 1000 });
+    const capacity = createBaleTopicTargetStore({ path: join(dir, "capacity.json"), getNowMs: () => 1000 });
     for (let index = 0; index < 25; index++) addBinding(capacity, index, index + 1);
     capacity.reserveThread({ target: { chatId: 7, threadId: 99 }, slot: "Z",
       reason: "leader-reload", createdAtMs: 1, updatedAtMs: 1 });
-    const pressure = await prepareTelegramWorkspaceRetirement({
+    const pressure = await prepareBaleWorkspaceRetirement({
       store: capacity,
       getExternalProtection: clearExternalProtection,
       getLeaderEpoch: () => 1,
@@ -2118,13 +2118,13 @@ test("Pressure preparation counts standalone reservations", async () => {
 });
 
 test("Preparation removes an unpersisted intent when protection or leader authority changes", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-retirement-fence-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-retirement-fence-"));
   try {
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
     for (let index = 0; index < 26; index++) addBinding(store, index, index + 1);
     let epoch = 1;
     let observations = 0;
-    await assert.rejects(prepareTelegramWorkspaceRetirement({
+    await assert.rejects(prepareBaleWorkspaceRetirement({
       store,
       getExternalProtection() {
         observations++;
@@ -2143,13 +2143,13 @@ test("Preparation removes an unpersisted intent when protection or leader author
 
 // --- Metadata-only slot reuse ---
 
-const protectedEvidence = (): TelegramWorkspaceExternalProtectionEvidence => ({
+const protectedEvidence = (): BaleWorkspaceExternalProtectionEvidence => ({
   liveOwner: "protected", acceptedWork: "protected", deliveryAuthority: "protected",
 });
 
-function addReuseBinding(store: TelegramTopicTargetStore, index: number, inactiveSinceMs?: number): void {
+function addReuseBinding(store: BaleTopicTargetStore, index: number, inactiveSinceMs?: number): void {
   store.upsertWorkspaceBinding({
-    ...createTelegramWorkspaceBindingIdentity(`/repo/${index}`, 0)!,
+    ...createBaleWorkspaceBindingIdentity(`/repo/${index}`, 0)!,
     target: { chatId: 7, threadId: 40 + index },
     slot: String.fromCharCode("A".charCodeAt(0) + index),
     threadName: `Workspace${index}`,
@@ -2160,14 +2160,14 @@ function addReuseBinding(store: TelegramTopicTargetStore, index: number, inactiv
 
 async function withFullPool<T>(
   run: (context: {
-    dir: string; store: TelegramTopicTargetStore; deletions: () => number;
-    rotation: ReturnType<typeof createTelegramWorkspaceSlotRotation>;
+    dir: string; store: BaleTopicTargetStore; deletions: () => number;
+    rotation: ReturnType<typeof createBaleWorkspaceSlotRotation>;
     claim: () => string | undefined; reserved: { slots: string[] }; epoch: { value: number };
   }) => Promise<T>,
   options: {
     inactive?: (index: number) => number | undefined;
     canPersist?: () => boolean;
-    onSlotReused?: (store: TelegramTopicTargetStore, bindingKey: string, path: string) => Promise<void>;
+    onSlotReused?: (store: BaleTopicTargetStore, bindingKey: string, path: string) => Promise<void>;
     recordEvent?: (message: string, details: Record<string, unknown>) => void;
   } = {},
 ): Promise<T> {
@@ -2175,7 +2175,7 @@ async function withFullPool<T>(
   try {
     const admission = createRetirementAdmission(join(dir, "admission.json"), "reuse");
     const reserved = { slots: [] as string[] };
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path: join(dir, "state.json"),
       getExternalReservedSlots: () => [...admission.listReservedSlots(), ...reserved.slots],
       ...(options.canPersist ? { canPersist: options.canPersist } : {}),
@@ -2184,16 +2184,16 @@ async function withFullPool<T>(
     await store.persist();
     let deletions = 0;
     const epoch = { value: 1 };
-    const rotation = createTelegramWorkspaceSlotRotation({
+    const rotation = createBaleWorkspaceSlotRotation({
       store, getAdmission: () => admission, getLeaderEpoch: () => epoch.value,
-      runExclusive: createTelegramWorkspaceOperationGate().runExclusive,
+      runExclusive: createBaleWorkspaceOperationGate().runExclusive,
       getExternalProtection: protectedEvidence, recordEvent: options.recordEvent ?? (() => {}),
       onSlotReused: options.onSlotReused ? (key) => options.onSlotReused!(store, key, join(dir, "state.json")) : undefined,
       async deleteThread() { deletions++; },
     });
     const claim = () => {
       const claimed = store.claimWorkspaceIdentity("/fresh", "fresh");
-      if (!claimed) throw new TelegramWorkspaceSlotUnavailableError();
+      if (!claimed) throw new BaleWorkspaceSlotUnavailableError();
       return claimed.slot;
     };
     return await run({ dir, store, deletions: () => deletions, rotation, claim, reserved, epoch });
@@ -2211,7 +2211,7 @@ test("A full protected pool gives a fresh claim the least recently used letter w
     assert.equal(reused.slot, undefined, "the previous holder loses only its letter");
     assert.deepEqual({ ...reused, slot: undefined }, { ...victim, slot: undefined });
     assert.equal(store.listWorkspaceBindings().filter((binding) => binding.slot === "A").length, 0);
-    const cold = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    const cold = createBaleTopicTargetStore({ path: join(dir, "state.json") });
     await cold.load();
     assert.equal(cold.getWorkspaceBinding("/repo/0")?.slot, undefined);
     assert.equal(cold.getWorkspaceBinding("/repo/0")?.target.threadId, victim.target.threadId);
@@ -2231,7 +2231,7 @@ test("Published slot reuse awaits its display update before the letter is alloca
   }, { onSlotReused: async (store, key, path) => {
     const binding = store.listWorkspaceBindings().find(binding => binding.bindingKey === key)!;
     assert.equal(binding.slot, undefined);
-    const cold = createTelegramTopicTargetStore({ path });
+    const cold = createBaleTopicTargetStore({ path });
     await cold.load();
     assert.equal(cold.listWorkspaceBindings().find(binding => binding.bindingKey === key)?.slot, undefined);
     effects.push("retitle");
@@ -2246,7 +2246,7 @@ test("A failed display update reports uncertainty without undoing or repeating p
     assert.equal(updates, 1);
     assert.equal(deletions(), 0);
     assert.equal(store.getWorkspaceBinding("/repo/0")?.slot, undefined);
-    assert.ok(events.includes("Telegram Workspace slot display update failed."));
+    assert.ok(events.includes("Bale Workspace slot display update failed."));
   }, { onSlotReused: async () => { updates++; throw new Error("unknown edit acknowledgement"); },
     recordEvent: message => { events.push(message); } });
 });
@@ -2335,7 +2335,7 @@ test("A reassigned letter is not handed out twice", async () => {
     assert.equal(store.claimWorkspaceIdentity("/second", "second"), undefined, "the pool is full again until another letter is reassigned");
     assert.equal(await rotation(async () => {
       const claimed = store.claimWorkspaceIdentity("/second", "second");
-      if (!claimed) throw new TelegramWorkspaceSlotUnavailableError();
+      if (!claimed) throw new BaleWorkspaceSlotUnavailableError();
       return claimed.slot;
     }), "B");
     const letters = store.listWorkspaceBindings().flatMap((binding) => binding.slot ? [binding.slot] : []);

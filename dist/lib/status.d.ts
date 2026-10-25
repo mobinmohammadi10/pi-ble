@@ -1,13 +1,13 @@
 /**
- * Telegram status rendering helpers
- * Zones: telegram ui, pi agent diagnostics, tui
+ * Bale status rendering helpers
+ * Zones: bale ui, pi agent diagnostics, tui
  * Owns status summaries, redacted diagnostics, projection lifecycle and compact connection-failure copy
  * Excludes canonical state, transport admission and filesystem policy
  */
 /** UI copy is allowlisted; raw exception text belongs only in redacted diagnostics. */
-export declare function formatTelegramConnectionFailure(error: unknown): string;
-export type TelegramStatusQueueLane = "control" | "steer" | "priority" | "default";
-export interface TelegramUsageStats {
+export declare function formatBaleConnectionFailure(error: unknown): string;
+export type BaleStatusQueueLane = "control" | "steer" | "priority" | "default";
+export interface BaleUsageStats {
     totalInput: number;
     totalOutput: number;
     totalCacheRead: number;
@@ -15,7 +15,7 @@ export interface TelegramUsageStats {
     totalCost: number;
     latestCacheHitRate?: number;
 }
-interface TelegramUsageMessage {
+interface BaleUsageMessage {
     role: string;
     usage?: {
         input: number;
@@ -27,63 +27,63 @@ interface TelegramUsageMessage {
         };
     };
 }
-interface TelegramStatusSessionEntry {
+interface BaleStatusSessionEntry {
     type: string;
-    message?: TelegramUsageMessage;
+    message?: BaleUsageMessage;
 }
-interface TelegramContextUsage {
+interface BaleContextUsage {
     contextWindow?: number;
     percent: number | null;
 }
-export interface TelegramStatusActiveModel {
+export interface BaleStatusActiveModel {
     provider?: string;
     id?: string;
     contextWindow?: number;
 }
-export interface TelegramStatusLineProviderContext {
-    activeModel: TelegramStatusActiveModel | undefined;
+export interface BaleStatusLineProviderContext {
+    activeModel: BaleStatusActiveModel | undefined;
 }
-export interface TelegramStatusLineProviderResult {
+export interface BaleStatusLineProviderResult {
     label: string;
     value: string;
 }
-export type TelegramStatusLineProvider = (ctx: TelegramStatusLineProviderContext) => TelegramStatusLineProviderResult | undefined;
-export interface TelegramStatusContext {
+export type BaleStatusLineProvider = (ctx: BaleStatusLineProviderContext) => BaleStatusLineProviderResult | undefined;
+export interface BaleStatusContext {
     sessionManager: {
-        getEntries(): TelegramStatusSessionEntry[];
+        getEntries(): BaleStatusSessionEntry[];
     };
-    getContextUsage(): TelegramContextUsage | undefined;
+    getContextUsage(): BaleContextUsage | undefined;
     isIdle?: () => boolean;
     hasPendingMessages?: () => boolean;
     isCompactionInProgress?: () => boolean;
     modelRegistry: {
-        isUsingOAuth(model: TelegramStatusActiveModel): boolean;
+        isUsingOAuth(model: BaleStatusActiveModel): boolean;
     };
 }
-export type TelegramRuntimeEventDetailValue = string | number | boolean | null;
-export interface TelegramRuntimeEvent {
+export type BaleRuntimeEventDetailValue = string | number | boolean | null;
+export interface BaleRuntimeEvent {
     at: number;
     category: string;
     message: string;
-    details?: Record<string, TelegramRuntimeEventDetailValue>;
+    details?: Record<string, BaleRuntimeEventDetailValue>;
 }
-export interface TelegramRuntimeEventInput {
+export interface BaleRuntimeEventInput {
     category: string;
     error?: unknown;
     message?: string;
     details?: Record<string, unknown>;
 }
-export interface TelegramRuntimeEventRecorder {
+export interface BaleRuntimeEventRecorder {
     record: (category: string, error: unknown, details?: Record<string, unknown>) => void;
-    getEvents: () => TelegramRuntimeEvent[];
+    getEvents: () => BaleRuntimeEvent[];
     clear: () => void;
 }
-export interface TelegramRuntimeEventRecorderOptions {
+export interface BaleRuntimeEventRecorderOptions {
     getBotToken: () => string | undefined;
     maxEvents?: number;
     now?: () => number;
 }
-export interface TelegramBridgeStatusBusFollower {
+export interface BaleBridgeStatusBusFollower {
     instanceId: string;
     cwd?: string;
     lastHeartbeatMs: number;
@@ -100,7 +100,7 @@ export interface TelegramBridgeStatusBusFollower {
     threadName?: string;
     status?: string;
 }
-export interface TelegramBridgeStatusLocalBus {
+export interface BaleBridgeStatusLocalBus {
     leaderSocketPath?: string;
     leaderTransport?: "pipe" | "socket";
     followerSocketPath?: string;
@@ -118,7 +118,7 @@ export interface TelegramBridgeStatusLocalBus {
         capabilities: string[];
     };
 }
-export interface TelegramBridgeStatusTopicTarget {
+export interface BaleBridgeStatusTopicTarget {
     instanceId?: string;
     status?: string;
     target?: {
@@ -133,7 +133,7 @@ export interface TelegramBridgeStatusTopicTarget {
     lastSyncError?: string;
     lastReconcileAction?: string;
 }
-export interface TelegramBridgeStatusThreadReservation {
+export interface BaleBridgeStatusThreadReservation {
     target?: {
         chatId: number;
         threadId?: number;
@@ -144,7 +144,7 @@ export interface TelegramBridgeStatusThreadReservation {
     expiresAtMs?: number;
     lastReconcileAction?: string;
 }
-export interface TelegramBridgeStatusSyncObservation {
+export interface BaleBridgeStatusSyncObservation {
     target?: {
         chatId: number;
         threadId?: number;
@@ -156,14 +156,14 @@ export interface TelegramBridgeStatusSyncObservation {
     lastSyncError?: string;
     lastReconcileAction?: string;
 }
-export interface TelegramBridgeStatusSyncSlice {
+export interface BaleBridgeStatusSyncSlice {
     status: string;
     updatedAtMs?: number;
     suspectAtMs?: number;
     reason?: string;
     lastReconcileAction?: string;
 }
-export interface TelegramBridgeThreadReconciliationState {
+export interface BaleBridgeThreadReconciliationState {
     phase: string;
     event: string;
     atMs: number;
@@ -172,9 +172,9 @@ export interface TelegramBridgeThreadReconciliationState {
     syncActionCount: number;
     cleanupActionCount: number;
 }
-export type TelegramBridgeBusRole = "leader" | "follower";
-export type TelegramBridgeBusLifecyclePhase = "electing";
-export interface TelegramBridgePollingState {
+export type BaleBridgeBusRole = "leader" | "follower";
+export type BaleBridgeBusLifecyclePhase = "electing";
+export interface BaleBridgePollingState {
     phase: string;
     phaseStartedAtMs?: number;
     currentUpdateId?: number;
@@ -184,7 +184,7 @@ export interface TelegramBridgePollingState {
     lastSuccessfulResponseUpdateCount?: number;
     stopReason?: string;
 }
-export interface TelegramBridgeInboundWorkerState {
+export interface BaleBridgeInboundWorkerState {
     phase: string;
     generation: number;
     phaseStartedAtMs?: number;
@@ -227,7 +227,7 @@ export interface TelegramBridgeInboundWorkerState {
     lastFailureAtMs?: number;
     lastFailurePhase?: string;
 }
-export interface TelegramBridgeStatusLineState {
+export interface BaleBridgeStatusLineState {
     hasBotToken?: boolean;
     botUsername?: string;
     /** Redacted named-variable diagnostic when the stored token reference cannot resolve. */
@@ -241,19 +241,19 @@ export interface TelegramBridgeStatusLineState {
     botThreadMode?: "unknown" | "enabled" | "disabled";
     botThreadModeUpdatedAtMs?: number;
     botThreadModeAction?: string;
-    busRole?: TelegramBridgeBusRole;
+    busRole?: BaleBridgeBusRole;
     busProtocol?: {
         protocolVersion: number;
         runtimeBuild: string;
         capabilities: string[];
     };
-    busLifecyclePhase?: TelegramBridgeBusLifecyclePhase;
+    busLifecyclePhase?: BaleBridgeBusLifecyclePhase;
     instanceSlot?: string;
     instanceThreadName?: string;
     lockState?: string;
     pollingActive: boolean;
-    polling?: TelegramBridgePollingState;
-    inboundWorker?: TelegramBridgeInboundWorkerState;
+    polling?: BaleBridgePollingState;
+    inboundWorker?: BaleBridgeInboundWorkerState;
     lastUpdateId?: number;
     activeSourceMessageIds?: number[];
     pendingDispatch: boolean;
@@ -261,29 +261,29 @@ export interface TelegramBridgeStatusLineState {
     activeToolExecutions: number;
     pendingModelSwitch: boolean;
     queuedItems: Array<{
-        queueLane: TelegramStatusQueueLane;
+        queueLane: BaleStatusQueueLane;
     }>;
-    busFollowers?: TelegramBridgeStatusBusFollower[];
-    localBus?: TelegramBridgeStatusLocalBus;
-    topicTargets?: TelegramBridgeStatusTopicTarget[];
-    threadReservations?: TelegramBridgeStatusThreadReservation[];
-    topicSyncObservations?: TelegramBridgeStatusSyncObservation[];
-    syncState?: Record<string, TelegramBridgeStatusSyncSlice | undefined>;
-    threadReconciliation?: TelegramBridgeThreadReconciliationState;
+    busFollowers?: BaleBridgeStatusBusFollower[];
+    localBus?: BaleBridgeStatusLocalBus;
+    topicTargets?: BaleBridgeStatusTopicTarget[];
+    threadReservations?: BaleBridgeStatusThreadReservation[];
+    topicSyncObservations?: BaleBridgeStatusSyncObservation[];
+    syncState?: Record<string, BaleBridgeStatusSyncSlice | undefined>;
+    threadReconciliation?: BaleBridgeThreadReconciliationState;
     busNowMs?: number;
-    recentRuntimeEvents: TelegramRuntimeEvent[];
+    recentRuntimeEvents: BaleRuntimeEvent[];
 }
-export interface TelegramStatusBarTheme {
+export interface BaleStatusBarTheme {
     fg: (token: "accent" | "dim" | "error" | "muted" | "warning" | "success", text: string) => string;
 }
-export interface TelegramStatusBarState {
+export interface BaleStatusBarState {
     hasBotToken: boolean;
     pollingActive: boolean;
     pollingStopReason?: string;
     paired: boolean;
-    busRole?: TelegramBridgeBusRole;
+    busRole?: BaleBridgeBusRole;
     followerRegistered?: boolean;
-    busLifecyclePhase?: TelegramBridgeBusLifecyclePhase;
+    busLifecyclePhase?: BaleBridgeBusLifecyclePhase;
     instanceSlot?: string;
     instanceThreadName?: string;
     compactionInProgress: boolean;
@@ -292,18 +292,18 @@ export interface TelegramStatusBarState {
     queuedStatus: string;
     error?: string;
 }
-export interface TelegramStatusRuntimeContext {
+export interface BaleStatusRuntimeContext {
     ui: {
-        theme: TelegramStatusBarTheme;
+        theme: BaleStatusBarTheme;
         setStatus: (key: string, text: string) => void;
     };
 }
-export interface TelegramStatusRuntimeDeps<TContext extends TelegramStatusRuntimeContext> {
+export interface BaleStatusRuntimeDeps<TContext extends BaleStatusRuntimeContext> {
     statusKey?: string;
-    getStatusBarState: (ctx: TContext, error?: string) => TelegramStatusBarState;
-    getBridgeStatusLineState: () => TelegramBridgeStatusLineState;
+    getStatusBarState: (ctx: TContext, error?: string) => BaleStatusBarState;
+    getBridgeStatusLineState: () => BaleBridgeStatusLineState;
 }
-export interface TelegramBridgeStatusConfig {
+export interface BaleBridgeStatusConfig {
     botToken?: string;
     /** Caller-resolved token availability; falls back to raw presence. */
     botHasToken?: boolean;
@@ -313,8 +313,8 @@ export interface TelegramBridgeStatusConfig {
     allowedUserId?: number;
 }
 /** Narrow config-store view used to project resolved bot-token availability. */
-export interface TelegramBridgeStatusConfigSource {
-    get: () => TelegramBridgeStatusConfig;
+export interface BaleBridgeStatusConfigSource {
+    get: () => BaleBridgeStatusConfig;
     hasBotToken?: () => boolean;
     getBotTokenDiagnostic?: () => string | undefined;
 }
@@ -322,20 +322,20 @@ export interface TelegramBridgeStatusConfigSource {
  * Project a config store into the status view without moving token-reference
  * resolution into this structural leaf domain.
  */
-export declare function createTelegramBridgeStatusConfigGetter(source: TelegramBridgeStatusConfigSource): () => TelegramBridgeStatusConfig;
-export interface TelegramBridgeStatusRuntimeDeps<TQueueItem extends {
-    queueLane: TelegramStatusQueueLane;
+export declare function createBaleBridgeStatusConfigGetter(source: BaleBridgeStatusConfigSource): () => BaleBridgeStatusConfig;
+export interface BaleBridgeStatusRuntimeDeps<TQueueItem extends {
+    queueLane: BaleStatusQueueLane;
 }> {
     statusKey?: string;
-    getConfig: () => TelegramBridgeStatusConfig;
+    getConfig: () => BaleBridgeStatusConfig;
     getActiveProfileName?: () => string | undefined;
     getDiagnosticPaths?: (profileName?: string) => {
         state: string;
         logs: string;
     };
     isPollingActive: () => boolean;
-    getPollingState?: () => TelegramBridgePollingState;
-    getInboundWorkerState?: () => TelegramBridgeInboundWorkerState | undefined;
+    getPollingState?: () => BaleBridgePollingState;
+    getInboundWorkerState?: () => BaleBridgeInboundWorkerState | undefined;
     getAcceptedThroughUpdateId?: () => number | undefined;
     getActiveSourceMessageIds: () => number[] | undefined;
     hasActiveTurn: () => boolean;
@@ -345,114 +345,114 @@ export interface TelegramBridgeStatusRuntimeDeps<TQueueItem extends {
     hasPendingModelSwitch: () => boolean;
     getQueuedItems: () => TQueueItem[];
     getQueuedItemCount?: (items: TQueueItem[]) => number;
-    getRecentRuntimeEvents: () => TelegramRuntimeEvent[];
+    getRecentRuntimeEvents: () => BaleRuntimeEvent[];
     getRuntimeLockState?: () => string;
-    getBusRole?: () => TelegramBridgeBusRole | undefined;
+    getBusRole?: () => BaleBridgeBusRole | undefined;
     getBusProtocol?: () => {
         protocolVersion: number;
         runtimeBuild: string;
         capabilities: string[];
     };
-    getBusLifecyclePhase?: () => TelegramBridgeBusLifecyclePhase | undefined;
+    getBusLifecyclePhase?: () => BaleBridgeBusLifecyclePhase | undefined;
     getBotThreadMode?: () => {
         threadMode: "unknown" | "enabled" | "disabled";
         updatedAtMs?: number;
         lastReconcileAction?: string;
     } | undefined;
-    getBusFollowers?: () => TelegramBridgeStatusBusFollower[];
-    getLocalBus?: () => TelegramBridgeStatusLocalBus | undefined;
-    getTopicTargets?: () => TelegramBridgeStatusTopicTarget[];
-    getThreadReservations?: () => TelegramBridgeStatusThreadReservation[];
-    getTopicSyncObservations?: () => TelegramBridgeStatusSyncObservation[];
-    getSyncState?: () => Record<string, TelegramBridgeStatusSyncSlice | undefined>;
-    getThreadReconciliationState?: () => TelegramBridgeThreadReconciliationState | undefined;
+    getBusFollowers?: () => BaleBridgeStatusBusFollower[];
+    getLocalBus?: () => BaleBridgeStatusLocalBus | undefined;
+    getTopicTargets?: () => BaleBridgeStatusTopicTarget[];
+    getThreadReservations?: () => BaleBridgeStatusThreadReservation[];
+    getTopicSyncObservations?: () => BaleBridgeStatusSyncObservation[];
+    getSyncState?: () => Record<string, BaleBridgeStatusSyncSlice | undefined>;
+    getThreadReconciliationState?: () => BaleBridgeThreadReconciliationState | undefined;
     getInstanceSlot?: () => string | undefined;
     getInstanceThreadName?: () => string | undefined;
     getNowMs?: () => number;
 }
-export interface TelegramBridgeStatusLineOptions {
+export interface BaleBridgeStatusLineOptions {
     verbose?: boolean;
 }
-export interface TelegramStatusRuntime<TContext extends TelegramStatusRuntimeContext> {
+export interface BaleStatusRuntime<TContext extends BaleStatusRuntimeContext> {
     updateStatus: (ctx: TContext, error?: string) => void;
-    getStatusLines: (options?: TelegramBridgeStatusLineOptions) => string[];
-    getStatusState: () => TelegramBridgeStatusLineState;
+    getStatusLines: (options?: BaleBridgeStatusLineOptions) => string[];
+    getStatusState: () => BaleBridgeStatusLineState;
 }
-export declare function recordStructuredTelegramRuntimeEvent(events: TelegramRuntimeEvent[], input: TelegramRuntimeEventInput, options: {
+export declare function recordStructuredBaleRuntimeEvent(events: BaleRuntimeEvent[], input: BaleRuntimeEventInput, options: {
     botToken?: string;
     maxEvents: number;
     now?: number;
 }): void;
 /**
- * Register a compact extension-provided line for the Telegram status menu.
+ * Register a compact extension-provided line for the Bale status menu.
  *
  * Providers are synchronous and should return undefined when their line is not
  * relevant for the active model. Errors are isolated so optional extension
- * status cannot break the core Telegram menu.
+ * status cannot break the core Bale menu.
  */
-export declare function registerTelegramStatusLineProvider(provider: TelegramStatusLineProvider, options: {
+export declare function registerBaleStatusLineProvider(provider: BaleStatusLineProvider, options: {
     id: string;
 }): () => void;
-export declare function clearTelegramStatusLineProviders(): void;
-export declare function createTelegramRuntimeEventRecorder(options: TelegramRuntimeEventRecorderOptions): TelegramRuntimeEventRecorder;
-export declare function buildTelegramRuntimeEventLines(events: TelegramRuntimeEvent[]): string[];
-export declare function createTelegramStatusHtmlBuilder<TContext>(deps: {
-    getActiveModel: (ctx: TContext) => TelegramStatusActiveModel | undefined;
+export declare function clearBaleStatusLineProviders(): void;
+export declare function createBaleRuntimeEventRecorder(options: BaleRuntimeEventRecorderOptions): BaleRuntimeEventRecorder;
+export declare function buildBaleRuntimeEventLines(events: BaleRuntimeEvent[]): string[];
+export declare function createBaleStatusHtmlBuilder<TContext>(deps: {
+    getActiveModel: (ctx: TContext) => BaleStatusActiveModel | undefined;
     isCompactionInProgress?: () => boolean;
-    getBridgeStatusLineState?: () => TelegramBridgeStatusLineState;
-}): (ctx: TContext & TelegramStatusContext) => string;
-export declare function createTelegramStatusRuntime<TContext extends TelegramStatusRuntimeContext>(deps: TelegramStatusRuntimeDeps<TContext>): TelegramStatusRuntime<TContext>;
-export declare function createTelegramBridgeStatusRuntime<TContext extends TelegramStatusRuntimeContext, TQueueItem extends {
-    queueLane: TelegramStatusQueueLane;
-}>(deps: TelegramBridgeStatusRuntimeDeps<TQueueItem>): TelegramStatusRuntime<TContext>;
-export interface TelegramRuntimeLogScope extends Record<string, unknown> {
+    getBridgeStatusLineState?: () => BaleBridgeStatusLineState;
+}): (ctx: TContext & BaleStatusContext) => string;
+export declare function createBaleStatusRuntime<TContext extends BaleStatusRuntimeContext>(deps: BaleStatusRuntimeDeps<TContext>): BaleStatusRuntime<TContext>;
+export declare function createBaleBridgeStatusRuntime<TContext extends BaleStatusRuntimeContext, TQueueItem extends {
+    queueLane: BaleStatusQueueLane;
+}>(deps: BaleBridgeStatusRuntimeDeps<TQueueItem>): BaleStatusRuntime<TContext>;
+export interface BaleRuntimeLogScope extends Record<string, unknown> {
     instanceId: string;
     role: string;
     slot?: string;
     threadName?: string;
     lockState?: string;
 }
-export declare function createTelegramRuntimeLogScope(input: {
-    state: TelegramBridgeStatusLineState;
+export declare function createBaleRuntimeLogScope(input: {
+    state: BaleBridgeStatusLineState;
     instanceId: string;
-}): TelegramRuntimeLogScope;
-export interface TelegramStatusSnapshot {
+}): BaleRuntimeLogScope;
+export interface BaleStatusSnapshot {
     runtime: Record<string, unknown>;
     liveRoster: Record<string, unknown>;
     diagnostics: Record<string, unknown>;
 }
-export interface TelegramStoredRuntimeProjection extends TelegramStatusSnapshot {
+export interface BaleStoredRuntimeProjection extends BaleStatusSnapshot {
     version: 1;
     source: "snapshot";
     writtenAtMs: number;
 }
-export declare function createTelegramStatusSnapshot(state: TelegramBridgeStatusLineState): TelegramStatusSnapshot;
-export interface TelegramRuntimeProjectionScope {
+export declare function createBaleStatusSnapshot(state: BaleBridgeStatusLineState): BaleStatusSnapshot;
+export interface BaleRuntimeProjectionScope {
     path: string;
     profile: string;
 }
-export interface TelegramRuntimeProjectionStorage {
-    read: (scope: TelegramRuntimeProjectionScope) => unknown;
+export interface BaleRuntimeProjectionStorage {
+    read: (scope: BaleRuntimeProjectionScope) => unknown;
     /** The adapter must enforce exact owner plus the supplied physical/logical scope in one transaction. */
-    publish: (scope: TelegramRuntimeProjectionScope, mutate: (current: unknown) => {
+    publish: (scope: BaleRuntimeProjectionScope, mutate: (current: unknown) => {
         value: unknown;
         changed: boolean;
     }, isCurrent: () => boolean) => boolean;
 }
-export interface TelegramRuntimeProjectionStoreOptions {
+export interface BaleRuntimeProjectionStoreOptions {
     getPath: () => string;
     getProfile: () => string | undefined;
     /** Capture exact owner/context/session authority at submission, never renew it after the queued await. */
     captureAuthority: () => (() => boolean) | undefined;
-    storage: TelegramRuntimeProjectionStorage;
+    storage: BaleRuntimeProjectionStorage;
     getNowMs?: () => number;
 }
 /** Observational runtime storage only; Workspace, admission, transport, logs and recovery remain with their owners. */
-export declare function createTelegramRuntimeProjectionStore(options: TelegramRuntimeProjectionStoreOptions): {
-    read: () => TelegramStoredRuntimeProjection | undefined;
-    persist: (snapshot: TelegramStatusSnapshot) => Promise<boolean>;
+export declare function createBaleRuntimeProjectionStore(options: BaleRuntimeProjectionStoreOptions): {
+    read: () => BaleStoredRuntimeProjection | undefined;
+    persist: (snapshot: BaleStatusSnapshot) => Promise<boolean>;
 };
-export declare function createTelegramRuntimeDiagnosticsSnapshotScheduler(deps: {
+export declare function createBaleRuntimeDiagnosticsSnapshotScheduler(deps: {
     persistSnapshot: (isCurrent: () => boolean) => Promise<void>;
     recordError: (error: unknown) => void;
     captureScope?: () => (() => boolean) | undefined;
@@ -466,13 +466,13 @@ export declare function createTelegramRuntimeDiagnosticsSnapshotScheduler(deps: 
     resume(): void;
     suspend(): Promise<void>;
 };
-export declare function getTelegramStatusBarProcessingStatus(state: {
+export declare function getBaleStatusBarProcessingStatus(state: {
     hasActiveTurn: boolean;
     hasPendingDispatch: boolean;
     hasPendingModelSwitch: boolean;
     activeToolExecutions: number;
     queuedItems: number;
 }): string | undefined;
-export declare function buildTelegramStatusBarText(theme: TelegramStatusBarTheme, state: TelegramStatusBarState): string;
-export declare function buildTelegramBridgeStatusLines(state: TelegramBridgeStatusLineState, options?: TelegramBridgeStatusLineOptions): string[];
+export declare function buildBaleStatusBarText(theme: BaleStatusBarTheme, state: BaleStatusBarState): string;
+export declare function buildBaleBridgeStatusLines(state: BaleBridgeStatusLineState, options?: BaleBridgeStatusLineOptions): string[];
 export {};

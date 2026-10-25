@@ -1,10 +1,12 @@
+> Bale port: only the supported subset in [Bale compatibility](bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
 # Updates
 
-`updates` owns Telegram update classification, default-routing plans, and the public update-handler registry. The internal `polling` domain owns the actual `getUpdates` loop, offsets, and abort/controller state.
+`updates` owns Bale update classification, default-routing plans, and the public update-handler registry. The internal `polling` domain owns the actual `getUpdates` loop, offsets, and abort/controller state.
 
-`pi-telegram` owns a single `getUpdates` long-poll connection per bot. Other pi extensions cannot open a competing polling connection against the same bot — the Telegram Bot API uses a per-bot `offset` cursor, and two loops race each other and lose updates.
+`pi-bale` owns a single `getUpdates` long-poll connection per bot. Other pi extensions cannot open a competing polling connection against the same bot — the Bale Bot API uses a per-bot `offset` cursor, and two loops race each other and lose updates.
 
-This document describes the registry that lets layered pi extensions running in the same pi process hook into `pi-telegram`'s polling loop and react to inbound Telegram updates **before** `pi-telegram`'s default routing fires.
+This document describes the registry that lets layered pi extensions running in the same pi process hook into `pi-bale`'s polling loop and react to inbound Bale updates **before** `pi-bale`'s default routing fires.
 
 The `0.28.0` transport/execution split is specified in [Durable Admission And Recovery](./architecture.md#durable-admission-and-recovery). Polling durably admits and advances batches before the independent worker invokes this registry. The worker binds source ids only after public interception passes, supplies public and built-in handlers with the same optional execution fence, settles late grouping under its exact generation, and publishes durable queue readiness. This document describes the executable public registry contract.
 
@@ -14,13 +16,13 @@ It is the runtime counterpart to [Callback Namespaces](./callback-namespaces.md)
 
 Use it when a layered extension needs to:
 
-- Resolve out-of-band state, for example a `tool_call` approval Promise, the moment a Telegram callback arrives, rather than waiting for the next agent turn.
-- Suppress `pi-telegram`'s default routing for callbacks owned by the layered extension, so `pi-telegram` does not also forward them as `[callback] <data>` text.
+- Resolve out-of-band state, for example a `tool_call` approval Promise, the moment a Bale callback arrives, rather than waiting for the next agent turn.
+- Suppress `pi-bale`'s default routing for callbacks owned by the layered extension, so `pi-bale` does not also forward them as `[callback] <data>` text.
 - Observe arbitrary update types such as messages, edits, channel posts, or reactions without owning the polling connection.
 
 If the layered extension only needs to read assistant-visible callbacks, the existing `[callback] <data>` fallback documented in [Callback Namespaces](./callback-namespaces.md) is enough.
 
-If the extension needs a durable top-level Telegram menu section with managed rendering, callback routing, authorization, and diagnostics, use the higher-level [Telegram Extension Sections](./sections.md) contract instead of a raw update handler.
+If the extension needs a durable top-level Bale menu section with managed rendering, callback routing, authorization, and diagnostics, use the higher-level [Bale Extension Sections](./sections.md) contract instead of a raw update handler.
 
 ## Constraints
 
@@ -28,14 +30,14 @@ If the extension needs a durable top-level Telegram menu section with managed re
 - Handlers run before built-in routing in the independent semantic worker. They must return promptly because a long await delays later handler/routing execution for that source order, but it does not delay `getUpdates` admission or offset persistence. Replacement generations wait for the unsettled handler rather than executing the same update concurrently.
 - Handler errors are caught and logged silently so polling never breaks. If you need durable error reporting, do it inside your handler.
 - Typed handlers receive an optional second `execution` argument with `signal`, `updateId`, `generation`, `isCurrent()`, and `assertCurrent()`. Pass `signal` into cancellable work and call `assertCurrent()` immediately before irreversible effects. The runtime also rejects a verdict returned after cancellation. Legacy one-argument and zero-coupling handlers remain compatible, but any effect they commit while still awaiting is their responsibility; replacement replay still waits for that handler's actual settlement.
-- The registry lives on `globalThis`. Module instance identity is not required, so layered extensions can reach it without importing `@llblab/pi-telegram`.
+- The registry lives on `globalThis`. Module instance identity is not required, so layered extensions can reach it without importing `@llblab/pi-bale`.
 
 ## Verdicts
 
 Each handler returns one of:
 
-- `"consume"` — `pi-telegram` skips its default routing for this update.
-- `"pass"` or `void` / `undefined` — `pi-telegram` routes the update normally. Other handlers registered after this one still run for the same update.
+- `"consume"` — `pi-bale` skips its default routing for this update.
+- `"pass"` or `void` / `undefined` — `pi-bale` routes the update normally. Other handlers registered after this one still run for the same update.
 
 The first handler that returns `"consume"` wins; later handlers are not called for that update.
 
@@ -43,12 +45,12 @@ The first handler that returns `"consume"` wins; later handlers are not called f
 
 Two equivalent paths.
 
-### Typed import (recommended when you can depend on `@llblab/pi-telegram`)
+### Typed import (recommended when you can depend on `@llblab/pi-bale`)
 
 ```ts
-import { registerTelegramUpdateHandler } from "@llblab/pi-telegram/updates";
+import { registerBaleUpdateHandler } from "@llblab/pi-bale/updates";
 
-const off = registerTelegramUpdateHandler(async (update, execution) => {
+const off = registerBaleUpdateHandler(async (update, execution) => {
   const cb = (update as { callback_query?: { id?: string; data?: string } })
     .callback_query;
   if (!cb?.data?.startsWith("myext:")) return "pass";
@@ -63,44 +65,44 @@ off();
 
 ### Zero-coupling globalThis lookup
 
-When the layered extension prefers no `import` from `@llblab/pi-telegram`, so load order between the two extensions does not matter and either can be installed first, it must implement the **full v1 registry contract**, not just `version` and `add`. pi-telegram's polling runtime calls `dispatch` on whatever object it finds at `globalThis.__piTelegramUpdateHandlerRegistry__`, so a partial object would silently break the first update.
+When the layered extension prefers no `import` from `@llblab/pi-bale`, so load order between the two extensions does not matter and either can be installed first, it must implement the **full v1 registry contract**, not just `version` and `add`. pi-bale's polling runtime calls `dispatch` on whatever object it finds at `globalThis.__piBaleUpdateHandlerRegistry__`, so a partial object would silently break the first update.
 
-pi-telegram defensively re-creates the registry if the object on `globalThis` is missing `add` or `dispatch`, validated as `version === 1`, `typeof add === "function"`, and `typeof dispatch === "function"`. Handlers registered against a malformed object are dropped — make sure your bootstrap implements all three fields.
+pi-bale defensively re-creates the registry if the object on `globalThis` is missing `add` or `dispatch`, validated as `version === 1`, `typeof add === "function"`, and `typeof dispatch === "function"`. Handlers registered against a malformed object are dropped — make sure your bootstrap implements all three fields.
 
 ```ts
-type PiTelegramVerdict =
+type PiBaleVerdict =
   | "consume"
   | "pass"
   | void
   | Promise<"consume" | "pass" | void>;
-type PiTelegramUpdateExecutionFence = {
+type PiBaleUpdateExecutionFence = {
   readonly generation: number;
   readonly updateId: number;
   readonly signal: AbortSignal;
   isCurrent: () => boolean;
   assertCurrent: () => void;
 };
-type PiTelegramUpdateHandler = (
+type PiBaleUpdateHandler = (
   update: unknown,
-  execution?: PiTelegramUpdateExecutionFence,
-) => PiTelegramVerdict;
+  execution?: PiBaleUpdateExecutionFence,
+) => PiBaleVerdict;
 
-interface PiTelegramUpdateHandlerRegistry {
+interface PiBaleUpdateHandlerRegistry {
   readonly version: 1;
-  add: (handler: PiTelegramUpdateHandler) => () => void;
-  // Required: pi-telegram's polling loop calls this on every update.
+  add: (handler: PiBaleUpdateHandler) => () => void;
+  // Required: pi-bale's polling loop calls this on every update.
   dispatch: (
     update: unknown,
-    execution?: PiTelegramUpdateExecutionFence,
+    execution?: PiBaleUpdateExecutionFence,
   ) => Promise<"consume" | "pass">;
 }
 
-const REGISTRY_KEY = "__piTelegramUpdateHandlerRegistry__";
+const REGISTRY_KEY = "__piBaleUpdateHandlerRegistry__";
 
-function getOrCreateRegistry(): PiTelegramUpdateHandlerRegistry {
+function getOrCreateRegistry(): PiBaleUpdateHandlerRegistry {
   const g = globalThis as Record<string, unknown>;
   const existing = g[REGISTRY_KEY] as
-    | PiTelegramUpdateHandlerRegistry
+    | PiBaleUpdateHandlerRegistry
     | undefined;
   if (
     existing &&
@@ -110,8 +112,8 @@ function getOrCreateRegistry(): PiTelegramUpdateHandlerRegistry {
   ) {
     return existing;
   }
-  const handlers = new Set<PiTelegramUpdateHandler>();
-  const registry: PiTelegramUpdateHandlerRegistry = {
+  const handlers = new Set<PiBaleUpdateHandler>();
+  const registry: PiBaleUpdateHandlerRegistry = {
     version: 1,
     add(handler) {
       handlers.add(handler);
@@ -140,34 +142,34 @@ const off = getOrCreateRegistry().add((update) => {
 });
 ```
 
-The registry object on `globalThis.__piTelegramUpdateHandlerRegistry__` is versioned (`version: 1`) and stable across pi-telegram releases; the optional second arguments preserve existing v1 callers and implementations. Internal adapters can capture one stable check with `createTelegramUpdateExecutionFenceGuard(update)` or transfer the hidden binding across an unavoidable clone with `carryTelegramUpdateExecutionFence(source, target)`, while `getTelegramUpdateExecutionFence` and `assertTelegramUpdateExecutionCurrent` serve carriers that retain it. Future breaking changes will use a new schema version and a new key.
+The registry object on `globalThis.__piBaleUpdateHandlerRegistry__` is versioned (`version: 1`) and stable across pi-bale releases; the optional second arguments preserve existing v1 callers and implementations. Internal adapters can capture one stable check with `createBaleUpdateExecutionFenceGuard(update)` or transfer the hidden binding across an unavoidable clone with `carryBaleUpdateExecutionFence(source, target)`, while `getBaleUpdateExecutionFence` and `assertBaleUpdateExecutionCurrent` serve carriers that retain it. Future breaking changes will use a new schema version and a new key.
 
 ## Interaction with built-in routing
 
-`pi-telegram` invokes registered handlers first, then routes the update through its own handlers: commands, app menu, queue menu, model menu, default prompt routing, and callback namespace fallback. If any handler returns `"consume"`, `pi-telegram` skips the rest of routing for that update.
+`pi-bale` invokes registered handlers first, then routes the update through its own handlers: commands, app menu, queue menu, model menu, default prompt routing, and callback namespace fallback. If any handler returns `"consume"`, `pi-bale` skips the rest of routing for that update.
 
-Default routing ignores `deleted_business_messages`. Telegram's [BusinessMessagesDeleted](https://core.telegram.org/bots/api#businessmessagesdeleted) belongs to a connected business account; [Message.business_connection_id](https://core.telegram.org/bots/api#message) explicitly distinguishes that account's chats from bot chats with the same IDs. Such an update cannot delete private Pi queue entries or pending media groups. Raw handlers still receive the carrier and may own their own namespace-aware behavior. The polling filter is not an authority check: Telegram may return updates created before a changed `allowed_updates` setting.
+Default routing ignores `deleted_business_messages`. Bale's [BusinessMessagesDeleted](https://docs.bale.ai/) belongs to a connected business account; [Message.business_connection_id](https://core.bale.org/bots/api#message) explicitly distinguishes that account's chats from bot chats with the same IDs. Such an update cannot delete private Pi queue entries or pending media groups. Raw handlers still receive the carrier and may own their own namespace-aware behavior. The polling filter is not an authority check: Bale may return updates created before a changed `allowed_updates` setting.
 
 This means:
 
-- Extensions can claim callback namespaces that `pi-telegram` would otherwise forward as `[callback] <data>` text.
+- Extensions can claim callback namespaces that `pi-bale` would otherwise forward as `[callback] <data>` text.
 - Extensions can observe updates by always returning `"pass"`.
-- Extensions must not consume updates that belong to `pi-telegram`'s own prefixes (`compact:`, `new:`, `tgbtn:`, `menu:`, `model:`, `thinking:`, `status:`, `queue:`, `settings:`, `section:`) unless they are deliberately replacing that behavior.
+- Extensions must not consume updates that belong to `pi-bale`'s own prefixes (`compact:`, `new:`, `tgbtn:`, `menu:`, `model:`, `thinking:`, `status:`, `queue:`, `settings:`, `section:`) unless they are deliberately replacing that behavior.
 
 ## Ownership semantics
 
 The handler registry is ownership-agnostic and does not interact with the extension-local transport owner slots documented in [Architecture](./architecture.md#configuration-and-ownership). When the polling runtime loses its transport ownership and stops `getUpdates`, handlers stop receiving updates because no updates are being fetched; they are not unregistered.
 
-If a layered extension needs to react to ownership changes, it should observe `pi-telegram` lifecycle events through the standard pi extension hooks rather than through the handler registry.
+If a layered extension needs to react to ownership changes, it should observe `pi-bale` lifecycle events through the standard pi extension hooks rather than through the handler registry.
 
 ## Not a transport multiplexer
 
-This registry does not bypass Telegram's single-polling-connection-per-bot constraint and does not route updates between processes. Threaded Mode provides the separate profile-scoped leader/follower bus: the leader owns `getUpdates`, applies its process-local update registry, and then routes retained built-in traffic to the owning instance. The registry remains an in-process extension interception surface only.
+This registry does not bypass Bale's single-polling-connection-per-bot constraint and does not route updates between processes. Threaded Mode provides the separate profile-scoped leader/follower bus: the leader owns `getUpdates`, applies its process-local update registry, and then routes retained built-in traffic to the owning instance. The registry remains an in-process extension interception surface only.
 
 ## Relationship to extension sections
 
-Update handlers are the raw update primitive. Extension sections are the structured Telegram UI layer above that primitive.
+Update handlers are the raw update primitive. Extension sections are the structured Bale UI layer above that primitive.
 
-Use update handlers for immediate update interception, custom callback namespaces, out-of-band Promise resolution, and update types that should not become a Telegram menu surface.
+Use update handlers for immediate update interception, custom callback namespaces, out-of-band Promise resolution, and update types that should not become a Bale menu surface.
 
-Use extension sections when the desired behavior is a menu-integrated UI: `render(ctx)`, managed callback dispatch, safe runtime ports, stale-callback handling, and diagnostics owned by `pi-telegram`.
+Use extension sections when the desired behavior is a menu-integrated UI: `render(ctx)`, managed callback dispatch, safe runtime ports, stale-callback handling, and diagnostics owned by `pi-bale`.

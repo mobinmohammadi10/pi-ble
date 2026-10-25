@@ -1,27 +1,27 @@
 /**
- * Regression tests for Telegram outbound button helpers
+ * Regression tests for Bale outbound button helpers
  * Exercises assistant-authored button markup extraction, action storage, callback handling, and prompt-turn construction
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sendTelegramNativeMarkdownReply, splitTelegramNativeMarkdown } from "../lib/replies.ts";
+import { sendBaleNativeMarkdownReply, splitBaleNativeMarkdown } from "../lib/replies.ts";
 
 import {
-  createTelegramButtonActionStore,
-  createTelegramButtonPromptTurn,
-  handleTelegramButtonCallbackQuery,
-  markTelegramButtonSelected,
-  planTelegramButtonReply,
+  createBaleButtonActionStore,
+  createBaleButtonPromptTurn,
+  handleBaleButtonCallbackQuery,
+  markBaleButtonSelected,
+  planBaleButtonReply,
 } from "../lib/outbound-buttons.ts";
 
 test("Fenced button blocks use the shared grammar in place, independently of footer controls", async () => {
-  const store = createTelegramButtonActionStore();
+  const store = createBaleButtonActionStore();
   const binding = { app: "counter", generation: "current", revision: 3 };
-  const plan = planTelegramButtonReply([
-    "Before.", "```telegram_button",
+  const plan = planBaleButtonReply([
+    "Before.", "```bale_button",
     '[{Run|counter::next}[{"label":"Wait","disabled":true}{|||true}]]',
-    "```", "After.", '<!-- telegram_button {Footer|Explain this.} -->',
+    "```", "After.", '<!-- bale_button {Footer|Explain this.} -->',
   ].join("\n"), { registerAction: store.register, binding });
   assert.match(plan.markdown, /^Before\.\n\n<tg-button-row>/u);
   assert.match(plan.markdown, /<tg-button type="disabled">Wait<\/tg-button>/u);
@@ -31,7 +31,7 @@ test("Fenced button blocks use the shared grammar in place, independently of foo
   const data = plan.markdown.match(/data="([^"]+)"/)?.[1];
   assert.ok(data);
   let invoked = false;
-  assert.equal(await handleTelegramButtonCallbackQuery({
+  assert.equal(await handleBaleButtonCallbackQuery({
     id: "callback", data, message: { chat: { id: 7 }, message_id: 8, message_thread_id: 9 },
   }, undefined, {
     resolveAction: store.resolve,
@@ -45,11 +45,11 @@ test("Fenced button blocks use the shared grammar in place, independently of foo
     },
   }), true);
   assert.equal(invoked, true);
-  const ordinary = planTelegramButtonReply('```telegram_button\n{Explain|Explain this section.}\n```', { registerAction: store.register });
+  const ordinary = planBaleButtonReply('```bale_button\n{Explain|Explain this section.}\n```', { registerAction: store.register });
   const ordinaryData = ordinary.markdown.match(/data="([^"]+)"/)?.[1];
   assert.ok(ordinaryData);
   let queued = false;
-  await handleTelegramButtonCallbackQuery({
+  await handleBaleButtonCallbackQuery({
     id: "ordinary", data: ordinaryData, message: { chat: { id: 7 }, message_id: 10, message_thread_id: 9 },
   }, undefined, {
     resolveAction: store.resolve,
@@ -71,7 +71,7 @@ test("Fenced top-level button sequences are vertical aliases for explicit matric
   ];
   for (const source of sources) {
     const actions: unknown[] = [];
-    const plan = planTelegramButtonReply(`\`\`\`telegram_button\n${source}\n\`\`\``, {
+    const plan = planBaleButtonReply(`\`\`\`bale_button\n${source}\n\`\`\``, {
       registerAction: (action) => {
         actions.push(action);
         return `tgbtn:${actions.length}`;
@@ -83,8 +83,8 @@ test("Fenced top-level button sequences are vertical aliases for explicit matric
     ]);
     assert.equal((plan.markdown.match(/<tg-button-row>/g) ?? []).length, 2);
   }
-  const horizontal = planTelegramButtonReply(
-    '```telegram_button\n[[{First|one}{Second|two}]]\n```',
+  const horizontal = planBaleButtonReply(
+    '```bale_button\n[[{First|one}{Second|two}]]\n```',
     { registerAction: () => "tgbtn:test" },
   );
   assert.equal((horizontal.markdown.match(/<tg-button-row>/g) ?? []).length, 1);
@@ -98,7 +98,7 @@ test("Fenced top-level button sequences are vertical aliases for explicit matric
     '[{Valid|one}]\n[{Valid|two}] trailing',
     '{Valid|one} trailing',
   ]) {
-    const plan = planTelegramButtonReply(`\`\`\`telegram_button\n${source}\n\`\`\``, {
+    const plan = planBaleButtonReply(`\`\`\`bale_button\n${source}\n\`\`\``, {
       registerAction: () => assert.fail("Malformed sequence registered callbacks"),
     });
     assert.equal(plan.markdown, "");
@@ -121,9 +121,9 @@ test("Adjacent top-level button groups normalize to one matrix without changing 
       const plan = (payload: string) => {
         const actions: unknown[] = [];
         const markdown = wrapper === "fence"
-          ? `\`\`\`telegram_button\n${payload}\n\`\`\``
-          : `<!-- telegram_button ${payload} -->`;
-        const reply = planTelegramButtonReply(markdown, {
+          ? `\`\`\`bale_button\n${payload}\n\`\`\``
+          : `<!-- bale_button ${payload} -->`;
+        const reply = planBaleButtonReply(markdown, {
           rendering,
           registerAction: (action) => {
             actions.push(action);
@@ -141,7 +141,7 @@ test("Adjacent top-level button groups normalize to one matrix without changing 
 
 test("Fenced singleton JSON/CML cells are equivalent and labels cannot inject Rich markup", () => {
   for (const payload of ['{Run|do-it}', '{"label":"Run","prompt":"do-it"}']) {
-    const plan = planTelegramButtonReply(`\`\`\`telegram_button\n${payload}\n\`\`\``, {
+    const plan = planBaleButtonReply(`\`\`\`bale_button\n${payload}\n\`\`\``, {
       registerAction: (action) => {
         assert.deepEqual(action, { text: "Run", prompt: "do-it" });
         return "tgbtn:test";
@@ -150,7 +150,7 @@ test("Fenced singleton JSON/CML cells are equivalent and labels cannot inject Ri
     assert.equal(plan.markdown, '<tg-button-row><tg-button type="callback_data" data="tgbtn:test">Run</tg-button></tg-button-row>');
     assert.equal(plan.replyMarkup, undefined);
   }
-  const plan = planTelegramButtonReply('```telegram_button\n' + JSON.stringify({
+  const plan = planBaleButtonReply('```bale_button\n' + JSON.stringify({
     label: '</tg-button><tg-button type="url">$USD`_*', prompt: "private prompt",
   }) + '\n```', { registerAction: () => "tgbtn:safe" });
   assert.equal((plan.markdown.match(/<tg-button /g) ?? []).length, 1);
@@ -160,29 +160,29 @@ test("Fenced singleton JSON/CML cells are equivalent and labels cannot inject Ri
 
 test("Only complete standalone exact-name fences activate; examples remain literal", () => {
   for (const source of [
-    '````markdown\n```telegram_button\n{Run}\n```\n````',
-    '~~~markdown\n```telegram_button\n{Run}\n```\n~~~',
-    '```text\n```telegram_button\n{Run}\n```',
-    '> ```telegram_button\n> {Run}\n> ```',
-    '    ```telegram_button\n    {Run}\n    ```',
-    '```telegram_button_extra\n{Run}\n```',
-    '```telegram_button extra\n{Run}\n```',
-    'Text <!--\n```telegram_button\n{Run}\n```\n-->',
+    '````markdown\n```bale_button\n{Run}\n```\n````',
+    '~~~markdown\n```bale_button\n{Run}\n```\n~~~',
+    '```text\n```bale_button\n{Run}\n```',
+    '> ```bale_button\n> {Run}\n> ```',
+    '    ```bale_button\n    {Run}\n    ```',
+    '```bale_button_extra\n{Run}\n```',
+    '```bale_button extra\n{Run}\n```',
+    'Text <!--\n```bale_button\n{Run}\n```\n-->',
   ]) {
-    const plan = planTelegramButtonReply(source, {
+    const plan = planBaleButtonReply(source, {
       registerAction: () => assert.fail(`Activated a literal example: ${source}`),
     });
     assert.equal(plan.markdown, source.trim());
   }
   for (const source of [
-    '```telegram_button\n{Run}',
-    '```telegram_button\n[{Valid}{Bad|}]\n```',
-    '```telegram_button\n{Run} trailing\n```',
-    '```telegram_button\n<!-- telegram_button {Run} -->\n```',
-    '```telegram_button\n[[' + Array(9).fill('{Run}').join('') + ']]\n```',
-    '```telegram_button\n{' + 'x'.repeat(32768) + '}\n```',
+    '```bale_button\n{Run}',
+    '```bale_button\n[{Valid}{Bad|}]\n```',
+    '```bale_button\n{Run} trailing\n```',
+    '```bale_button\n<!-- bale_button {Run} -->\n```',
+    '```bale_button\n[[' + Array(9).fill('{Run}').join('') + ']]\n```',
+    '```bale_button\n{' + 'x'.repeat(32768) + '}\n```',
   ]) {
-    const plan = planTelegramButtonReply(source, {
+    const plan = planBaleButtonReply(source, {
       registerAction: () => assert.fail("Invalid or incomplete block registered callbacks"),
     });
     assert.equal(plan.markdown, "");
@@ -193,17 +193,17 @@ test("Only complete standalone exact-name fences activate; examples remain liter
 test("Native sends preserve in-body controls, target ownership and chunk boundaries", async () => {
   const row = '<tg-button-row><tg-button type="callback_data" data="tgbtn:test">Run</tg-button></tg-button-row>';
   const markdown = `${'x'.repeat(32760)}\n\n${row}\n\nTail`;
-  const chunks = splitTelegramNativeMarkdown(markdown);
+  const chunks = splitBaleNativeMarkdown(markdown);
   assert.ok(chunks.length > 1);
   assert.equal(chunks.filter((chunk) => chunk.includes(row)).length, 1);
   assert.ok(chunks.every((chunk) => !chunk.includes('<tg-button-row>') || chunk.includes('</tg-button-row>')));
-  const many = splitTelegramNativeMarkdown(Array(501).fill(row).join('\n\n'));
+  const many = splitBaleNativeMarkdown(Array(501).fill(row).join('\n\n'));
   assert.ok(many.length > 1);
   assert.ok(many.every((chunk) => (chunk.match(/<tg-button-row>/g) ?? []).length <= 500));
   const target = { chatId: 7, threadId: 9 };
   const ownership: unknown[] = [];
   let sends = 0;
-  await sendTelegramNativeMarkdownReply(7, 5, markdown, {
+  await sendBaleNativeMarkdownReply(7, 5, markdown, {
     recordOwnership: (value) => { ownership.push(value); },
     sendRichMessage: async (body) => {
       assert.equal(body.message_thread_id, 9);
@@ -218,7 +218,7 @@ test("Native sends preserve in-body controls, target ownership and chunk boundar
 });
 
 test("HTML compatibility projects fenced controls into the existing footer keyboard", () => {
-  const plan = planTelegramButtonReply('Before\n```telegram_button\n[{Run}{Wait|||1}]\n```\nAfter', {
+  const plan = planBaleButtonReply('Before\n```bale_button\n[{Run}{Wait|||1}]\n```\nAfter', {
     rendering: "html", registerAction: () => "tgbtn:run",
   });
   assert.equal(plan.markdown, "Before\n\nAfter");
@@ -227,13 +227,13 @@ test("HTML compatibility projects fenced controls into the existing footer keybo
   ] });
 });
 
-test("Button reply planner strips telegram_button markup and registers actions", () => {
+test("Button reply planner strips bale_button markup and registers actions", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
+  const plan = planBaleButtonReply(
     [
       "Visible answer.",
       "",
-      '<!-- telegram_button {"label":"Run","prompt":"Run the workflow."} -->',
+      '<!-- bale_button {"label":"Run","prompt":"Run the workflow."} -->',
       "",
       "Tail.",
     ].join("\n"),
@@ -254,14 +254,14 @@ test("Button reply planner strips telegram_button markup and registers actions",
 
 test("Button reply planner retains legacy attribute compatibility", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
+  const plan = planBaleButtonReply(
     [
-      '<!-- telegram_button {"label":"JSON","prompt":"Run JSON."} -->',
-      '<!-- telegram_button {"label":"Styled JSON","prompt":"Run styled JSON.","selected_style":"success"} -->',
-      '<!-- telegram_button label="Attributes" prompt="Run attributes." -->',
-      '<!-- telegram_button {"value":"JSON value"} -->',
-      '<!-- telegram_button value="Attribute value" -->',
-      '<!-- telegram_button {"value":"Fallback prompt","label":"Explicit label"} -->',
+      '<!-- bale_button {"label":"JSON","prompt":"Run JSON."} -->',
+      '<!-- bale_button {"label":"Styled JSON","prompt":"Run styled JSON.","selected_style":"success"} -->',
+      '<!-- bale_button label="Attributes" prompt="Run attributes." -->',
+      '<!-- bale_button {"value":"JSON value"} -->',
+      '<!-- bale_button value="Attribute value" -->',
+      '<!-- bale_button {"value":"Fallback prompt","label":"Explicit label"} -->',
     ].join("\n"),
     {
       registerAction: (action) => {
@@ -295,13 +295,13 @@ test("Button reply planner retains legacy attribute compatibility", () => {
   });
 });
 
-test("Button reply planner expands JSON arrays, compact rows, and the telegram_buttons alias", () => {
+test("Button reply planner expands JSON arrays, compact rows, and the bale_buttons alias", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
+  const plan = planBaleButtonReply(
     [
-      '<!-- telegram_button [{"label":"⬆️ Up","prompt":"/"},[{"value":"⬅️ Previous"},{"value":"➡️ Next"}],{"label":"📁 etc","prompt":"/etc"},{"label":"📁 home","prompt":"/home","selected_style":"success"}] -->',
-      '<!-- telegram_buttons [{"value":"Next"},{"label":"Refresh","prompt":"/"}] -->',
-      '<!-- telegram_buttons {"label":"Single alias","prompt":"One more."} -->',
+      '<!-- bale_button [{"label":"⬆️ Up","prompt":"/"},[{"value":"⬅️ Previous"},{"value":"➡️ Next"}],{"label":"📁 etc","prompt":"/etc"},{"label":"📁 home","prompt":"/home","selected_style":"success"}] -->',
+      '<!-- bale_buttons [{"value":"Next"},{"label":"Refresh","prompt":"/"}] -->',
+      '<!-- bale_buttons {"label":"Single alias","prompt":"One more."} -->',
     ].join("\n"),
     {
       registerAction: (action) => {
@@ -339,8 +339,8 @@ test("Button reply planner expands JSON arrays, compact rows, and the telegram_b
 
 test("Button reply planner leaves compact-row width to the renderer profile", () => {
   let nextId = 0;
-  const plan = planTelegramButtonReply(
-    '<!-- telegram_button [[{"value":"1"},{"value":"2"},{"value":"3"},{"value":"4"},{"value":"5"},{"value":"6"},{"value":"7"},{"value":"8"}]] -->',
+  const plan = planBaleButtonReply(
+    '<!-- bale_button [[{"value":"1"},{"value":"2"},{"value":"3"},{"value":"4"},{"value":"5"},{"value":"6"},{"value":"7"},{"value":"8"}]] -->',
     { registerAction: () => `btn:${++nextId}` },
   );
 
@@ -360,8 +360,8 @@ test("Button reply planner leaves compact-row width to the renderer profile", ()
 
 test("Button reply planner decodes compact matrix literals", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
-    String.raw`<!-- telegram_button [{  Up  | / }[{1}{2}{3}{4}{5}{6}{7}{8}]{Stop|music-player::stop|danger}{A {["x"], v1: \| B|C:\\Games\}}] -->`,
+  const plan = planBaleButtonReply(
+    String.raw`<!-- bale_button [{  Up  | / }[{1}{2}{3}{4}{5}{6}{7}{8}]{Stop|music-player::stop|danger}{A {["x"], v1: \| B|C:\\Games\}}] -->`,
     {
       registerAction: (action) => {
         actions.push(action);
@@ -409,8 +409,8 @@ test("Button reply planner preserves semantics across adaptive JSON and CML comp
   ];
   for (const source of sources) {
     const actions: unknown[] = [];
-    const plan = planTelegramButtonReply(
-      `<!-- telegram_button ${source} -->`,
+    const plan = planBaleButtonReply(
+      `<!-- bale_button ${source} -->`,
       {
         registerAction: (action) => {
           actions.push(action);
@@ -434,42 +434,42 @@ test("Button reply planner preserves semantics across adaptive JSON and CML comp
 
 test("Button reply planner extracts the JSON-to-CML gradient from tolerant envelopes", () => {
   const cases = [
-    ['<!-- telegram_button {"label":"text","prompt":"text"} -->', [["text"]]],
-    ['<!-- telegram_button JSON {"label":"trailing","prompt":"trailing",} -->', [["trailing"]]],
-    ["<!-- telegram_button noise [draft {after noise} -->", [["after noise"]]],
-    ["<!-- telegram_button noise [{after orphan opener} -->", [["after orphan opener"]]],
-    ["<!-- telegram_button {label|prompt} -->", [["label"]]],
-    ["<!-- telegram_button [{label|prompt}] -->", [["label"]]],
-    ["<!-- telegram_button [{|e2}{|e4}] -->", [["e2"], ["e4"]]],
-    ["<!-- telegram_button {prompt} -->", [["prompt"]]],
-    ["<!-- telegram_button [{prompt}] -->", [["prompt"]]],
-    ['<!-- telegram_button noise {Say "yes"|speak} trailing -->', [['Say "yes"']]],
-    ["<!-- telegram_button noise {Open [draft|open} trailing -->", [["Open [draft"]]],
-    ["<!-- telegram_button [[{prompt}]] -->", [["prompt"]]],
-    ["<!-- telegram_button [[{one}{two}]] -->", [["one", "two"]]],
-    ["<!-- telegram_button [[{one},{two}]] -->", [["one", "two"]]],
-    ["<!-- telegram_button [[{one},{two},],] -->", [["one", "two"]]],
+    ['<!-- bale_button {"label":"text","prompt":"text"} -->', [["text"]]],
+    ['<!-- bale_button JSON {"label":"trailing","prompt":"trailing",} -->', [["trailing"]]],
+    ["<!-- bale_button noise [draft {after noise} -->", [["after noise"]]],
+    ["<!-- bale_button noise [{after orphan opener} -->", [["after orphan opener"]]],
+    ["<!-- bale_button {label|prompt} -->", [["label"]]],
+    ["<!-- bale_button [{label|prompt}] -->", [["label"]]],
+    ["<!-- bale_button [{|e2}{|e4}] -->", [["e2"], ["e4"]]],
+    ["<!-- bale_button {prompt} -->", [["prompt"]]],
+    ["<!-- bale_button [{prompt}] -->", [["prompt"]]],
+    ['<!-- bale_button noise {Say "yes"|speak} trailing -->', [['Say "yes"']]],
+    ["<!-- bale_button noise {Open [draft|open} trailing -->", [["Open [draft"]]],
+    ["<!-- bale_button [[{prompt}]] -->", [["prompt"]]],
+    ["<!-- bale_button [[{one}{two}]] -->", [["one", "two"]]],
+    ["<!-- bale_button [[{one},{two}]] -->", [["one", "two"]]],
+    ["<!-- bale_button [[{one},{two},],] -->", [["one", "two"]]],
     [
-      '<!-- telegram_button [[{"label":"text","prompt":"text"},{prompt}]] -->',
+      '<!-- bale_button [[{"label":"text","prompt":"text"},{prompt}]] -->',
       [["text", "prompt"]],
     ],
     [
-      '<!-- telegram_button: CML [[{"label":"text"},{"prompt":"text"}{prompt}]] -->',
+      '<!-- bale_button: CML [[{"label":"text"},{"prompt":"text"}{prompt}]] -->',
       [["text", "text", "prompt"]],
     ],
     [
-      '<!-- telegram_buttons something [{"label":"text"}{"prompt":"text"},{prompt}] what? -->',
+      '<!-- bale_buttons something [{"label":"text"}{"prompt":"text"},{prompt}] what? -->',
       [["text"], ["text"], ["prompt"]],
     ],
     [
-      "<!-- telegram_button ignored label=Label prompt=Prompt trailing -->",
+      "<!-- bale_button ignored label=Label prompt=Prompt trailing -->",
       [["Label"]],
     ],
   ] as const;
 
   for (const [comment, expectedRows] of cases) {
     let nextId = 0;
-    const plan = planTelegramButtonReply(comment, {
+    const plan = planBaleButtonReply(comment, {
       registerAction: () => `btn:${++nextId}`,
     });
     assert.deepEqual(
@@ -484,12 +484,12 @@ test("Button reply planner extracts the JSON-to-CML gradient from tolerant envel
 
 test("Button reply planner preserves label and prompt semantics across shorthand forms", () => {
   const actions: unknown[] = [];
-  planTelegramButtonReply(
+  planBaleButtonReply(
     [
-      "<!-- telegram_button {Label|Prompt} -->",
-      "<!-- telegram_button [{|e2}{|e4}] -->",
-      '<!-- telegram_button {"label":"Label only"} -->',
-      '<!-- telegram_button {"prompt":"Prompt only"} -->',
+      "<!-- bale_button {Label|Prompt} -->",
+      "<!-- bale_button [{|e2}{|e4}] -->",
+      '<!-- bale_button {"label":"Label only"} -->',
+      '<!-- bale_button {"prompt":"Prompt only"} -->',
     ].join("\n"),
     {
       registerAction: (action) => {
@@ -510,10 +510,10 @@ test("Button reply planner preserves label and prompt semantics across shorthand
 test("Compact button style accepts exactly the selected-style enum", () => {
   for (const selectedStyle of ["primary", "success", "danger"] as const) {
     const actions: unknown[] = [];
-    planTelegramButtonReply(
+    planBaleButtonReply(
       [
-        `<!-- telegram_button {Run|run-now|${selectedStyle}} -->`,
-        `<!-- telegram_button {|retry-now|${selectedStyle}} -->`,
+        `<!-- bale_button {Run|run-now|${selectedStyle}} -->`,
+        `<!-- bale_button {|retry-now|${selectedStyle}} -->`,
       ].join("\n"),
       {
         registerAction: (action) => {
@@ -537,7 +537,7 @@ test("Disabled buttons normalize JSON and CML without registering prompt or boun
       JSON.stringify({ prompt, disabled: true }),
       `prompt="${prompt}" disabled="true"`,
     ]) {
-      const plan = planTelegramButtonReply(`<!-- telegram_button ${payload} -->`, {
+      const plan = planBaleButtonReply(`<!-- bale_button ${payload} -->`, {
         binding: { app: "counter", generation: "current", revision: 2 },
         registerAction: () => assert.fail("Disabled controls must have no action identity"),
       });
@@ -559,12 +559,12 @@ test("Disabled cells need neither a prompt nor a label, with JSON/CML parity", (
     ['{"disabled":true}', "\u00a0"],
     ["{Next||danger|1}", "Next"],
   ]) {
-    const plan = planTelegramButtonReply(`<!-- telegram_button ${payload} -->`, {
+    const plan = planBaleButtonReply(`<!-- bale_button ${payload} -->`, {
       registerAction: () => assert.fail("Disabled cells have no action"),
     });
     assert.deepEqual(plan.replyMarkup, { inline_keyboard: [[{ text, disabled: {} }]] });
   }
-  const plan = planTelegramButtonReply('<!-- telegram_button [[{|||1}{Next|||1}]{Run}] -->', {
+  const plan = planBaleButtonReply('<!-- bale_button [[{|||1}{Next|||1}]{Run}] -->', {
     registerAction: (action) => {
       assert.deepEqual(action, { text: "Run", prompt: "Run" });
       return "btn:run";
@@ -579,8 +579,8 @@ test("Disabled cells need neither a prompt nor a label, with JSON/CML parity", (
 test("Mixed matrices preserve disabled cells and enabled selection/binding semantics", () => {
   const actions: unknown[] = [];
   const binding = { app: "counter", generation: "current", revision: 2 };
-  const plan = planTelegramButtonReply(
-    '<!-- telegram_button [[{Wait|counter::next||1}{Next|counter::next||false}]{Run|run|success|0}{"value":"Again","disabled":false}] -->',
+  const plan = planBaleButtonReply(
+    '<!-- bale_button [[{Wait|counter::next||1}{Next|counter::next||false}]{Run|run|success|0}{"value":"Again","disabled":false}] -->',
     {
       binding,
       registerAction: (action) => {
@@ -601,7 +601,7 @@ test("Mixed matrices preserve disabled cells and enabled selection/binding seman
       [{ text: "Again", callback_data: "btn:3" }],
     ],
   });
-  const selected = markTelegramButtonSelected(plan.replyMarkup!, "btn:1");
+  const selected = markBaleButtonSelected(plan.replyMarkup!, "btn:1");
   assert.deepEqual(selected?.inline_keyboard[0], [
     { text: "Wait", disabled: {} },
     { text: "Next", callback_data: "btn:1", style: "primary" },
@@ -616,7 +616,7 @@ test("Invalid disabled values reject an entire matrix without activating peers",
     '{"disabled":false}',
     ...["true", 1, 0, null, {}, []].map((disabled) => JSON.stringify({ value: "x", disabled })),
   ]) {
-    const plan = planTelegramButtonReply(`<!-- telegram_button [{Valid}${cell}] -->`, {
+    const plan = planBaleButtonReply(`<!-- bale_button [{Valid}${cell}] -->`, {
       registerAction: () => assert.fail(`Invalid matrix registered an action: ${cell}`),
     });
     assert.equal(plan.replyMarkup, undefined, cell);
@@ -625,10 +625,10 @@ test("Invalid disabled values reject an entire matrix without activating peers",
 });
 
 test("Disabled stored actions cannot invoke an app or enqueue a prompt", async () => {
-  const store = createTelegramButtonActionStore();
+  const store = createBaleButtonActionStore();
   const data = store.register({ text: "Wait", prompt: "counter::next", disabled: true });
   const answers: unknown[] = [];
-  assert.equal(await handleTelegramButtonCallbackQuery({ id: "query", data }, undefined, {
+  assert.equal(await handleBaleButtonCallbackQuery({ id: "query", data }, undefined, {
     resolveAction: store.resolve,
     answerCallbackQuery: async (...args) => { answers.push(args); },
     enqueueButtonPrompt: () => assert.fail("Disabled prompt was queued"),
@@ -640,15 +640,15 @@ test("Disabled stored actions cannot invoke an app or enqueue a prompt", async (
 
 test("Button reply planner rejects payloads without a valid button shape", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
+  const plan = planBaleButtonReply(
     [
-      '<!-- telegram_button [{"value":"Valid"},null] -->',
-      '<!-- telegram_button [1,2] -->',
-      '<!-- telegram_button [[]] -->',
-      '<!-- telegram_button [[[{"value":"Nested too deeply"}]]] -->',
-      '<!-- telegram_button unknown=data -->',
-      '<!-- telegram_button {"label":"Must not become CML","prompt":} -->',
-      '<!-- telegram_button [{broken|} prompt=Must-not-recover] -->',
+      '<!-- bale_button [{"value":"Valid"},null] -->',
+      '<!-- bale_button [1,2] -->',
+      '<!-- bale_button [[]] -->',
+      '<!-- bale_button [[[{"value":"Nested too deeply"}]]] -->',
+      '<!-- bale_button unknown=data -->',
+      '<!-- bale_button {"label":"Must not become CML","prompt":} -->',
+      '<!-- bale_button [{broken|} prompt=Must-not-recover] -->',
     ].join("\n"),
     {
       registerAction: (action) => {
@@ -687,8 +687,8 @@ test("Button reply planner rejects malformed compact matrix literals atomically"
     "{x|line\nbreak}",
   ]) {
     const actions: unknown[] = [];
-    const plan = planTelegramButtonReply(
-      `<!-- telegram_button ${payload} -->`,
+    const plan = planBaleButtonReply(
+      `<!-- bale_button ${payload} -->`,
       {
         registerAction: (action) => {
           actions.push(action);
@@ -704,8 +704,8 @@ test("Button reply planner rejects malformed compact matrix literals atomically"
 
 test("Button reply planner supplies visible text and stores selected style for a button-only reply", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
-    '<!-- telegram_button label="Continue" prompt="Continue now." selected_style="danger" -->',
+  const plan = planBaleButtonReply(
+    '<!-- bale_button label="Continue" prompt="Continue now." selected_style="danger" -->',
     {
       registerAction: (action) => {
         actions.push(action);
@@ -726,9 +726,9 @@ test("Button reply planner supplies visible text and stores selected style for a
 });
 
 test("Button reply planner retains hidden Generative App revision binding in stored actions", () => {
-  const store = createTelegramButtonActionStore();
-  const plan = planTelegramButtonReply(
-    "<!-- telegram_button {Next|counter::increment} -->",
+  const store = createBaleButtonActionStore();
+  const plan = planBaleButtonReply(
+    "<!-- bale_button {Next|counter::increment} -->",
     {
       registerAction: store.register,
       binding: { generation: "generation-a", app: "counter", revision: 4 },
@@ -743,7 +743,7 @@ test("Button reply planner retains hidden Generative App revision binding in sto
 });
 
 test("Button action store resolves registered actions once and expires old entries", () => {
-  const store = createTelegramButtonActionStore();
+  const store = createBaleButtonActionStore();
   const callbackData = store.register({
     text: "Run",
     prompt: "Do it.",
@@ -758,7 +758,7 @@ test("Button action store resolves registered actions once and expires old entri
   assert.equal(store.resolve(callbackData), undefined);
   assert.equal(store.resolve("other:callback"), undefined);
 
-  const expiringStore = createTelegramButtonActionStore({ ttlMs: -1 });
+  const expiringStore = createBaleButtonActionStore({ ttlMs: -1 });
   const expiredCallbackData = expiringStore.register({
     text: "Expired",
     prompt: "Too late.",
@@ -767,13 +767,13 @@ test("Button action store resolves registered actions once and expires old entri
 });
 
 test("Button prompt turn preserves prompt text and queue metadata", () => {
-  const turn = createTelegramButtonPromptTurn({
+  const turn = createBaleButtonPromptTurn({
     chatId: 10,
     replyToMessageId: 20,
     queueOrder: 30,
     action: { text: "Run", prompt: "Run this now." },
     target: { chatId: 10, threadId: 40 },
-    telegramPrefix: "[telegram|thread:Nimbus]",
+    balePrefix: "[bale|thread:Nimbus]",
   });
 
   assert.equal(turn.kind, "prompt");
@@ -783,7 +783,7 @@ test("Button prompt turn preserves prompt text and queue metadata", () => {
   assert.equal(turn.queueLane, "priority");
   assert.deepEqual(turn.sourceMessageIds, [20]);
   assert.deepEqual(turn.content, [
-    { type: "text", text: "[telegram|thread:Nimbus] Run this now." },
+    { type: "text", text: "[bale|thread:Nimbus] Run this now." },
   ]);
   assert.equal(turn.historyText, "Run this now.");
   assert.equal(turn.statusSummary, "Run");
@@ -793,7 +793,7 @@ test("Button callback handler keeps successful bound actions successful when old
   const answered: string[] = [];
   const invoked: string[] = [];
   const edited: unknown[] = [];
-  const handled = await handleTelegramButtonCallbackQuery(
+  const handled = await handleBaleButtonCallbackQuery(
     {
       id: "q-bound",
       data: "tgbtn:bound",
@@ -835,7 +835,7 @@ test("Button callback handler keeps successful bound actions successful when old
 test("Button callback handler answers bound-action failures without queue fallback", async () => {
   const answered: string[] = [];
   await assert.rejects(
-    handleTelegramButtonCallbackQuery(
+    handleBaleButtonCallbackQuery(
       {
         id: "q-bound-failed",
         data: "tgbtn:bound-failed",
@@ -864,7 +864,7 @@ test("Button callback handler enqueues owned actions, marks the selected button,
   const answered: string[] = [];
   const enqueued: unknown[] = [];
   const edited: unknown[] = [];
-  const handled = await handleTelegramButtonCallbackQuery(
+  const handled = await handleBaleButtonCallbackQuery(
     {
       id: "q1",
       data: "tgbtn:live",
@@ -922,7 +922,7 @@ test("Button callback handler enqueues owned actions, marks the selected button,
     },
   ]);
 
-  const expired = await handleTelegramButtonCallbackQuery(
+  const expired = await handleBaleButtonCallbackQuery(
     { id: "q2", data: "tgbtn:expired" },
     "ctx",
     {
@@ -939,7 +939,7 @@ test("Button callback handler enqueues owned actions, marks the selected button,
   assert.equal(expired, true);
   assert.deepEqual(answered, ["Queued", "Button action expired"]);
 
-  const duplicate = await handleTelegramButtonCallbackQuery(
+  const duplicate = await handleBaleButtonCallbackQuery(
     {
       id: "q3",
       data: "tgbtn:duplicate",

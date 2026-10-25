@@ -1,17 +1,17 @@
 /**
- * Telegram per-chat time injection runtime
- * Zones: telegram inbound, prompt content
+ * Bale per-chat time injection runtime
+ * Zones: bale inbound, prompt content
  * Owns the formatted `[time]` line and the per-chat interval bookkeeping that decides when to emit it
  */
 
-import type { ResolvedTelegramTimeConfig } from "./config.ts";
+import type { ResolvedBaleTimeConfig } from "./config.ts";
 
 export interface TimeInjectionRuntime {
   resolveLine: (chatId: number, now?: Date) => string | null;
 }
 
 export interface TimeInjectionRuntimeDeps {
-  getConfig: () => ResolvedTelegramTimeConfig;
+  getConfig: () => ResolvedBaleTimeConfig;
   recordRuntimeEvent?: (
     category: string,
     error: unknown,
@@ -19,7 +19,7 @@ export interface TimeInjectionRuntimeDeps {
   ) => void;
 }
 
-export function formatTelegramTimeInjectionLine(
+export function formatBaleTimeInjectionLine(
   now: Date,
   timezone: string,
 ): string {
@@ -55,7 +55,7 @@ export function createTimeInjectionRuntime(
       if (config.injectionMode === "hidden") return null;
       let line: string;
       try {
-        line = formatTelegramTimeInjectionLine(now, config.timezone);
+        line = formatBaleTimeInjectionLine(now, config.timezone);
       } catch (error) {
         deps.recordRuntimeEvent?.("time-injection", error, {
           timezone: config.timezone,

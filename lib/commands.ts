@@ -1,85 +1,85 @@
 /**
- * Telegram command routing helpers
- * Zones: telegram controls, pi agent commands, queue controls
- * Owns Telegram slash-command normalization, bot command metadata, pi-side command registration, and command-initiated session replacement orchestration behind runtime ports
+ * Bale command routing helpers
+ * Zones: bale controls, pi agent commands, queue controls
+ * Owns Bale slash-command normalization, bot command metadata, pi-side command registration, and command-initiated session replacement orchestration behind runtime ports
  */
 
 import { createHash, randomUUID } from "node:crypto";
 import { addAbortListener } from "node:events";
 import { isDeepStrictEqual } from "node:util";
 
-import type { TelegramActivityPublicationWork } from "./activity.ts";
+import type { BaleActivityPublicationWork } from "./activity.ts";
 import {
-  pairTelegramUserIfNeeded,
-  TELEGRAM_DEFAULT_PROFILE_NAME,
-  type TelegramConfigStore,
+  pairBaleUserIfNeeded,
+  BALE_DEFAULT_PROFILE_NAME,
+  type BaleConfigStore,
 } from "./config.ts";
 import type * as Pi from "./pi.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "./pi.ts";
 import { isPiStaleContextError } from "./pi.ts";
-import type { TelegramPromptTemplateCommand } from "./prompt-templates.ts";
+import type { BalePromptTemplateCommand } from "./prompt-templates.ts";
 import {
-  createTelegramControlItemBuilder,
-  createTelegramControlQueueController,
-  createTelegramQueueAdmissionReceipt,
-  type PendingTelegramControlItem,
-  type TelegramControlQueueController,
-  type TelegramControlQueueControllerDeps,
-  type TelegramQueueAdmissionReceipt,
+  createBaleControlItemBuilder,
+  createBaleControlQueueController,
+  createBaleQueueAdmissionReceipt,
+  type PendingBaleControlItem,
+  type BaleControlQueueController,
+  type BaleControlQueueControllerDeps,
+  type BaleQueueAdmissionReceipt,
 } from "./queue.ts";
 import { escapeHtml } from "./rendering.ts";
 import {
-  formatTelegramConnectionFailure,
-  type TelegramBridgeStatusLineOptions,
+  formatBaleConnectionFailure,
+  type BaleBridgeStatusLineOptions,
 } from "./status.ts";
 import {
-  TelegramApiAuthorityError,
-  type TelegramApiCallOptions,
-} from "./telegram-api.ts";
-import type { TelegramTarget } from "./target.ts";
-import type { TelegramSessionReplacementIntent } from "./threads.ts";
+  BaleApiAuthorityError,
+  type BaleApiCallOptions,
+} from "./bale-api.ts";
+import type { BaleTarget } from "./target.ts";
+import type { BaleSessionReplacementIntent } from "./threads.ts";
 import {
-  acquireTelegramUpdateRouting,
-  carryTelegramUpdateExecutionFence,
-  getTelegramUpdateExecutionFence,
-  inspectTelegramDeferredSource,
-  prepareTelegramDeferredQueueAdmission,
-  reportTelegramQueueAdmission,
-  type TelegramDeferredQueueAdmissionPreparation,
-  type TelegramDeferredSourceCompletionPreparation,
-  type TelegramDeferredSourceEvidence,
-  type TelegramLiveSourceCompletionReadiness,
-  type TelegramQueueAdmissionReceiptLike,
-  type TelegramUpdateWorkerRuntimeDeps,
+  acquireBaleUpdateRouting,
+  carryBaleUpdateExecutionFence,
+  getBaleUpdateExecutionFence,
+  inspectBaleDeferredSource,
+  prepareBaleDeferredQueueAdmission,
+  reportBaleQueueAdmission,
+  type BaleDeferredQueueAdmissionPreparation,
+  type BaleDeferredSourceCompletionPreparation,
+  type BaleDeferredSourceEvidence,
+  type BaleLiveSourceCompletionReadiness,
+  type BaleQueueAdmissionReceiptLike,
+  type BaleUpdateWorkerRuntimeDeps,
 } from "./updates.ts";
 
-export type TelegramHeldCommandName =
+export type BaleHeldCommandName =
   "status" | "start" | "help" | "abort" | "stop" | "next" | "continue";
 
 /** Commands-owned no-fold admission over the ordinary recipient queue; source reporting stays separate from removal. */
-export interface TelegramHeldTurnAdmission {
+export interface BaleHeldTurnAdmission {
   assertCurrent(): void;
-  report(receipts: readonly TelegramQueueAdmissionReceiptLike[]): void;
+  report(receipts: readonly BaleQueueAdmissionReceiptLike[]): void;
 }
 
-export interface TelegramPreparedHeldCommand {
-  readonly source: TelegramDeferredSourceEvidence;
-  readonly command: ParsedTelegramCommand;
+export interface BalePreparedHeldCommand {
+  readonly source: BaleDeferredSourceEvidence;
+  readonly command: ParsedBaleCommand;
   bindCarrier(value: unknown): boolean;
   execute(): Promise<boolean>;
   /** Source disposal only, independent of detached delivery and ended source-execution/chooser callbacks. */
-  inspectCompletion(): TelegramDeferredSourceEvidence | undefined;
+  inspectCompletion(): BaleDeferredSourceEvidence | undefined;
 }
 
 /** Saved-original admission for a held follower plan: fixed target plus independent source and recipient lifetimes. */
-export interface TelegramHeldCommandAdmission {
+export interface BaleHeldCommandAdmission {
   target: { chatId: number; threadId: number };
   assertSourceCurrent(): void;
   assertRecipientCurrent(): void;
 }
 
 /** Recipient-scoped reply sender; the plan never falls back to ordinary follower API delivery. */
-export interface TelegramHeldCommandReply {
+export interface BaleHeldCommandReply {
   sendTextReply(
     chatId: number,
     replyToMessageId: number,
@@ -93,24 +93,24 @@ export interface TelegramHeldCommandReply {
 }
 
 /** Captured recipient effects; a supplied but unavailable effect never falls back to ordinary dispatch. */
-export type TelegramHeldCommandEffects<TContext> = Partial<
-  TelegramHeldCommandReply &
+export type BaleHeldCommandEffects<TContext> = Partial<
+  BaleHeldCommandReply &
     Pick<
-      TelegramCommandHandlerTargetRuntimeDeps<
-        TelegramCommandRuntimeMessage,
+      BaleCommandHandlerTargetRuntimeDeps<
+        BaleCommandRuntimeMessage,
         TContext
       >,
       "showStatus"
     >
 >;
 
-export interface ParsedTelegramCommand {
+export interface ParsedBaleCommand {
   name: string;
   args: string;
 }
 
 /** Exact singleton operator-private text command original eligible for a held follower plan. */
-export function isTelegramSelectedHeldOriginal(
+export function isBaleSelectedHeldOriginal(
   update: unknown,
   target: { chatId: number; threadId: number },
   operator: number | undefined,
@@ -130,7 +130,7 @@ export function isTelegramSelectedHeldOriginal(
     from = Reflect.get(value, "from");
   return (
     typeof text === "string" &&
-    parseTelegramCommand(text)?.name === name &&
+    parseBaleCommand(text)?.name === name &&
     value.caption === undefined &&
     value.media_group_id === undefined &&
     chat?.type === "private" &&
@@ -148,20 +148,20 @@ export function isTelegramSelectedHeldOriginal(
   );
 }
 
-export interface TelegramBotCommandDefinition {
+export interface BaleBotCommandDefinition {
   command: string;
   description: string;
 }
 
-export interface TelegramPromptTemplateMenuCommand {
+export interface BalePromptTemplateMenuCommand {
   command: string;
   description?: string;
 }
 
-const TELEGRAM_EXTENSION_COMMAND_REGISTRY_KEY = "__piTelegramCommandRegistry__";
-const TELEGRAM_BOT_COMMAND_NAME_PATTERN = /^[a-z0-9_]{1,32}$/;
+const BALE_EXTENSION_COMMAND_REGISTRY_KEY = "__piBaleCommandRegistry__";
+const BALE_BOT_COMMAND_NAME_PATTERN = /^[a-z0-9_]{1,32}$/;
 
-export interface TelegramExtensionCommandContext {
+export interface BaleExtensionCommandContext {
   name: string;
   args: string;
   reply: (text: string) => Promise<void>;
@@ -189,13 +189,13 @@ export type PreparedSelectedCommand =
     }
   | { kind: "generated-prompt"; prompt: string };
 
-export interface TelegramExtensionCommandRegistration {
+export interface BaleExtensionCommandRegistration {
   name: string;
   description?: string;
   order?: number;
   showInMenu?: boolean;
   emoji?: string;
-  handler: (ctx: TelegramExtensionCommandContext) => Promise<void> | void;
+  handler: (ctx: BaleExtensionCommandContext) => Promise<void> | void;
   /** Trusted side-effect-free plan preparation for single-message leader selection; ordinary dispatch still uses handler. */
   selected?: {
     prepare(
@@ -207,23 +207,23 @@ export interface TelegramExtensionCommandRegistration {
   };
 }
 
-interface RegisteredTelegramExtensionCommand {
+interface RegisteredBaleExtensionCommand {
   name: string;
   description?: string;
   order: number;
   showInMenu: boolean;
   emoji?: string;
-  handler: TelegramExtensionCommandRegistration["handler"];
-  selected?: Readonly<TelegramExtensionCommandRegistration["selected"]>;
+  handler: BaleExtensionCommandRegistration["handler"];
+  selected?: Readonly<BaleExtensionCommandRegistration["selected"]>;
 }
 
-interface TelegramExtensionCommandRegistry {
-  commands: Map<string, RegisteredTelegramExtensionCommand>;
+interface BaleExtensionCommandRegistry {
+  commands: Map<string, RegisteredBaleExtensionCommand>;
 }
 
-function getOrCreateTelegramCommandRegistry(): TelegramExtensionCommandRegistry {
+function getOrCreateBaleCommandRegistry(): BaleExtensionCommandRegistry {
   const existing = (globalThis as Record<string, unknown>)[
-    TELEGRAM_EXTENSION_COMMAND_REGISTRY_KEY
+    BALE_EXTENSION_COMMAND_REGISTRY_KEY
   ];
   if (
     existing &&
@@ -232,55 +232,55 @@ function getOrCreateTelegramCommandRegistry(): TelegramExtensionCommandRegistry 
     "commands" in existing &&
     existing.commands instanceof Map
   ) {
-    return existing as TelegramExtensionCommandRegistry;
+    return existing as BaleExtensionCommandRegistry;
   }
-  const registry: TelegramExtensionCommandRegistry = { commands: new Map() };
+  const registry: BaleExtensionCommandRegistry = { commands: new Map() };
   (globalThis as Record<string, unknown>)[
-    TELEGRAM_EXTENSION_COMMAND_REGISTRY_KEY
+    BALE_EXTENSION_COMMAND_REGISTRY_KEY
   ] = registry;
   return registry;
 }
 
-function normalizeTelegramExtensionCommandName(name: string): string {
+function normalizeBaleExtensionCommandName(name: string): string {
   return name.trim().replace(/^\/+/, "").toLowerCase();
 }
 
-function isTelegramExtensionCommandName(name: string): boolean {
-  return TELEGRAM_BOT_COMMAND_NAME_PATTERN.test(name);
+function isBaleExtensionCommandName(name: string): boolean {
+  return BALE_BOT_COMMAND_NAME_PATTERN.test(name);
 }
 
-function normalizeTelegramExtensionCommandEmoji(
+function normalizeBaleExtensionCommandEmoji(
   emoji: string | undefined,
 ): string | undefined {
   const normalized = emoji?.trim();
   return normalized ? normalized : undefined;
 }
 
-export function registerTelegramCommand(
-  registration: TelegramExtensionCommandRegistration,
+export function registerBaleCommand(
+  registration: BaleExtensionCommandRegistration,
 ): () => void {
-  const name = normalizeTelegramExtensionCommandName(registration.name);
+  const name = normalizeBaleExtensionCommandName(registration.name);
   const showInMenu = registration.showInMenu ?? false;
-  const emoji = normalizeTelegramExtensionCommandEmoji(registration.emoji);
-  if (!isTelegramExtensionCommandName(name)) {
-    throw new Error(`Invalid Telegram command name: ${registration.name}`);
+  const emoji = normalizeBaleExtensionCommandEmoji(registration.emoji);
+  if (!isBaleExtensionCommandName(name)) {
+    throw new Error(`Invalid Bale command name: ${registration.name}`);
   }
   if (showInMenu && !emoji) {
-    throw new Error(`Visible Telegram command requires emoji: ${name}`);
+    throw new Error(`Visible Bale command requires emoji: ${name}`);
   }
   if (emoji && emoji.length > 8) {
-    throw new Error(`Telegram command emoji is too long: ${name}`);
+    throw new Error(`Bale command emoji is too long: ${name}`);
   }
-  if (isTelegramReservedCommandName(name)) {
+  if (isBaleReservedCommandName(name)) {
     throw new Error(
-      `Telegram command conflicts with built-in command: ${name}`,
+      `Bale command conflicts with built-in command: ${name}`,
     );
   }
-  const registry = getOrCreateTelegramCommandRegistry();
+  const registry = getOrCreateBaleCommandRegistry();
   if (registry.commands.has(name)) {
-    throw new Error(`Telegram command is already registered: ${name}`);
+    throw new Error(`Bale command is already registered: ${name}`);
   }
-  const command: RegisteredTelegramExtensionCommand = {
+  const command: RegisteredBaleExtensionCommand = {
     name,
     description: registration.description,
     order: registration.order ?? 0,
@@ -297,24 +297,24 @@ export function registerTelegramCommand(
   };
 }
 
-function getTelegramExtensionCommands(): RegisteredTelegramExtensionCommand[] {
+function getBaleExtensionCommands(): RegisteredBaleExtensionCommand[] {
   return Array.from(
-    getOrCreateTelegramCommandRegistry().commands.values(),
+    getOrCreateBaleCommandRegistry().commands.values(),
   ).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 }
 
-export function findTelegramExtensionCommand(
+export function findBaleExtensionCommand(
   name: string | undefined,
-): RegisteredTelegramExtensionCommand | undefined {
+): RegisteredBaleExtensionCommand | undefined {
   if (!name) return undefined;
-  return getOrCreateTelegramCommandRegistry().commands.get(
-    normalizeTelegramExtensionCommandName(name),
+  return getOrCreateBaleCommandRegistry().commands.get(
+    normalizeBaleExtensionCommandName(name),
   );
 }
 
 /** Preparation only: no execution, admission, source freeze or binding effects. Routing owns those later. */
-export async function prepareTelegramSelectedExtensionCommand(
-  command: ParsedTelegramCommand,
+export async function prepareBaleSelectedExtensionCommand(
+  command: ParsedBaleCommand,
   authority: { assertSourceCurrent(): void; assertRecipientCurrent(): void },
 ): Promise<
   | {
@@ -323,7 +323,7 @@ export async function prepareTelegramSelectedExtensionCommand(
     }
   | undefined
 > {
-  const registration = findTelegramExtensionCommand(command.name),
+  const registration = findBaleExtensionCommand(command.name),
     selected = registration?.selected;
   const prepare = selected?.prepare;
   if (!registration || !selected || typeof prepare !== "function")
@@ -332,7 +332,7 @@ export async function prepareTelegramSelectedExtensionCommand(
   const { assertSourceCurrent, assertRecipientCurrent } = authority;
   const assertRegistrationCurrent = () => {
     if (
-      findTelegramExtensionCommand(input.name) !== registration ||
+      findBaleExtensionCommand(input.name) !== registration ||
       registration.selected !== selected ||
       selected.prepare !== prepare
     )
@@ -382,11 +382,11 @@ export async function prepareTelegramSelectedExtensionCommand(
   }
 }
 
-export function clearTelegramExtensionCommands(): void {
-  getOrCreateTelegramCommandRegistry().commands.clear();
+export function clearBaleExtensionCommands(): void {
+  getOrCreateBaleCommandRegistry().commands.clear();
 }
 
-export const TELEGRAM_COMMAND_EMOJI = {
+export const BALE_COMMAND_EMOJI = {
   start: "🟢",
   status: "📊",
   model: "🤖",
@@ -402,34 +402,34 @@ export const TELEGRAM_COMMAND_EMOJI = {
   new: "🆕",
 } as const;
 
-export type TelegramCommandEmojiName = keyof typeof TELEGRAM_COMMAND_EMOJI;
+export type BaleCommandEmojiName = keyof typeof BALE_COMMAND_EMOJI;
 
-function getTelegramCommandEmoji(command: TelegramCommandEmojiName): string {
-  return TELEGRAM_COMMAND_EMOJI[command];
+function getBaleCommandEmoji(command: BaleCommandEmojiName): string {
+  return BALE_COMMAND_EMOJI[command];
 }
 
-export function formatTelegramCommandEmojiPrefix(
-  command: TelegramCommandEmojiName,
+export function formatBaleCommandEmojiPrefix(
+  command: BaleCommandEmojiName,
 ): string {
-  return `${getTelegramCommandEmoji(command)} `;
+  return `${getBaleCommandEmoji(command)} `;
 }
 
-export function formatTelegramPiCommandHtml(command: string): string {
+export function formatBalePiCommandHtml(command: string): string {
   return `<code>${escapeHtml(command)}</code>`;
 }
 
-export function formatTelegramInformationHeading(
+export function formatBaleInformationHeading(
   emoji: string,
   text: string,
 ): string {
   return `<b>${escapeHtml(emoji)} ${escapeHtml(text)}</b>`;
 }
 
-export function formatTelegramInvalidInstanceName(
+export function formatBaleInvalidInstanceName(
   validationError: string,
 ): string {
   const details = validationError.replace(
-    /^Invalid Telegram (?:instance name|Thread display name):\s*/,
+    /^Invalid Bale (?:instance name|Thread display name):\s*/,
     "",
   );
   const items = details
@@ -444,87 +444,87 @@ export function formatTelegramInvalidInstanceName(
   ].join("\n");
 }
 
-export function formatTelegramThreadDisplayNameSavedHeading(
+export function formatBaleThreadDisplayNameSavedHeading(
   name: string,
 ): string {
   return `<b>✅ Thread display name saved as <i>${escapeHtml(name)}</i>.</b>`;
 }
 
-export function formatTelegramAutomaticThreadDisplayNameRestoredHeading(
+export function formatBaleAutomaticThreadDisplayNameRestoredHeading(
   name: string,
 ): string {
   return `<b>✅ Automatic Thread display name restored as <i>${escapeHtml(name)}</i>.</b>`;
 }
 
-const TELEGRAM_COMPACTION_STARTED_TEXT = formatTelegramInformationHeading(
-  getTelegramCommandEmoji("compact"),
+const BALE_COMPACTION_STARTED_TEXT = formatBaleInformationHeading(
+  getBaleCommandEmoji("compact"),
   "Compaction started.",
 );
-const TELEGRAM_COMPACTION_COMPLETED_TEXT = formatTelegramInformationHeading(
+const BALE_COMPACTION_COMPLETED_TEXT = formatBaleInformationHeading(
   "✅",
   "Compaction completed.",
 );
-export const TELEGRAM_COMPACTION_STARTED_MARKDOWN = `**${formatTelegramCommandEmojiPrefix("compact")}Compaction started.**`;
-export const TELEGRAM_COMPACTION_COMPLETED_MARKDOWN =
+export const BALE_COMPACTION_STARTED_MARKDOWN = `**${formatBaleCommandEmojiPrefix("compact")}Compaction started.**`;
+export const BALE_COMPACTION_COMPLETED_MARKDOWN =
   "**✅ Compaction completed.**";
 
-function formatTelegramBotCommandDescription(
-  command: TelegramCommandEmojiName,
+function formatBaleBotCommandDescription(
+  command: BaleCommandEmojiName,
   description: string,
 ): string {
-  return `${formatTelegramCommandEmojiPrefix(command)}${description}`;
+  return `${formatBaleCommandEmojiPrefix(command)}${description}`;
 }
 
-const TELEGRAM_BUILTIN_BOT_COMMANDS: readonly TelegramBotCommandDefinition[] = [
+const BALE_BUILTIN_BOT_COMMANDS: readonly BaleBotCommandDefinition[] = [
   {
     command: "start",
-    description: formatTelegramBotCommandDescription(
+    description: formatBaleBotCommandDescription(
       "start",
       "Open menu / Pair bridge",
     ),
   },
   {
     command: "compact",
-    description: formatTelegramBotCommandDescription(
+    description: formatBaleBotCommandDescription(
       "compact",
       "Compact current session",
     ),
   },
   {
     command: "new",
-    description: formatTelegramBotCommandDescription(
+    description: formatBaleBotCommandDescription(
       "new",
       "Start a new session",
     ),
   },
   {
     command: "continue",
-    description: formatTelegramBotCommandDescription(
+    description: formatBaleBotCommandDescription(
       "continue",
       "Queue continue prompt",
     ),
   },
   {
     command: "next",
-    description: formatTelegramBotCommandDescription("next", "Force next turn"),
+    description: formatBaleBotCommandDescription("next", "Force next turn"),
   },
   {
     command: "abort",
-    description: formatTelegramBotCommandDescription("abort", "Abort Pi"),
+    description: formatBaleBotCommandDescription("abort", "Abort Pi"),
   },
   {
     command: "stop",
-    description: formatTelegramBotCommandDescription(
+    description: formatBaleBotCommandDescription(
       "stop",
       "Abort Pi & Clear queue",
     ),
   },
 ];
 
-export const TELEGRAM_BOT_COMMANDS = TELEGRAM_BUILTIN_BOT_COMMANDS;
+export const BALE_BOT_COMMANDS = BALE_BUILTIN_BOT_COMMANDS;
 
-function getVisibleTelegramExtensionBotCommands(): TelegramBotCommandDefinition[] {
-  return getTelegramExtensionCommands()
+function getVisibleBaleExtensionBotCommands(): BaleBotCommandDefinition[] {
+  return getBaleExtensionCommands()
     .filter((command) => command.showInMenu && command.description)
     .map((command) => ({
       command: command.name,
@@ -532,62 +532,62 @@ function getVisibleTelegramExtensionBotCommands(): TelegramBotCommandDefinition[
     }));
 }
 
-export function getTelegramReservedCommandNames(): string[] {
+export function getBaleReservedCommandNames(): string[] {
   return [
-    ...TELEGRAM_RESERVED_COMMAND_NAMES,
-    ...getTelegramExtensionCommands().map((command) => command.name),
+    ...BALE_RESERVED_COMMAND_NAMES,
+    ...getBaleExtensionCommands().map((command) => command.name),
   ];
 }
 
-export interface TelegramBotCommandRegistrationDeps {
+export interface BaleBotCommandRegistrationDeps {
   setMyCommands: (
-    commands: readonly TelegramBotCommandDefinition[],
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    commands: readonly BaleBotCommandDefinition[],
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<unknown>;
 }
 
-export async function registerTelegramBotCommands(
-  deps: TelegramBotCommandRegistrationDeps,
-  options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+export async function registerBaleBotCommands(
+  deps: BaleBotCommandRegistrationDeps,
+  options?: Pick<BaleApiCallOptions, "assertAuthority">,
 ): Promise<void> {
   const assertAuthority = options?.assertAuthority,
     send = deps.setMyCommands;
   const capturedOptions = assertAuthority ? { assertAuthority } : undefined;
   const setMyCommands = async (
-    commands: readonly TelegramBotCommandDefinition[],
+    commands: readonly BaleBotCommandDefinition[],
   ) => {
     assertAuthority?.();
     await send(commands, capturedOptions);
     assertAuthority?.();
   };
   assertAuthority?.();
-  const extensionCommands = getVisibleTelegramExtensionBotCommands();
+  const extensionCommands = getVisibleBaleExtensionBotCommands();
   if (extensionCommands.length === 0) {
-    await setMyCommands(TELEGRAM_BOT_COMMANDS);
+    await setMyCommands(BALE_BOT_COMMANDS);
     return;
   }
-  const nextCommandIndex = TELEGRAM_BOT_COMMANDS.findIndex(
+  const nextCommandIndex = BALE_BOT_COMMANDS.findIndex(
     (command) => command.command === "next",
   );
   if (nextCommandIndex === -1) {
-    await setMyCommands([...TELEGRAM_BOT_COMMANDS, ...extensionCommands]);
+    await setMyCommands([...BALE_BOT_COMMANDS, ...extensionCommands]);
     return;
   }
   await setMyCommands([
-    ...TELEGRAM_BOT_COMMANDS.slice(0, nextCommandIndex + 1),
+    ...BALE_BOT_COMMANDS.slice(0, nextCommandIndex + 1),
     ...extensionCommands,
-    ...TELEGRAM_BOT_COMMANDS.slice(nextCommandIndex + 1),
+    ...BALE_BOT_COMMANDS.slice(nextCommandIndex + 1),
   ]);
 }
 
-export function createTelegramBotCommandRegistrar(
-  deps: TelegramBotCommandRegistrationDeps,
+export function createBaleBotCommandRegistrar(
+  deps: BaleBotCommandRegistrationDeps,
 ): (
-  options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+  options?: Pick<BaleApiCallOptions, "assertAuthority">,
 ) => Promise<void> {
   // Only an identical local lifetime may share an in-flight sync; unguarded calls remain separate.
   const pending = new Map<
-    TelegramApiCallOptions["assertAuthority"],
+    BaleApiCallOptions["assertAuthority"],
     Promise<void>
   >();
   return (options) => {
@@ -600,7 +600,7 @@ export function createTelegramBotCommandRegistrar(
     const joined = pending.get(assertAuthority);
     if (joined) return joined;
     let request: Promise<void>;
-    request = registerTelegramBotCommands(
+    request = registerBaleBotCommands(
       deps,
       assertAuthority ? { assertAuthority } : undefined,
     ).finally(() => {
@@ -612,35 +612,35 @@ export function createTelegramBotCommandRegistrar(
   };
 }
 
-export interface TelegramBridgeCommandStartPollingOptions {
+export interface BaleBridgeCommandStartPollingOptions {
   force?: boolean;
   forceFreshLeaderThread?: boolean;
 }
 
-export interface TelegramBridgeCommandStartPollingResult {
+export interface BaleBridgeCommandStartPollingResult {
   ok: boolean;
   message?: string;
   canTakeover?: boolean;
   owner?: string;
 }
 
-export interface TelegramBridgeCommandRegistrationDeps {
-  handleInternalAction?: TelegramSessionActionRuntime["handleInternalAction"];
+export interface BaleBridgeCommandRegistrationDeps {
+  handleInternalAction?: BaleSessionActionRuntime["handleInternalAction"];
   promptForConfig: (
     ctx: ExtensionCommandContext,
     profileName?: string,
   ) => Promise<void>;
-  getStatusLines: (options?: TelegramBridgeStatusLineOptions) => string[];
+  getStatusLines: (options?: BaleBridgeStatusLineOptions) => string[];
   reloadConfig: () => Promise<void>;
   hasBotToken: () => boolean;
   getBotTokenDiagnostic?: () => string | undefined;
   startPolling: (
     ctx: ExtensionCommandContext,
-    options?: TelegramBridgeCommandStartPollingOptions,
+    options?: BaleBridgeCommandStartPollingOptions,
   ) =>
     | void
-    | Promise<void | TelegramBridgeCommandStartPollingResult>
-    | TelegramBridgeCommandStartPollingResult;
+    | Promise<void | BaleBridgeCommandStartPollingResult>
+    | BaleBridgeCommandStartPollingResult;
   stopPolling: () => Promise<void | string>;
   recordConnectionEvent?: (error: unknown, phase: string) => void;
   getDisconnectThreadName?: () => string | undefined;
@@ -667,27 +667,27 @@ export interface TelegramBridgeCommandRegistrationDeps {
 }
 
 /** Bound adapters must carry the optional recipient guard through their own effect/publication awaits. */
-export type TelegramThreadDisplayNameRenamePort = (
+export type BaleThreadDisplayNameRenamePort = (
   target: { chatId: number; threadId?: number },
   threadName: string,
-  options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+  options?: Pick<BaleApiCallOptions, "assertAuthority">,
 ) => Promise<{ ok: boolean; threadName?: string; message?: string }>;
 
 /** Reset adapters must preserve the same optional recipient lifetime as manual rename adapters. */
-export type TelegramThreadDisplayNameResetPort = (
+export type BaleThreadDisplayNameResetPort = (
   target: { chatId: number; threadId?: number },
-  options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+  options?: Pick<BaleApiCallOptions, "assertAuthority">,
 ) => Promise<{
   ok: boolean;
   threadName?: string;
   message?: string;
 }>;
 
-export function createTelegramThreadDisplayNameResetBinding(): {
-  bind: (reset: TelegramThreadDisplayNameResetPort) => void;
-  reset: TelegramThreadDisplayNameResetPort;
+export function createBaleThreadDisplayNameResetBinding(): {
+  bind: (reset: BaleThreadDisplayNameResetPort) => void;
+  reset: BaleThreadDisplayNameResetPort;
 } {
-  let current: TelegramThreadDisplayNameResetPort | undefined,
+  let current: BaleThreadDisplayNameResetPort | undefined,
     generation = 0;
   return {
     bind(reset) {
@@ -722,11 +722,11 @@ export function createTelegramThreadDisplayNameResetBinding(): {
   };
 }
 
-export function createTelegramThreadDisplayNameRenameBinding(): {
-  bind: (rename: TelegramThreadDisplayNameRenamePort) => void;
-  rename: TelegramThreadDisplayNameRenamePort;
+export function createBaleThreadDisplayNameRenameBinding(): {
+  bind: (rename: BaleThreadDisplayNameRenamePort) => void;
+  rename: BaleThreadDisplayNameRenamePort;
 } {
-  let current: TelegramThreadDisplayNameRenamePort | undefined,
+  let current: BaleThreadDisplayNameRenamePort | undefined,
     generation = 0;
   return {
     bind(rename) {
@@ -764,18 +764,18 @@ export function createTelegramThreadDisplayNameRenameBinding(): {
   };
 }
 
-function parseTelegramProfileArg(args: string): string | undefined {
+function parseBaleProfileArg(args: string): string | undefined {
   const word = args.trim().split(/\s+/)[0];
   if (!word || word.length === 0) return undefined;
   if (word.startsWith("-") || /^as=/i.test(word)) return undefined;
-  return word === TELEGRAM_DEFAULT_PROFILE_NAME ? undefined : word;
+  return word === BALE_DEFAULT_PROFILE_NAME ? undefined : word;
 }
 
-function formatTelegramTakeoverTitle(ctx: ExtensionCommandContext): string {
-  return ctx.ui.theme.fg("accent", "pi-telegram");
+function formatBaleTakeoverTitle(ctx: ExtensionCommandContext): string {
+  return ctx.ui.theme.fg("accent", "pi-bale");
 }
 
-function formatTelegramTakeoverPrompt(
+function formatBaleTakeoverPrompt(
   ctx: ExtensionCommandContext,
   owner?: string,
 ): string {
@@ -787,19 +787,19 @@ function formatTelegramTakeoverPrompt(
   return `${action}\n\n${from} ${source}\n${to} ${ctx.cwd}`;
 }
 
-export function registerTelegramBridgeCommands(
+export function registerBaleBridgeCommands(
   pi: ExtensionAPI,
-  deps: TelegramBridgeCommandRegistrationDeps,
+  deps: BaleBridgeCommandRegistrationDeps,
 ): void {
   const handleInternalAction = deps.handleInternalAction;
-  pi.registerCommand("telegram-setup", {
-    description: "<profile> — Configure Telegram bot token",
+  pi.registerCommand("bale-setup", {
+    description: "<profile> — Configure Bale bot token",
     handler: async (args, ctx) => {
-      await deps.promptForConfig(ctx, parseTelegramProfileArg(args));
+      await deps.promptForConfig(ctx, parseBaleProfileArg(args));
     },
   });
-  pi.registerCommand("telegram-status", {
-    description: "Show Telegram bridge status",
+  pi.registerCommand("bale-status", {
+    description: "Show Bale bridge status",
     handler: async (args, ctx) => {
       const verbose = /(^|\s)(--debug|debug|--verbose|verbose)(\s|$)/i.test(
         args,
@@ -807,16 +807,16 @@ export function registerTelegramBridgeCommands(
       ctx.ui.notify(deps.getStatusLines({ verbose }).join("\n"), "info");
     },
   });
-  pi.registerCommand(TELEGRAM_CONNECT_COMMAND_NAME, {
-    description: "<profile> — Start Telegram bridge",
+  pi.registerCommand(BALE_CONNECT_COMMAND_NAME, {
+    description: "<profile> — Start Bale bridge",
     handler: async (args, ctx) => {
       const words = args.trim().split(/\s+/);
       // Service dispatch never inherits profile activation or explicit-connect recovery authority.
       if (words.some(word =>
-        word.toLowerCase().startsWith(TELEGRAM_INTERNAL_COMMAND_FLAG),
+        word.toLowerCase().startsWith(BALE_INTERNAL_COMMAND_FLAG),
       )) {
-        if (words[0] !== TELEGRAM_INTERNAL_COMMAND_FLAG || !handleInternalAction) {
-          ctx.ui.notify(TELEGRAM_INTERNAL_MANUAL_USE_MESSAGE, "warning");
+        if (words[0] !== BALE_INTERNAL_COMMAND_FLAG || !handleInternalAction) {
+          ctx.ui.notify(BALE_INTERNAL_MANUAL_USE_MESSAGE, "warning");
           return;
         }
         await handleInternalAction(words.slice(1).join(" "), ctx);
@@ -838,13 +838,13 @@ export function registerTelegramBridgeCommands(
           .some((word) => /^as=/i.test(word))
       ) {
         ctx.ui.notify(
-          "Thread names are configured from Telegram, not from Pi commands.",
+          "Thread names are configured from Bale, not from Pi commands.",
           "warning",
         );
         deps.updateStatus(ctx);
         return;
       }
-      const profileName = parseTelegramProfileArg(args);
+      const profileName = parseBaleProfileArg(args);
       intentId = deps.connectionIntent?.begin(ctx.cwd, profileName);
       try {
         if (profileName && deps.activateProfileConfig) {
@@ -871,7 +871,7 @@ export function registerTelegramBridgeCommands(
           const profileNames = deps.getProfileNames?.() ?? [];
           if (!profileName && profileNames.length > 0) {
             ctx.ui.notify(
-              `No default Telegram profile configured. Available profiles: ${profileNames.join(", ")}. Use /telegram-connect <profileName> or /telegram-setup to create a default profile.`,
+              `No default Bale profile configured. Available profiles: ${profileNames.join(", ")}. Use /bale-connect <profileName> or /bale-setup to create a default profile.`,
               "info",
             );
             deps.updateStatus(ctx);
@@ -881,8 +881,8 @@ export function registerTelegramBridgeCommands(
           return;
         }
         const startPolling = async (
-          options: TelegramBridgeCommandStartPollingOptions,
-        ): Promise<void | TelegramBridgeCommandStartPollingResult> => {
+          options: BaleBridgeCommandStartPollingOptions,
+        ): Promise<void | BaleBridgeCommandStartPollingResult> => {
           try {
             return await deps.startPolling(ctx, options);
           } catch (error) {
@@ -894,12 +894,12 @@ export function registerTelegramBridgeCommands(
         if (!isCurrent()) return;
         if (result && !result.ok && result.canTakeover) {
           const confirmed = await ctx.ui.confirm(
-            formatTelegramTakeoverTitle(ctx),
-            formatTelegramTakeoverPrompt(ctx, result.owner),
+            formatBaleTakeoverTitle(ctx),
+            formatBaleTakeoverPrompt(ctx, result.owner),
           );
           if (!isCurrent()) return;
           if (!confirmed) {
-            ctx.ui.notify("Telegram bridge takeover cancelled.", "info");
+            ctx.ui.notify("Bale bridge takeover cancelled.", "info");
             deps.updateStatus(ctx);
             return;
           }
@@ -913,7 +913,7 @@ export function registerTelegramBridgeCommands(
           if (result.message)
             deps.recordConnectionEvent?.(result.message, "connect-refused");
           ctx.ui.notify(
-            formatTelegramConnectionFailure(result.message),
+            formatBaleConnectionFailure(result.message),
             "warning",
           );
         } else if (result?.message) {
@@ -924,15 +924,15 @@ export function registerTelegramBridgeCommands(
       } catch (error) {
         if (!isCurrent()) return;
         deps.recordConnectionEvent?.(error, "connect");
-        ctx.ui.notify(formatTelegramConnectionFailure(error), "warning");
+        ctx.ui.notify(formatBaleConnectionFailure(error), "warning");
         deps.updateStatus(ctx);
       } finally {
         if (intentId) deps.connectionIntent?.finish(intentId);
       }
     },
   });
-  pi.registerCommand("telegram-disconnect", {
-    description: "Stop Telegram and delete current thread in Threaded Mode",
+  pi.registerCommand("bale-disconnect", {
+    description: "Stop Bale and delete current thread in Threaded Mode",
     handler: async (_args, ctx) => {
       const generation = deps.getSessionGeneration?.();
       const isCurrent = () =>
@@ -945,12 +945,12 @@ export function registerTelegramBridgeCommands(
         const threadName = deps.getDisconnectThreadName?.();
         if (threadName) {
           const confirmed = await ctx.ui.confirm(
-            ctx.ui.theme.fg("accent", "pi-telegram"),
-            `Delete Telegram thread ${ctx.ui.theme.fg("warning", threadName)} and disconnect this Pi session?`,
+            ctx.ui.theme.fg("accent", "pi-bale"),
+            `Delete Bale thread ${ctx.ui.theme.fg("warning", threadName)} and disconnect this Pi session?`,
           );
           if (!isCurrent()) return;
           if (!confirmed) {
-            ctx.ui.notify("Telegram disconnect cancelled.", "info");
+            ctx.ui.notify("Bale disconnect cancelled.", "info");
             return;
           }
         }
@@ -962,7 +962,7 @@ export function registerTelegramBridgeCommands(
         deps.recordConnectionEvent?.(error, "disconnect");
         if (!isCurrent()) return;
         ctx.ui.notify(
-          "Telegram disconnect incomplete; keep Pi open. Check /telegram-status --debug.",
+          "Bale disconnect incomplete; keep Pi open. Check /bale-status --debug.",
           "warning",
         );
       } finally {
@@ -972,7 +972,7 @@ export function registerTelegramBridgeCommands(
   });
 }
 
-export const TELEGRAM_RESERVED_COMMAND_NAMES = [
+export const BALE_RESERVED_COMMAND_NAMES = [
   "stop",
   "name",
   "new",
@@ -989,23 +989,23 @@ export const TELEGRAM_RESERVED_COMMAND_NAMES = [
   "start",
 ] as const;
 
-export type TelegramReservedCommandName =
-  (typeof TELEGRAM_RESERVED_COMMAND_NAMES)[number];
+export type BaleReservedCommandName =
+  (typeof BALE_RESERVED_COMMAND_NAMES)[number];
 
-const TELEGRAM_RESERVED_COMMAND_NAME_SET = new Set<string>(
-  TELEGRAM_RESERVED_COMMAND_NAMES,
+const BALE_RESERVED_COMMAND_NAME_SET = new Set<string>(
+  BALE_RESERVED_COMMAND_NAMES,
 );
 
-export function isTelegramReservedCommandName(
+export function isBaleReservedCommandName(
   commandName: string | undefined,
-): commandName is TelegramReservedCommandName {
+): commandName is BaleReservedCommandName {
   return (
     commandName !== undefined &&
-    TELEGRAM_RESERVED_COMMAND_NAME_SET.has(commandName)
+    BALE_RESERVED_COMMAND_NAME_SET.has(commandName)
   );
 }
 
-export type TelegramCommandAction =
+export type BaleCommandAction =
   | { kind: "ignore"; executionMode: "ignored" }
   | { kind: "stop"; executionMode: "immediate" }
   | { kind: "name"; executionMode: "immediate" }
@@ -1025,7 +1025,7 @@ export type TelegramCommandAction =
       executionMode: "immediate";
     };
 
-export interface TelegramCommandActionDeps<TMessage, TContext> {
+export interface BaleCommandActionDeps<TMessage, TContext> {
   handleStop: (message: TMessage, ctx: TContext) => Promise<void>;
   handleName: (message: TMessage, ctx: TContext, name: string) => Promise<void>;
   handleNew: (message: TMessage, ctx: TContext) => Promise<void>;
@@ -1045,11 +1045,11 @@ export interface TelegramCommandActionDeps<TMessage, TContext> {
   ) => Promise<void>;
 }
 
-export interface TelegramStopCommandDeps {
+export interface BaleStopCommandDeps {
   hasAbortHandler: () => boolean;
   clearPendingModelSwitch: () => void;
   cancelNextTransitionAnnouncements?: () => void;
-  clearQueuedTelegramItems: () => number;
+  clearQueuedBaleItems: () => number;
   setFoldQueuedPromptsIntoHistory: (fold: boolean) => void;
   abortCurrentTurn: () => void;
   updateStatus: () => void;
@@ -1059,7 +1059,7 @@ export interface TelegramStopCommandDeps {
   ) => Promise<void>;
 }
 
-export interface TelegramRuntimeEventRecorderPort {
+export interface BaleRuntimeEventRecorderPort {
   recordRuntimeEvent?: (
     category: string,
     error: unknown,
@@ -1067,37 +1067,37 @@ export interface TelegramRuntimeEventRecorderPort {
   ) => void;
 }
 
-export interface TelegramCompactConfirmationReplyMarkup {
+export interface BaleCompactConfirmationReplyMarkup {
   inline_keyboard: { text: string; callback_data: string }[][];
 }
 
-/** Pi or Telegram work that must drain before a session-level command may replace or compact the session. */
-export interface TelegramSessionBusyPorts {
+/** Pi or Bale work that must drain before a session-level command may replace or compact the session. */
+export interface BaleSessionBusyPorts {
   isIdle: () => boolean;
   hasPendingMessages: () => boolean;
-  hasActiveTelegramTurn: () => boolean;
+  hasActiveBaleTurn: () => boolean;
   hasDispatchPending: () => boolean;
-  hasQueuedTelegramItems: () => boolean;
+  hasQueuedBaleItems: () => boolean;
   isCompactionInProgress: () => boolean;
 }
 
-function isTelegramSessionBusy(ports: TelegramSessionBusyPorts): boolean {
+function isBaleSessionBusy(ports: BaleSessionBusyPorts): boolean {
   return (
     !ports.isIdle() ||
     ports.hasPendingMessages() ||
-    ports.hasActiveTelegramTurn() ||
+    ports.hasActiveBaleTurn() ||
     ports.hasDispatchPending() ||
-    ports.hasQueuedTelegramItems() ||
+    ports.hasQueuedBaleItems() ||
     ports.isCompactionInProgress()
   );
 }
 
-export interface TelegramCompactCommandDeps
-  extends TelegramRuntimeEventRecorderPort, TelegramSessionBusyPorts {
+export interface BaleCompactCommandDeps
+  extends BaleRuntimeEventRecorderPort, BaleSessionBusyPorts {
   setCompactionInProgress: (inProgress: boolean) => void;
   updateStatus: () => void;
-  dispatchNextQueuedTelegramTurn: () => void;
-  requestDeferredDispatchNextQueuedTelegramTurn?: (
+  dispatchNextQueuedBaleTurn: () => void;
+  requestDeferredDispatchNextQueuedBaleTurn?: (
     dispatch: () => void,
   ) => void;
   startTypingLoop?: () => void;
@@ -1113,20 +1113,20 @@ export interface TelegramCompactCommandDeps
   suppressStartNotice?: boolean;
 }
 
-export interface TelegramCompactConfirmationDeps {
+export interface BaleCompactConfirmationDeps {
   sendInteractiveMessage: (
     chatId: number,
     text: string,
     mode: "markdown" | "html" | "plain",
-    replyMarkup: TelegramCompactConfirmationReplyMarkup,
+    replyMarkup: BaleCompactConfirmationReplyMarkup,
     options?: {
       target?: { chatId: number; threadId?: number };
-      assertAuthority?: TelegramApiCallOptions["assertAuthority"];
+      assertAuthority?: BaleApiCallOptions["assertAuthority"];
     },
   ) => Promise<number | undefined>;
 }
 
-export interface TelegramCompactConfirmationCallbackQuery {
+export interface BaleCompactConfirmationCallbackQuery {
   id: string;
   data?: string;
   message?: {
@@ -1136,7 +1136,7 @@ export interface TelegramCompactConfirmationCallbackQuery {
   };
 }
 
-export interface TelegramNewConfirmationCallbackDeps<TContext> {
+export interface BaleNewConfirmationCallbackDeps<TContext> {
   ctx: TContext;
   answerCallbackQuery: (
     callbackQueryId: string,
@@ -1147,13 +1147,13 @@ export interface TelegramNewConfirmationCallbackDeps<TContext> {
     messageId: number,
     text: string,
     mode: "markdown" | "html" | "plain",
-    replyMarkup: TelegramCompactConfirmationReplyMarkup,
+    replyMarkup: BaleCompactConfirmationReplyMarkup,
   ) => Promise<void>;
   deleteMessage: (chatId: number, messageId: number) => Promise<void>;
   runNew: (ctx: TContext) => Promise<void>;
 }
 
-export interface TelegramCompactConfirmationCallbackDeps<TContext> {
+export interface BaleCompactConfirmationCallbackDeps<TContext> {
   ctx: TContext;
   answerCallbackQuery: (
     callbackQueryId: string,
@@ -1164,7 +1164,7 @@ export interface TelegramCompactConfirmationCallbackDeps<TContext> {
     messageId: number,
     text: string,
     mode: "markdown" | "html" | "plain",
-    replyMarkup: TelegramCompactConfirmationReplyMarkup,
+    replyMarkup: BaleCompactConfirmationReplyMarkup,
   ) => Promise<void>;
   runCompact: (
     ctx: TContext,
@@ -1174,69 +1174,69 @@ export interface TelegramCompactConfirmationCallbackDeps<TContext> {
   ) => Promise<void>;
 }
 
-export type TelegramControlCommandType =
-  PendingTelegramControlItem<unknown>["controlType"];
+export type BaleControlCommandType =
+  PendingBaleControlItem<unknown>["controlType"];
 
-export interface TelegramCommandRuntimeMessage {
+export interface BaleCommandRuntimeMessage {
   chat: { id: number; type?: string; title?: string };
   message_id: number;
   message_thread_id?: number;
   from?: { id?: number; is_bot?: boolean };
-  pi_telegram_source_update_id?: number;
+  pi_bale_source_update_id?: number;
 }
 
-export interface TelegramCommandMessageTarget {
+export interface BaleCommandMessageTarget {
   chatId: number;
   threadId?: number;
   replyToMessageId: number;
 }
 
-function canPairTelegramUserFromCommandMessage(
-  message: TelegramCommandRuntimeMessage,
+function canPairBaleUserFromCommandMessage(
+  message: BaleCommandRuntimeMessage,
 ): boolean {
   return message.chat.type === undefined || message.chat.type === "private";
 }
 
-export interface TelegramCommandTargetRuntimeDeps<TContext> {
+export interface BaleCommandTargetRuntimeDeps<TContext> {
   enqueueControlItem: (
-    target: TelegramCommandMessageTarget,
+    target: BaleCommandMessageTarget,
     ctx: TContext,
-    controlType: TelegramControlCommandType,
+    controlType: BaleControlCommandType,
     statusSummary: string,
     execute: (ctx: TContext) => Promise<void>,
-    admissionReceipts?: TelegramQueueAdmissionReceipt[],
-    onQueued?: (item: PendingTelegramControlItem<TContext>) => void,
+    admissionReceipts?: BaleQueueAdmissionReceipt[],
+    onQueued?: (item: PendingBaleControlItem<TContext>) => void,
   ) => void;
   getAdmissionScope?: () => string | undefined;
   getAdmissionJournalBinding?: () => string | undefined;
   /** Ordinary reply destination selected before publication, not resend authority. */
   getReplyTarget?: (
-    message: TelegramCommandRuntimeMessage,
-  ) => TelegramTarget | undefined;
+    message: BaleCommandRuntimeMessage,
+  ) => BaleTarget | undefined;
   onControlQueued?: (
-    message: TelegramCommandRuntimeMessage,
-    receipt: TelegramQueueAdmissionReceipt,
+    message: BaleCommandRuntimeMessage,
+    receipt: BaleQueueAdmissionReceipt,
   ) => void;
   showStatus: (
     chatId: number,
     replyToMessageId: number | undefined,
     ctx: TContext,
     threadId?: number,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openModelMenu: (
     chatId: number,
     replyToMessageId: number | undefined,
     ctx: TContext,
     threadId?: number,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openSettingsMenu?: (
     chatId: number,
     replyToMessageId: number | undefined,
     ctx: TContext,
     threadId?: number,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   sendTextReply: (
     chatId: number,
@@ -1245,50 +1245,50 @@ export interface TelegramCommandTargetRuntimeDeps<TContext> {
     options?: {
       parseMode?: "HTML";
       target?: { chatId: number; threadId?: number };
-      assertAuthority?: TelegramApiCallOptions["assertAuthority"];
+      assertAuthority?: BaleApiCallOptions["assertAuthority"];
     },
   ) => Promise<unknown>;
 }
 
-export interface TelegramCommandTargetRuntime<
-  TMessage extends TelegramCommandRuntimeMessage,
+export interface BaleCommandTargetRuntime<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
 > {
   enqueueControlItem: (
     message: TMessage,
     ctx: TContext,
-    controlType: TelegramControlCommandType,
+    controlType: BaleControlCommandType,
     statusSummary: string,
     execute: (ctx: TContext) => Promise<void>,
   ) => void;
   showStatus: (
     message: TMessage,
     ctx: TContext,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openModelMenu: (
     message: TMessage,
     ctx: TContext,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openSettingsMenu: (
     message: TMessage,
     ctx: TContext,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   sendTextReply: (
     message: TMessage,
     text: string,
     options?: {
       parseMode?: "HTML";
-      assertAuthority?: TelegramApiCallOptions["assertAuthority"];
+      assertAuthority?: BaleApiCallOptions["assertAuthority"];
     },
   ) => Promise<void>;
 }
 
-export function getTelegramCommandMessageTarget(
-  message: TelegramCommandRuntimeMessage,
-): TelegramCommandMessageTarget {
+export function getBaleCommandMessageTarget(
+  message: BaleCommandRuntimeMessage,
+): BaleCommandMessageTarget {
   return {
     chatId: message.chat.id,
     threadId:
@@ -1299,12 +1299,12 @@ export function getTelegramCommandMessageTarget(
   };
 }
 
-export function createTelegramCommandControlEnqueueAdapter<TContext>(deps: {
+export function createBaleCommandControlEnqueueAdapter<TContext>(deps: {
   createControlItem: ReturnType<
-    typeof createTelegramControlItemBuilder<TContext>
+    typeof createBaleControlItemBuilder<TContext>
   >;
-  enqueueControlItem: TelegramControlQueueController<TContext>["enqueue"];
-}): TelegramCommandTargetRuntimeDeps<TContext>["enqueueControlItem"] {
+  enqueueControlItem: BaleControlQueueController<TContext>["enqueue"];
+}): BaleCommandTargetRuntimeDeps<TContext>["enqueueControlItem"] {
   return (
     target,
     ctx,
@@ -1328,30 +1328,30 @@ export function createTelegramCommandControlEnqueueAdapter<TContext>(deps: {
   };
 }
 
-export type TelegramCommandTargetQueueRuntimeDeps<TContext> =
-  TelegramControlQueueControllerDeps<TContext> & {
+export type BaleCommandTargetQueueRuntimeDeps<TContext> =
+  BaleControlQueueControllerDeps<TContext> & {
     createControlItem: ReturnType<
-      typeof createTelegramControlItemBuilder<TContext>
+      typeof createBaleControlItemBuilder<TContext>
     >;
-  } & Omit<TelegramCommandTargetRuntimeDeps<TContext>, "enqueueControlItem">;
+  } & Omit<BaleCommandTargetRuntimeDeps<TContext>, "enqueueControlItem">;
 
-export function createTelegramCommandTargetQueueRuntime<
-  TMessage extends TelegramCommandRuntimeMessage,
+export function createBaleCommandTargetQueueRuntime<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
 >(
-  deps: TelegramCommandTargetQueueRuntimeDeps<TContext>,
-): TelegramCommandTargetRuntime<TMessage, TContext> {
+  deps: BaleCommandTargetQueueRuntimeDeps<TContext>,
+): BaleCommandTargetRuntime<TMessage, TContext> {
   const {
     createControlItem,
     appendControlItem,
-    dispatchNextQueuedTelegramTurn,
+    dispatchNextQueuedBaleTurn,
   } = deps;
-  const controlQueueController = createTelegramControlQueueController({
+  const controlQueueController = createBaleControlQueueController({
     appendControlItem,
-    dispatchNextQueuedTelegramTurn,
+    dispatchNextQueuedBaleTurn,
   });
-  return createTelegramCommandTargetRuntime({
-    enqueueControlItem: createTelegramCommandControlEnqueueAdapter({
+  return createBaleCommandTargetRuntime({
+    enqueueControlItem: createBaleCommandControlEnqueueAdapter({
       createControlItem,
       enqueueControlItem: controlQueueController.enqueue,
     }),
@@ -1366,25 +1366,25 @@ export function createTelegramCommandTargetQueueRuntime<
   });
 }
 
-export function createTelegramCommandTargetRuntime<
-  TMessage extends TelegramCommandRuntimeMessage,
+export function createBaleCommandTargetRuntime<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
 >(
-  deps: TelegramCommandTargetRuntimeDeps<TContext>,
-): TelegramCommandTargetRuntime<TMessage, TContext> {
+  deps: BaleCommandTargetRuntimeDeps<TContext>,
+): BaleCommandTargetRuntime<TMessage, TContext> {
   const getReplyTarget = (
     message: TMessage,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => {
-    const source = getTelegramCommandMessageTarget(message);
+    const source = getBaleCommandMessageTarget(message);
     const recipient = options?.assertAuthority
       ? undefined
       : deps.getReplyTarget?.(message);
     if (!recipient) return source;
     if (recipient.chatId !== source.chatId)
-      throw new Error("Telegram command reply cannot change its recipient chat.");
+      throw new Error("Bale command reply cannot change its recipient chat.");
     if (source.threadId !== undefined && recipient.threadId === undefined)
-      throw new Error("Telegram command cannot move a Thread reply to All.");
+      throw new Error("Bale command cannot move a Thread reply to All.");
     return {
       ...recipient,
       replyToMessageId:
@@ -1393,10 +1393,10 @@ export function createTelegramCommandTargetRuntime<
   };
   return {
     enqueueControlItem: (message, ctx, controlType, statusSummary, execute) => {
-      const sourceUpdateId = message.pi_telegram_source_update_id;
+      const sourceUpdateId = message.pi_bale_source_update_id;
       const baseReceipt =
         typeof sourceUpdateId === "number"
-          ? createTelegramQueueAdmissionReceipt({
+          ? createBaleQueueAdmissionReceipt({
               queueKind: "control",
               scope: deps.getAdmissionScope?.() ?? "",
               sourceUpdateIds: [sourceUpdateId],
@@ -1410,7 +1410,7 @@ export function createTelegramCommandTargetRuntime<
           }
         : undefined;
       deps.enqueueControlItem(
-        getTelegramCommandMessageTarget(message),
+        getBaleCommandMessageTarget(message),
         ctx,
         controlType,
         statusSummary,
@@ -1445,7 +1445,7 @@ export function createTelegramCommandTargetRuntime<
         await deps.sendTextReply(
           target.chatId,
           target.replyToMessageId,
-          formatTelegramInformationHeading(
+          formatBaleInformationHeading(
             "🚫",
             "Settings menu is unavailable.",
           ),
@@ -1473,7 +1473,7 @@ export function createTelegramCommandTargetRuntime<
   };
 }
 
-export interface TelegramCommandOrPromptDispatcherDeps<TMessage, TContext> {
+export interface BaleCommandOrPromptDispatcherDeps<TMessage, TContext> {
   extractRawText: (messages: TMessage[]) => string;
   shouldIgnoreMessages?: (messages: TMessage[]) => boolean;
   consumeThreadNameInput?: (
@@ -1487,7 +1487,7 @@ export interface TelegramCommandOrPromptDispatcherDeps<TMessage, TContext> {
     commandArgs?: string,
   ) => Promise<boolean>;
   executeExtensionCommand?: (
-    command: ParsedTelegramCommand,
+    command: ParsedBaleCommand,
     message: TMessage,
     ctx: TContext,
   ) => Promise<boolean>;
@@ -1500,34 +1500,34 @@ export interface TelegramCommandOrPromptDispatcherDeps<TMessage, TContext> {
   assertExecutionCurrent?: (message: TMessage) => void;
 }
 
-interface TelegramCommandEffectWorkPort {
-  beginCommandEffectWork?: () => TelegramActivityPublicationWork;
+interface BaleCommandEffectWorkPort {
+  beginCommandEffectWork?: () => BaleActivityPublicationWork;
 }
 
-export interface TelegramCommandRuntimeDeps<
-  TMessage extends TelegramCommandRuntimeMessage,
+export interface BaleCommandRuntimeDeps<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
 >
-  extends TelegramRuntimeEventRecorderPort, TelegramCommandEffectWorkPort {
+  extends BaleRuntimeEventRecorderPort, BaleCommandEffectWorkPort {
   hasAbortHandler: () => boolean;
   clearPendingModelSwitch: () => void;
-  hasQueuedTelegramItems: () => boolean;
-  clearQueuedTelegramItems: (ctx: TContext) => number;
+  hasQueuedBaleItems: () => boolean;
+  clearQueuedBaleItems: (ctx: TContext) => number;
   setFoldQueuedPromptsIntoHistory: (fold: boolean) => void;
   abortCurrentTurn: () => void;
   isIdle: (ctx: TContext) => boolean;
   hasPendingMessages: (ctx: TContext) => boolean;
-  hasActiveTelegramTurn: () => boolean;
+  hasActiveBaleTurn: () => boolean;
   hasDispatchPending: () => boolean;
   isCompactionInProgress: () => boolean;
   setCompactionInProgress: (inProgress: boolean) => void;
   updateStatus: (ctx: TContext) => void;
   isContextActive?: (ctx: TContext) => boolean;
-  dispatchNextQueuedTelegramTurn: (ctx: TContext) => void;
+  dispatchNextQueuedBaleTurn: (ctx: TContext) => void;
   requestNextDispatchAnnouncement?: () => void;
   markActiveTurnNextAbortAnnouncement?: () => boolean;
   cancelNextTransitionAnnouncements?: () => void;
-  requestDeferredDispatchNextQueuedTelegramTurn?: (
+  requestDeferredDispatchNextQueuedBaleTurn?: (
     dispatch: (ctx: TContext) => void,
   ) => void;
   startTypingLoop?: (
@@ -1542,10 +1542,10 @@ export interface TelegramCommandRuntimeDeps<
       message: TMessage,
       ctx: TContext,
       kind: "continue" | "prompt",
-      admission: TelegramHeldTurnAdmission,
+      admission: BaleHeldTurnAdmission,
     ): Promise<void>;
     templates?: {
-      getCommands(): readonly TelegramPromptTemplateCommand[];
+      getCommands(): readonly BalePromptTemplateCommand[];
       expand(name: string, args: string): string | undefined;
     };
   };
@@ -1557,44 +1557,44 @@ export interface TelegramCommandRuntimeDeps<
   enqueueControlItem: (
     message: TMessage,
     ctx: TContext,
-    controlType: TelegramControlCommandType,
+    controlType: BaleControlCommandType,
     statusSummary: string,
     execute: (ctx: TContext) => Promise<void>,
   ) => void;
   showStatus: (
     message: TMessage,
     ctx: TContext,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   /** Supplied adapters must forward recipient authority into issuance and recheck it after awaits. */
   handleForumBootstrap?: (
     message: TMessage,
     ctx: TContext,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<string | undefined>;
   openModelMenu: (
     message: TMessage,
     ctx: TContext,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openThinkingMenu: (
     message: TMessage,
     ctx: TContext,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openQueueMenu: (
     message: TMessage,
     ctx: TContext,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openSettingsMenu?: (
     message: TMessage,
     ctx: TContext,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   validateThreadName?: (threadName: string) => string | undefined;
-  renameCurrentThread?: TelegramThreadDisplayNameRenamePort;
-  resetCurrentThreadName?: TelegramThreadDisplayNameResetPort;
+  renameCurrentThread?: BaleThreadDisplayNameRenamePort;
+  resetCurrentThreadName?: BaleThreadDisplayNameResetPort;
   openThreadNameDialog?: (
     message: TMessage,
     ctx: TContext,
@@ -1604,34 +1604,34 @@ export interface TelegramCommandRuntimeDeps<
     },
   ) => Promise<void | { assertPublished(): void }>;
   getAllowedUserId: () => number | undefined;
-  persistAllowedUserId: TelegramConfigStore["persistAllowedUserId"];
+  persistAllowedUserId: BaleConfigStore["persistAllowedUserId"];
   registerBotCommands: (
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
-  getPromptTemplateCommands?: () => readonly TelegramPromptTemplateMenuCommand[];
+  getPromptTemplateCommands?: () => readonly BalePromptTemplateMenuCommand[];
   sendTextReply: (
     message: TMessage,
     text: string,
     options?: {
       parseMode?: "HTML";
-      assertAuthority?: TelegramApiCallOptions["assertAuthority"];
+      assertAuthority?: BaleApiCallOptions["assertAuthority"];
     },
   ) => Promise<void>;
   getActiveTurnReply?: () =>
     | ((text: string, options?: { parseMode?: "HTML" }) => Promise<void>)
     | undefined;
-  sendInteractiveMessage?: TelegramCompactConfirmationDeps["sendInteractiveMessage"];
+  sendInteractiveMessage?: BaleCompactConfirmationDeps["sendInteractiveMessage"];
   assertExecutionCurrent?: (message: TMessage) => void;
 }
 
 /** Pure intro: built-in controls with registered extension lines before the abort controls. */
-function formatTelegramAppMenuIntroHtml(
+function formatBaleAppMenuIntroHtml(
   extensionLines: readonly string[],
 ): string {
-  const line = (name: TelegramCommandEmojiName, label: string) =>
-    `${formatTelegramCommandEmojiPrefix(name)}/${name} — ${label}`;
+  const line = (name: BaleCommandEmojiName, label: string) =>
+    `${formatBaleCommandEmojiPrefix(name)}/${name} — ${label}`;
   return [
-    "<b>Pi Telegram</b>",
+    "<b>Pi Bale</b>",
     "",
     line("start", "Open menu / Pair bridge"),
     line("compact", "Compact current session"),
@@ -1644,10 +1644,10 @@ function formatTelegramAppMenuIntroHtml(
   ].join("\n");
 }
 
-export const TELEGRAM_APP_MENU_INTRO_HTML = formatTelegramAppMenuIntroHtml([]);
+export const BALE_APP_MENU_INTRO_HTML = formatBaleAppMenuIntroHtml([]);
 
-function buildTelegramPromptTemplateMenuHtml(
-  promptTemplates: readonly TelegramPromptTemplateMenuCommand[] = [],
+function buildBalePromptTemplateMenuHtml(
+  promptTemplates: readonly BalePromptTemplateMenuCommand[] = [],
 ): string {
   if (promptTemplates.length === 0) return "";
   return promptTemplates
@@ -1655,8 +1655,8 @@ function buildTelegramPromptTemplateMenuHtml(
     .join("\n");
 }
 
-function buildTelegramExtensionCommandMenuLines(): string[] {
-  return getTelegramExtensionCommands()
+function buildBaleExtensionCommandMenuLines(): string[] {
+  return getBaleExtensionCommands()
     .filter((command) => command.showInMenu)
     .map((command) => {
       const prefix = `${escapeHtml(command.emoji ?? "")} /${escapeHtml(command.name)}`;
@@ -1665,41 +1665,41 @@ function buildTelegramExtensionCommandMenuLines(): string[] {
     });
 }
 
-function buildTelegramAppMenuIntroHtml(): string {
-  return formatTelegramAppMenuIntroHtml(
-    buildTelegramExtensionCommandMenuLines(),
+function buildBaleAppMenuIntroHtml(): string {
+  return formatBaleAppMenuIntroHtml(
+    buildBaleExtensionCommandMenuLines(),
   );
 }
 
-export function buildTelegramAppMenuHtml(
+export function buildBaleAppMenuHtml(
   statusHtml: string,
-  promptTemplates: readonly TelegramPromptTemplateMenuCommand[] = [],
+  promptTemplates: readonly BalePromptTemplateMenuCommand[] = [],
 ): string {
-  const introHtml = buildTelegramAppMenuIntroHtml();
+  const introHtml = buildBaleAppMenuIntroHtml();
   const promptTemplateHtml =
-    buildTelegramPromptTemplateMenuHtml(promptTemplates);
+    buildBalePromptTemplateMenuHtml(promptTemplates);
   if (!promptTemplateHtml) return `${introHtml}\n\n${statusHtml}`;
   return `${introHtml}\n\n${promptTemplateHtml}\n\n${statusHtml}`;
 }
 
-export function createTelegramAppMenuHtmlBuilder<TContext>(deps: {
+export function createBaleAppMenuHtmlBuilder<TContext>(deps: {
   buildStatusHtml: (ctx: TContext) => string;
-  getPromptTemplateCommands?: () => readonly TelegramPromptTemplateMenuCommand[];
+  getPromptTemplateCommands?: () => readonly BalePromptTemplateMenuCommand[];
 }): (ctx: TContext) => string {
   return (ctx) => {
-    return buildTelegramAppMenuHtml(
+    return buildBaleAppMenuHtml(
       deps.buildStatusHtml(ctx),
       deps.getPromptTemplateCommands?.(),
     );
   };
 }
 
-function getTelegramCommandErrorMessage(error: unknown): string {
+function getBaleCommandErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function formatTelegramCompactionFailure(error: unknown): string {
-  let message = getTelegramCommandErrorMessage(error).trim();
+function formatBaleCompactionFailure(error: unknown): string {
+  let message = getBaleCommandErrorMessage(error).trim();
   const redundantPrefixes = [
     "Compaction failed: ",
     "Turn prefix summarization failed: ",
@@ -1717,9 +1717,9 @@ function formatTelegramCompactionFailure(error: unknown): string {
   return `Compaction failed! ${sentence}`;
 }
 
-export function parseTelegramCommand(
+export function parseBaleCommand(
   text: string,
-): ParsedTelegramCommand | undefined {
+): ParsedBaleCommand | undefined {
   const trimmed = text.trim();
   if (!trimmed.startsWith("/")) return undefined;
   const [head, ...tail] = trimmed.split(/\s+/);
@@ -1728,7 +1728,7 @@ export function parseTelegramCommand(
   return { name, args: tail.join(" ").trim() };
 }
 
-export const TELEGRAM_COMMAND_ACTIONS = {
+export const BALE_COMMAND_ACTIONS = {
   stop: { kind: "stop", executionMode: "immediate" },
   name: { kind: "name", executionMode: "immediate" },
   new: { kind: "new", executionMode: "immediate" },
@@ -1743,36 +1743,36 @@ export const TELEGRAM_COMMAND_ACTIONS = {
   settings: { kind: "settings", executionMode: "immediate" },
   help: { kind: "help", commandName: "help", executionMode: "immediate" },
   start: { kind: "help", commandName: "start", executionMode: "immediate" },
-} as const satisfies Record<TelegramReservedCommandName, TelegramCommandAction>;
+} as const satisfies Record<BaleReservedCommandName, BaleCommandAction>;
 
-export function buildTelegramCommandAction(
+export function buildBaleCommandAction(
   commandName: string | undefined,
-): TelegramCommandAction {
-  if (!isTelegramReservedCommandName(commandName)) {
+): BaleCommandAction {
+  if (!isBaleReservedCommandName(commandName)) {
     return { kind: "ignore", executionMode: "ignored" };
   }
-  return TELEGRAM_COMMAND_ACTIONS[commandName];
+  return BALE_COMMAND_ACTIONS[commandName];
 }
 
-function formatTelegramQueuedTurnCount(count: number): string {
+function formatBaleQueuedTurnCount(count: number): string {
   return count === 1 ? "1 queued turn" : `${count} queued turns`;
 }
 
-export async function handleTelegramStopCommand(
-  deps: TelegramStopCommandDeps,
+export async function handleBaleStopCommand(
+  deps: BaleStopCommandDeps,
 ): Promise<void> {
   deps.clearPendingModelSwitch();
   deps.cancelNextTransitionAnnouncements?.();
-  const clearedCount = deps.clearQueuedTelegramItems();
+  const clearedCount = deps.clearQueuedBaleItems();
   deps.setFoldQueuedPromptsIntoHistory(false);
   if (!deps.hasAbortHandler()) {
     const clearedSuffix =
       clearedCount > 0
-        ? ` Cleared ${formatTelegramQueuedTurnCount(clearedCount)}.`
+        ? ` Cleared ${formatBaleQueuedTurnCount(clearedCount)}.`
         : "";
     if (clearedCount > 0) deps.updateStatus();
     await deps.sendTextReply(
-      formatTelegramInformationHeading("💤", `No active turn.${clearedSuffix}`),
+      formatBaleInformationHeading("💤", `No active turn.${clearedSuffix}`),
       { parseMode: "HTML" },
     );
     return;
@@ -1781,10 +1781,10 @@ export async function handleTelegramStopCommand(
   deps.updateStatus();
   const clearedSuffix =
     clearedCount > 0
-      ? ` Cleared ${formatTelegramQueuedTurnCount(clearedCount)}.`
+      ? ` Cleared ${formatBaleQueuedTurnCount(clearedCount)}.`
       : "";
   await deps.sendTextReply(
-    formatTelegramInformationHeading(
+    formatBaleInformationHeading(
       "⏹️",
       `Aborted current turn.${clearedSuffix}`,
     ),
@@ -1792,9 +1792,9 @@ export async function handleTelegramStopCommand(
   );
 }
 
-export async function handleTelegramAbortCommand(deps: {
+export async function handleBaleAbortCommand(deps: {
   hasAbortHandler: () => boolean;
-  hasActiveTelegramTurn: () => boolean;
+  hasActiveBaleTurn: () => boolean;
   clearPendingModelSwitch: () => void;
   cancelNextTransitionAnnouncements?: () => void;
   abortCurrentTurn: () => void;
@@ -1809,21 +1809,21 @@ export async function handleTelegramAbortCommand(deps: {
   deps.cancelNextTransitionAnnouncements?.();
   if (!deps.hasAbortHandler()) {
     await deps.sendTextReply(
-      formatTelegramInformationHeading("💤", "No active turn."),
+      formatBaleInformationHeading("💤", "No active turn."),
       { parseMode: "HTML" },
     );
     return;
   }
-  deps.setFoldQueuedPromptsIntoHistory(deps.hasActiveTelegramTurn());
+  deps.setFoldQueuedPromptsIntoHistory(deps.hasActiveBaleTurn());
   deps.abortCurrentTurn();
   deps.updateStatus();
   await deps.sendTextReply(
-    formatTelegramInformationHeading("⏹️", "Aborted current turn."),
+    formatBaleInformationHeading("⏹️", "Aborted current turn."),
     { parseMode: "HTML" },
   );
 }
 
-export async function handleTelegramNextCommand(deps: {
+export async function handleBaleNextCommand(deps: {
   hasAbortHandler: () => boolean;
   isIdle: () => boolean;
   hasQueuedItems: () => boolean;
@@ -1845,7 +1845,7 @@ export async function handleTelegramNextCommand(deps: {
   deps.clearPendingModelSwitch();
   if (!deps.hasQueuedItems()) {
     await deps.sendTextReply(
-      formatTelegramInformationHeading("⌛", "Queue is empty"),
+      formatBaleInformationHeading("⌛", "Queue is empty"),
       { parseMode: "HTML" },
     );
     return;
@@ -1860,7 +1860,7 @@ export async function handleTelegramNextCommand(deps: {
   }
   if (!deps.isIdle()) {
     await deps.sendTextReply(
-      formatTelegramInformationHeading(
+      formatBaleInformationHeading(
         "⏳",
         "Pi is busy. Send /abort or /stop first.",
       ),
@@ -1873,7 +1873,7 @@ export async function handleTelegramNextCommand(deps: {
   deps.updateStatus();
 }
 
-async function handleTelegramContinueCommand<TMessage, TContext>(
+async function handleBaleContinueCommand<TMessage, TContext>(
   message: TMessage,
   ctx: TContext,
   deps: {
@@ -1883,23 +1883,23 @@ async function handleTelegramContinueCommand<TMessage, TContext>(
   await deps.enqueueContinueTurn(message, ctx);
 }
 
-function dispatchNextQueuedTelegramTurnAfterCompact(
+function dispatchNextQueuedBaleTurnAfterCompact(
   deps: Pick<
-    TelegramCompactCommandDeps,
-    | "dispatchNextQueuedTelegramTurn"
-    | "requestDeferredDispatchNextQueuedTelegramTurn"
+    BaleCompactCommandDeps,
+    | "dispatchNextQueuedBaleTurn"
+    | "requestDeferredDispatchNextQueuedBaleTurn"
   >,
 ): void {
-  if (deps.requestDeferredDispatchNextQueuedTelegramTurn) {
-    deps.requestDeferredDispatchNextQueuedTelegramTurn(
-      deps.dispatchNextQueuedTelegramTurn,
+  if (deps.requestDeferredDispatchNextQueuedBaleTurn) {
+    deps.requestDeferredDispatchNextQueuedBaleTurn(
+      deps.dispatchNextQueuedBaleTurn,
     );
     return;
   }
-  deps.dispatchNextQueuedTelegramTurn();
+  deps.dispatchNextQueuedBaleTurn();
 }
 
-function buildTelegramNewConfirmationReplyMarkup(): TelegramCompactConfirmationReplyMarkup {
+function buildBaleNewConfirmationReplyMarkup(): BaleCompactConfirmationReplyMarkup {
   return {
     inline_keyboard: [
       [
@@ -1911,14 +1911,14 @@ function buildTelegramNewConfirmationReplyMarkup(): TelegramCompactConfirmationR
 }
 
 /** Send one confirmation to an exact copied recipient, with authority checks around the issued request. */
-async function sendTelegramConfirmation(
-  target: TelegramCommandMessageTarget,
-  deps: TelegramCompactConfirmationDeps,
+async function sendBaleConfirmation(
+  target: BaleCommandMessageTarget,
+  deps: BaleCompactConfirmationDeps,
   html: string,
   markup: Parameters<
-    TelegramCompactConfirmationDeps["sendInteractiveMessage"]
+    BaleCompactConfirmationDeps["sendInteractiveMessage"]
   >[3],
-  assertAuthority?: TelegramApiCallOptions["assertAuthority"],
+  assertAuthority?: BaleApiCallOptions["assertAuthority"],
 ): Promise<void> {
   const recipientTarget = {
     chatId: target.chatId,
@@ -1940,27 +1940,27 @@ async function sendTelegramConfirmation(
   assertAuthority?.();
 }
 
-function getTelegramNewConfirmationHtml(): string {
+function getBaleNewConfirmationHtml(): string {
   return "<b>Start a new session?</b>";
 }
 
-export async function openTelegramNewConfirmation(
-  target: TelegramCommandMessageTarget,
-  deps: TelegramCompactConfirmationDeps,
-  assertAuthority?: TelegramApiCallOptions["assertAuthority"],
+export async function openBaleNewConfirmation(
+  target: BaleCommandMessageTarget,
+  deps: BaleCompactConfirmationDeps,
+  assertAuthority?: BaleApiCallOptions["assertAuthority"],
 ): Promise<void> {
-  await sendTelegramConfirmation(
+  await sendBaleConfirmation(
     target,
     deps,
-    getTelegramNewConfirmationHtml(),
-    buildTelegramNewConfirmationReplyMarkup(),
+    getBaleNewConfirmationHtml(),
+    buildBaleNewConfirmationReplyMarkup(),
     assertAuthority,
   );
 }
 
-export async function handleTelegramNewConfirmationCallback<TContext>(
-  query: TelegramCompactConfirmationCallbackQuery,
-  deps: TelegramNewConfirmationCallbackDeps<TContext>,
+export async function handleBaleNewConfirmationCallback<TContext>(
+  query: BaleCompactConfirmationCallbackQuery,
+  deps: BaleNewConfirmationCallbackDeps<TContext>,
 ): Promise<boolean> {
   if (query.data !== "new:confirm" && query.data !== "new:cancel") return false;
   const chatId = query.message?.chat?.id;
@@ -1986,7 +1986,7 @@ export async function handleTelegramNewConfirmationCallback<TContext>(
   return true;
 }
 
-function buildTelegramCompactConfirmationReplyMarkup(): TelegramCompactConfirmationReplyMarkup {
+function buildBaleCompactConfirmationReplyMarkup(): BaleCompactConfirmationReplyMarkup {
   return {
     inline_keyboard: [
       [
@@ -1997,27 +1997,27 @@ function buildTelegramCompactConfirmationReplyMarkup(): TelegramCompactConfirmat
   };
 }
 
-function getTelegramCompactConfirmationHtml(): string {
+function getBaleCompactConfirmationHtml(): string {
   return "<b>Compact session?</b>";
 }
 
-async function openTelegramCompactConfirmation(
-  target: TelegramCommandMessageTarget,
-  deps: TelegramCompactConfirmationDeps,
-  assertAuthority?: TelegramApiCallOptions["assertAuthority"],
+async function openBaleCompactConfirmation(
+  target: BaleCommandMessageTarget,
+  deps: BaleCompactConfirmationDeps,
+  assertAuthority?: BaleApiCallOptions["assertAuthority"],
 ): Promise<void> {
-  await sendTelegramConfirmation(
+  await sendBaleConfirmation(
     target,
     deps,
-    getTelegramCompactConfirmationHtml(),
-    buildTelegramCompactConfirmationReplyMarkup(),
+    getBaleCompactConfirmationHtml(),
+    buildBaleCompactConfirmationReplyMarkup(),
     assertAuthority,
   );
 }
 
-export async function handleTelegramCompactConfirmationCallback<TContext>(
-  query: TelegramCompactConfirmationCallbackQuery,
-  deps: TelegramCompactConfirmationCallbackDeps<TContext>,
+export async function handleBaleCompactConfirmationCallback<TContext>(
+  query: BaleCompactConfirmationCallbackQuery,
+  deps: BaleCompactConfirmationCallbackDeps<TContext>,
 ): Promise<boolean> {
   if (query.data !== "compact:confirm" && query.data !== "compact:cancel") {
     return false;
@@ -2043,7 +2043,7 @@ export async function handleTelegramCompactConfirmationCallback<TContext>(
   await deps.editInteractiveMessage(
     chatId,
     messageId,
-    TELEGRAM_COMPACTION_STARTED_TEXT,
+    BALE_COMPACTION_STARTED_TEXT,
     "html",
     { inline_keyboard: [] },
   );
@@ -2058,8 +2058,8 @@ export async function handleTelegramCompactConfirmationCallback<TContext>(
   return true;
 }
 
-export interface TelegramNewCommandDeps
-  extends TelegramRuntimeEventRecorderPort, TelegramSessionBusyPorts {
+export interface BaleNewCommandDeps
+  extends BaleRuntimeEventRecorderPort, BaleSessionBusyPorts {
   requestNewSession?: () => void;
   sendTextReply: (
     text: string,
@@ -2067,14 +2067,14 @@ export interface TelegramNewCommandDeps
   ) => Promise<void>;
 }
 
-export async function handleTelegramNewCommand(
-  deps: TelegramNewCommandDeps,
+export async function handleBaleNewCommand(
+  deps: BaleNewCommandDeps,
 ): Promise<void> {
-  if (isTelegramSessionBusy(deps)) {
+  if (isBaleSessionBusy(deps)) {
     await deps.sendTextReply(
-      formatTelegramInformationHeading(
+      formatBaleInformationHeading(
         "⏳",
-        "Cannot start a new session while Pi or the Telegram queue is busy. Wait for queued turns to finish or send /abort first.",
+        "Cannot start a new session while Pi or the Bale queue is busy. Wait for queued turns to finish or send /abort first.",
       ),
       { parseMode: "HTML" },
     );
@@ -2082,7 +2082,7 @@ export async function handleTelegramNewCommand(
   }
   if (!deps.requestNewSession) {
     await deps.sendTextReply(
-      formatTelegramInformationHeading(
+      formatBaleInformationHeading(
         "🚫",
         "Session replacement is unavailable in this Pi runtime.",
       ),
@@ -2093,14 +2093,14 @@ export async function handleTelegramNewCommand(
   deps.requestNewSession();
 }
 
-export async function handleTelegramCompactCommand(
-  deps: TelegramCompactCommandDeps,
+export async function handleBaleCompactCommand(
+  deps: BaleCompactCommandDeps,
 ): Promise<void> {
-  if (isTelegramSessionBusy(deps)) {
+  if (isBaleSessionBusy(deps)) {
     await deps.sendTextReply(
-      formatTelegramInformationHeading(
+      formatBaleInformationHeading(
         "⏳",
-        "Cannot compact while Pi or the Telegram queue is busy. Wait for queued turns to finish or send /abort first.",
+        "Cannot compact while Pi or the Bale queue is busy. Wait for queued turns to finish or send /abort first.",
       ),
       { parseMode: "HTML" },
     );
@@ -2115,8 +2115,8 @@ export async function handleTelegramCompactCommand(
         deps.stopTypingLoop?.();
         deps.setCompactionInProgress(false);
         deps.updateStatus();
-        dispatchNextQueuedTelegramTurnAfterCompact(deps);
-        void deps.sendTextReply(TELEGRAM_COMPACTION_COMPLETED_TEXT, {
+        dispatchNextQueuedBaleTurnAfterCompact(deps);
+        void deps.sendTextReply(BALE_COMPACTION_COMPLETED_TEXT, {
           parseMode: "HTML",
         });
       },
@@ -2124,12 +2124,12 @@ export async function handleTelegramCompactCommand(
         deps.stopTypingLoop?.();
         deps.setCompactionInProgress(false);
         deps.updateStatus();
-        dispatchNextQueuedTelegramTurnAfterCompact(deps);
+        dispatchNextQueuedBaleTurnAfterCompact(deps);
         deps.recordRuntimeEvent?.("compact", error);
         void deps.sendTextReply(
-          formatTelegramInformationHeading(
+          formatBaleInformationHeading(
             "⚠️",
-            formatTelegramCompactionFailure(error),
+            formatBaleCompactionFailure(error),
           ),
           { parseMode: "HTML" },
         );
@@ -2141,22 +2141,22 @@ export async function handleTelegramCompactCommand(
     deps.updateStatus();
     deps.recordRuntimeEvent?.("compact", error);
     await deps.sendTextReply(
-      formatTelegramInformationHeading(
+      formatBaleInformationHeading(
         "⚠️",
-        formatTelegramCompactionFailure(error),
+        formatBaleCompactionFailure(error),
       ),
       { parseMode: "HTML" },
     );
     return;
   }
   if (!deps.suppressStartNotice) {
-    await deps.sendTextReply(TELEGRAM_COMPACTION_STARTED_TEXT, {
+    await deps.sendTextReply(BALE_COMPACTION_STARTED_TEXT, {
       parseMode: "HTML",
     });
   }
 }
 
-export async function handleTelegramModelCommand<TContext>(deps: {
+export async function handleBaleModelCommand<TContext>(deps: {
   ctx: TContext;
   openModelMenu: (ctx: TContext) => Promise<void>;
 }): Promise<void> {
@@ -2167,11 +2167,11 @@ export async function handleTelegramModelCommand<TContext>(deps: {
   }
 }
 
-export async function executeTelegramCommandAction<TMessage, TContext>(
-  action: TelegramCommandAction,
+export async function executeBaleCommandAction<TMessage, TContext>(
+  action: BaleCommandAction,
   message: TMessage,
   ctx: TContext,
-  deps: TelegramCommandActionDeps<TMessage, TContext>,
+  deps: BaleCommandActionDeps<TMessage, TContext>,
   commandArgs = "",
 ): Promise<boolean> {
   switch (action.kind) {
@@ -2220,13 +2220,13 @@ export async function executeTelegramCommandAction<TMessage, TContext>(
   }
 }
 
-export interface TelegramCommandHandlerTargetRuntimeDeps<
-  TMessage extends TelegramCommandRuntimeMessage,
+export interface BaleCommandHandlerTargetRuntimeDeps<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
 >
   extends
     Omit<
-      TelegramCommandRuntimeDeps<TMessage, TContext>,
+      BaleCommandRuntimeDeps<TMessage, TContext>,
       | "enqueueControlItem"
       | "showStatus"
       | "openModelMenu"
@@ -2234,28 +2234,28 @@ export interface TelegramCommandHandlerTargetRuntimeDeps<
       | "sendTextReply"
       | "registerBotCommands"
     >,
-    Omit<TelegramCommandTargetQueueRuntimeDeps<TContext>, "createControlItem">,
-    TelegramBotCommandRegistrationDeps {
+    Omit<BaleCommandTargetQueueRuntimeDeps<TContext>, "createControlItem">,
+    BaleBotCommandRegistrationDeps {
   allocateItemOrder: () => number;
   allocateControlOrder: () => number;
 }
 
-export function createTelegramCommandHandlerTargetRuntime<
-  TMessage extends TelegramCommandRuntimeMessage,
+export function createBaleCommandHandlerTargetRuntime<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
 >(
-  deps: TelegramCommandHandlerTargetRuntimeDeps<TMessage, TContext>,
-): ReturnType<typeof createTelegramCommandHandler<TMessage, TContext>> {
-  const commandTargetRuntime = createTelegramCommandTargetQueueRuntime<
+  deps: BaleCommandHandlerTargetRuntimeDeps<TMessage, TContext>,
+): ReturnType<typeof createBaleCommandHandler<TMessage, TContext>> {
+  const commandTargetRuntime = createBaleCommandTargetQueueRuntime<
     TMessage,
     TContext
   >({
-    createControlItem: createTelegramControlItemBuilder<TContext>({
+    createControlItem: createBaleControlItemBuilder<TContext>({
       allocateItemOrder: deps.allocateItemOrder,
       allocateControlOrder: deps.allocateControlOrder,
     }),
     appendControlItem: deps.appendControlItem,
-    dispatchNextQueuedTelegramTurn: deps.dispatchNextQueuedTelegramTurn,
+    dispatchNextQueuedBaleTurn: deps.dispatchNextQueuedBaleTurn,
     getReplyTarget: deps.getReplyTarget,
     getAdmissionScope: deps.getAdmissionScope,
     getAdmissionJournalBinding: deps.getAdmissionJournalBinding,
@@ -2265,24 +2265,24 @@ export function createTelegramCommandHandlerTargetRuntime<
     openSettingsMenu: deps.openSettingsMenu,
     sendTextReply: deps.sendTextReply,
   });
-  return createTelegramCommandHandler({
+  return createBaleCommandHandler({
     assertExecutionCurrent: deps.assertExecutionCurrent,
     hasAbortHandler: deps.hasAbortHandler,
     clearPendingModelSwitch: deps.clearPendingModelSwitch,
-    hasQueuedTelegramItems: deps.hasQueuedTelegramItems,
-    clearQueuedTelegramItems: deps.clearQueuedTelegramItems,
+    hasQueuedBaleItems: deps.hasQueuedBaleItems,
+    clearQueuedBaleItems: deps.clearQueuedBaleItems,
     setFoldQueuedPromptsIntoHistory: deps.setFoldQueuedPromptsIntoHistory,
     abortCurrentTurn: deps.abortCurrentTurn,
     isIdle: deps.isIdle,
     hasPendingMessages: deps.hasPendingMessages,
-    hasActiveTelegramTurn: deps.hasActiveTelegramTurn,
+    hasActiveBaleTurn: deps.hasActiveBaleTurn,
     hasDispatchPending: deps.hasDispatchPending,
     isCompactionInProgress: deps.isCompactionInProgress,
     setCompactionInProgress: deps.setCompactionInProgress,
     updateStatus: deps.updateStatus,
     isContextActive: deps.isContextActive,
     beginCommandEffectWork: deps.beginCommandEffectWork,
-    dispatchNextQueuedTelegramTurn: deps.dispatchNextQueuedTelegramTurn,
+    dispatchNextQueuedBaleTurn: deps.dispatchNextQueuedBaleTurn,
     requestNextDispatchAnnouncement: deps.requestNextDispatchAnnouncement,
     markActiveTurnNextAbortAnnouncement:
       deps.markActiveTurnNextAbortAnnouncement,
@@ -2303,7 +2303,7 @@ export function createTelegramCommandHandlerTargetRuntime<
     handleForumBootstrap: deps.handleForumBootstrap,
     getAllowedUserId: deps.getAllowedUserId,
     persistAllowedUserId: deps.persistAllowedUserId,
-    registerBotCommands: createTelegramBotCommandRegistrar({
+    registerBotCommands: createBaleBotCommandRegistrar({
       setMyCommands: deps.setMyCommands,
     }),
     validateThreadName: deps.validateThreadName,
@@ -2316,7 +2316,7 @@ export function createTelegramCommandHandlerTargetRuntime<
 }
 
 /** Released exact-source admission for one selected command: source/recipient lifetimes and one completion report. */
-export interface TelegramSelectedCommandAdmission {
+export interface BaleSelectedCommandAdmission {
   assertSourceCurrent(): void;
   /** Independent exact recipient/target lifetime, including inside captured menu transport adapters. */
   assertRecipientCurrent(): void;
@@ -2330,7 +2330,7 @@ export interface TelegramSelectedCommandAdmission {
  * recipient, for owners whose effects outlive one synchronous step.
  */
 function createSelectedSemanticGuard(
-  admission: TelegramSelectedCommandAdmission,
+  admission: BaleSelectedCommandAdmission,
   assertExecution: () => void,
   strict: boolean,
 ): () => void {
@@ -2375,7 +2375,7 @@ function issueSelectedOnce(
 
 /** Body-free reply anchor: chat, message and Thread only, never the original's admission symbols. */
 function copySelectedReplyAnchor<
-  TMessage extends TelegramCommandRuntimeMessage,
+  TMessage extends BaleCommandRuntimeMessage,
 >(original: TMessage): TMessage {
   return {
     chat: { ...original.chat },
@@ -2385,28 +2385,28 @@ function copySelectedReplyAnchor<
 }
 
 function copySelectedMenuCarrier<
-  TMessage extends TelegramCommandRuntimeMessage,
+  TMessage extends BaleCommandRuntimeMessage,
 >(original: TMessage): TMessage {
   const message = Object.fromEntries(
     Object.entries(original).filter(
-      ([key]) => key !== "pi_telegram_source_update_id",
+      ([key]) => key !== "pi_bale_source_update_id",
     ),
   ) as TMessage;
   message.chat = { ...original.chat };
   return message;
 }
 
-export function createTelegramCommandHandler<
-  TMessage extends TelegramCommandRuntimeMessage,
+export function createBaleCommandHandler<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
->(deps: TelegramCommandRuntimeDeps<TMessage, TContext>) {
+>(deps: BaleCommandRuntimeDeps<TMessage, TContext>) {
   const handle = async (
     commandName: string | undefined,
     message: TMessage,
     ctx: TContext,
     commandArgs?: string,
   ): Promise<boolean> => {
-    return handleTelegramCommandRuntime(
+    return handleBaleCommandRuntime(
       commandName,
       message,
       ctx,
@@ -2418,9 +2418,9 @@ export function createTelegramCommandHandler<
   type HeldExecution = {
     message: TMessage;
     carrier?: TMessage;
-    source?: TelegramDeferredSourceEvidence;
-    queue?: TelegramDeferredQueueAdmissionPreparation;
-    command: ParsedTelegramCommand;
+    source?: BaleDeferredSourceEvidence;
+    queue?: BaleDeferredQueueAdmissionPreparation;
+    command: ParsedBaleCommand;
     reportCompleted(): boolean;
     assertSemantic(): void;
     assertRecipient: () => void;
@@ -2428,8 +2428,8 @@ export function createTelegramCommandHandler<
   type HeldQueueRecord = {
     ctx: TContext;
     signal: AbortSignal;
-    receipt: TelegramQueueAdmissionReceiptLike;
-    queue: TelegramDeferredQueueAdmissionPreparation;
+    receipt: BaleQueueAdmissionReceiptLike;
+    queue: BaleDeferredQueueAdmissionPreparation;
     completionSha256: string;
     current(): boolean;
   };
@@ -2446,13 +2446,13 @@ export function createTelegramCommandHandler<
   };
   type HeldPlan = {
     completion: "before-effect" | "after-semantics" | "queue-receipt";
-    effect?: keyof TelegramHeldCommandEffects<TContext>;
+    effect?: keyof BaleHeldCommandEffects<TContext>;
     template?: true;
     available?(): boolean;
     prepare(
       ctx: TContext,
-      effects?: TelegramHeldCommandEffects<TContext>,
-      command?: ParsedTelegramCommand,
+      effects?: BaleHeldCommandEffects<TContext>,
+      command?: ParsedBaleCommand,
       replyDelivery?: "inline" | "detached",
     ):
       | {
@@ -2460,20 +2460,20 @@ export function createTelegramCommandHandler<
           portsCurrent(): boolean;
           run(input: HeldExecution): Promise<boolean>;
           inspectQueuedCompletion?():
-            TelegramDeferredSourceEvidence | undefined;
+            BaleDeferredSourceEvidence | undefined;
         }
       | undefined;
   };
   const prepareHeldSelectedCommand = (
     name: string,
-    readiness: TelegramLiveSourceCompletionReadiness,
-    admission: TelegramHeldCommandAdmission,
+    readiness: BaleLiveSourceCompletionReadiness,
+    admission: BaleHeldCommandAdmission,
     captured: typeof deps,
     portsCurrent: () => boolean,
     completion: HeldPlan["completion"],
     run: (input: HeldExecution) => Promise<boolean>,
-    inspectQueuedCompletion?: () => TelegramDeferredSourceEvidence | undefined,
-  ): TelegramPreparedHeldCommand | undefined => {
+    inspectQueuedCompletion?: () => BaleDeferredSourceEvidence | undefined,
+  ): BalePreparedHeldCommand | undefined => {
     const snapshot = readiness.snapshot,
       raw = snapshot.update.message,
       target = { ...admission.target };
@@ -2501,14 +2501,14 @@ export function createTelegramCommandHandler<
     if (typeof captured.getAllowedUserId !== "function") return undefined;
     const command =
         typeof value.text === "string"
-          ? parseTelegramCommand(value.text)
+          ? parseBaleCommand(value.text)
           : undefined,
       operator = captured.getAllowedUserId();
     if (
       !command ||
       !chat ||
       !from ||
-      !isTelegramSelectedHeldOriginal(snapshot.update, target, operator, name)
+      !isBaleSelectedHeldOriginal(snapshot.update, target, operator, name)
     )
       return undefined;
     const source = { ...snapshot.source },
@@ -2518,13 +2518,13 @@ export function createTelegramCommandHandler<
       chat: { ...chat },
       message_thread_id: target.threadId,
     } as TMessage;
-    delete message.pi_telegram_source_update_id;
+    delete message.pi_bale_source_update_id;
     let bound:
         | {
             carrier: unknown;
-            completion: TelegramDeferredSourceCompletionPreparation;
+            completion: BaleDeferredSourceCompletionPreparation;
             ports: Pick<
-              TelegramDeferredSourceCompletionPreparation,
+              BaleDeferredSourceCompletionPreparation,
               "isCurrent" | "reportCompleted" | "inspectCompletion"
             >;
           }
@@ -2547,7 +2547,7 @@ export function createTelegramCommandHandler<
       if (!ownerCurrent() || !completionCurrent() || !bound)
         throw new Error(`Held ${name} source owner is unavailable.`);
       captured.assertExecutionCurrent?.(bound.carrier as TMessage);
-      const current = inspectTelegramDeferredSource(bound.carrier);
+      const current = inspectBaleDeferredSource(bound.carrier);
       if (
         !current ||
         current.updateId !== source.updateId ||
@@ -2623,7 +2623,7 @@ export function createTelegramCommandHandler<
   };
   const prepareHeldReplyPlan = (
     ctx: TContext,
-    effects: TelegramHeldCommandEffects<TContext>,
+    effects: BaleHeldCommandEffects<TContext>,
     run: (
       captured: typeof deps,
       semantic: ReturnType<typeof guardSelectedEffect>,
@@ -2670,7 +2670,7 @@ export function createTelegramCommandHandler<
           // Transport waiting never changes the already reported semantic completion or licenses another effect.
           if (replyDelivery === "inline") await deliver();
           else
-            scheduleTelegramCommandEffect(
+            scheduleBaleCommandEffect(
               ctx,
               input.command.name,
               "selected-reply",
@@ -2686,7 +2686,7 @@ export function createTelegramCommandHandler<
   const prepareHeldQueuePlan = (
     ctx: TContext,
     template?: {
-      command: ParsedTelegramCommand;
+      command: ParsedBaleCommand;
       expanded: string;
       isCurrent(): boolean;
     },
@@ -2710,10 +2710,10 @@ export function createTelegramCommandHandler<
           return false;
         const { carrier, source } = input;
         if (!carrier || !source) return false;
-        const signal = getTelegramUpdateExecutionFence(carrier)?.signal;
+        const signal = getBaleUpdateExecutionFence(carrier)?.signal;
         if (!signal || signal.aborted) return false;
         const queue =
-          input.queue ?? prepareTelegramDeferredQueueAdmission(carrier);
+          input.queue ?? prepareBaleDeferredQueueAdmission(carrier);
         if (!queue || !queue.isCurrent()) return false;
         const ports = {
           isCurrent: queue.isCurrent,
@@ -2740,10 +2740,10 @@ export function createTelegramCommandHandler<
         };
         const sameTarget =
           carrier.message_thread_id === input.message.message_thread_id;
-        const message = carryTelegramUpdateExecutionFence(carrier, {
+        const message = carryBaleUpdateExecutionFence(carrier, {
           ...carrier,
           ...input.message,
-          pi_telegram_source_update_id: source.updateId,
+          pi_bale_source_update_id: source.updateId,
           ...(template ? { text: template.expanded, caption: undefined } : {}),
           ...(sameTarget ? {} : { message_id: 0, reply_to_message: undefined }),
         } as TMessage);
@@ -2754,11 +2754,11 @@ export function createTelegramCommandHandler<
               randomUUID(),
               source,
               input.command,
-              getTelegramCommandMessageTarget(message),
+              getBaleCommandMessageTarget(message),
             ]),
           )
           .digest("hex");
-        const admission: TelegramHeldTurnAdmission = {
+        const admission: BaleHeldTurnAdmission = {
           assertCurrent: input.assertSemantic,
           report(receipts) {
             input.assertSemantic();
@@ -2791,14 +2791,14 @@ export function createTelegramCommandHandler<
               receipt.receiptId,
               signal.aborted ? null : retained,
             );
-            if (!reportTelegramQueueAdmission([carrier], [receipt]))
+            if (!reportBaleQueueAdmission([carrier], [receipt]))
               throw new Error("Held command queue admission refused.");
           },
         };
         if (template)
           await enqueue.call(owner, message, ctx, "prompt", admission);
         else
-          await handleTelegramContinueCommand(message, ctx, {
+          await handleBaleContinueCommand(message, ctx, {
             enqueueContinueTurn: (value, context) =>
               enqueue.call(owner, value, context, "continue", admission),
           });
@@ -2828,9 +2828,9 @@ export function createTelegramCommandHandler<
           ? (
               message: TMessage,
               context: TContext,
-              options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+              options?: Pick<BaleApiCallOptions, "assertAuthority">,
             ) => {
-              const address = getTelegramCommandMessageTarget(message);
+              const address = getBaleCommandMessageTarget(message);
               return scopedStatus.call(
                 effects,
                 address.chatId,
@@ -2847,7 +2847,7 @@ export function createTelegramCommandHandler<
         portsCurrent: () => !effects || effects.showStatus === scopedStatus,
         async run({ message, command, assertRecipient }) {
           const recipientOptions = { assertAuthority: assertRecipient };
-          return handleTelegramCommandRuntime(
+          return handleBaleCommandRuntime(
             "status",
             message,
             ctx,
@@ -2863,7 +2863,7 @@ export function createTelegramCommandHandler<
       };
     },
   };
-  const heldPlans: Record<TelegramHeldCommandName, HeldPlan> = {
+  const heldPlans: Record<BaleHeldCommandName, HeldPlan> = {
     status: heldMenuPlan,
     start: heldMenuPlan,
     help: heldMenuPlan,
@@ -2875,9 +2875,9 @@ export function createTelegramCommandHandler<
           ctx,
           effects!,
           async (captured, semantic, _complete, reply) => {
-            await handleTelegramAbortCommand({
+            await handleBaleAbortCommand({
               hasAbortHandler: semantic(captured.hasAbortHandler),
-              hasActiveTelegramTurn: semantic(captured.hasActiveTelegramTurn),
+              hasActiveBaleTurn: semantic(captured.hasActiveBaleTurn),
               clearPendingModelSwitch: semantic(
                 captured.clearPendingModelSwitch,
               ),
@@ -2901,13 +2901,13 @@ export function createTelegramCommandHandler<
       effect: "sendTextReply",
       available: () =>
         typeof deps.cancelNextTransitionAnnouncements === "function" &&
-        typeof deps.clearQueuedTelegramItems === "function",
+        typeof deps.clearQueuedBaleItems === "function",
       prepare(ctx, effects, _command, delivery) {
         return prepareHeldReplyPlan(
           ctx,
           effects!,
           async (captured, semantic, _complete, reply) => {
-            await handleTelegramStopCommand({
+            await handleBaleStopCommand({
               hasAbortHandler: semantic(captured.hasAbortHandler),
               clearPendingModelSwitch: semantic(
                 captured.clearPendingModelSwitch,
@@ -2915,8 +2915,8 @@ export function createTelegramCommandHandler<
               cancelNextTransitionAnnouncements: semantic(
                 captured.cancelNextTransitionAnnouncements!,
               ),
-              clearQueuedTelegramItems: semantic(() =>
-                captured.clearQueuedTelegramItems(ctx),
+              clearQueuedBaleItems: semantic(() =>
+                captured.clearQueuedBaleItems(ctx),
               ),
               setFoldQueuedPromptsIntoHistory: semantic(
                 captured.setFoldQueuedPromptsIntoHistory,
@@ -2941,16 +2941,16 @@ export function createTelegramCommandHandler<
           ctx,
           effects!,
           async (captured, semantic, complete, reply) => {
-            await handleTelegramNextCommand({
+            await handleBaleNextCommand({
               hasAbortHandler: semantic(captured.hasAbortHandler),
               isIdle: semantic(() => captured.isIdle(ctx)),
-              hasQueuedItems: semantic(captured.hasQueuedTelegramItems),
+              hasQueuedItems: semantic(captured.hasQueuedBaleItems),
               clearPendingModelSwitch: semantic(
                 captured.clearPendingModelSwitch,
               ),
               abortCurrentTurn: semantic(captured.abortCurrentTurn),
               dispatchNextQueuedTurn: semantic(() =>
-                captured.dispatchNextQueuedTelegramTurn(ctx),
+                captured.dispatchNextQueuedBaleTurn(ctx),
               ),
               requestNextDispatchAnnouncement: semantic(
                 captured.requestNextDispatchAnnouncement!,
@@ -2991,8 +2991,8 @@ export function createTelegramCommandHandler<
       typeof owner.enqueue !== "function" ||
       typeof get !== "function" ||
       typeof expand !== "function" ||
-      getTelegramReservedCommandNames().includes(name) ||
-      findTelegramExtensionCommand(name)
+      getBaleReservedCommandNames().includes(name) ||
+      findBaleExtensionCommand(name)
     )
       return undefined;
     const getIdentity = () => {
@@ -3020,7 +3020,7 @@ export function createTelegramCommandHandler<
         owner.templates !== templates ||
         templates.getCommands !== get ||
         templates.expand !== expand ||
-        findTelegramExtensionCommand(name)
+        findBaleExtensionCommand(name)
       )
         return false;
       try {
@@ -3030,7 +3030,7 @@ export function createTelegramCommandHandler<
           owner.templates === templates &&
           templates.getCommands === get &&
           templates.expand === expand &&
-          !findTelegramExtensionCommand(name)
+          !findBaleExtensionCommand(name)
         );
       } catch {
         return false;
@@ -3070,10 +3070,10 @@ export function createTelegramCommandHandler<
   };
   const getHeldPlan = (
     name: string,
-    effects?: TelegramHeldCommandEffects<TContext>,
+    effects?: BaleHeldCommandEffects<TContext>,
   ): HeldPlan | undefined => {
     if (!Object.hasOwn(heldPlans, name)) return getHeldTemplatePlan(name);
-    const plan = heldPlans[name as TelegramHeldCommandName];
+    const plan = heldPlans[name as BaleHeldCommandName];
     if (plan.available?.() === false) return undefined;
     if (
       (plan.effect &&
@@ -3088,10 +3088,10 @@ export function createTelegramCommandHandler<
     return plan;
   };
   const prepareSelectedPlan = (
-    command: ParsedTelegramCommand,
+    command: ParsedBaleCommand,
     messages: readonly TMessage[],
     ctx: TContext,
-    admission: TelegramSelectedCommandAdmission,
+    admission: BaleSelectedCommandAdmission,
   ): (() => Promise<boolean>) | undefined => {
     const original = messages[0];
     if (
@@ -3112,7 +3112,7 @@ export function createTelegramCommandHandler<
     const assertRecipientCurrent = admission.assertRecipientCurrent,
       report = admission.reportCompleted,
       beforeEffects = admission.beforeEffects;
-    const effects: TelegramHeldCommandEffects<TContext> | undefined =
+    const effects: BaleHeldCommandEffects<TContext> | undefined =
       parsed.name === "status"
         ? undefined
         : {
@@ -3160,17 +3160,17 @@ export function createTelegramCommandHandler<
   const prepareSelectedHelp =
     (name: "start" | "help") =>
     (
-      command: ParsedTelegramCommand,
+      command: ParsedBaleCommand,
       messages: readonly TMessage[],
       ctx: TContext,
-      admission: TelegramSelectedCommandAdmission,
+      admission: BaleSelectedCommandAdmission,
     ): (() => Promise<boolean>) | undefined => {
       const original = messages[0];
       if (
         command.name !== name ||
         messages.length !== 1 ||
         !original ||
-        !canPairTelegramUserFromCommandMessage(original) ||
+        !canPairBaleUserFromCommandMessage(original) ||
         original.from?.id === undefined ||
         original.from.is_bot
       )
@@ -3198,7 +3198,7 @@ export function createTelegramCommandHandler<
           );
       };
       return issueSelectedOnce(assertSemanticCurrent, () =>
-        handleTelegramHelpCommand(
+        handleBaleHelpCommand(
           name,
           message,
           ctx,
@@ -3217,10 +3217,10 @@ export function createTelegramCommandHandler<
   const prepareSelectedConfirmation =
     (name: "new" | "compact") =>
     (
-      command: ParsedTelegramCommand,
+      command: ParsedBaleCommand,
       messages: readonly TMessage[],
       ctx: TContext,
-      admission: TelegramSelectedCommandAdmission,
+      admission: BaleSelectedCommandAdmission,
     ): (() => Promise<boolean>) | undefined => {
       const original = messages[0],
         captured = { ...deps };
@@ -3231,13 +3231,13 @@ export function createTelegramCommandHandler<
         !captured.sendInteractiveMessage
       )
         return undefined;
-      const target = getTelegramCommandMessageTarget(original);
+      const target = getBaleCommandMessageTarget(original);
       const assertRecipientCurrent = admission.assertRecipientCurrent,
         reportCompleted = admission.reportCompleted;
       const openConfirmation =
         name === "new"
-          ? openTelegramNewConfirmation
-          : openTelegramCompactConfirmation;
+          ? openBaleNewConfirmation
+          : openBaleCompactConfirmation;
       const assertSemanticCurrent = createSelectedSemanticGuard(
         admission,
         () => captured.assertExecutionCurrent?.(original),
@@ -3246,7 +3246,7 @@ export function createTelegramCommandHandler<
       return issueSelectedOnce(assertSemanticCurrent, async () => {
         if (!reportCompleted()) return false;
         assertRecipientCurrent();
-        scheduleTelegramCommandEffect(
+        scheduleBaleCommandEffect(
           ctx,
           name,
           "confirmation-render",
@@ -3266,11 +3266,11 @@ export function createTelegramCommandHandler<
     /** Command-only producer execution; Routing must supply the captured plan and released exact-source authority. */
     prepareSelectedExtensionCommand(
       prepared: NonNullable<
-        Awaited<ReturnType<typeof prepareTelegramSelectedExtensionCommand>>
+        Awaited<ReturnType<typeof prepareBaleSelectedExtensionCommand>>
       >,
       messages: readonly TMessage[],
       ctx: TContext,
-      admission: TelegramSelectedCommandAdmission,
+      admission: BaleSelectedCommandAdmission,
     ): (() => Promise<void>) | undefined {
       const original = messages[0],
         captured = { ...deps },
@@ -3326,7 +3326,7 @@ export function createTelegramCommandHandler<
           assertRecipientCurrent();
           if (typeof text !== "string")
             throw new Error("Selected extension reply requires text.");
-          scheduleTelegramCommandEffect(
+          scheduleBaleCommandEffect(
             ctx,
             "extension",
             "selected-reply",
@@ -3356,10 +3356,10 @@ export function createTelegramCommandHandler<
     prepareSelectedCompactCommand: prepareSelectedConfirmation("compact"),
     /** Bare naming completes only after the exact dialog owner confirms current publication, not delivery alone. */
     prepareSelectedNameDialogCommand(
-      command: ParsedTelegramCommand,
+      command: ParsedBaleCommand,
       messages: readonly TMessage[],
       ctx: TContext,
-      admission: TelegramSelectedCommandAdmission,
+      admission: BaleSelectedCommandAdmission,
     ): (() => Promise<boolean>) | undefined {
       const original = messages[0],
         captured = { ...deps };
@@ -3401,10 +3401,10 @@ export function createTelegramCommandHandler<
     },
     /** Explicit naming retains source authority until its owner result; bare dialogs use their own publication leaf. */
     prepareSelectedNameCommand(
-      command: ParsedTelegramCommand,
+      command: ParsedBaleCommand,
       messages: readonly TMessage[],
       ctx: TContext,
-      admission: TelegramSelectedCommandAdmission,
+      admission: BaleSelectedCommandAdmission,
     ): (() => Promise<boolean>) | undefined {
       const original = messages[0],
         threadName = command.args.trim(),
@@ -3428,7 +3428,7 @@ export function createTelegramCommandHandler<
         true,
       );
       return issueSelectedOnce(assertSemanticCurrent, async () => {
-        await handleTelegramNameCommand(message, ctx, threadName, captured, {
+        await handleBaleNameCommand(message, ctx, threadName, captured, {
           assertSemanticCurrent,
           assertRecipientCurrent,
           reportCompleted,
@@ -3438,11 +3438,11 @@ export function createTelegramCommandHandler<
     },
     /** Genuine leader originals capture their warm queue owner before release; no hold copy or semantic-completion report. */
     prepareSelectedQueueCommand(
-      command: ParsedTelegramCommand,
+      command: ParsedBaleCommand,
       messages: readonly TMessage[],
       ctx: TContext,
-      admission: TelegramHeldCommandAdmission,
-    ): Omit<TelegramPreparedHeldCommand, "bindCarrier"> | undefined {
+      admission: BaleHeldCommandAdmission,
+    ): Omit<BalePreparedHeldCommand, "bindCarrier"> | undefined {
       const original = messages[0],
         parsed = { ...command };
       if (
@@ -3456,7 +3456,7 @@ export function createTelegramCommandHandler<
           Reflect.get(original, "text") ?? Reflect.get(original, "caption"),
         operator = deps.getAllowedUserId();
       const actual =
-        typeof raw === "string" ? parseTelegramCommand(raw) : undefined;
+        typeof raw === "string" ? parseBaleCommand(raw) : undefined;
       if (
         !isDeepStrictEqual(actual, parsed) ||
         typeof operator !== "number" ||
@@ -3471,8 +3471,8 @@ export function createTelegramCommandHandler<
         return undefined;
       const plan = getHeldPlan(parsed.name);
       if (!plan || plan.completion !== "queue-receipt") return undefined;
-      const source = inspectTelegramDeferredSource(original),
-        queue = prepareTelegramDeferredQueueAdmission(original);
+      const source = inspectBaleDeferredSource(original),
+        queue = prepareBaleDeferredQueueAdmission(original);
       if (!source || source.completionSha256 || !queue?.isCurrent())
         return undefined;
       const prepared = plan.prepare(ctx, undefined, parsed);
@@ -3495,14 +3495,14 @@ export function createTelegramCommandHandler<
             copySelectedMenuCarrier(original),
             originalProjection,
           ) ||
-          !isDeepStrictEqual(inspectTelegramDeferredSource(original), source)
+          !isDeepStrictEqual(inspectBaleDeferredSource(original), source)
         )
           throw new Error("Selected queue command source/owner changed.");
         assertSource.call(admission);
         prepared.captured.assertExecutionCurrent?.(original);
       };
       const execute = issueSelectedOnce(assertCurrent, async () => {
-        const release = acquireTelegramUpdateRouting(original);
+        const release = acquireBaleUpdateRouting(original);
         try {
           assertCurrent();
           return await prepared.run({
@@ -3582,23 +3582,23 @@ export function createTelegramCommandHandler<
         throw new Error("Held queue receipt original scope is unavailable.");
       return [scope];
     }) satisfies NonNullable<
-      TelegramUpdateWorkerRuntimeDeps<TContext>["beforeQueueReceiptPublished"]
+      BaleUpdateWorkerRuntimeDeps<TContext>["beforeQueueReceiptPublished"]
     >,
     /** Pure registry/effect availability; never reads a source or activates future recipient authority. */
     canPrepareHeldCommand(
       name: string,
-      effects?: TelegramHeldCommandEffects<TContext>,
+      effects?: BaleHeldCommandEffects<TContext>,
     ): boolean {
       return getHeldPlan(name, effects) !== undefined;
     },
     /** Compile one registry plan from a saved original; no admission, recipient activation or update-handler replay. */
     prepareHeldCommand(
       name: string,
-      readiness: TelegramLiveSourceCompletionReadiness,
+      readiness: BaleLiveSourceCompletionReadiness,
       ctx: TContext,
-      admission: TelegramHeldCommandAdmission,
-      effects?: TelegramHeldCommandEffects<TContext>,
-    ): TelegramPreparedHeldCommand | undefined {
+      admission: BaleHeldCommandAdmission,
+      effects?: BaleHeldCommandEffects<TContext>,
+    ): BalePreparedHeldCommand | undefined {
       const plan = getHeldPlan(name, effects);
       if (!plan) return undefined;
       const value = plan.template
@@ -3608,7 +3608,7 @@ export function createTelegramCommandHandler<
         value &&
         typeof value === "object" &&
         typeof Reflect.get(value, "text") === "string"
-          ? parseTelegramCommand(Reflect.get(value, "text"))
+          ? parseBaleCommand(Reflect.get(value, "text"))
           : undefined;
       const prepared = plan.prepare(ctx, effects, command);
       if (!prepared) return undefined;
@@ -3625,12 +3625,12 @@ export function createTelegramCommandHandler<
     },
     /** Warm menu-only issuance; completion reporting is not a receipt or a durable removal ACK. */
     prepareSelectedMenuCommand(
-      command: ParsedTelegramCommand,
+      command: ParsedBaleCommand,
       messages: readonly TMessage[],
       ctx: TContext,
-      admission: TelegramSelectedCommandAdmission,
+      admission: BaleSelectedCommandAdmission,
     ): (() => Promise<boolean>) | undefined {
-      const action = buildTelegramCommandAction(command.name);
+      const action = buildBaleCommandAction(command.name);
       if (
         messages.length !== 1 ||
         !messages[0] ||
@@ -3691,18 +3691,18 @@ export function createTelegramCommandHandler<
           if (!reportCompleted.call(admission)) return false;
           if (beforeEffects) await beforeEffects();
           assertRecipientCurrent();
-          return handleTelegramCommandRuntime(name, message, ctx, recipientDeps, args);
+          return handleBaleCommandRuntime(name, message, ctx, recipientDeps, args);
         },
       );
     },
   });
 }
 
-export function createTelegramCommandOrPromptDispatcher<TMessage, TContext>(
-  deps: TelegramCommandOrPromptDispatcherDeps<TMessage, TContext>,
+export function createBaleCommandOrPromptDispatcher<TMessage, TContext>(
+  deps: BaleCommandOrPromptDispatcherDeps<TMessage, TContext>,
 ) {
   const dispatchPromptTemplate = async (
-    command: ParsedTelegramCommand | undefined,
+    command: ParsedBaleCommand | undefined,
     messages: TMessage[],
     ctx: TContext,
   ): Promise<boolean> => {
@@ -3727,7 +3727,7 @@ export function createTelegramCommandOrPromptDispatcher<TMessage, TContext>(
       deps.assertExecutionCurrent?.(firstMessage);
       return;
     }
-    const command = parseTelegramCommand(deps.extractRawText(messages));
+    const command = parseBaleCommand(deps.extractRawText(messages));
     const handled = await deps.handleCommand(
       command?.name,
       firstMessage,
@@ -3751,12 +3751,12 @@ export function createTelegramCommandOrPromptDispatcher<TMessage, TContext>(
   };
 }
 
-function scheduleTelegramCommandEffect<TContext>(
+function scheduleBaleCommandEffect<TContext>(
   ctx: TContext,
   command: string,
   phase: string,
-  deps: TelegramRuntimeEventRecorderPort &
-    TelegramCommandEffectWorkPort & {
+  deps: BaleRuntimeEventRecorderPort &
+    BaleCommandEffectWorkPort & {
       isContextActive?: (ctx: TContext) => boolean;
     },
   effect: () => Promise<void>,
@@ -3777,11 +3777,11 @@ function scheduleTelegramCommandEffect<TContext>(
       // A failed started effect cannot prove non-issuance; never turn its uncertainty into known idle.
       if (
         started &&
-        !(error instanceof TelegramApiAuthorityError && !error.requestIssued)
+        !(error instanceof BaleApiAuthorityError && !error.requestIssued)
       )
         outcome = "unconfirmed";
       try {
-        deps.recordRuntimeEvent?.("telegram-command", error, {
+        deps.recordRuntimeEvent?.("bale-command", error, {
           command,
           phase,
         });
@@ -3792,15 +3792,15 @@ function scheduleTelegramCommandEffect<TContext>(
     .finally(() => work?.settle(outcome));
 }
 
-async function handleTelegramHelpCommand<
-  TMessage extends TelegramCommandRuntimeMessage,
+async function handleBaleHelpCommand<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
 >(
   commandName: string,
   message: TMessage,
   ctx: TContext,
   deps: Pick<
-    TelegramCommandRuntimeDeps<TMessage, TContext>,
+    BaleCommandRuntimeDeps<TMessage, TContext>,
     | "assertExecutionCurrent"
     | "getAllowedUserId"
     | "persistAllowedUserId"
@@ -3826,9 +3826,9 @@ async function handleTelegramHelpCommand<
   admission?.assertSemanticCurrent();
   if (
     message.from?.id !== undefined &&
-    canPairTelegramUserFromCommandMessage(message)
+    canPairBaleUserFromCommandMessage(message)
   ) {
-    const allowed = await pairTelegramUserIfNeeded(message.from.id, {
+    const allowed = await pairBaleUserIfNeeded(message.from.id, {
       allowedUserId: deps.getAllowedUserId(),
       ctx: undefined,
       persistAllowedUserId: deps.persistAllowedUserId,
@@ -3850,7 +3850,7 @@ async function handleTelegramHelpCommand<
     assertAuthority: admission.assertRecipientCurrent,
   };
   const isContextActive = () => deps.isContextActive?.(ctx) !== false;
-  scheduleTelegramCommandEffect(
+  scheduleBaleCommandEffect(
     ctx,
     commandName,
     "menu-render",
@@ -3876,7 +3876,7 @@ async function handleTelegramHelpCommand<
     },
     assertEffectCurrent,
   );
-  scheduleTelegramCommandEffect(
+  scheduleBaleCommandEffect(
     ctx,
     commandName,
     "bot-command-sync",
@@ -3887,14 +3887,14 @@ async function handleTelegramHelpCommand<
   return true;
 }
 
-async function handleTelegramNameCommand<
-  TMessage extends TelegramCommandRuntimeMessage,
+async function handleBaleNameCommand<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
 >(
   message: TMessage,
   ctx: TContext,
   requestedName: string,
-  deps: TelegramCommandRuntimeDeps<TMessage, TContext>,
+  deps: BaleCommandRuntimeDeps<TMessage, TContext>,
   admission?: {
     assertSemanticCurrent(): void;
     assertRecipientCurrent(): void;
@@ -3924,13 +3924,13 @@ async function handleTelegramNameCommand<
       await deps.openThreadNameDialog(message, ctx);
     else
       await reply(
-        formatTelegramInformationHeading("🏷️", "Usage: /name Navigator"),
+        formatBaleInformationHeading("🏷️", "Usage: /name Navigator"),
       );
     return;
   }
   if (/^[A-Z]$/.test(threadName) && deps.resetCurrentThreadName) {
     admission?.assertSemanticCurrent();
-    const target = getTelegramCommandMessageTarget(message);
+    const target = getBaleCommandMessageTarget(message);
     const result = admission
       ? await deps.resetCurrentThreadName(target, {
           assertAuthority: admission.assertSemanticCurrent,
@@ -3939,10 +3939,10 @@ async function handleTelegramNameCommand<
     admission?.assertSemanticCurrent();
     await reply(
       result.ok && !result.message
-        ? formatTelegramAutomaticThreadDisplayNameRestoredHeading(
+        ? formatBaleAutomaticThreadDisplayNameRestoredHeading(
             result.threadName ?? threadName,
           )
-        : formatTelegramInformationHeading(
+        : formatBaleInformationHeading(
             result.ok ? "✅" : "⚠️",
             result.message ?? "Thread display name reset failed.",
           ),
@@ -3953,12 +3953,12 @@ async function handleTelegramNameCommand<
   const validationError = deps.validateThreadName?.(threadName);
   admission?.assertSemanticCurrent();
   if (validationError) {
-    await reply(formatTelegramInvalidInstanceName(validationError));
+    await reply(formatBaleInvalidInstanceName(validationError));
     return;
   }
   if (!deps.renameCurrentThread) {
     await reply(
-      formatTelegramInformationHeading(
+      formatBaleInformationHeading(
         "🚫",
         "Thread display naming is unavailable.",
       ),
@@ -3967,7 +3967,7 @@ async function handleTelegramNameCommand<
   }
   if (admission) admission.assertSemanticCurrent();
   else deps.assertExecutionCurrent?.(message);
-  const target = getTelegramCommandMessageTarget(message);
+  const target = getBaleCommandMessageTarget(message);
   const result = admission
     ? await deps.renameCurrentThread(target, threadName, {
         assertAuthority: admission.assertSemanticCurrent,
@@ -3977,24 +3977,24 @@ async function handleTelegramNameCommand<
   else deps.assertExecutionCurrent?.(message);
   await reply(
     result.ok && !result.message
-      ? formatTelegramThreadDisplayNameSavedHeading(
+      ? formatBaleThreadDisplayNameSavedHeading(
           result.threadName ?? threadName,
         )
-      : formatTelegramInformationHeading(
+      : formatBaleInformationHeading(
           result.ok ? "✅" : "⚠️",
           result.message ?? "Thread display name update failed.",
         ),
   );
 }
 
-async function handleTelegramCommandRuntime<
-  TMessage extends TelegramCommandRuntimeMessage,
+async function handleBaleCommandRuntime<
+  TMessage extends BaleCommandRuntimeMessage,
   TContext,
 >(
   commandName: string | undefined,
   message: TMessage,
   ctx: TContext,
-  deps: TelegramCommandRuntimeDeps<TMessage, TContext>,
+  deps: BaleCommandRuntimeDeps<TMessage, TContext>,
   commandArgs = "",
 ): Promise<boolean> {
   deps.assertExecutionCurrent?.(message);
@@ -4009,19 +4009,19 @@ async function handleTelegramCommandRuntime<
     };
   const updateStatusFor = (commandCtx: TContext) => () =>
     deps.updateStatus(commandCtx);
-  return executeTelegramCommandAction(
-    buildTelegramCommandAction(commandName),
+  return executeBaleCommandAction(
+    buildBaleCommandAction(commandName),
     message,
     ctx,
     {
       handleStop: async (nextMessage, commandCtx) => {
-        await handleTelegramStopCommand({
+        await handleBaleStopCommand({
           hasAbortHandler: deps.hasAbortHandler,
           clearPendingModelSwitch: deps.clearPendingModelSwitch,
           cancelNextTransitionAnnouncements:
             deps.cancelNextTransitionAnnouncements,
-          clearQueuedTelegramItems: () =>
-            deps.clearQueuedTelegramItems(commandCtx),
+          clearQueuedBaleItems: () =>
+            deps.clearQueuedBaleItems(commandCtx),
           setFoldQueuedPromptsIntoHistory: deps.setFoldQueuedPromptsIntoHistory,
           abortCurrentTurn: deps.abortCurrentTurn,
           updateStatus: updateStatusFor(commandCtx),
@@ -4029,11 +4029,11 @@ async function handleTelegramCommandRuntime<
         });
       },
       handleName: (nextMessage, commandCtx, requestedName) =>
-        handleTelegramNameCommand(nextMessage, commandCtx, requestedName, deps),
+        handleBaleNameCommand(nextMessage, commandCtx, requestedName, deps),
       handleAbort: async (nextMessage, commandCtx) => {
-        await handleTelegramAbortCommand({
+        await handleBaleAbortCommand({
           hasAbortHandler: deps.hasAbortHandler,
-          hasActiveTelegramTurn: deps.hasActiveTelegramTurn,
+          hasActiveBaleTurn: deps.hasActiveBaleTurn,
           clearPendingModelSwitch: deps.clearPendingModelSwitch,
           cancelNextTransitionAnnouncements:
             deps.cancelNextTransitionAnnouncements,
@@ -4044,14 +4044,14 @@ async function handleTelegramCommandRuntime<
         });
       },
       handleNext: async (nextMessage, commandCtx) => {
-        await handleTelegramNextCommand({
+        await handleBaleNextCommand({
           hasAbortHandler: deps.hasAbortHandler,
           isIdle: () => deps.isIdle(commandCtx),
-          hasQueuedItems: deps.hasQueuedTelegramItems,
+          hasQueuedItems: deps.hasQueuedBaleItems,
           clearPendingModelSwitch: deps.clearPendingModelSwitch,
           abortCurrentTurn: deps.abortCurrentTurn,
           dispatchNextQueuedTurn: () =>
-            deps.dispatchNextQueuedTelegramTurn(commandCtx),
+            deps.dispatchNextQueuedBaleTurn(commandCtx),
           requestNextDispatchAnnouncement: deps.requestNextDispatchAnnouncement,
           markActiveTurnNextAbortAnnouncement:
             deps.markActiveTurnNextAbortAnnouncement,
@@ -4063,12 +4063,12 @@ async function handleTelegramCommandRuntime<
         });
       },
       handleContinue: async (nextMessage, commandCtx) => {
-        await handleTelegramContinueCommand(nextMessage, commandCtx, {
+        await handleBaleContinueCommand(nextMessage, commandCtx, {
           enqueueContinueTurn: deps.enqueueContinueTurn,
         });
       },
       handleQueue: async (nextMessage, commandCtx) => {
-        scheduleTelegramCommandEffect(
+        scheduleBaleCommandEffect(
           commandCtx,
           "queue",
           "menu-render",
@@ -4079,18 +4079,18 @@ async function handleTelegramCommandRuntime<
       },
       handleNew: async (nextMessage, commandCtx) => {
         if (deps.sendInteractiveMessage) {
-          await openTelegramNewConfirmation(
-            getTelegramCommandMessageTarget(nextMessage),
+          await openBaleNewConfirmation(
+            getBaleCommandMessageTarget(nextMessage),
             { sendInteractiveMessage: deps.sendInteractiveMessage },
           );
           return;
         }
-        await handleTelegramNewCommand({
+        await handleBaleNewCommand({
           isIdle: () => deps.isIdle(commandCtx),
           hasPendingMessages: () => deps.hasPendingMessages(commandCtx),
-          hasActiveTelegramTurn: deps.hasActiveTelegramTurn,
+          hasActiveBaleTurn: deps.hasActiveBaleTurn,
           hasDispatchPending: deps.hasDispatchPending,
-          hasQueuedTelegramItems: deps.hasQueuedTelegramItems,
+          hasQueuedBaleItems: deps.hasQueuedBaleItems,
           isCompactionInProgress: deps.isCompactionInProgress,
           requestNewSession: deps.requestNewSession
             ? () => deps.requestNewSession!(nextMessage)
@@ -4101,27 +4101,27 @@ async function handleTelegramCommandRuntime<
       },
       handleCompact: async (nextMessage, commandCtx) => {
         if (deps.sendInteractiveMessage) {
-          await openTelegramCompactConfirmation(
-            getTelegramCommandMessageTarget(nextMessage),
+          await openBaleCompactConfirmation(
+            getBaleCommandMessageTarget(nextMessage),
             { sendInteractiveMessage: deps.sendInteractiveMessage },
           );
           return;
         }
-        await handleTelegramCompactCommand({
+        await handleBaleCompactCommand({
           isIdle: () => deps.isIdle(commandCtx),
           hasPendingMessages: () => deps.hasPendingMessages(commandCtx),
-          hasActiveTelegramTurn: deps.hasActiveTelegramTurn,
+          hasActiveBaleTurn: deps.hasActiveBaleTurn,
           hasDispatchPending: deps.hasDispatchPending,
-          hasQueuedTelegramItems: deps.hasQueuedTelegramItems,
+          hasQueuedBaleItems: deps.hasQueuedBaleItems,
           isCompactionInProgress: deps.isCompactionInProgress,
           setCompactionInProgress: deps.setCompactionInProgress,
           updateStatus: updateStatusFor(commandCtx),
-          dispatchNextQueuedTelegramTurn: () =>
-            deps.dispatchNextQueuedTelegramTurn(commandCtx),
-          requestDeferredDispatchNextQueuedTelegramTurn:
-            deps.requestDeferredDispatchNextQueuedTelegramTurn
+          dispatchNextQueuedBaleTurn: () =>
+            deps.dispatchNextQueuedBaleTurn(commandCtx),
+          requestDeferredDispatchNextQueuedBaleTurn:
+            deps.requestDeferredDispatchNextQueuedBaleTurn
               ? (dispatch) =>
-                  deps.requestDeferredDispatchNextQueuedTelegramTurn?.(() =>
+                  deps.requestDeferredDispatchNextQueuedBaleTurn?.(() =>
                     dispatch(),
                   )
               : undefined,
@@ -4129,7 +4129,7 @@ async function handleTelegramCommandRuntime<
           startTypingLoop: deps.startTypingLoop
             ? () =>
                 deps.startTypingLoop?.(commandCtx, nextMessage.chat.id, {
-                  target: getTelegramCommandMessageTarget(nextMessage),
+                  target: getBaleCommandMessageTarget(nextMessage),
                 })
             : undefined,
           stopTypingLoop: deps.stopTypingLoop,
@@ -4138,7 +4138,7 @@ async function handleTelegramCommandRuntime<
         });
       },
       handleStatus: async (nextMessage, commandCtx) => {
-        scheduleTelegramCommandEffect(
+        scheduleBaleCommandEffect(
           commandCtx,
           "status",
           "menu-render",
@@ -4148,13 +4148,13 @@ async function handleTelegramCommandRuntime<
         );
       },
       handleModel: async (nextMessage, commandCtx) => {
-        scheduleTelegramCommandEffect(
+        scheduleBaleCommandEffect(
           commandCtx,
           "model",
           "menu-render",
           deps,
           () =>
-            handleTelegramModelCommand<TContext>({
+            handleBaleModelCommand<TContext>({
               ctx: commandCtx,
               openModelMenu: (controlCtx) =>
                 deps.openModelMenu(nextMessage, controlCtx),
@@ -4163,7 +4163,7 @@ async function handleTelegramCommandRuntime<
         );
       },
       handleThinking: async (nextMessage, commandCtx) => {
-        scheduleTelegramCommandEffect(
+        scheduleBaleCommandEffect(
           commandCtx,
           "thinking",
           "menu-render",
@@ -4174,7 +4174,7 @@ async function handleTelegramCommandRuntime<
       },
       handleSettings: deps.openSettingsMenu
         ? async (nextMessage, commandCtx) => {
-            scheduleTelegramCommandEffect(
+            scheduleBaleCommandEffect(
               commandCtx,
               "settings",
               "menu-render",
@@ -4185,7 +4185,7 @@ async function handleTelegramCommandRuntime<
           }
         : undefined,
       handleHelp: async (nextMessage, nextCommandName, commandCtx) => {
-        await handleTelegramHelpCommand(
+        await handleBaleHelpCommand(
           nextCommandName,
           nextMessage,
           commandCtx,
@@ -4197,16 +4197,16 @@ async function handleTelegramCommandRuntime<
   );
 }
 
-export const TELEGRAM_CONNECT_COMMAND_NAME = "telegram-connect";
-export const TELEGRAM_INTERNAL_COMMAND_FLAG = "--internal";
-export const TELEGRAM_INTERNAL_MANUAL_USE_MESSAGE =
-  "This internal Telegram action cannot be run manually.";
+export const BALE_CONNECT_COMMAND_NAME = "bale-connect";
+export const BALE_INTERNAL_COMMAND_FLAG = "--internal";
+export const BALE_INTERNAL_MANUAL_USE_MESSAGE =
+  "This internal Bale action cannot be run manually.";
 
-function delayTelegramSessionAction(delayMs: number): Promise<void> {
+function delayBaleSessionAction(delayMs: number): Promise<void> {
   return new Promise<void>((resolve) => setTimeout(resolve, delayMs));
 }
 
-export interface TelegramSessionActionRuntimeDeps {
+export interface BaleSessionActionRuntimeDeps {
   sendUserMessage: Pi.ExtensionAPI["sendUserMessage"];
   notifyResult: (
     target: { chatId: number; threadId?: number; messageId: number },
@@ -4220,13 +4220,13 @@ export interface TelegramSessionActionRuntimeDeps {
   recordRuntimeEvent?: (category: string, error: unknown) => void;
 }
 
-export interface TelegramSessionReplacementSettlementDeps {
-  getIntent: () => Promise<TelegramSessionReplacementIntent | undefined>;
-  hasSuccessorContinuity: (intent: TelegramSessionReplacementIntent) => boolean;
+export interface BaleSessionReplacementSettlementDeps {
+  getIntent: () => Promise<BaleSessionReplacementIntent | undefined>;
+  hasSuccessorContinuity: (intent: BaleSessionReplacementIntent) => boolean;
   editSuccess: (
-    intent: TelegramSessionReplacementIntent,
+    intent: BaleSessionReplacementIntent,
   ) => Promise<{ ok: boolean; retryable?: boolean; message?: string }>;
-  clearIntent: (intent: TelegramSessionReplacementIntent) => Promise<boolean>;
+  clearIntent: (intent: BaleSessionReplacementIntent) => Promise<boolean>;
   profileName: string | undefined;
   cwd: string;
   sessionId: string;
@@ -4235,8 +4235,8 @@ export interface TelegramSessionReplacementSettlementDeps {
   isCurrent?: () => boolean;
 }
 
-export async function settleTelegramSessionReplacement(
-  deps: TelegramSessionReplacementSettlementDeps,
+export async function settleBaleSessionReplacement(
+  deps: BaleSessionReplacementSettlementDeps,
 ): Promise<"none" | "settled" | "expired" | "failed" | "stale"> {
   const now = deps.now ?? Date.now;
   const sleep =
@@ -4264,10 +4264,10 @@ export async function settleTelegramSessionReplacement(
   return "stale";
 }
 
-function createTelegramSessionReplacementSettlementRuntime<TContext>(deps: {
+function createBaleSessionReplacementSettlementRuntime<TContext>(deps: {
   resolve: (
     ctx: TContext,
-  ) => TelegramSessionReplacementSettlementDeps | undefined;
+  ) => BaleSessionReplacementSettlementDeps | undefined;
   onResult?: (
     result: "none" | "settled" | "expired" | "failed" | "stale",
   ) => void;
@@ -4279,7 +4279,7 @@ function createTelegramSessionReplacementSettlementRuntime<TContext>(deps: {
       const currentGeneration = ++generation;
       const resolved = deps.resolve(ctx);
       if (!resolved) return;
-      void settleTelegramSessionReplacement({
+      void settleBaleSessionReplacement({
         ...resolved,
         isCurrent: () =>
           currentGeneration === generation && resolved.isCurrent?.() !== false,
@@ -4288,7 +4288,7 @@ function createTelegramSessionReplacementSettlementRuntime<TContext>(deps: {
   };
 }
 
-export interface TelegramSessionActionAssemblyDeps {
+export interface BaleSessionActionAssemblyDeps {
   sendUserMessage: Pi.ExtensionAPI["sendUserMessage"];
   store: {
     load: () => Promise<void>;
@@ -4307,13 +4307,13 @@ export interface TelegramSessionActionAssemblyDeps {
         }
       | undefined;
     getSessionReplacementIntent: () =>
-      TelegramSessionReplacementIntent | undefined;
+      BaleSessionReplacementIntent | undefined;
     commitSessionReplacementIntent: (
-      intent: TelegramSessionReplacementIntent,
+      intent: BaleSessionReplacementIntent,
       isCurrent: () => boolean,
     ) => Promise<boolean>;
     removeSessionReplacementIntent: (
-      intent: TelegramSessionReplacementIntent,
+      intent: BaleSessionReplacementIntent,
       isCurrent: () => boolean,
     ) => Promise<boolean>;
   };
@@ -4329,7 +4329,7 @@ export interface TelegramSessionActionAssemblyDeps {
     isRegisteredFor: (target: { chatId: number; threadId?: number }) => boolean;
     requestSessionReplacement: (
       operation: "publish" | "settle",
-      intent: TelegramSessionReplacementIntent,
+      intent: BaleSessionReplacementIntent,
     ) => Promise<boolean>;
   };
   sendResult: (
@@ -4341,10 +4341,10 @@ export interface TelegramSessionActionAssemblyDeps {
   recordRuntimeEvent?: (category: string, error: unknown) => void;
 }
 
-export function createTelegramSessionActionAssembly(
-  deps: TelegramSessionActionAssemblyDeps,
+export function createBaleSessionActionAssembly(
+  deps: BaleSessionActionAssemblyDeps,
 ): {
-  action: TelegramSessionActionRuntime;
+  action: BaleSessionActionRuntime;
   settlement: { onSessionStart: (ctx: Pi.ExtensionContext) => void };
 } {
   const now = deps.now ?? Date.now;
@@ -4365,11 +4365,11 @@ export function createTelegramSessionActionAssembly(
       const delivery = await deps.sendResult(target, text);
       if (delivery.ok) return;
       if (!delivery.retryable) break;
-      await delayTelegramSessionAction(100);
+      await delayBaleSessionAction(100);
     } while (now() < deadline);
-    report(new Error("Telegram new-session result delivery failed."));
+    report(new Error("Bale new-session result delivery failed."));
   };
-  const action = createTelegramSessionActionRuntime({
+  const action = createBaleSessionActionRuntime({
     sendUserMessage: deps.sendUserMessage,
     notifyResult(target, result) {
       return sendTerminalResult(target, result);
@@ -4393,10 +4393,10 @@ export function createTelegramSessionActionAssembly(
         typeof target.threadId === "number" &&
         (!binding || binding.cwd !== ctx.cwd || binding.sessionId !== sessionId)
       ) {
-        throw new Error("Telegram session replacement binding is unavailable.");
+        throw new Error("Bale session replacement binding is unavailable.");
       }
       const createdAtMs = now();
-      const intent: TelegramSessionReplacementIntent = {
+      const intent: BaleSessionReplacementIntent = {
         continuity: binding ? "workspace-thread" : "classic-chat",
         cwd: binding?.cwd ?? ctx.cwd,
         profileName: deps.getProfileName() ?? "default",
@@ -4421,14 +4421,14 @@ export function createTelegramSessionActionAssembly(
             )))
       ) {
         throw new Error(
-          "Telegram session replacement intent was not persisted.",
+          "Bale session replacement intent was not persisted.",
         );
       }
     },
     recordRuntimeEvent: deps.recordRuntimeEvent,
   });
   const settlement =
-    createTelegramSessionReplacementSettlementRuntime<Pi.ExtensionContext>({
+    createBaleSessionReplacementSettlementRuntime<Pi.ExtensionContext>({
       resolve(ctx) {
         const sessionId = ctx.sessionManager?.getSessionId?.();
         if (!sessionId) return undefined;
@@ -4483,7 +4483,7 @@ export function createTelegramSessionActionAssembly(
         if (result === "expired" || result === "failed") {
           report(
             new Error(
-              `Telegram session replacement successor settlement ${result}.`,
+              `Bale session replacement successor settlement ${result}.`,
             ),
           );
         }
@@ -4493,14 +4493,14 @@ export function createTelegramSessionActionAssembly(
   return { action, settlement };
 }
 
-type TelegramPendingInternalAction = {
+type BalePendingInternalAction = {
   kind: "replace-session";
   token: string;
   updateId: number;
   target: { chatId: number; threadId?: number; messageId: number };
 };
 
-export interface TelegramSessionActionRuntime {
+export interface BaleSessionActionRuntime {
   handleInternalAction: (
     args: string,
     ctx: Pi.ExtensionCommandContext,
@@ -4513,9 +4513,9 @@ export interface TelegramSessionActionRuntime {
   hasPending: () => boolean;
 }
 
-export function createTelegramSessionActionRuntime(
-  deps: TelegramSessionActionRuntimeDeps,
-): TelegramSessionActionRuntime {
+export function createBaleSessionActionRuntime(
+  deps: BaleSessionActionRuntimeDeps,
+): BaleSessionActionRuntime {
   let pendingUpdateId: number | undefined;
   let pendingTarget:
     | {
@@ -4524,7 +4524,7 @@ export function createTelegramSessionActionRuntime(
         messageId: number;
       }
     | undefined;
-  let pendingAction: TelegramPendingInternalAction | undefined;
+  let pendingAction: BalePendingInternalAction | undefined;
 
   const reportFailure = (error: unknown): void => {
     try {
@@ -4542,7 +4542,7 @@ export function createTelegramSessionActionRuntime(
         !action || operation !== "new" ||
         token !== action.token || extra.length !== 0
       ) {
-        ctx.ui.notify(TELEGRAM_INTERNAL_MANUAL_USE_MESSAGE, "warning");
+        ctx.ui.notify(BALE_INTERNAL_MANUAL_USE_MESSAGE, "warning");
         return;
       }
       pendingAction = undefined;
@@ -4582,7 +4582,7 @@ export function createTelegramSessionActionRuntime(
       void Promise.resolve()
         .then(() =>
           deps.sendUserMessage(
-            `/${TELEGRAM_CONNECT_COMMAND_NAME} ${TELEGRAM_INTERNAL_COMMAND_FLAG} new ${token}`,
+            `/${BALE_CONNECT_COMMAND_NAME} ${BALE_INTERNAL_COMMAND_FLAG} new ${token}`,
             { expandPromptTemplates: true },
           ),
         )

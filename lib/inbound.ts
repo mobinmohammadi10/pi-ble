@@ -1,6 +1,6 @@
 /**
- * Telegram inbound handler pipeline
- * Zones: telegram inbound, command templates, prompt preparation
+ * Bale inbound handler pipeline
+ * Zones: bale inbound, command templates, prompt preparation
  * Owns MIME/type matching, command-template execution, fallback handling, and prompt injection before prompt enqueueing
  */
 
@@ -19,21 +19,21 @@ import {
   type CommandTemplateConfig,
   type CommandTemplateObjectConfig,
 } from "./command-templates.ts";
-import { getTelegramVoiceTranscriptionProviders } from "./voice.ts";
+import { getBaleVoiceTranscriptionProviders } from "./voice.ts";
 
 const DEFAULT_INBOUND_HANDLER_TIMEOUT_MS = 120_000;
-const INBOUND_HANDLER_REGISTRY_KEY = "__piTelegramInboundHandlers__";
+const INBOUND_HANDLER_REGISTRY_KEY = "__piBaleInboundHandlers__";
 const MAX_INBOUND_HANDLER_OUTPUT_LENGTH = 24_000;
 const MAX_INBOUND_HANDLER_FAILURE_STREAM_LENGTH = 4_000;
 
-type TelegramInboundCommandTemplateConfig =
+type BaleInboundCommandTemplateConfig =
   string | CommandTemplateObjectConfig;
 
-export interface TelegramInboundHandlerConfig {
+export interface BaleInboundHandlerConfig {
   match?: string | string[];
   mime?: string | string[];
   type?: string | string[];
-  template?: string | TelegramInboundCommandTemplateConfig[];
+  template?: string | BaleInboundCommandTemplateConfig[];
   /** Falsy skips this handler so selection continues with the next match. */
   when?: CommandTemplateObjectConfig["when"];
   args?: string[];
@@ -43,7 +43,7 @@ export interface TelegramInboundHandlerConfig {
   recover?: CommandTemplateObjectConfig["recover"];
 }
 
-export interface TelegramInboundHandlerFile {
+export interface BaleInboundHandlerFile {
   path: string;
   fileName?: string;
   mimeType?: string;
@@ -51,22 +51,22 @@ export interface TelegramInboundHandlerFile {
   isImage?: boolean;
 }
 
-export interface TelegramInboundHandlerOutput {
-  file: TelegramInboundHandlerFile;
+export interface BaleInboundHandlerOutput {
+  file: BaleInboundHandlerFile;
   output: string;
-  handler: TelegramInboundHandlerConfig;
+  handler: BaleInboundHandlerConfig;
 }
 
-export interface TelegramInboundHandlerProcessResult<
-  TFile extends TelegramInboundHandlerFile = TelegramInboundHandlerFile,
+export interface BaleInboundHandlerProcessResult<
+  TFile extends BaleInboundHandlerFile = BaleInboundHandlerFile,
 > {
   rawText: string;
   promptFiles: TFile[];
   handlerOutputs: string[];
-  handledFiles: TelegramInboundHandlerOutput[];
+  handledFiles: BaleInboundHandlerOutput[];
 }
 
-export interface TelegramInboundHandlerExecOptions {
+export interface BaleInboundHandlerExecOptions {
   cwd?: string;
   timeout?: number;
   signal?: AbortSignal;
@@ -75,20 +75,20 @@ export interface TelegramInboundHandlerExecOptions {
   recover?: () => Promise<void>;
 }
 
-export interface TelegramInboundHandlerExecResult {
+export interface BaleInboundHandlerExecResult {
   stdout: string;
   stderr: string;
   code: number;
   killed: boolean;
 }
 
-export interface TelegramInboundHandlerRuntimeDeps<TContext> {
-  getHandlers: () => TelegramInboundHandlerConfig[] | undefined;
+export interface BaleInboundHandlerRuntimeDeps<TContext> {
+  getHandlers: () => BaleInboundHandlerConfig[] | undefined;
   execCommand: (
     command: string,
     args: string[],
-    options?: TelegramInboundHandlerExecOptions,
-  ) => Promise<TelegramInboundHandlerExecResult>;
+    options?: BaleInboundHandlerExecOptions,
+  ) => Promise<BaleInboundHandlerExecResult>;
   getCwd: (ctx: TContext) => string;
   recordRuntimeEvent?: (
     category: string,
@@ -97,31 +97,31 @@ export interface TelegramInboundHandlerRuntimeDeps<TContext> {
   ) => void;
 }
 
-export interface TelegramInboundHandlerRuntime<TContext> {
-  process: <TFile extends TelegramInboundHandlerFile>(
+export interface BaleInboundHandlerRuntime<TContext> {
+  process: <TFile extends BaleInboundHandlerFile>(
     files: TFile[],
     rawText: string,
     ctx: TContext,
-  ) => Promise<TelegramInboundHandlerProcessResult<TFile>>;
+  ) => Promise<BaleInboundHandlerProcessResult<TFile>>;
 }
 
-export type TelegramInboundProgrammaticHandlerResult =
+export type BaleInboundProgrammaticHandlerResult =
   string | { text: string } | undefined;
 
-export interface TelegramInboundProgrammaticHandlerInput {
+export interface BaleInboundProgrammaticHandlerInput {
   kind: string;
   text?: string;
-  file?: TelegramInboundHandlerFile;
+  file?: BaleInboundHandlerFile;
   mimeType?: string;
 }
 
-export type TelegramInboundProgrammaticHandler = (
-  input: TelegramInboundProgrammaticHandlerInput,
+export type BaleInboundProgrammaticHandler = (
+  input: BaleInboundProgrammaticHandlerInput,
   options?: { cwd?: string },
-) => Promise<TelegramInboundProgrammaticHandlerResult>;
+) => Promise<BaleInboundProgrammaticHandlerResult>;
 
-export interface TelegramInboundHandlerRegistry {
-  handlers: Map<string, TelegramInboundProgrammaticHandler[]>;
+export interface BaleInboundHandlerRegistry {
+  handlers: Map<string, BaleInboundProgrammaticHandler[]>;
 }
 
 interface InboundHandlerInvocation {
@@ -131,7 +131,7 @@ interface InboundHandlerInvocation {
 
 const BUILT_IN_TEXT_ATTACHMENT_MAX_BYTES = 1_000_000;
 
-function getOrCreateInboundHandlerRegistry(): TelegramInboundHandlerRegistry {
+function getOrCreateInboundHandlerRegistry(): BaleInboundHandlerRegistry {
   const existing = (globalThis as Record<string, unknown>)[
     INBOUND_HANDLER_REGISTRY_KEY
   ];
@@ -142,9 +142,9 @@ function getOrCreateInboundHandlerRegistry(): TelegramInboundHandlerRegistry {
     "handlers" in existing &&
     existing.handlers instanceof Map
   ) {
-    return existing as TelegramInboundHandlerRegistry;
+    return existing as BaleInboundHandlerRegistry;
   }
-  const registry: TelegramInboundHandlerRegistry = {
+  const registry: BaleInboundHandlerRegistry = {
     handlers: new Map(),
   };
   (globalThis as Record<string, unknown>)[INBOUND_HANDLER_REGISTRY_KEY] =
@@ -152,9 +152,9 @@ function getOrCreateInboundHandlerRegistry(): TelegramInboundHandlerRegistry {
   return registry;
 }
 
-export function registerTelegramInboundHandler(
+export function registerBaleInboundHandler(
   kind: string,
-  handler: TelegramInboundProgrammaticHandler,
+  handler: BaleInboundProgrammaticHandler,
 ): () => void {
   const normalizedKind = kind.trim() || "*";
   const registry = getOrCreateInboundHandlerRegistry();
@@ -171,9 +171,9 @@ export function registerTelegramInboundHandler(
   };
 }
 
-function getTelegramInboundProgrammaticHandlers(
+function getBaleInboundProgrammaticHandlers(
   kind: string,
-): TelegramInboundProgrammaticHandler[] {
+): BaleInboundProgrammaticHandler[] {
   const registry = getOrCreateInboundHandlerRegistry();
   return [
     ...(registry.handlers.get(kind) ?? []),
@@ -181,32 +181,32 @@ function getTelegramInboundProgrammaticHandlers(
   ];
 }
 
-export function clearTelegramInboundHandlers(): void {
+export function clearBaleInboundHandlers(): void {
   getOrCreateInboundHandlerRegistry().handlers.clear();
 }
 
-function truncateTelegramInboundText(text: string, maxLength: number): string {
+function truncateBaleInboundText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength).trimEnd()}… [truncated ${text.length - maxLength} chars]`;
 }
 
-function truncateTelegramInboundOutput(text: string): string {
-  return truncateTelegramInboundText(text, MAX_INBOUND_HANDLER_OUTPUT_LENGTH);
+function truncateBaleInboundOutput(text: string): string {
+  return truncateBaleInboundText(text, MAX_INBOUND_HANDLER_OUTPUT_LENGTH);
 }
 
-function truncateTelegramInboundFailureStream(text: string): string {
-  return truncateTelegramInboundText(
+function truncateBaleInboundFailureStream(text: string): string {
+  return truncateBaleInboundText(
     text.trimEnd(),
     MAX_INBOUND_HANDLER_FAILURE_STREAM_LENGTH,
   );
 }
 
 function normalizeInboundProgrammaticHandlerText(
-  result: TelegramInboundProgrammaticHandlerResult,
+  result: BaleInboundProgrammaticHandlerResult,
 ): string | undefined {
   const text = typeof result === "string" ? result : result?.text;
   const normalized = text?.trim();
-  return normalized ? truncateTelegramInboundOutput(normalized) : undefined;
+  return normalized ? truncateBaleInboundOutput(normalized) : undefined;
 }
 
 function normalizeStringList(value: string | string[] | undefined): string[] {
@@ -231,7 +231,7 @@ function matchesWildcard(pattern: string, value: string | undefined): boolean {
   return new RegExp(`^${escaped}$`).test(normalizedValue);
 }
 
-function handlerHasSelectors(handler: TelegramInboundHandlerConfig): boolean {
+function handlerHasSelectors(handler: BaleInboundHandlerConfig): boolean {
   return (
     normalizeStringList(handler.match).length > 0 ||
     normalizeStringList(handler.mime).length > 0 ||
@@ -246,13 +246,13 @@ function matchesAnyPattern(
   return patterns.some((pattern) => matchesWildcard(pattern, value));
 }
 
-function isTelegramTextMimeType(mimeType: string | undefined): boolean {
+function isBaleTextMimeType(mimeType: string | undefined): boolean {
   return matchesWildcard("text/*", mimeType);
 }
 
-export function telegramInboundHandlerMatchesFile(
-  handler: TelegramInboundHandlerConfig,
-  file: TelegramInboundHandlerFile,
+export function baleInboundHandlerMatchesFile(
+  handler: BaleInboundHandlerConfig,
+  file: BaleInboundHandlerFile,
 ): boolean {
   if (!handlerHasSelectors(handler)) return true;
   const matchPatterns = normalizeStringList(handler.match);
@@ -264,16 +264,16 @@ export function telegramInboundHandlerMatchesFile(
   return matchesAnyPattern(matchPatterns, file.kind);
 }
 
-function findTelegramInboundHandlers(
-  handlers: TelegramInboundHandlerConfig[] | undefined,
-  file: TelegramInboundHandlerFile,
-): TelegramInboundHandlerConfig[] {
+function findBaleInboundHandlers(
+  handlers: BaleInboundHandlerConfig[] | undefined,
+  file: BaleInboundHandlerFile,
+): BaleInboundHandlerConfig[] {
   if (!Array.isArray(handlers)) return [];
   return handlers.filter(
     (handler) =>
       !!handler &&
       typeof handler === "object" &&
-      telegramInboundHandlerMatchesFile(handler, file),
+      baleInboundHandlerMatchesFile(handler, file),
   );
 }
 
@@ -281,8 +281,8 @@ function hasInboundFilePlaceholder(value: string): boolean {
   return /\{file\}/.test(value);
 }
 
-function getTelegramInboundHandlerTemplateValues(
-  file: TelegramInboundHandlerFile,
+function getBaleInboundHandlerTemplateValues(
+  file: BaleInboundHandlerFile,
   text = "",
 ): Record<string, string> {
   return {
@@ -293,13 +293,13 @@ function getTelegramInboundHandlerTemplateValues(
   };
 }
 
-function buildTelegramInboundTemplateInvocation(
+function buildBaleInboundTemplateInvocation(
   handler: CommandTemplateConfig,
-  file: TelegramInboundHandlerFile,
+  file: BaleInboundHandlerFile,
   cwd: string,
   appendFileIfMissing = true,
 ): InboundHandlerInvocation {
-  const values = getTelegramInboundHandlerTemplateValues(file);
+  const values = getBaleInboundHandlerTemplateValues(file);
   const templateConfig = normalizeCommandTemplateConfig(handler);
   const hadFilePlaceholder =
     typeof templateConfig.template === "string"
@@ -314,15 +314,15 @@ function buildTelegramInboundTemplateInvocation(
   return invocation;
 }
 
-export function buildTelegramInboundHandlerInvocation(
+export function buildBaleInboundHandlerInvocation(
   handler: CommandTemplateConfig,
-  file: TelegramInboundHandlerFile,
+  file: BaleInboundHandlerFile,
   cwd: string,
   appendFileIfMissing = true,
 ): InboundHandlerInvocation {
   const { template } = normalizeCommandTemplateConfig(handler);
   if (!template) throw new Error("Inbound handler template is required");
-  return buildTelegramInboundTemplateInvocation(
+  return buildBaleInboundTemplateInvocation(
     handler,
     file,
     cwd,
@@ -330,8 +330,8 @@ export function buildTelegramInboundHandlerInvocation(
   );
 }
 
-function getTelegramInboundHandlerTimeout(
-  handler: TelegramInboundCommandTemplateConfig,
+function getBaleInboundHandlerTimeout(
+  handler: BaleInboundCommandTemplateConfig,
 ): number {
   return (
     getCommandTemplateConfiguredTimeout(handler) ??
@@ -339,38 +339,38 @@ function getTelegramInboundHandlerTimeout(
   );
 }
 
-function getTelegramInboundHandlerKind(
-  handler: TelegramInboundHandlerConfig,
+function getBaleInboundHandlerKind(
+  handler: BaleInboundHandlerConfig,
 ): string {
   if (Array.isArray(handler.template)) return "composition";
   if (handler.template) return "template";
   return "unknown";
 }
 
-function formatTelegramInboundHandlerFailure(
-  result: TelegramInboundHandlerExecResult,
+function formatBaleInboundHandlerFailure(
+  result: BaleInboundHandlerExecResult,
 ): string {
   const parts = [
     `Inbound handler exited with code ${result.code}${result.killed ? " (killed)" : ""}`,
   ];
   if (result.stderr.trim())
     parts.push(
-      `stderr:\n${truncateTelegramInboundFailureStream(result.stderr)}`,
+      `stderr:\n${truncateBaleInboundFailureStream(result.stderr)}`,
     );
   if (result.stdout.trim())
     parts.push(
-      `stdout:\n${truncateTelegramInboundFailureStream(result.stdout)}`,
+      `stdout:\n${truncateBaleInboundFailureStream(result.stdout)}`,
     );
   return parts.join("\n\n");
 }
 
-function getTelegramInboundHandlerRetryOptions(
-  handler: TelegramInboundCommandTemplateConfig,
+function getBaleInboundHandlerRetryOptions(
+  handler: BaleInboundCommandTemplateConfig,
   values: Record<string, string>,
   cwd: string,
   timeout: number,
-  deps: Pick<TelegramInboundHandlerRuntimeDeps<unknown>, "execCommand">,
-): Pick<TelegramInboundHandlerExecOptions, "retry" | "recover"> {
+  deps: Pick<BaleInboundHandlerRuntimeDeps<unknown>, "execCommand">,
+): Pick<BaleInboundHandlerExecOptions, "retry" | "recover"> {
   if (typeof handler !== "object" || handler.retry === undefined) return {};
   const recover = createCommandTemplateRecovery(handler, values, {
     cwd,
@@ -383,16 +383,16 @@ function getTelegramInboundHandlerRetryOptions(
   };
 }
 
-async function executeTelegramInboundHandlerInvocation(
-  handler: TelegramInboundCommandTemplateConfig,
-  file: TelegramInboundHandlerFile,
+async function executeBaleInboundHandlerInvocation(
+  handler: BaleInboundCommandTemplateConfig,
+  file: BaleInboundHandlerFile,
   cwd: string,
-  deps: Pick<TelegramInboundHandlerRuntimeDeps<unknown>, "execCommand">,
+  deps: Pick<BaleInboundHandlerRuntimeDeps<unknown>, "execCommand">,
   appendFileIfMissing = true,
-  timeout = getTelegramInboundHandlerTimeout(handler),
+  timeout = getBaleInboundHandlerTimeout(handler),
   stdin?: string,
 ): Promise<string> {
-  const invocation = buildTelegramInboundHandlerInvocation(
+  const invocation = buildBaleInboundHandlerInvocation(
     handler,
     file,
     cwd,
@@ -401,9 +401,9 @@ async function executeTelegramInboundHandlerInvocation(
   const result = await deps.execCommand(invocation.command, invocation.args, {
     cwd,
     timeout,
-    ...getTelegramInboundHandlerRetryOptions(
+    ...getBaleInboundHandlerRetryOptions(
       handler,
-      getTelegramInboundHandlerTemplateValues(file),
+      getBaleInboundHandlerTemplateValues(file),
       cwd,
       timeout,
       deps,
@@ -411,11 +411,11 @@ async function executeTelegramInboundHandlerInvocation(
     ...(stdin !== undefined ? { stdin } : {}),
   });
   if (result.code !== 0)
-    throw new Error(formatTelegramInboundHandlerFailure(result));
-  return truncateTelegramInboundOutput(result.stdout);
+    throw new Error(formatBaleInboundHandlerFailure(result));
+  return truncateBaleInboundOutput(result.stdout);
 }
 
-function getTelegramTextHandlerFile(): TelegramInboundHandlerFile {
+function getBaleTextHandlerFile(): BaleInboundHandlerFile {
   return {
     path: "",
     fileName: "message.txt",
@@ -425,27 +425,27 @@ function getTelegramTextHandlerFile(): TelegramInboundHandlerFile {
   };
 }
 
-function findTelegramTextHandlers(
-  handlers: TelegramInboundHandlerConfig[] | undefined,
-): TelegramInboundHandlerConfig[] {
+function findBaleTextHandlers(
+  handlers: BaleInboundHandlerConfig[] | undefined,
+): BaleInboundHandlerConfig[] {
   if (!Array.isArray(handlers)) return [];
-  const textFile = getTelegramTextHandlerFile();
+  const textFile = getBaleTextHandlerFile();
   return handlers.filter(
     (handler) =>
       !!handler &&
       typeof handler === "object" &&
       handlerHasSelectors(handler) &&
-      telegramInboundHandlerMatchesFile(handler, textFile),
+      baleInboundHandlerMatchesFile(handler, textFile),
   );
 }
 
-function buildTelegramTextHandlerInvocation(
+function buildBaleTextHandlerInvocation(
   handler: CommandTemplateConfig,
   text: string,
   cwd: string,
 ): InboundHandlerInvocation {
-  const values = getTelegramInboundHandlerTemplateValues(
-    getTelegramTextHandlerFile(),
+  const values = getBaleInboundHandlerTemplateValues(
+    getBaleTextHandlerFile(),
     text,
   );
   const { template } = normalizeCommandTemplateConfig(handler);
@@ -456,22 +456,22 @@ function buildTelegramTextHandlerInvocation(
   });
 }
 
-async function executeTelegramTextHandlerInvocation(
-  handler: TelegramInboundCommandTemplateConfig,
+async function executeBaleTextHandlerInvocation(
+  handler: BaleInboundCommandTemplateConfig,
   text: string,
   cwd: string,
-  deps: Pick<TelegramInboundHandlerRuntimeDeps<unknown>, "execCommand">,
-  timeout = getTelegramInboundHandlerTimeout(handler),
+  deps: Pick<BaleInboundHandlerRuntimeDeps<unknown>, "execCommand">,
+  timeout = getBaleInboundHandlerTimeout(handler),
 ): Promise<string> {
-  const invocation = buildTelegramTextHandlerInvocation(handler, text, cwd);
+  const invocation = buildBaleTextHandlerInvocation(handler, text, cwd);
   const result = await deps.execCommand(invocation.command, invocation.args, {
     cwd,
     timeout,
     stdin: text,
-    ...getTelegramInboundHandlerRetryOptions(
+    ...getBaleInboundHandlerRetryOptions(
       handler,
-      getTelegramInboundHandlerTemplateValues(
-        getTelegramTextHandlerFile(),
+      getBaleInboundHandlerTemplateValues(
+        getBaleTextHandlerFile(),
         text,
       ),
       cwd,
@@ -480,20 +480,20 @@ async function executeTelegramTextHandlerInvocation(
     ),
   });
   if (result.code !== 0)
-    throw new Error(formatTelegramInboundHandlerFailure(result));
-  return truncateTelegramInboundOutput(result.stdout);
+    throw new Error(formatBaleInboundHandlerFailure(result));
+  return truncateBaleInboundOutput(result.stdout);
 }
 
-async function executeTelegramTextHandler(
-  handler: TelegramInboundHandlerConfig,
+async function executeBaleTextHandler(
+  handler: BaleInboundHandlerConfig,
   text: string,
   cwd: string,
-  deps: Pick<TelegramInboundHandlerRuntimeDeps<unknown>, "execCommand">,
+  deps: Pick<BaleInboundHandlerRuntimeDeps<unknown>, "execCommand">,
 ): Promise<string> {
   const steps = getCommandTemplateCompositionSteps(handler);
   if (steps.length === 0) {
     return (
-      await executeTelegramTextHandlerInvocation(handler, text, cwd, deps)
+      await executeBaleTextHandlerInvocation(handler, text, cwd, deps)
     ).trim();
   }
   const startedAt = Date.now();
@@ -502,21 +502,21 @@ async function executeTelegramTextHandler(
     if (
       !shouldRunCommandTemplateConfig(
         step,
-        getTelegramInboundHandlerTemplateValues(
-          getTelegramTextHandlerFile(),
+        getBaleInboundHandlerTemplateValues(
+          getBaleTextHandlerFile(),
           output,
         ),
       )
     )
       continue;
     try {
-      output = await executeTelegramTextHandlerInvocation(
+      output = await executeBaleTextHandlerInvocation(
         step,
         output,
         cwd,
         deps,
         getCommandTemplateStepTimeout(
-          getTelegramInboundHandlerTimeout(handler),
+          getBaleInboundHandlerTimeout(handler),
           step,
           index === 0 ? undefined : Date.now() - startedAt,
         ),
@@ -530,29 +530,29 @@ async function executeTelegramTextHandler(
   return output.trim();
 }
 
-async function processTelegramTextHandlers(options: {
+async function processBaleTextHandlers(options: {
   rawText: string;
-  handlers?: TelegramInboundHandlerConfig[];
+  handlers?: BaleInboundHandlerConfig[];
   cwd: string;
-  execCommand: TelegramInboundHandlerRuntimeDeps<unknown>["execCommand"];
-  recordRuntimeEvent?: TelegramInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
+  execCommand: BaleInboundHandlerRuntimeDeps<unknown>["execCommand"];
+  recordRuntimeEvent?: BaleInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
 }): Promise<string> {
   if (!options.rawText) return options.rawText;
   let text = options.rawText;
-  for (const handler of findTelegramTextHandlers(options.handlers)) {
+  for (const handler of findBaleTextHandlers(options.handlers)) {
     try {
       // An unresolvable guard fails only this handler, like its command would.
       if (
         !shouldRunCommandTemplateConfig(
           handler,
-          getTelegramInboundHandlerTemplateValues(
-            getTelegramTextHandlerFile(),
+          getBaleInboundHandlerTemplateValues(
+            getBaleTextHandlerFile(),
             text,
           ),
         )
       )
         continue;
-      const output = await executeTelegramTextHandler(
+      const output = await executeBaleTextHandler(
         handler,
         text,
         options.cwd,
@@ -561,11 +561,11 @@ async function processTelegramTextHandlers(options: {
       if (output) text = output;
     } catch (error) {
       options.recordRuntimeEvent?.("inbound-text-handler", error, {
-        handler: getTelegramInboundHandlerKind(handler),
+        handler: getBaleInboundHandlerKind(handler),
       });
     }
   }
-  for (const handler of getTelegramInboundProgrammaticHandlers("text")) {
+  for (const handler of getBaleInboundProgrammaticHandlers("text")) {
     try {
       const output = normalizeInboundProgrammaticHandlerText(
         await handler(
@@ -583,7 +583,7 @@ async function processTelegramTextHandlers(options: {
   return text;
 }
 
-function isTelegramVoiceLikeFile(file: TelegramInboundHandlerFile): boolean {
+function isBaleVoiceLikeFile(file: BaleInboundHandlerFile): boolean {
   return (
     file.kind === "voice" ||
     file.kind === "audio" ||
@@ -591,15 +591,15 @@ function isTelegramVoiceLikeFile(file: TelegramInboundHandlerFile): boolean {
   );
 }
 
-async function processTelegramFileWithProgrammaticHandlers(
-  file: TelegramInboundHandlerFile,
+async function processBaleFileWithProgrammaticHandlers(
+  file: BaleInboundHandlerFile,
   options: {
     cwd: string;
-    recordRuntimeEvent?: TelegramInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
+    recordRuntimeEvent?: BaleInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
   },
 ): Promise<string | undefined> {
   const kind = file.kind || "*";
-  for (const handler of getTelegramInboundProgrammaticHandlers(kind)) {
+  for (const handler of getBaleInboundProgrammaticHandlers(kind)) {
     try {
       const output = normalizeInboundProgrammaticHandlerText(
         await handler(
@@ -622,18 +622,18 @@ async function processTelegramFileWithProgrammaticHandlers(
   return undefined;
 }
 
-async function transcribeTelegramVoiceFileWithProviders(
-  file: TelegramInboundHandlerFile,
+async function transcribeBaleVoiceFileWithProviders(
+  file: BaleInboundHandlerFile,
   options: {
-    recordRuntimeEvent?: TelegramInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
+    recordRuntimeEvent?: BaleInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
   },
 ): Promise<string | undefined> {
-  if (!isTelegramVoiceLikeFile(file)) return undefined;
-  for (const provider of getTelegramVoiceTranscriptionProviders()) {
+  if (!isBaleVoiceLikeFile(file)) return undefined;
+  for (const provider of getBaleVoiceTranscriptionProviders()) {
     try {
       const result = await provider(file, {});
       const text = typeof result === "string" ? result : result?.text;
-      if (text?.trim()) return truncateTelegramInboundOutput(text.trim());
+      if (text?.trim()) return truncateBaleInboundOutput(text.trim());
     } catch (error) {
       options.recordRuntimeEvent?.("voice-transcription-provider", error, {
         fileName: file.fileName || basename(file.path),
@@ -643,10 +643,10 @@ async function transcribeTelegramVoiceFileWithProviders(
   return undefined;
 }
 
-async function readBuiltInTelegramTextAttachment(
-  file: TelegramInboundHandlerFile,
+async function readBuiltInBaleTextAttachment(
+  file: BaleInboundHandlerFile,
 ): Promise<string | undefined> {
-  if (!isTelegramTextMimeType(file.mimeType)) return undefined;
+  if (!isBaleTextMimeType(file.mimeType)) return undefined;
   const content = await readFile(file.path, "utf8");
   const normalized = content.trim();
   if (
@@ -656,18 +656,18 @@ async function readBuiltInTelegramTextAttachment(
     return undefined;
   }
   const name = file.fileName || basename(file.path);
-  return truncateTelegramInboundOutput(`[${name}]\n${normalized}`);
+  return truncateBaleInboundOutput(`[${name}]\n${normalized}`);
 }
 
-async function executeTelegramInboundHandler(
-  handler: TelegramInboundHandlerConfig,
-  file: TelegramInboundHandlerFile,
+async function executeBaleInboundHandler(
+  handler: BaleInboundHandlerConfig,
+  file: BaleInboundHandlerFile,
   cwd: string,
-  deps: Pick<TelegramInboundHandlerRuntimeDeps<unknown>, "execCommand">,
+  deps: Pick<BaleInboundHandlerRuntimeDeps<unknown>, "execCommand">,
 ): Promise<string> {
   const steps = getCommandTemplateCompositionSteps(handler);
   if (steps.length === 0) {
-    const output = await executeTelegramInboundHandlerInvocation(
+    const output = await executeBaleInboundHandlerInvocation(
       handler,
       file,
       cwd,
@@ -676,7 +676,7 @@ async function executeTelegramInboundHandler(
     return output.trim();
   }
   const startedAt = Date.now();
-  const values = getTelegramInboundHandlerTemplateValues(file);
+  const values = getBaleInboundHandlerTemplateValues(file);
   let output = "";
   let started = false;
   for (const step of steps) {
@@ -684,14 +684,14 @@ async function executeTelegramInboundHandler(
     const first = !started;
     started = true;
     try {
-      output = await executeTelegramInboundHandlerInvocation(
+      output = await executeBaleInboundHandlerInvocation(
         step,
         file,
         cwd,
         deps,
         false,
         getCommandTemplateStepTimeout(
-          getTelegramInboundHandlerTimeout(handler),
+          getBaleInboundHandlerTimeout(handler),
           step,
           first ? undefined : Date.now() - startedAt,
         ),
@@ -705,17 +705,17 @@ async function executeTelegramInboundHandler(
   return output.trim();
 }
 
-export async function processTelegramInboundHandlers<
-  TFile extends TelegramInboundHandlerFile,
+export async function processBaleInboundHandlers<
+  TFile extends BaleInboundHandlerFile,
 >(options: {
   files: TFile[];
   rawText: string;
-  handlers?: TelegramInboundHandlerConfig[];
+  handlers?: BaleInboundHandlerConfig[];
   cwd: string;
-  execCommand: TelegramInboundHandlerRuntimeDeps<unknown>["execCommand"];
-  recordRuntimeEvent?: TelegramInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
-}): Promise<TelegramInboundHandlerProcessResult<TFile>> {
-  const rawText = await processTelegramTextHandlers({
+  execCommand: BaleInboundHandlerRuntimeDeps<unknown>["execCommand"];
+  recordRuntimeEvent?: BaleInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
+}): Promise<BaleInboundHandlerProcessResult<TFile>> {
+  const rawText = await processBaleTextHandlers({
     rawText: options.rawText,
     handlers: options.handlers,
     cwd: options.cwd,
@@ -723,20 +723,20 @@ export async function processTelegramInboundHandlers<
     recordRuntimeEvent: options.recordRuntimeEvent,
   });
   const promptFiles: TFile[] = [...options.files];
-  const outputs: TelegramInboundHandlerOutput[] = [];
+  const outputs: BaleInboundHandlerOutput[] = [];
   for (const file of options.files) {
     let hasOutput = false;
-    const handlers = findTelegramInboundHandlers(options.handlers, file);
+    const handlers = findBaleInboundHandlers(options.handlers, file);
     for (const handler of handlers) {
       try {
         if (
           !shouldRunCommandTemplateConfig(
             handler,
-            getTelegramInboundHandlerTemplateValues(file),
+            getBaleInboundHandlerTemplateValues(file),
           )
         )
           continue;
-        const output = await executeTelegramInboundHandler(
+        const output = await executeBaleInboundHandler(
           handler,
           file,
           options.cwd,
@@ -750,13 +750,13 @@ export async function processTelegramInboundHandlers<
       } catch (error) {
         options.recordRuntimeEvent?.("inbound-handler", error, {
           fileName: file.fileName || basename(file.path),
-          handler: getTelegramInboundHandlerKind(handler),
+          handler: getBaleInboundHandlerKind(handler),
         });
       }
     }
     if (!hasOutput) {
       try {
-        const output = await processTelegramFileWithProgrammaticHandlers(file, {
+        const output = await processBaleFileWithProgrammaticHandlers(file, {
           cwd: options.cwd,
           recordRuntimeEvent: options.recordRuntimeEvent,
         });
@@ -772,7 +772,7 @@ export async function processTelegramInboundHandlers<
     }
     if (!hasOutput) {
       try {
-        const output = await transcribeTelegramVoiceFileWithProviders(file, {
+        const output = await transcribeBaleVoiceFileWithProviders(file, {
           recordRuntimeEvent: options.recordRuntimeEvent,
         });
         if (output) {
@@ -787,7 +787,7 @@ export async function processTelegramInboundHandlers<
     }
     if (!hasOutput) {
       try {
-        const output = await readBuiltInTelegramTextAttachment(file);
+        const output = await readBuiltInBaleTextAttachment(file);
         if (output) outputs.push({ file, output, handler: { type: "text" } });
       } catch (error) {
         options.recordRuntimeEvent?.("inbound-handler", error, {
@@ -805,12 +805,12 @@ export async function processTelegramInboundHandlers<
   };
 }
 
-export function createTelegramInboundHandlerRuntime<TContext>(
-  deps: TelegramInboundHandlerRuntimeDeps<TContext>,
-): TelegramInboundHandlerRuntime<TContext> {
+export function createBaleInboundHandlerRuntime<TContext>(
+  deps: BaleInboundHandlerRuntimeDeps<TContext>,
+): BaleInboundHandlerRuntime<TContext> {
   return {
     process: (files, rawText, ctx) =>
-      processTelegramInboundHandlers({
+      processBaleInboundHandlers({
         files,
         rawText,
         handlers: deps.getHandlers(),

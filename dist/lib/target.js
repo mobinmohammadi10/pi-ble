@@ -1,32 +1,32 @@
 /**
- * Telegram transport destination value helpers
+ * Bale transport destination value helpers
  * Zones: Bot API transport, routing, replies/previews, ownership, multi-instance bus
  * Owns the minimal `{ chatId, threadId? }` address shape shared by classic private chats
- * and Telegram UI threads mapped through Bot API `message_thread_id`.
+ * and Bale UI threads mapped through Bot API `message_thread_id`.
  */
 const PRIVATE_TARGET_THREAD_KEY = "private";
-export function createTelegramPrivateTarget(chatId) {
+export function createBalePrivateTarget(chatId) {
     return { chatId };
 }
-export function createTelegramThreadTarget(chatId, threadId) {
+export function createBaleThreadTarget(chatId, threadId) {
     return { chatId, threadId };
 }
-export function getTelegramTargetKey(target) {
+export function getBaleTargetKey(target) {
     return `${target.chatId}:${target.threadId ?? PRIVATE_TARGET_THREAD_KEY}`;
 }
-export function isTelegramThreadTarget(target) {
+export function isBaleThreadTarget(target) {
     return Number.isInteger(target.threadId);
 }
-export function areTelegramTargetsEqual(left, right) {
+export function areBaleTargetsEqual(left, right) {
     return left.chatId === right.chatId && left.threadId === right.threadId;
 }
-export function getTelegramTargetThreadParams(target) {
-    return isTelegramThreadTarget(target)
+export function getBaleTargetThreadParams(target) {
+    return isBaleThreadTarget(target)
         ? { message_thread_id: target.threadId }
         : {};
 }
 /** Pure wire parser for `{ chatId, threadId? }`; unknown fields are dropped and malformed shapes refuse. */
-export function parseTelegramTarget(value) {
+export function parseBaleTarget(value) {
     if (typeof value !== "object" || value === null || Array.isArray(value))
         return undefined;
     const { chatId, threadId } = value;
@@ -35,7 +35,7 @@ export function parseTelegramTarget(value) {
     return typeof threadId === "number" ? { chatId, threadId } : { chatId };
 }
 /** Pure Bot API integer id parser accepting integer numbers or non-blank integer strings. */
-export function parseTelegramIntegerId(value) {
+export function parseBaleIntegerId(value) {
     if (typeof value === "number" && Number.isInteger(value))
         return value;
     if (typeof value !== "string" || value.trim() === "")

@@ -1,5 +1,5 @@
 /**
- * Public Telegram keyboard API
+ * Public Bale keyboard API
  * Zones: package boundary, extension interop
  * Exposes shared inline-keyboard structural types without runtime exports
  */

@@ -1,41 +1,41 @@
 /**
- * Telegram media and text extraction helpers
- * Zones: telegram inbound, media groups, filesystem paths
- * Normalizes inbound Telegram messages into reusable file, text, id, history, and media-group metadata
+ * Bale media and text extraction helpers
+ * Zones: bale inbound, media groups, filesystem paths
+ * Normalizes inbound Bale messages into reusable file, text, id, history, and media-group metadata
  */
 
 import { basename, dirname } from "node:path";
 
 import * as Machine from "./machine.ts";
 
-const TELEGRAM_MEDIA_GROUP_DEBOUNCE_MS = 1200;
-const TELEGRAM_REPLY_CONTEXT_MAX_LENGTH = 1000;
+const BALE_MEDIA_GROUP_DEBOUNCE_MS = 1200;
+const BALE_REPLY_CONTEXT_MAX_LENGTH = 1000;
 
-export interface TelegramPhotoSize {
+export interface BalePhotoSize {
   file_id: string;
   file_size?: number;
 }
 
-export interface TelegramDocument {
+export interface BaleDocument {
   file_id: string;
   file_name?: string;
   mime_type?: string;
 }
 
-export type TelegramVideo = TelegramDocument;
-export type TelegramAudio = TelegramDocument;
-export type TelegramAnimation = TelegramDocument;
+export type BaleVideo = BaleDocument;
+export type BaleAudio = BaleDocument;
+export type BaleAnimation = BaleDocument;
 
-export interface TelegramVoice {
+export interface BaleVoice {
   file_id: string;
   mime_type?: string;
 }
 
-export interface TelegramRichMessage {
+export interface BaleRichMessage {
   blocks?: unknown[];
 }
 
-export interface TelegramMessageUser {
+export interface BaleMessageUser {
   id?: number;
   is_bot?: boolean;
   first_name?: string;
@@ -43,66 +43,66 @@ export interface TelegramMessageUser {
   username?: string;
 }
 
-export interface TelegramMessageForwardOrigin {
+export interface BaleMessageForwardOrigin {
   type?: string;
-  sender_user?: TelegramMessageUser;
+  sender_user?: BaleMessageUser;
   sender_user_name?: string;
   sender_chat?: { title?: string; username?: string; id?: number };
   chat?: { title?: string; username?: string; id?: number };
   author_signature?: string;
 }
 
-export interface TelegramReplyToMessage {
+export interface BaleReplyToMessage {
   message_id?: number;
-  from?: TelegramMessageUser;
+  from?: BaleMessageUser;
   text?: string;
   caption?: string;
-  rich_message?: TelegramRichMessage;
-  photo?: TelegramPhotoSize[];
-  document?: TelegramDocument;
-  video?: TelegramVideo;
-  audio?: TelegramAudio;
-  voice?: TelegramVoice;
-  animation?: TelegramAnimation;
-  sticker?: TelegramSticker;
+  rich_message?: BaleRichMessage;
+  photo?: BalePhotoSize[];
+  document?: BaleDocument;
+  video?: BaleVideo;
+  audio?: BaleAudio;
+  voice?: BaleVoice;
+  animation?: BaleAnimation;
+  sticker?: BaleSticker;
 }
 
-export interface TelegramSticker {
+export interface BaleSticker {
   file_id: string;
   is_video?: boolean;
   is_animated?: boolean;
 }
 
-export interface TelegramMediaMessage {
+export interface BaleMediaMessage {
   message_id: number;
   chat?: { id: number; type?: string; username?: string };
-  from?: TelegramMessageUser;
-  forward_origin?: TelegramMessageForwardOrigin;
-  forward_from?: TelegramMessageUser;
+  from?: BaleMessageUser;
+  forward_origin?: BaleMessageForwardOrigin;
+  forward_from?: BaleMessageUser;
   forward_sender_name?: string;
   text?: string;
   caption?: string;
-  rich_message?: TelegramRichMessage;
-  reply_to_message?: TelegramReplyToMessage;
+  rich_message?: BaleRichMessage;
+  reply_to_message?: BaleReplyToMessage;
   media_group_id?: string;
-  photo?: TelegramPhotoSize[];
-  document?: TelegramDocument;
-  video?: TelegramVideo;
-  audio?: TelegramAudio;
-  voice?: TelegramVoice;
-  animation?: TelegramAnimation;
-  sticker?: TelegramSticker;
+  photo?: BalePhotoSize[];
+  document?: BaleDocument;
+  video?: BaleVideo;
+  audio?: BaleAudio;
+  voice?: BaleVoice;
+  animation?: BaleAnimation;
+  sticker?: BaleSticker;
 }
 
-export interface TelegramMediaGroupMessage {
+export interface BaleMediaGroupMessage {
   message_id: number;
   chat: { id: number };
   message_thread_id?: number;
   media_group_id?: string;
 }
 
-export interface TelegramMediaGroupController<
-  TMessage extends TelegramMediaGroupMessage,
+export interface BaleMediaGroupController<
+  TMessage extends BaleMediaGroupMessage,
   TContext = unknown,
 > {
   queueMessage: (options: {
@@ -120,23 +120,23 @@ export interface TelegramMediaGroupController<
   clear: () => void;
 }
 
-export interface TelegramMediaGroupDispatchRuntimeDeps<
-  TMessage extends TelegramMediaGroupMessage,
+export interface BaleMediaGroupDispatchRuntimeDeps<
+  TMessage extends BaleMediaGroupMessage,
   TContext,
 > {
-  mediaGroups: TelegramMediaGroupController<TMessage, TContext>;
+  mediaGroups: BaleMediaGroupController<TMessage, TContext>;
   dispatchMessages: (messages: TMessage[], ctx: TContext) => Promise<void>;
   onDeferredMessage?: (message: TMessage) => void;
 }
 
-export interface TelegramMediaGroupDispatchRuntime<
-  TMessage extends TelegramMediaGroupMessage,
+export interface BaleMediaGroupDispatchRuntime<
+  TMessage extends BaleMediaGroupMessage,
   TContext,
 > {
   handleMessage: (message: TMessage, ctx: TContext) => Promise<void>;
 }
 
-export interface TelegramMediaGroupControllerOptions {
+export interface BaleMediaGroupControllerOptions {
   debounceMs?: number;
   setTimer?: (
     callback: () => void,
@@ -145,11 +145,11 @@ export interface TelegramMediaGroupControllerOptions {
   clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
 }
 
-export type TelegramAttachmentKind =
+export type BaleAttachmentKind =
   "photo" | "document" | "video" | "audio" | "voice" | "animation" | "sticker";
 
 /** Where an inbound attachment came from; the download layer turns it into a scoped file name. */
-export interface TelegramAttachmentSource {
+export interface BaleAttachmentSource {
   kind: string;
   messageId: number;
   index?: number;
@@ -160,40 +160,40 @@ export interface TelegramAttachmentSource {
   scope?: string;
 }
 
-export interface TelegramFileInfo {
+export interface BaleFileInfo {
   file_id: string;
   fileName: string;
   /** Present only when the sender chose the name. */
   userFileName?: string;
   /** Position inside a rich message. */
   index?: number;
-  source?: TelegramAttachmentSource;
+  source?: BaleAttachmentSource;
   mimeType?: string;
-  kind: TelegramAttachmentKind;
+  kind: BaleAttachmentKind;
   isImage: boolean;
 }
 
-export interface DownloadedTelegramFile {
+export interface DownloadedBaleFile {
   path: string;
   fileName?: string;
   isImage?: boolean;
   mimeType?: string;
-  kind?: TelegramAttachmentKind;
+  kind?: BaleAttachmentKind;
 }
 
-export interface DownloadedTelegramMessageFile {
+export interface DownloadedBaleMessageFile {
   path: string;
   fileName: string;
   isImage: boolean;
   mimeType?: string;
-  kind?: TelegramAttachmentKind;
+  kind?: BaleAttachmentKind;
 }
 
-export interface DownloadTelegramMessageFilesDeps {
+export interface DownloadBaleMessageFilesDeps {
   downloadFile: (
     fileId: string,
     fileName: string,
-    source?: TelegramAttachmentSource,
+    source?: BaleAttachmentSource,
   ) => Promise<string>;
 }
 
@@ -241,14 +241,14 @@ function joinRichTextParts(parts: string[], separator = ""): string {
   return parts.filter(Boolean).join(separator).trim();
 }
 
-function extractTelegramRichText(value: unknown): string {
+function extractBaleRichText(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) {
-    return joinRichTextParts(value.map(extractTelegramRichText));
+    return joinRichTextParts(value.map(extractBaleRichText));
   }
   if (typeof value !== "object" || value === null) return "";
   const text = getObjectField(value, "text");
-  if (text !== undefined) return extractTelegramRichText(text);
+  if (text !== undefined) return extractBaleRichText(text);
   const expression = getObjectField(value, "expression");
   if (typeof expression === "string") return expression;
   const alternativeText = getObjectField(value, "alternative_text");
@@ -256,12 +256,12 @@ function extractTelegramRichText(value: unknown): string {
   return "";
 }
 
-function extractTelegramRichBlockText(block: unknown): string {
+function extractBaleRichBlockText(block: unknown): string {
   if (typeof block !== "object" || block === null) return "";
-  const directText = extractTelegramRichText(getObjectField(block, "text"));
+  const directText = extractBaleRichText(getObjectField(block, "text"));
   if (directText) return directText;
-  const summary = extractTelegramRichText(getObjectField(block, "summary"));
-  const nestedBlocks = extractTelegramRichMessageBlocksText(
+  const summary = extractBaleRichText(getObjectField(block, "summary"));
+  const nestedBlocks = extractBaleRichMessageBlocksText(
     getObjectField(block, "blocks"),
   );
   const items = getObjectField(block, "items");
@@ -269,7 +269,7 @@ function extractTelegramRichBlockText(block: unknown): string {
     ? items
         .map((item) => {
           const label = getObjectField(item, "label");
-          const body = extractTelegramRichMessageBlocksText(
+          const body = extractBaleRichMessageBlocksText(
             getObjectField(item, "blocks"),
           );
           return typeof label === "string" && body ? `${label} ${body}` : body;
@@ -284,7 +284,7 @@ function extractTelegramRichBlockText(block: unknown): string {
           Array.isArray(row)
             ? row
                 .map((cell) =>
-                  extractTelegramRichText(getObjectField(cell, "text")),
+                  extractBaleRichText(getObjectField(cell, "text")),
                 )
                 .filter(Boolean)
                 .join(" | ")
@@ -293,42 +293,42 @@ function extractTelegramRichBlockText(block: unknown): string {
         .filter(Boolean)
         .join("\n")
     : "";
-  const caption = extractTelegramRichText(getObjectField(block, "caption"));
+  const caption = extractBaleRichText(getObjectField(block, "caption"));
   return joinRichTextParts(
     [summary, nestedBlocks, itemText, cellText, caption],
     "\n",
   );
 }
 
-function extractTelegramRichMessageBlocksText(blocks: unknown): string {
+function extractBaleRichMessageBlocksText(blocks: unknown): string {
   if (!Array.isArray(blocks)) return "";
-  return joinRichTextParts(blocks.map(extractTelegramRichBlockText), "\n\n");
+  return joinRichTextParts(blocks.map(extractBaleRichBlockText), "\n\n");
 }
 
-function extractTelegramRichMessageText(
-  richMessage: TelegramRichMessage | undefined,
+function extractBaleRichMessageText(
+  richMessage: BaleRichMessage | undefined,
 ): string {
-  return extractTelegramRichMessageBlocksText(richMessage?.blocks);
+  return extractBaleRichMessageBlocksText(richMessage?.blocks);
 }
 
-export function extractTelegramMessageText(
-  message: TelegramMediaMessage,
+export function extractBaleMessageText(
+  message: BaleMediaMessage,
 ): string {
   return (
-    extractTelegramRichMessageText(message.rich_message) ||
+    extractBaleRichMessageText(message.rich_message) ||
     message.text ||
     message.caption ||
     ""
   ).trim();
 }
 
-function truncateTelegramReplyContextText(text: string): string {
-  if (text.length <= TELEGRAM_REPLY_CONTEXT_MAX_LENGTH) return text;
-  return `${text.slice(0, TELEGRAM_REPLY_CONTEXT_MAX_LENGTH).trimEnd()}…`;
+function truncateBaleReplyContextText(text: string): string {
+  if (text.length <= BALE_REPLY_CONTEXT_MAX_LENGTH) return text;
+  return `${text.slice(0, BALE_REPLY_CONTEXT_MAX_LENGTH).trimEnd()}…`;
 }
 
-function formatTelegramUser(
-  user: TelegramMessageUser | undefined,
+function formatBaleUser(
+  user: BaleMessageUser | undefined,
 ): string | undefined {
   if (!user) return undefined;
   if (user.username) return user.username;
@@ -340,8 +340,8 @@ function formatTelegramUser(
   return name || undefined;
 }
 
-function formatTelegramForwardOriginIdentifier(
-  message: TelegramMediaMessage,
+function formatBaleForwardOriginIdentifier(
+  message: BaleMediaMessage,
 ): string | undefined {
   const origin = message.forward_origin;
   const user = origin?.sender_user ?? message.forward_from;
@@ -353,39 +353,39 @@ function formatTelegramForwardOriginIdentifier(
   return origin?.sender_user_name ?? message.forward_sender_name;
 }
 
-export function extractTelegramForwardContextText(
-  message: TelegramMediaMessage,
+export function extractBaleForwardContextText(
+  message: BaleMediaMessage,
   allowedUserId?: number,
 ): string {
   const originUser =
     message.forward_origin?.sender_user ?? message.forward_from;
   const isOwnerOrigin =
     typeof allowedUserId === "number" && originUser?.id === allowedUserId;
-  const origin = formatTelegramForwardOriginIdentifier(message);
+  const origin = formatBaleForwardOriginIdentifier(message);
   if (!origin || isOwnerOrigin) return "";
   return `from: ${origin}`;
 }
 
-function extractTelegramReplyContextText(
-  message: TelegramMediaMessage,
+function extractBaleReplyContextText(
+  message: BaleMediaMessage,
 ): string {
   const quoted = (
-    extractTelegramRichMessageText(message.reply_to_message?.rich_message) ||
+    extractBaleRichMessageText(message.reply_to_message?.rich_message) ||
     message.reply_to_message?.text ||
     message.reply_to_message?.caption ||
     ""
   ).trim();
-  return quoted ? truncateTelegramReplyContextText(quoted) : "";
+  return quoted ? truncateBaleReplyContextText(quoted) : "";
 }
 
-export function buildTelegramReplyContextBlock(
-  message: TelegramMediaMessage,
-  replyFiles: Pick<DownloadedTelegramFile, "path">[] = [],
+export function buildBaleReplyContextBlock(
+  message: BaleMediaMessage,
+  replyFiles: Pick<DownloadedBaleFile, "path">[] = [],
   replyOutputs: readonly string[] = [],
 ): string {
-  const from = formatTelegramUser(message.reply_to_message?.from);
+  const from = formatBaleUser(message.reply_to_message?.from);
   const header = from ? `[reply|from:${from}]` : "[reply]";
-  const text = extractTelegramReplyContextText(message);
+  const text = extractBaleReplyContextText(message);
   const dirs = [...new Set(replyFiles.map((file) => dirname(file.path)))];
   const sameDir = dirs.length === 1;
   const attachmentHeader = sameDir
@@ -411,7 +411,7 @@ export function buildTelegramReplyContextBlock(
   return "";
 }
 
-function appendTelegramReplyContext(
+function appendBaleReplyContext(
   text: string,
   replyContext: string,
 ): string {
@@ -419,35 +419,35 @@ function appendTelegramReplyContext(
   return text ? `${text}\n\n${replyContext}` : `_\n\n${replyContext}`;
 }
 
-export function extractTelegramMessagesText(
-  messages: TelegramMediaMessage[],
+export function extractBaleMessagesText(
+  messages: BaleMediaMessage[],
 ): string {
-  return messages.map(extractTelegramMessageText).filter(Boolean).join("\n\n");
+  return messages.map(extractBaleMessageText).filter(Boolean).join("\n\n");
 }
 
-export function extractTelegramMessagesPromptText(
-  messages: TelegramMediaMessage[],
+export function extractBaleMessagesPromptText(
+  messages: BaleMediaMessage[],
 ): string {
-  const text = extractTelegramMessagesText(messages);
+  const text = extractBaleMessagesText(messages);
   const firstMessage = messages[0];
   if (!firstMessage) return text;
-  return appendTelegramReplyContext(
+  return appendBaleReplyContext(
     text,
-    buildTelegramReplyContextBlock(firstMessage),
+    buildBaleReplyContextBlock(firstMessage),
   );
 }
 
-export function extractFirstTelegramMessageText(
-  messages: TelegramMediaMessage[],
+export function extractFirstBaleMessageText(
+  messages: BaleMediaMessage[],
 ): string {
-  return messages.map(extractTelegramMessageText).find(Boolean) ?? "";
+  return messages.map(extractBaleMessageText).find(Boolean) ?? "";
 }
 
-function hasTelegramMessagePromptContent(
-  message: TelegramMediaMessage,
+function hasBaleMessagePromptContent(
+  message: BaleMediaMessage,
 ): boolean {
   return (
-    !!extractTelegramMessageText(message) ||
+    !!extractBaleMessageText(message) ||
     (Array.isArray(message.photo) && message.photo.length > 0) ||
     !!message.document ||
     !!message.video ||
@@ -458,20 +458,20 @@ function hasTelegramMessagePromptContent(
   );
 }
 
-export function hasTelegramMessagesPromptContent(
-  messages: TelegramMediaMessage[],
+export function hasBaleMessagesPromptContent(
+  messages: BaleMediaMessage[],
 ): boolean {
-  return messages.some(hasTelegramMessagePromptContent);
+  return messages.some(hasBaleMessagePromptContent);
 }
 
-export function collectTelegramMessageIds(
-  messages: TelegramMediaMessage[],
+export function collectBaleMessageIds(
+  messages: BaleMediaMessage[],
 ): number[] {
   return [...new Set(messages.map((message) => message.message_id))];
 }
 
-export function getTelegramMediaGroupKey(
-  message: TelegramMediaGroupMessage,
+export function getBaleMediaGroupKey(
+  message: BaleMediaGroupMessage,
 ): string | undefined {
   if (!message.media_group_id) return undefined;
   const threadKey =
@@ -481,8 +481,8 @@ export function getTelegramMediaGroupKey(
   return `${message.chat.id}:${threadKey}:${message.media_group_id}`;
 }
 
-/** One pending input group; only `transitionTelegramPendingGroups` produces a new one. */
-export interface TelegramPendingGroup<TMessage, TContext, TMeta = undefined> {
+/** One pending input group; only `transitionBalePendingGroups` produces a new one. */
+export interface BalePendingGroup<TMessage, TContext, TMeta = undefined> {
   readonly messages: readonly TMessage[];
   readonly context?: TContext;
   /** Domain data carried with the group, such as a text group's forward-comment pairing side. */
@@ -498,22 +498,22 @@ export interface TelegramPendingGroup<TMessage, TContext, TMeta = undefined> {
   readonly boundaryId?: number;
 }
 
-export interface TelegramPendingGroupsState<TMessage, TContext, TMeta> {
+export interface BalePendingGroupsState<TMessage, TContext, TMeta> {
   readonly groups: ReadonlyMap<
     string,
-    TelegramPendingGroup<TMessage, TContext, TMeta>
+    BalePendingGroup<TMessage, TContext, TMeta>
   >;
   readonly nextTimerId: number;
   readonly nextDispatchId: number;
 }
 
-export interface TelegramPendingGroupsConfig {
+export interface BalePendingGroupsConfig {
   debounceMs: number;
   /** A group without a context waits (text) instead of dispatching without one (media). */
   requireContext: boolean;
 }
 
-export type TelegramPendingGroupsEvent<TMessage, TContext, TMeta> =
+export type BalePendingGroupsEvent<TMessage, TContext, TMeta> =
   | {
       type: "queued";
       key: string;
@@ -535,7 +535,7 @@ export type TelegramPendingGroupsEvent<TMessage, TContext, TMeta> =
   | { type: "keyCleared"; key: string }
   | { type: "cleared" };
 
-export type TelegramPendingGroupsEffect<TMessage, TContext> =
+export type BalePendingGroupsEffect<TMessage, TContext> =
   | { type: "armTimer"; key: string; timerId: number; delayMs: number }
   | { type: "cancelTimer"; timerId: number }
   | {
@@ -546,23 +546,23 @@ export type TelegramPendingGroupsEffect<TMessage, TContext> =
       context?: TContext;
     };
 
-export interface TelegramPendingGroupsStep<
+export interface BalePendingGroupsStep<
   TMessage,
   TContext,
   TMeta,
-> extends Machine.TelegramMachineStep<
-  TelegramPendingGroupsState<TMessage, TContext, TMeta>,
-  TelegramPendingGroupsEffect<TMessage, TContext>
+> extends Machine.BaleMachineStep<
+  BalePendingGroupsState<TMessage, TContext, TMeta>,
+  BalePendingGroupsEffect<TMessage, TContext>
 > {
   /** `removed`: how many groups were dropped. */
   result: number;
 }
 
-export function createTelegramPendingGroupsState<
+export function createBalePendingGroupsState<
   TMessage,
   TContext,
   TMeta = undefined,
->(): TelegramPendingGroupsState<TMessage, TContext, TMeta> {
+>(): BalePendingGroupsState<TMessage, TContext, TMeta> {
   return { groups: new Map(), nextTimerId: 0, nextDispatchId: 0 };
 }
 
@@ -571,17 +571,17 @@ export function createTelegramPendingGroupsState<
  * time; messages that arrive meanwhile wait for the next batch, a failure keeps the batch for a retry, and suspension
  * keeps every admitted message for the replacement context.
  */
-export function transitionTelegramPendingGroups<
+export function transitionBalePendingGroups<
   TMessage extends { message_id: number },
   TContext,
   TMeta,
 >(
-  state: TelegramPendingGroupsState<TMessage, TContext, TMeta>,
-  event: TelegramPendingGroupsEvent<TMessage, TContext, TMeta>,
-  config: TelegramPendingGroupsConfig,
-): TelegramPendingGroupsStep<TMessage, TContext, TMeta> {
-  type Group = TelegramPendingGroup<TMessage, TContext, TMeta>;
-  type Effect = TelegramPendingGroupsEffect<TMessage, TContext>;
+  state: BalePendingGroupsState<TMessage, TContext, TMeta>,
+  event: BalePendingGroupsEvent<TMessage, TContext, TMeta>,
+  config: BalePendingGroupsConfig,
+): BalePendingGroupsStep<TMessage, TContext, TMeta> {
+  type Group = BalePendingGroup<TMessage, TContext, TMeta>;
+  type Effect = BalePendingGroupsEffect<TMessage, TContext>;
   const groups = new Map(state.groups);
   const effects: Effect[] = [];
   let { nextTimerId, nextDispatchId } = state;
@@ -743,15 +743,15 @@ export function transitionTelegramPendingGroups<
   return { state: { groups, nextTimerId, nextDispatchId }, effects, result };
 }
 
-export interface TelegramPendingGroups<TMessage, TContext, TMeta> {
+export interface BalePendingGroups<TMessage, TContext, TMeta> {
   /** Read-only view of one group; it never grants mutation. */
   get: (
     key: string,
-  ) => TelegramPendingGroup<TMessage, TContext, TMeta> | undefined;
+  ) => BalePendingGroup<TMessage, TContext, TMeta> | undefined;
   queue: (
     event: Omit<
       Extract<
-        TelegramPendingGroupsEvent<TMessage, TContext, TMeta>,
+        BalePendingGroupsEvent<TMessage, TContext, TMeta>,
         { type: "queued" }
       >,
       "type"
@@ -773,11 +773,11 @@ export interface TelegramPendingGroups<TMessage, TContext, TMeta> {
 }
 
 /**
- * The shell around `transitionTelegramPendingGroups`: it owns timer handles and each key's latest dispatcher, turns
+ * The shell around `transitionBalePendingGroups`: it owns timer handles and each key's latest dispatcher, turns
  * every dispatch outcome, including a synchronous throw, into `dispatchSettled`, and keeps each batch's promise for
  * flush callers.
  */
-export function createTelegramPendingGroups<
+export function createBalePendingGroups<
   TMessage extends { message_id: number },
   TContext,
   TMeta = undefined,
@@ -786,8 +786,8 @@ export function createTelegramPendingGroups<
   requireContext: boolean;
   setTimer: (callback: () => void, ms: number) => ReturnType<typeof setTimeout>;
   clearTimer: (timer: ReturnType<typeof setTimeout>) => void;
-}): TelegramPendingGroups<TMessage, TContext, TMeta> {
-  const config: TelegramPendingGroupsConfig = {
+}): BalePendingGroups<TMessage, TContext, TMeta> {
+  const config: BalePendingGroupsConfig = {
     debounceMs: options.debounceMs,
     requireContext: options.requireContext,
   };
@@ -797,15 +797,15 @@ export function createTelegramPendingGroups<
     (messages: TMessage[], ctx?: TContext) => unknown | Promise<unknown>
   >();
   const batches = new Map<number, Promise<void>>();
-  const machine = Machine.createTelegramMachineRunner<
-    TelegramPendingGroupsState<TMessage, TContext, TMeta>,
-    TelegramPendingGroupsEvent<TMessage, TContext, TMeta>,
-    TelegramPendingGroupsEffect<TMessage, TContext>,
-    TelegramPendingGroupsStep<TMessage, TContext, TMeta>
+  const machine = Machine.createBaleMachineRunner<
+    BalePendingGroupsState<TMessage, TContext, TMeta>,
+    BalePendingGroupsEvent<TMessage, TContext, TMeta>,
+    BalePendingGroupsEffect<TMessage, TContext>,
+    BalePendingGroupsStep<TMessage, TContext, TMeta>
   >({
-    initial: createTelegramPendingGroupsState<TMessage, TContext, TMeta>(),
+    initial: createBalePendingGroupsState<TMessage, TContext, TMeta>(),
     transition: (state, event) =>
-      transitionTelegramPendingGroups(state, event, config),
+      transitionBalePendingGroups(state, event, config),
     run(effect) {
       switch (effect.type) {
         case "armTimer": {
@@ -862,7 +862,7 @@ export function createTelegramPendingGroups<
     },
   });
   const dispatch = (
-    event: TelegramPendingGroupsEvent<TMessage, TContext, TMeta>,
+    event: BalePendingGroupsEvent<TMessage, TContext, TMeta>,
   ): number => {
     const step = machine.dispatch(event);
     for (const key of dispatchers.keys())
@@ -919,14 +919,14 @@ export function createTelegramPendingGroups<
   };
 }
 
-export function createTelegramMediaGroupController<
-  TMessage extends TelegramMediaGroupMessage,
+export function createBaleMediaGroupController<
+  TMessage extends BaleMediaGroupMessage,
   TContext = unknown,
 >(
-  options: TelegramMediaGroupControllerOptions = {},
-): TelegramMediaGroupController<TMessage, TContext> {
-  const debounceMs = options.debounceMs ?? TELEGRAM_MEDIA_GROUP_DEBOUNCE_MS;
-  const groups = createTelegramPendingGroups<TMessage, TContext>({
+  options: BaleMediaGroupControllerOptions = {},
+): BaleMediaGroupController<TMessage, TContext> {
+  const debounceMs = options.debounceMs ?? BALE_MEDIA_GROUP_DEBOUNCE_MS;
+  const groups = createBalePendingGroups<TMessage, TContext>({
     debounceMs,
     requireContext: false,
     setTimer:
@@ -937,7 +937,7 @@ export function createTelegramMediaGroupController<
   });
   return {
     queueMessage: ({ message, context, dispatchMessages }) => {
-      const key = getTelegramMediaGroupKey(message);
+      const key = getBaleMediaGroupKey(message);
       if (!key) return false;
       groups.queue({
         key,
@@ -957,12 +957,12 @@ export function createTelegramMediaGroupController<
   };
 }
 
-export function createTelegramMediaGroupDispatchRuntime<
-  TMessage extends TelegramMediaGroupMessage,
+export function createBaleMediaGroupDispatchRuntime<
+  TMessage extends BaleMediaGroupMessage,
   TContext,
 >(
-  deps: TelegramMediaGroupDispatchRuntimeDeps<TMessage, TContext>,
-): TelegramMediaGroupDispatchRuntime<TMessage, TContext> {
+  deps: BaleMediaGroupDispatchRuntimeDeps<TMessage, TContext>,
+): BaleMediaGroupDispatchRuntime<TMessage, TContext> {
   return {
     handleMessage: async (message, ctx) => {
       const queuedMediaGroup = deps.mediaGroups.queueMessage({
@@ -983,7 +983,7 @@ export function createTelegramMediaGroupDispatchRuntime<
 }
 
 /** Pure `[title]` bullet section appended after a blank line; empty items leave text unchanged. */
-export function appendTelegramListSection(
+export function appendBaleListSection(
   text: string,
   title: string,
   items: string[],
@@ -993,9 +993,9 @@ export function appendTelegramListSection(
   return `${prefix}[${title}]\n${items.map((item) => `- ${item}`).join("\n")}`;
 }
 
-export function appendTelegramAttachmentSection(
+export function appendBaleAttachmentSection(
   text: string,
-  files: Pick<DownloadedTelegramFile, "path">[],
+  files: Pick<DownloadedBaleFile, "path">[],
 ): string {
   if (files.length === 0) return text;
   const dirs = [...new Set(files.map((file) => dirname(file.path)))];
@@ -1008,23 +1008,23 @@ export function appendTelegramAttachmentSection(
   return `${prefix}${header}\n${items.map((item) => `- ${item}`).join("\n")}`;
 }
 
-export function formatTelegramHistoryText(
+export function formatBaleHistoryText(
   rawText: string,
-  files: DownloadedTelegramFile[],
+  files: DownloadedBaleFile[],
   handlerOutputs: string[] = [],
 ): string {
   let summary = rawText.length > 0 ? rawText : "(no text)";
-  summary = appendTelegramAttachmentSection(summary, files);
-  summary = appendTelegramListSection(summary, "outputs", handlerOutputs);
+  summary = appendBaleAttachmentSection(summary, files);
+  summary = appendBaleListSection(summary, "outputs", handlerOutputs);
   return summary;
 }
 
-export async function downloadTelegramMessageFiles(
-  messages: TelegramMediaMessage[],
-  deps: DownloadTelegramMessageFilesDeps,
-): Promise<DownloadedTelegramMessageFile[]> {
-  const downloaded: DownloadedTelegramMessageFile[] = [];
-  for (const file of collectTelegramFileInfos(messages)) {
+export async function downloadBaleMessageFiles(
+  messages: BaleMediaMessage[],
+  deps: DownloadBaleMessageFilesDeps,
+): Promise<DownloadedBaleMessageFile[]> {
+  const downloaded: DownloadedBaleMessageFile[] = [];
+  for (const file of collectBaleFileInfos(messages)) {
     downloaded.push({
       path: await deps.downloadFile(file.file_id, file.fileName, file.source),
       fileName: file.fileName,
@@ -1036,12 +1036,12 @@ export async function downloadTelegramMessageFiles(
   return downloaded;
 }
 
-function collectTelegramRichBlockFileInfos(
+function collectBaleRichBlockFileInfos(
   blocks: unknown,
   messageId: number,
-): TelegramFileInfo[] {
+): BaleFileInfo[] {
   if (!Array.isArray(blocks)) return [];
-  const files: TelegramFileInfo[] = [];
+  const files: BaleFileInfo[] = [];
   let mediaIndex = 0;
   const visit = (entries: unknown): void => {
     if (!Array.isArray(entries)) return;
@@ -1062,7 +1062,7 @@ function collectTelegramRichBlockFileInfos(
         if (Array.isArray(photos)) {
           const photo = photos
             .filter(
-              (value): value is TelegramPhotoSize =>
+              (value): value is BalePhotoSize =>
                 typeof value === "object" &&
                 value !== null &&
                 typeof getObjectField(value, "file_id") === "string",
@@ -1098,7 +1098,7 @@ function collectTelegramRichBlockFileInfos(
         const fileName = getObjectField(media, "file_name");
         if (typeof fileId === "string") {
           const kind =
-            type === "voice_note" ? "voice" : (type as TelegramAttachmentKind);
+            type === "voice_note" ? "voice" : (type as BaleAttachmentKind);
           const fallbackExtension =
             kind === "voice" ? ".ogg" : kind === "audio" ? ".mp3" : ".mp4";
           files.push({
@@ -1129,14 +1129,14 @@ function collectTelegramRichBlockFileInfos(
   return files;
 }
 
-export function collectTelegramFileInfos(
-  messages: TelegramMediaMessage[],
-): TelegramFileInfo[] {
-  const files: TelegramFileInfo[] = [];
+export function collectBaleFileInfos(
+  messages: BaleMediaMessage[],
+): BaleFileInfo[] {
+  const files: BaleFileInfo[] = [];
   for (const message of messages) {
     const firstOfMessage = files.length;
     files.push(
-      ...collectTelegramRichBlockFileInfos(
+      ...collectBaleRichBlockFileInfos(
         message.rich_message?.blocks,
         message.message_id,
       ),

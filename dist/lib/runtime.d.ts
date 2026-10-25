@@ -1,39 +1,39 @@
 /**
- * Telegram bridge runtime-state helpers
- * Zones: pi agent runtime state, telegram session, shared coordination
- * Owns small session-local runtime primitives that are shared by orchestration but are not specific to queueing, rendering, polling, or Telegram transport
+ * Bale bridge runtime-state helpers
+ * Zones: pi agent runtime state, bale session, shared coordination
+ * Owns small session-local runtime primitives that are shared by orchestration but are not specific to queueing, rendering, polling, or Bale transport
  */
 import * as Machine from "./machine.ts";
 /**
  * Structural port for run-collapsing diagnostics: a repeated identical failure extends its run instead of logging
  * again, and the closing success records one outcome. The composition root owns the collapsed implementation.
  */
-export interface TelegramRepeatedFailureLogPort {
+export interface BaleRepeatedFailureLogPort {
     record: (error: unknown, details?: Record<string, unknown>) => void;
     settled: () => void;
     reset: () => void;
 }
-export interface TelegramRuntimeQueueCounters {
-    nextQueuedTelegramItemOrder: number;
-    nextQueuedTelegramControlOrder: number;
+export interface BaleRuntimeQueueCounters {
+    nextQueuedBaleItemOrder: number;
+    nextQueuedBaleControlOrder: number;
 }
-export interface TelegramRuntimeLifecycleFlags {
-    activeTelegramToolExecutions: number;
-    telegramTurnDispatchPending: boolean;
+export interface BaleRuntimeLifecycleFlags {
+    activeBaleToolExecutions: number;
+    baleTurnDispatchPending: boolean;
     compactionInProgress: boolean;
     foldQueuedPromptsIntoHistory: boolean;
     setupInProgress: boolean;
 }
-export interface TelegramBridgeRuntimeState extends TelegramRuntimeQueueCounters, TelegramRuntimeLifecycleFlags {
+export interface BaleBridgeRuntimeState extends BaleRuntimeQueueCounters, BaleRuntimeLifecycleFlags {
     abortHandler?: () => void;
 }
-export interface TelegramRuntimeQueuePort {
-    syncCounters: (counters: Partial<TelegramRuntimeQueueCounters>) => void;
+export interface BaleRuntimeQueuePort {
+    syncCounters: (counters: Partial<BaleRuntimeQueueCounters>) => void;
     allocateItemOrder: () => number;
     allocateControlOrder: () => number;
 }
-export interface TelegramRuntimeLifecyclePort {
-    syncFlags: (flags: Partial<TelegramRuntimeLifecycleFlags>) => void;
+export interface BaleRuntimeLifecyclePort {
+    syncFlags: (flags: Partial<BaleRuntimeLifecycleFlags>) => void;
     getActiveToolExecutions: () => number;
     setActiveToolExecutions: (count: number) => void;
     resetActiveToolExecutions: () => void;
@@ -45,62 +45,62 @@ export interface TelegramRuntimeLifecyclePort {
     shouldFoldQueuedPromptsIntoHistory: () => boolean;
     setFoldQueuedPromptsIntoHistory: (fold: boolean) => void;
 }
-export interface TelegramRuntimeSetupPort {
+export interface BaleRuntimeSetupPort {
     isInProgress: () => boolean;
     start: () => boolean;
     finish: () => void;
 }
-export interface TelegramRuntimeAbortPort {
+export interface BaleRuntimeAbortPort {
     hasHandler: () => boolean;
     setHandler: (abortHandler: () => void) => void;
     clearHandler: () => void;
     getHandler: () => (() => void) | undefined;
     abortTurn: () => boolean;
 }
-export interface TelegramRuntimeTypingPort {
-    start: (deps: TelegramTypingLoopDeps) => boolean;
+export interface BaleRuntimeTypingPort {
+    start: (deps: BaleTypingLoopDeps) => boolean;
     stop: () => boolean;
     /** Waits for the in-flight action, bounded so a never-settling request cannot hold shutdown. */
     waitForIdle: (timeoutMs?: number) => Promise<void>;
 }
-export interface TelegramBridgeRuntime {
-    state: TelegramBridgeRuntimeState;
-    queue: TelegramRuntimeQueuePort;
-    lifecycle: TelegramRuntimeLifecyclePort;
-    setup: TelegramRuntimeSetupPort;
-    abort: TelegramRuntimeAbortPort;
-    typing: TelegramRuntimeTypingPort;
+export interface BaleBridgeRuntime {
+    state: BaleBridgeRuntimeState;
+    queue: BaleRuntimeQueuePort;
+    lifecycle: BaleRuntimeLifecyclePort;
+    setup: BaleRuntimeSetupPort;
+    abort: BaleRuntimeAbortPort;
+    typing: BaleRuntimeTypingPort;
 }
-export declare function createTelegramBridgeRuntimeState(): TelegramBridgeRuntimeState;
-export declare function createTelegramBridgeRuntime(state?: TelegramBridgeRuntimeState, typing?: TelegramRuntimeTypingPort): TelegramBridgeRuntime;
-export declare function syncTelegramQueueRuntimeCounters(state: TelegramBridgeRuntimeState, counters: Partial<TelegramRuntimeQueueCounters>): void;
-export declare function allocateTelegramQueueItemOrder(state: TelegramBridgeRuntimeState): number;
-export declare function allocateTelegramQueueControlOrder(state: TelegramBridgeRuntimeState): number;
-export declare function syncTelegramLifecycleRuntimeFlags(state: TelegramBridgeRuntimeState, flags: Partial<TelegramRuntimeLifecycleFlags>): void;
-export declare function getActiveTelegramToolExecutions(state: TelegramBridgeRuntimeState): number;
-export declare function setActiveTelegramToolExecutions(state: TelegramBridgeRuntimeState, count: number): void;
-export declare function resetActiveTelegramToolExecutions(state: TelegramBridgeRuntimeState): void;
-export declare function hasTelegramDispatchPending(state: TelegramBridgeRuntimeState): boolean;
-export declare function clearTelegramDispatchPending(state: TelegramBridgeRuntimeState): void;
-export declare function isTelegramCompactionInProgress(state: TelegramBridgeRuntimeState): boolean;
-export declare function setTelegramCompactionInProgress(state: TelegramBridgeRuntimeState, inProgress: boolean): void;
-export declare function shouldFoldQueuedPromptsIntoHistory(state: TelegramBridgeRuntimeState): boolean;
-export declare function setFoldQueuedPromptsIntoHistory(state: TelegramBridgeRuntimeState, fold: boolean): void;
-export declare function isTelegramSetupInProgress(state: TelegramBridgeRuntimeState): boolean;
-export declare function startTelegramSetup(state: TelegramBridgeRuntimeState): boolean;
-export declare function finishTelegramSetup(state: TelegramBridgeRuntimeState): void;
-export declare function hasTelegramAbortHandler(state: TelegramBridgeRuntimeState): boolean;
-export declare function setTelegramAbortHandler(state: TelegramBridgeRuntimeState, abortHandler: () => void): void;
-export declare function clearTelegramAbortHandler(state: TelegramBridgeRuntimeState): void;
-export declare function getTelegramAbortHandler(state: TelegramBridgeRuntimeState): (() => void) | undefined;
-export declare function abortTelegramTurn(state: TelegramBridgeRuntimeState): boolean;
-export interface TelegramTypingLoopTarget {
+export declare function createBaleBridgeRuntimeState(): BaleBridgeRuntimeState;
+export declare function createBaleBridgeRuntime(state?: BaleBridgeRuntimeState, typing?: BaleRuntimeTypingPort): BaleBridgeRuntime;
+export declare function syncBaleQueueRuntimeCounters(state: BaleBridgeRuntimeState, counters: Partial<BaleRuntimeQueueCounters>): void;
+export declare function allocateBaleQueueItemOrder(state: BaleBridgeRuntimeState): number;
+export declare function allocateBaleQueueControlOrder(state: BaleBridgeRuntimeState): number;
+export declare function syncBaleLifecycleRuntimeFlags(state: BaleBridgeRuntimeState, flags: Partial<BaleRuntimeLifecycleFlags>): void;
+export declare function getActiveBaleToolExecutions(state: BaleBridgeRuntimeState): number;
+export declare function setActiveBaleToolExecutions(state: BaleBridgeRuntimeState, count: number): void;
+export declare function resetActiveBaleToolExecutions(state: BaleBridgeRuntimeState): void;
+export declare function hasBaleDispatchPending(state: BaleBridgeRuntimeState): boolean;
+export declare function clearBaleDispatchPending(state: BaleBridgeRuntimeState): void;
+export declare function isBaleCompactionInProgress(state: BaleBridgeRuntimeState): boolean;
+export declare function setBaleCompactionInProgress(state: BaleBridgeRuntimeState, inProgress: boolean): void;
+export declare function shouldFoldQueuedPromptsIntoHistory(state: BaleBridgeRuntimeState): boolean;
+export declare function setFoldQueuedPromptsIntoHistory(state: BaleBridgeRuntimeState, fold: boolean): void;
+export declare function isBaleSetupInProgress(state: BaleBridgeRuntimeState): boolean;
+export declare function startBaleSetup(state: BaleBridgeRuntimeState): boolean;
+export declare function finishBaleSetup(state: BaleBridgeRuntimeState): void;
+export declare function hasBaleAbortHandler(state: BaleBridgeRuntimeState): boolean;
+export declare function setBaleAbortHandler(state: BaleBridgeRuntimeState, abortHandler: () => void): void;
+export declare function clearBaleAbortHandler(state: BaleBridgeRuntimeState): void;
+export declare function getBaleAbortHandler(state: BaleBridgeRuntimeState): (() => void) | undefined;
+export declare function abortBaleTurn(state: BaleBridgeRuntimeState): boolean;
+export interface BaleTypingLoopTarget {
     chatId: number;
     threadId?: number;
 }
-export interface TelegramTypingLoopDeps {
+export interface BaleTypingLoopDeps {
     chatId: number | undefined;
-    target?: TelegramTypingLoopTarget;
+    target?: BaleTypingLoopTarget;
     intervalMs: number;
     sendTypingAction: (chatId: number, options?: {
         message_thread_id?: number;
@@ -108,13 +108,13 @@ export interface TelegramTypingLoopDeps {
     shouldContinue?: () => boolean;
     onStopped?: () => void;
 }
-export interface TelegramRuntimeEventRecorderPort {
+export interface BaleRuntimeEventRecorderPort {
     recordRuntimeEvent?: (category: string, error: unknown, details?: Record<string, unknown>) => void;
 }
-export interface TelegramTypingLoopStarterDeps<TContext> extends TelegramRuntimeEventRecorderPort {
+export interface BaleTypingLoopStarterDeps<TContext> extends BaleRuntimeEventRecorderPort {
     /** Collapses one sustained presence failure run; the caller supplies its owner. */
-    failureLog: TelegramRepeatedFailureLogPort;
-    typing: TelegramRuntimeTypingPort;
+    failureLog: BaleRepeatedFailureLogPort;
+    typing: BaleRuntimeTypingPort;
     getDefaultChatId: () => number | undefined;
     sendTypingAction: (chatId: number, options?: {
         message_thread_id?: number;
@@ -128,12 +128,12 @@ export interface TelegramTypingLoopStarterDeps<TContext> extends TelegramRuntime
     getTransportAuthority?: () => string | number | undefined;
     intervalMs?: number;
 }
-export declare function createTelegramTypingLoopStarter<TContext>(deps: TelegramTypingLoopStarterDeps<TContext>): (ctx: TContext, chatId?: number, options?: {
-    target?: TelegramTypingLoopTarget;
+export declare function createBaleTypingLoopStarter<TContext>(deps: BaleTypingLoopStarterDeps<TContext>): (ctx: TContext, chatId?: number, options?: {
+    target?: BaleTypingLoopTarget;
     ensure?: boolean;
 }) => boolean;
-/** The whole typing-loop state; only `transitionTelegramTypingLoop` produces a new one. */
-export interface TelegramTypingMachineState {
+/** The whole typing-loop state; only `transitionBaleTypingLoop` produces a new one. */
+export interface BaleTypingMachineState {
     /** The loop the interval serves; its callbacks live in the shell under `id`. A loop exists exactly while ticking. */
     readonly loop: {
         readonly id: number;
@@ -147,7 +147,7 @@ export interface TelegramTypingMachineState {
     readonly inFlight: number | null;
     readonly nextSendId: number;
 }
-export type TelegramTypingEvent = {
+export type BaleTypingEvent = {
     type: "started";
     /** Shell-assigned, so the shell can hold the caller's callbacks before effects run. */
     loopId: number;
@@ -168,7 +168,7 @@ export type TelegramTypingEvent = {
 } | {
     type: "stopRequested";
 };
-export type TelegramTypingEffect = {
+export type BaleTypingEffect = {
     type: "send";
     loopId: number;
     sendId: number;
@@ -185,54 +185,54 @@ export type TelegramTypingEffect = {
     type: "loopEnded";
     loopId: number;
 };
-export interface TelegramTypingStep extends Machine.TelegramMachineStep<TelegramTypingMachineState, TelegramTypingEffect> {
+export interface BaleTypingStep extends Machine.BaleMachineStep<BaleTypingMachineState, BaleTypingEffect> {
     /** `start`: a loop began or moved to a new target. `stop`: a running loop ended. */
     result: boolean;
 }
-export declare function createTelegramTypingMachineState(): TelegramTypingMachineState;
+export declare function createBaleTypingMachineState(): BaleTypingMachineState;
 /**
  * Pure typing-loop transition. Every start replaces the caller's callbacks, even on the same target, and forgets the
  * old in-flight action; only a new target sends at once on a running loop, whose interval keeps its phase.
  */
-export declare function transitionTelegramTypingLoop(state: TelegramTypingMachineState, event: TelegramTypingEvent): TelegramTypingStep;
+export declare function transitionBaleTypingLoop(state: BaleTypingMachineState, event: BaleTypingEvent): BaleTypingStep;
 /**
- * The shell around `transitionTelegramTypingLoop`: it holds each loop's callbacks, samples `shouldContinue` into
+ * The shell around `transitionBaleTypingLoop`: it holds each loop's callbacks, samples `shouldContinue` into
  * events, owns the interval and turns every action outcome into `sendSettled`.
  */
-export declare function createTelegramTypingLoop(): TelegramRuntimeTypingPort;
-export declare function createTelegramContextAbortHandlerSetter<TContext extends {
+export declare function createBaleTypingLoop(): BaleRuntimeTypingPort;
+export declare function createBaleContextAbortHandlerSetter<TContext extends {
     abort: () => void;
-}>(abort: Pick<TelegramRuntimeAbortPort, "setHandler">): (ctx: TContext) => void;
-export interface TelegramAgentEndResetDeps {
-    abort: Pick<TelegramRuntimeAbortPort, "clearHandler">;
-    typing: Pick<TelegramRuntimeTypingPort, "stop">;
+}>(abort: Pick<BaleRuntimeAbortPort, "setHandler">): (ctx: TContext) => void;
+export interface BaleAgentEndResetDeps {
+    abort: Pick<BaleRuntimeAbortPort, "clearHandler">;
+    typing: Pick<BaleRuntimeTypingPort, "stop">;
     clearActiveTurn: () => void;
     resetToolExecutions: () => void;
     clearPendingModelSwitch: () => void;
     clearDispatchPending: () => void;
 }
-export declare function createTelegramAgentEndResetter(deps: TelegramAgentEndResetDeps): () => void;
-export interface TelegramPromptDispatchLifecycleDeps<TContext> extends TelegramRuntimeEventRecorderPort {
-    lifecycle: Pick<TelegramRuntimeLifecyclePort, "setDispatchPending" | "clearDispatchPending">;
-    typing: Pick<TelegramRuntimeTypingPort, "stop">;
+export declare function createBaleAgentEndResetter(deps: BaleAgentEndResetDeps): () => void;
+export interface BalePromptDispatchLifecycleDeps<TContext> extends BaleRuntimeEventRecorderPort {
+    lifecycle: Pick<BaleRuntimeLifecyclePort, "setDispatchPending" | "clearDispatchPending">;
+    typing: Pick<BaleRuntimeTypingPort, "stop">;
     startTypingLoop: (ctx: TContext, chatId?: number, options?: {
-        target?: TelegramTypingLoopTarget;
+        target?: BaleTypingLoopTarget;
     }) => boolean | void;
     updateStatus: (ctx: TContext, error?: string) => void;
 }
-export interface TelegramPromptDispatchRuntimeDeps<TContext> extends TelegramTypingLoopStarterDeps<TContext> {
-    lifecycle: TelegramPromptDispatchLifecycleDeps<TContext>["lifecycle"];
+export interface BalePromptDispatchRuntimeDeps<TContext> extends BaleTypingLoopStarterDeps<TContext> {
+    lifecycle: BalePromptDispatchLifecycleDeps<TContext>["lifecycle"];
 }
-export interface TelegramPromptDispatchRuntime<TContext> {
+export interface BalePromptDispatchRuntime<TContext> {
     startTypingLoop: (ctx: TContext, chatId?: number, options?: {
-        target?: TelegramTypingLoopTarget;
+        target?: BaleTypingLoopTarget;
         ensure?: boolean;
     }) => boolean | void;
-    onPromptDispatchStart: (ctx: TContext, chatId?: number, target?: TelegramTypingLoopTarget) => void;
+    onPromptDispatchStart: (ctx: TContext, chatId?: number, target?: BaleTypingLoopTarget) => void;
     onPromptDispatchFailure: (ctx: TContext, message: string) => void;
 }
-export declare function createTelegramPromptDispatchRuntime<TContext>(deps: TelegramPromptDispatchRuntimeDeps<TContext>): TelegramPromptDispatchRuntime<TContext>;
-export declare function createTelegramPromptDispatchLifecycle<TContext>(deps: TelegramPromptDispatchLifecycleDeps<TContext>): {
-    onPromptDispatchStart: (ctx: TContext, chatId?: number, target?: TelegramTypingLoopTarget) => void;
+export declare function createBalePromptDispatchRuntime<TContext>(deps: BalePromptDispatchRuntimeDeps<TContext>): BalePromptDispatchRuntime<TContext>;
+export declare function createBalePromptDispatchLifecycle<TContext>(deps: BalePromptDispatchLifecycleDeps<TContext>): {
+    onPromptDispatchStart: (ctx: TContext, chatId?: number, target?: BaleTypingLoopTarget) => void;
     onPromptDispatchFailure: (ctx: TContext, message: string) => void;
 };

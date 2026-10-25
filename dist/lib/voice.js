@@ -1,13 +1,13 @@
 /**
- * Telegram voice reply policy and provider registries
- * Zones: telegram, voice, pi agent prompts
+ * Bale voice reply policy and provider registries
+ * Zones: bale, voice, pi agent prompts
  * Owns: voice reply modes (manual / mirror / always), voice turn flags and preview suppression,
  * voice prompt contributions, and the process-global synthesis/transcription provider registries.
- * Excludes: voice markup parsing (outbound-markup), audio generation and Telegram delivery
+ * Excludes: voice markup parsing (outbound-markup), audio generation and Bale delivery
  * (outbound, outbound-voice), queue, preview lifecycle and turn building.
  */
-const VOICE_SYNTHESIS_PROVIDER_REGISTRY_KEY = "__piTelegramVoiceSynthesisProviders__";
-const VOICE_TRANSCRIPTION_PROVIDER_REGISTRY_KEY = "__piTelegramVoiceTranscriptionProviders__";
+const VOICE_SYNTHESIS_PROVIDER_REGISTRY_KEY = "__piBaleVoiceSynthesisProviders__";
+const VOICE_TRANSCRIPTION_PROVIDER_REGISTRY_KEY = "__piBaleVoiceTranscriptionProviders__";
 let nextGeneratedVoiceSynthesisProviderId = 0;
 let nextGeneratedVoiceTranscriptionProviderId = 0;
 function getNextAvailableProviderId(registry, prefix, nextId) {
@@ -27,14 +27,14 @@ function getOrCreateVoiceSynthesisProviderRegistry() {
     return registry;
 }
 /**
- * Register a high-level Telegram voice synthesis provider.
+ * Register a high-level Bale voice synthesis provider.
  *
  * Stable public API callers must pass a stable `options.id` so diagnostics,
  * replacement, and cleanup can identify the provider. Omitted ids remain a
  * compatibility path for pre-matrix callers and receive generated session-local
  * ids.
  */
-export function registerTelegramVoiceSynthesisProvider(provider, options) {
+export function registerBaleVoiceSynthesisProvider(provider, options) {
     const registry = getOrCreateVoiceSynthesisProviderRegistry();
     const id = options?.id ??
         getNextAvailableProviderId(registry, "voice-synthesis-provider", () => nextGeneratedVoiceSynthesisProviderId++);
@@ -51,13 +51,13 @@ export function registerTelegramVoiceSynthesisProvider(provider, options) {
             registry.delete(id);
     };
 }
-export function getTelegramVoiceSynthesisProviders() {
+export function getBaleVoiceSynthesisProviders() {
     return Array.from(getOrCreateVoiceSynthesisProviderRegistry().values());
 }
-export function hasTelegramVoiceSynthesisProvider() {
+export function hasBaleVoiceSynthesisProvider() {
     return getOrCreateVoiceSynthesisProviderRegistry().size > 0;
 }
-export function clearTelegramVoiceSynthesisProviders() {
+export function clearBaleVoiceSynthesisProviders() {
     getOrCreateVoiceSynthesisProviderRegistry().clear();
 }
 function getOrCreateVoiceTranscriptionProviderRegistry() {
@@ -70,13 +70,13 @@ function getOrCreateVoiceTranscriptionProviderRegistry() {
     return registry;
 }
 /**
- * Register a high-level Telegram voice transcription provider.
+ * Register a high-level Bale voice transcription provider.
  *
  * Stable public API callers must pass a stable `options.id`. Omitted ids remain
  * a compatibility path for pre-matrix callers and receive generated
  * session-local ids.
  */
-export function registerTelegramVoiceTranscriptionProvider(provider, options) {
+export function registerBaleVoiceTranscriptionProvider(provider, options) {
     const registry = getOrCreateVoiceTranscriptionProviderRegistry();
     const id = options?.id ??
         getNextAvailableProviderId(registry, "voice-transcription-provider", () => nextGeneratedVoiceTranscriptionProviderId++);
@@ -86,17 +86,17 @@ export function registerTelegramVoiceTranscriptionProvider(provider, options) {
             registry.delete(id);
     };
 }
-export function getTelegramVoiceTranscriptionProviders() {
+export function getBaleVoiceTranscriptionProviders() {
     return Array.from(getOrCreateVoiceTranscriptionProviderRegistry().values());
 }
-export function hasTelegramVoiceTranscriptionProvider() {
+export function hasBaleVoiceTranscriptionProvider() {
     return getOrCreateVoiceTranscriptionProviderRegistry().size > 0;
 }
-export function clearTelegramVoiceTranscriptionProviders() {
+export function clearBaleVoiceTranscriptionProviders() {
     getOrCreateVoiceTranscriptionProviderRegistry().clear();
 }
 // --- Voice Reply Modes ---
-export const TELEGRAM_VOICE_REPLY_MODES = [
+export const BALE_VOICE_REPLY_MODES = [
     "manual",
     "mirror",
     "always",
@@ -104,11 +104,11 @@ export const TELEGRAM_VOICE_REPLY_MODES = [
 /**
  * Returns the active voice reply mode for the current session.
  *
- * Pi-telegram owns reply-mode policy through telegram.json. If
+ * Pi-bale owns reply-mode policy through bale.json. If
  * config.voice.replyMode is missing, invalid, or legacy `hidden`, the effective
  * mode is manual.
  */
-export function getTelegramVoiceReplyMode(config) {
+export function getBaleVoiceReplyMode(config) {
     const configMode = config?.voice?.replyMode;
     if (configMode === "mirror" || configMode === "always")
         return configMode;
@@ -141,7 +141,7 @@ export function computeVoicePromptContribution(voiceReplyMode, files, rawText) {
     // Let the voice synthesis provider supply additional instructions for the LLM when in voice mode.
     // When multiple providers are registered, the first one (in registration order)
     // that returns a non-empty string wins.
-    for (const provider of getTelegramVoiceSynthesisProviders()) {
+    for (const provider of getBaleVoiceSynthesisProviders()) {
         if (typeof provider.getVoicePromptContribution === "function") {
             const contribution = provider.getVoicePromptContribution(view);
             if (contribution?.trim()) {

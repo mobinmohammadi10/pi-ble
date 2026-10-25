@@ -1,3 +1,5 @@
+> Bale port: only the supported subset in [Bale compatibility](../../docs/bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
 # Complex Layout And Interaction State
 
 Read this reference only for complex grids, navigation collections, or repeated stateful clicks.

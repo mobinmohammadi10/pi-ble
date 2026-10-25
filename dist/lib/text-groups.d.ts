@@ -1,10 +1,10 @@
 /**
- * Telegram text-group coalescing helpers
- * Zones: telegram inbound, queue admission, split-message recovery
- * Owns conservative delayed grouping for Telegram text messages that look like automatic long-message splits
+ * Bale text-group coalescing helpers
+ * Zones: bale inbound, queue admission, split-message recovery
+ * Owns conservative delayed grouping for Bale text messages that look like automatic long-message splits
  */
-import { type TelegramMessageForwardOrigin, type TelegramMessageUser, type TelegramRichMessage } from "./media.ts";
-export interface TelegramTextGroupMessage {
+import { type BaleMessageForwardOrigin, type BaleMessageUser, type BaleRichMessage } from "./media.ts";
+export interface BaleTextGroupMessage {
     message_id: number;
     media_group_id?: string;
     chat: {
@@ -17,18 +17,18 @@ export interface TelegramTextGroupMessage {
     };
     text?: string;
     caption?: string;
-    rich_message?: TelegramRichMessage;
-    forward_origin?: TelegramMessageForwardOrigin;
-    forward_from?: TelegramMessageUser;
+    rich_message?: BaleRichMessage;
+    forward_origin?: BaleMessageForwardOrigin;
+    forward_from?: BaleMessageUser;
     forward_sender_name?: string;
 }
-export type TelegramForwardCommentBatchPosition = "comment" | "forward";
-export interface TelegramTextGroupController<TMessage, TContext = unknown> {
+export type BaleForwardCommentBatchPosition = "comment" | "forward";
+export interface BaleTextGroupController<TMessage, TContext = unknown> {
     prepareUpdateBatch: (updates: readonly {
         message?: TMessage;
     }[]) => void;
-    getPreparedForwardingPosition: (message: TelegramTextGroupMessage) => TelegramForwardCommentBatchPosition | undefined;
-    prepareForwardedMessage: (message: TelegramTextGroupMessage, position: TelegramForwardCommentBatchPosition) => void;
+    getPreparedForwardingPosition: (message: BaleTextGroupMessage) => BaleForwardCommentBatchPosition | undefined;
+    prepareForwardedMessage: (message: BaleTextGroupMessage, position: BaleForwardCommentBatchPosition) => void;
     queueMessage: (options: {
         message: TMessage;
         context: TContext;
@@ -39,25 +39,25 @@ export interface TelegramTextGroupController<TMessage, TContext = unknown> {
     resume: (context: TContext) => void;
     clear: () => void;
 }
-export interface TelegramTextGroupControllerOptions {
+export interface BaleTextGroupControllerOptions {
     debounceMs?: number;
     forwardCommentWaitMs?: number | false;
     minSplitLength?: number;
     setTimer?: (callback: () => void, ms: number) => ReturnType<typeof setTimeout>;
     clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
 }
-export interface TelegramTextGroupDispatchRuntime<TMessage extends TelegramTextGroupMessage, TContext> {
+export interface BaleTextGroupDispatchRuntime<TMessage extends BaleTextGroupMessage, TContext> {
     handleMessage: (message: TMessage, ctx: TContext) => Promise<void>;
 }
-export interface TelegramGroupedInputClearerDeps {
+export interface BaleGroupedInputClearerDeps {
     clearMediaGroups: () => void;
     clearTextGroups: () => void;
 }
-export declare function createTelegramTextGroupController<TMessage extends TelegramTextGroupMessage, TContext = unknown>(options?: TelegramTextGroupControllerOptions): TelegramTextGroupController<TMessage, TContext>;
-export declare function createTelegramTextGroupDispatchRuntime<TMessage extends TelegramTextGroupMessage, TContext>(deps: {
-    textGroups: TelegramTextGroupController<TMessage, TContext>;
+export declare function createBaleTextGroupController<TMessage extends BaleTextGroupMessage, TContext = unknown>(options?: BaleTextGroupControllerOptions): BaleTextGroupController<TMessage, TContext>;
+export declare function createBaleTextGroupDispatchRuntime<TMessage extends BaleTextGroupMessage, TContext>(deps: {
+    textGroups: BaleTextGroupController<TMessage, TContext>;
     dispatchMessages: (messages: TMessage[], ctx: TContext) => Promise<void>;
     dispatchSingleMessage: (message: TMessage, ctx: TContext) => Promise<void>;
     onDeferredMessage?: (message: TMessage) => void;
-}): TelegramTextGroupDispatchRuntime<TMessage, TContext>;
-export declare function createTelegramGroupedInputClearer(deps: TelegramGroupedInputClearerDeps): () => void;
+}): BaleTextGroupDispatchRuntime<TMessage, TContext>;
+export declare function createBaleGroupedInputClearer(deps: BaleGroupedInputClearerDeps): () => void;

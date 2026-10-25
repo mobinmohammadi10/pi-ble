@@ -1,5 +1,5 @@
 /**
- * Regression tests for inbound Telegram handlers
+ * Regression tests for inbound Bale handlers
  * Covers MIME/type matching, template substitution, fallback failures, and prompt-text routing
  */
 
@@ -10,23 +10,23 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
-  buildTelegramInboundHandlerInvocation,
-  clearTelegramInboundHandlers,
-  processTelegramInboundHandlers,
-  registerTelegramInboundHandler,
-  telegramInboundHandlerMatchesFile,
+  buildBaleInboundHandlerInvocation,
+  clearBaleInboundHandlers,
+  processBaleInboundHandlers,
+  registerBaleInboundHandler,
+  baleInboundHandlerMatchesFile,
 } from "../lib/inbound.ts";
 import {
-  clearTelegramVoiceTranscriptionProviders,
-  registerTelegramVoiceTranscriptionProvider,
+  clearBaleVoiceTranscriptionProviders,
+  registerBaleVoiceTranscriptionProvider,
 } from "../lib/voice.ts";
 
 test.beforeEach(() => {
-  clearTelegramInboundHandlers();
-  clearTelegramVoiceTranscriptionProviders();
+  clearBaleInboundHandlers();
+  clearBaleVoiceTranscriptionProviders();
 });
 
-test("Inbound handlers match MIME wildcards and Telegram file types", () => {
+test("Inbound handlers match MIME wildcards and Bale file types", () => {
   const voiceFile = {
     path: "/tmp/voice.ogg",
     fileName: "voice.ogg",
@@ -34,18 +34,18 @@ test("Inbound handlers match MIME wildcards and Telegram file types", () => {
     kind: "voice",
   };
   assert.equal(
-    telegramInboundHandlerMatchesFile({ mime: "audio/*" }, voiceFile),
+    baleInboundHandlerMatchesFile({ mime: "audio/*" }, voiceFile),
     true,
   );
   assert.equal(
-    telegramInboundHandlerMatchesFile({ type: "voice" }, voiceFile),
+    baleInboundHandlerMatchesFile({ type: "voice" }, voiceFile),
     true,
   );
   assert.equal(
-    telegramInboundHandlerMatchesFile({ match: "application/pdf" }, voiceFile),
+    baleInboundHandlerMatchesFile({ match: "application/pdf" }, voiceFile),
     false,
   );
-  assert.equal(telegramInboundHandlerMatchesFile({}, voiceFile), true);
+  assert.equal(baleInboundHandlerMatchesFile({}, voiceFile), true);
 });
 
 test("Inbound template handlers substitute paths without shell interpolation", async () => {
@@ -56,7 +56,7 @@ test("Inbound template handlers substitute paths without shell interpolation", a
     mimeType: "audio/ogg",
     kind: "voice",
   };
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [file],
     rawText: "please summarize",
     handlers: [
@@ -102,7 +102,7 @@ test("Inbound template handlers apply declared defaults", async () => {
     mimeType: "audio/ogg",
     kind: "voice",
   };
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [file],
     rawText: "",
     handlers: [
@@ -130,7 +130,7 @@ test("Inbound template handlers apply declared defaults", async () => {
 
 test("Inbound text handlers transform raw prompt text through stdin", async () => {
   const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [],
     rawText: "привет",
     handlers: [
@@ -157,7 +157,7 @@ test("Inbound text handlers transform raw prompt text through stdin", async () =
 });
 
 test("Inbound text handlers can match raw text by MIME only", async () => {
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [],
     rawText: "bonjour",
     handlers: [
@@ -179,7 +179,7 @@ test("Inbound text handlers can match raw text by MIME only", async () => {
 
 test("Inbound text handlers keep original text on empty or failed output", async () => {
   const events: string[] = [];
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [],
     rawText: "original",
     handlers: [
@@ -202,10 +202,10 @@ test("Inbound text handlers keep original text on empty or failed output", async
 });
 
 test("Built-in text attachment handling injects text files into outputs", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-text-attachment-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-text-attachment-"));
   const filePath = join(dir, "note.txt");
   await writeFile(filePath, "hello from file\n", "utf8");
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [
       {
         path: filePath,
@@ -234,7 +234,7 @@ test("Inbound handler output is bounded before entering prompts", async () => {
     mimeType: "application/pdf",
     kind: "document",
   };
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [file],
     rawText: "summarize",
     handlers: [{ mime: "application/pdf", template: "/tools/ocr {file}" }],
@@ -254,7 +254,7 @@ test("Inbound handler output is bounded before entering prompts", async () => {
 
 test("Inbound handler failure output is bounded before runtime events", async () => {
   const events: string[] = [];
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [
       {
         path: "/tmp/huge.pdf",
@@ -288,10 +288,10 @@ test("Inbound handler failure output is bounded before runtime events", async ()
 });
 
 test("Built-in text attachment handling accepts text wildcards", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-text-attachment-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-text-attachment-"));
   const filePath = join(dir, "note.md");
   await writeFile(filePath, "# Hello\n", "utf8");
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [
       {
         path: filePath,
@@ -314,7 +314,7 @@ test("Built-in text attachment handling accepts text wildcards", async () => {
 });
 
 test("Inbound template invocation keeps args as name declarations only", () => {
-  const invocation = buildTelegramInboundHandlerInvocation(
+  const invocation = buildBaleInboundHandlerInvocation(
     {
       template: "./scripts/transcribe {file} {lang=ru}",
       args: ["file", "lang"],
@@ -329,7 +329,7 @@ test("Inbound template invocation keeps args as name declarations only", () => {
 });
 
 test("Inbound template invocation supports inline placeholder defaults", () => {
-  const invocation = buildTelegramInboundHandlerInvocation(
+  const invocation = buildBaleInboundHandlerInvocation(
     {
       template:
         "./scripts/transcribe {file} {lang=ru} {model=voxtral-mini-latest}",
@@ -344,7 +344,7 @@ test("Inbound template invocation supports inline placeholder defaults", () => {
 });
 
 test("Inbound template handlers resolve relative commands", () => {
-  const invocation = buildTelegramInboundHandlerInvocation(
+  const invocation = buildBaleInboundHandlerInvocation(
     { template: "./scripts/transcribe {file} ru" },
     { path: "/tmp/a.ogg" },
     "/work",
@@ -356,7 +356,7 @@ test("Inbound template handlers resolve relative commands", () => {
 });
 
 test("Inbound template handlers append the path when no placeholder is present", () => {
-  const invocation = buildTelegramInboundHandlerInvocation(
+  const invocation = buildBaleInboundHandlerInvocation(
     { template: "./scripts/transcribe --lang ru" },
     { path: "/tmp/a.ogg" },
     "/work",
@@ -375,7 +375,7 @@ test("Inbound template composition handlers execute steps in order", async () =>
     mimeType: "audio/ogg",
     kind: "voice",
   };
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [file],
     rawText: "",
     handlers: [
@@ -412,7 +412,7 @@ test("Inbound template composition handlers execute steps in order", async () =>
 test("Inbound template composition wraps timeout and pipes stdout to stdin", async () => {
   const calls: Array<{ command: string; stdin?: string; timeout?: number }> =
     [];
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [{ path: "/tmp/voice.ogg", mimeType: "audio/ogg", kind: "voice" }],
     rawText: "",
     handlers: [
@@ -460,7 +460,7 @@ test("Inbound handlers fall back to the next matching handler on failure", async
     mimeType: "audio/ogg",
     kind: "voice",
   };
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [file],
     rawText: "",
     handlers: [
@@ -503,7 +503,7 @@ test("Inbound handler failures fall back to normal inbound prompts", async () =>
     mimeType: "application/pdf",
     kind: "document",
   };
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [file],
     rawText: "read this",
     handlers: [
@@ -535,7 +535,7 @@ test("Inbound handler failures fall back to normal inbound prompts", async () =>
 
 test("Inbound handler composition: non-critical failure continues to next step", async () => {
   const calls: string[] = [];
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [{ path: "/tmp/in.ogg", mimeType: "audio/ogg", kind: "voice" }],
     rawText: "",
     handlers: [
@@ -557,12 +557,12 @@ test("Inbound handler composition: non-critical failure continues to next step",
 });
 
 test("Programmatic inbound text handlers transform text after configured text handlers", async () => {
-  const dispose = registerTelegramInboundHandler(
+  const dispose = registerBaleInboundHandler(
     "text",
     async ({ text }) => `${text} world`,
   );
   try {
-    const result = await processTelegramInboundHandlers({
+    const result = await processBaleInboundHandlers({
       files: [],
       rawText: "hello",
       handlers: [
@@ -586,17 +586,17 @@ test("Programmatic inbound text handlers transform text after configured text ha
 });
 
 test("Programmatic inbound media handlers run before voice transcription providers", async () => {
-  const disposeInbound = registerTelegramInboundHandler(
+  const disposeInbound = registerBaleInboundHandler(
     "voice",
     async ({ file }) => ({
       text: `programmatic transcript for ${file?.fileName}`,
     }),
   );
-  const disposeProvider = registerTelegramVoiceTranscriptionProvider(
+  const disposeProvider = registerBaleVoiceTranscriptionProvider(
     async () => "provider transcript",
   );
   try {
-    const result = await processTelegramInboundHandlers({
+    const result = await processBaleInboundHandlers({
       files: [
         {
           path: "/tmp/programmatic.ogg",
@@ -626,11 +626,11 @@ test("Programmatic inbound media handlers run before voice transcription provide
 });
 
 test("Inbound voice transcription providers handle voice files when no handler matches", async () => {
-  const dispose = registerTelegramVoiceTranscriptionProvider(async (file) => ({
+  const dispose = registerBaleVoiceTranscriptionProvider(async (file) => ({
     text: `provider transcript for ${file.fileName}`,
   }));
   try {
-    const result = await processTelegramInboundHandlers({
+    const result = await processBaleInboundHandlers({
       files: [
         {
           path: "/tmp/provider.ogg",
@@ -659,11 +659,11 @@ test("Inbound voice transcription providers handle voice files when no handler m
 });
 
 test("Inbound handlers take precedence over voice transcription providers", async () => {
-  const dispose = registerTelegramVoiceTranscriptionProvider(
+  const dispose = registerBaleVoiceTranscriptionProvider(
     async () => "provider transcript",
   );
   try {
-    const result = await processTelegramInboundHandlers({
+    const result = await processBaleInboundHandlers({
       files: [{ path: "/tmp/in.ogg", mimeType: "audio/ogg", kind: "voice" }],
       rawText: "",
       handlers: [{ type: "voice", template: "transcribe --file {file}" }],
@@ -683,7 +683,7 @@ test("Inbound handlers take precedence over voice transcription providers", asyn
 
 test("Inbound handler composition: critical failure aborts composition", async () => {
   const calls: string[] = [];
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [{ path: "/tmp/in.ogg", mimeType: "audio/ogg", kind: "voice" }],
     rawText: "",
     handlers: [
@@ -710,7 +710,7 @@ test("Inbound handler composition: critical failure aborts composition", async (
 
 test("Inbound handler composition: non-critical failure continues, critical stops", async () => {
   const calls: string[] = [];
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [{ path: "/tmp/in.ogg", mimeType: "audio/ogg", kind: "voice" }],
     rawText: "",
     handlers: [
@@ -739,7 +739,7 @@ test("Inbound handlers skip when-guarded steps and fall through when a whole han
     calls.push(command);
     return { stdout: `${command}(${options?.stdin ?? ""})`, stderr: "", code: 0, killed: false };
   };
-  const text = await processTelegramInboundHandlers({
+  const text = await processBaleInboundHandlers({
     files: [],
     rawText: "hi",
     handlers: [
@@ -753,7 +753,7 @@ test("Inbound handlers skip when-guarded steps and fall through when a whole han
   assert.equal(text.rawText, "/tools/b(/tools/a(hi))");
   calls.length = 0;
   const file = { path: "/tmp/voice.ogg", fileName: "voice.ogg", mimeType: "audio/ogg", kind: "voice", isImage: false };
-  const files = await processTelegramInboundHandlers({
+  const files = await processBaleInboundHandlers({
     files: [file],
     rawText: "",
     handlers: [
@@ -769,7 +769,7 @@ test("Inbound handlers skip when-guarded steps and fall through when a whole han
 
 test("Inbound handlers treat an unresolvable when guard as that handler's failure", async () => {
   const events: string[] = [];
-  const result = await processTelegramInboundHandlers({
+  const result = await processBaleInboundHandlers({
     files: [],
     rawText: "hi",
     handlers: [

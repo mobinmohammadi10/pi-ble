@@ -1,62 +1,62 @@
 /**
- * Telegram target-aware operational delivery and logical message lifecycle
- * Zones: telegram delivery, extension API, runtime binding
- * Owns the public extension delivery contract, authorized scope resolution, operational rendering adapter, per-target serialization, chunk reconciliation, generation-fenced logical handles, and process-local runtime membrane; composes the established reply renderer with bus-aware Telegram API ports and excludes bot clients, Pi contexts, and consumer-extension policy
+ * Bale target-aware operational delivery and logical message lifecycle
+ * Zones: bale delivery, extension API, runtime binding
+ * Owns the public extension delivery contract, authorized scope resolution, operational rendering adapter, per-target serialization, chunk reconciliation, generation-fenced logical handles, and process-local runtime membrane; composes the established reply renderer with bus-aware Bale API ports and excludes bot clients, Pi contexts, and consumer-extension policy
  */
 
 import {
-  assertTelegramInlineKeyboardCallbackData,
-  type TelegramInlineKeyboardMarkup,
+  assertBaleInlineKeyboardCallbackData,
+  type BaleInlineKeyboardMarkup,
 } from "./keyboard.ts";
 import {
-  renderTelegramMessage,
-  withTelegramReplyParameters,
+  renderBaleMessage,
+  withBaleReplyParameters,
 } from "./replies.ts";
 import {
-  areTelegramTargetsEqual as areDeliveryTargetsEqual,
-  getTelegramTargetThreadParams,
-  type TelegramTarget,
+  areBaleTargetsEqual as areDeliveryTargetsEqual,
+  getBaleTargetThreadParams,
+  type BaleTarget,
 } from "./target.ts";
 import {
-  getTelegramApiRetryAfterMs,
-  isRetryableTelegramApiError,
-  isTelegramApiCommitUnknownError,
-  isTelegramMessageUnavailableError,
-  type TelegramBridgeApiRuntime,
-} from "./telegram-api.ts";
+  getBaleApiRetryAfterMs,
+  isRetryableBaleApiError,
+  isBaleApiCommitUnknownError,
+  isBaleMessageUnavailableError,
+  type BaleBridgeApiRuntime,
+} from "./bale-api.ts";
 
-const TELEGRAM_DELIVERY_RUNTIME_KEY = "__piTelegramDeliveryRuntime__";
+const BALE_DELIVERY_RUNTIME_KEY = "__piBaleDeliveryRuntime__";
 
-class TelegramDeliveryTransportGenerationError extends Error {
+class BaleDeliveryTransportGenerationError extends Error {
   constructor() {
-    super("Telegram Delivery transport generation is no longer active.");
-    this.name = "TelegramDeliveryTransportGenerationError";
+    super("Bale Delivery transport generation is no longer active.");
+    this.name = "BaleDeliveryTransportGenerationError";
   }
 }
 
-export type TelegramDeliveryParseMode = "plain" | "html" | "markdown";
+export type BaleDeliveryParseMode = "plain" | "html" | "markdown";
 
-export interface TelegramDeliveryView {
+export interface BaleDeliveryView {
   text: string;
-  parseMode?: TelegramDeliveryParseMode;
-  replyMarkup?: TelegramInlineKeyboardMarkup;
+  parseMode?: BaleDeliveryParseMode;
+  replyMarkup?: BaleInlineKeyboardMarkup;
 }
 
-export type TelegramDeliveryTarget = TelegramTarget;
+export type BaleDeliveryTarget = BaleTarget;
 
-export type TelegramDeliveryScope =
+export type BaleDeliveryScope =
   | { kind: "active-turn" }
   | { kind: "instance" }
   | { kind: "aggregate" }
-  | { kind: "target"; target: TelegramDeliveryTarget };
+  | { kind: "target"; target: BaleDeliveryTarget };
 
-export interface TelegramDeliveryHandle {
-  readonly target: TelegramDeliveryTarget;
+export interface BaleDeliveryHandle {
+  readonly target: BaleDeliveryTarget;
   readonly messageIds: readonly number[];
   readonly generation: string;
 }
 
-export type TelegramDeliveryFailureReason =
+export type BaleDeliveryFailureReason =
   | "runtime-unavailable"
   | "target-unavailable"
   | "target-unauthorized"
@@ -68,130 +68,130 @@ export type TelegramDeliveryFailureReason =
   | "transport-retryable"
   | "transport-failed";
 
-export type TelegramDeliveryResult<T> =
+export type BaleDeliveryResult<T> =
   | { ok: true; value: T }
   | {
       ok: false;
-      reason: TelegramDeliveryFailureReason;
+      reason: BaleDeliveryFailureReason;
       message: string;
-      /** Exact Telegram flood-control delay when supplied by the API. */
+      /** Exact Bale flood-control delay when supplied by the API. */
       retryAfterMs?: number;
       /** Successfully materialized state that callers may edit or delete to recover. */
       partial?: T;
     };
 
-export interface SendTelegramViewOptions {
-  scope: TelegramDeliveryScope;
+export interface SendBaleViewOptions {
+  scope: BaleDeliveryScope;
   replyToMessageId?: number;
 }
 
-export type TelegramDeliveryChatAction =
+export type BaleDeliveryChatAction =
   "typing" | "upload_document" | "upload_photo" | "record_voice";
 
 /** @internal */
-export interface TelegramDeliveryRuntime {
+export interface BaleDeliveryRuntime {
   readonly generation: string;
-  hasPendingTarget?: (target: TelegramDeliveryTarget) => boolean;
+  hasPendingTarget?: (target: BaleDeliveryTarget) => boolean;
   shutdown: () => void;
   sendView: (
-    view: TelegramDeliveryView,
-    options: SendTelegramViewOptions,
-  ) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+    view: BaleDeliveryView,
+    options: SendBaleViewOptions,
+  ) => Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
   editView: (
-    handle: TelegramDeliveryHandle,
-    view: TelegramDeliveryView,
-  ) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+    handle: BaleDeliveryHandle,
+    view: BaleDeliveryView,
+  ) => Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
   deleteView: (
-    handle: TelegramDeliveryHandle,
-  ) => Promise<TelegramDeliveryResult<void>>;
+    handle: BaleDeliveryHandle,
+  ) => Promise<BaleDeliveryResult<void>>;
   sendChatAction: (
-    action: TelegramDeliveryChatAction,
-    scope: TelegramDeliveryScope,
-  ) => Promise<TelegramDeliveryResult<void>>;
+    action: BaleDeliveryChatAction,
+    scope: BaleDeliveryScope,
+  ) => Promise<BaleDeliveryResult<void>>;
 }
 
 /** @internal */
-export interface TelegramDeliveryTargetResolverDeps {
-  getActiveTurnTarget: () => TelegramDeliveryTarget | undefined;
-  getInstanceTarget: () => TelegramDeliveryTarget | undefined;
-  getAggregateTarget: () => TelegramDeliveryTarget | undefined;
-  isExplicitTargetAuthorized: (target: TelegramDeliveryTarget) => boolean;
+export interface BaleDeliveryTargetResolverDeps {
+  getActiveTurnTarget: () => BaleDeliveryTarget | undefined;
+  getInstanceTarget: () => BaleDeliveryTarget | undefined;
+  getAggregateTarget: () => BaleDeliveryTarget | undefined;
+  isExplicitTargetAuthorized: (target: BaleDeliveryTarget) => boolean;
 }
 
 /** @internal */
-export interface TelegramDeliveryRenderedChunk {
+export interface BaleDeliveryRenderedChunk {
   text: string;
-  parseMode: TelegramDeliveryParseMode;
+  parseMode: BaleDeliveryParseMode;
 }
 
 /** @internal */
-export interface TelegramDeliveryTransportOptions {
+export interface BaleDeliveryTransportOptions {
   replyToMessageId?: number;
-  replyMarkup?: TelegramInlineKeyboardMarkup | null;
+  replyMarkup?: BaleInlineKeyboardMarkup | null;
 }
 
 /** @internal */
-export interface TelegramDeliveryRuntimeDeps extends TelegramDeliveryTargetResolverDeps {
+export interface BaleDeliveryRuntimeDeps extends BaleDeliveryTargetResolverDeps {
   generation: string;
   captureDrain?: () => (() => void) | undefined;
   renderView: (
-    view: TelegramDeliveryView,
-  ) => readonly TelegramDeliveryRenderedChunk[];
+    view: BaleDeliveryView,
+  ) => readonly BaleDeliveryRenderedChunk[];
   sendChunk: (
-    target: TelegramDeliveryTarget,
-    chunk: TelegramDeliveryRenderedChunk,
-    options: TelegramDeliveryTransportOptions,
+    target: BaleDeliveryTarget,
+    chunk: BaleDeliveryRenderedChunk,
+    options: BaleDeliveryTransportOptions,
   ) => Promise<number>;
   editChunk: (
-    target: TelegramDeliveryTarget,
+    target: BaleDeliveryTarget,
     messageId: number,
-    chunk: TelegramDeliveryRenderedChunk,
-    options: TelegramDeliveryTransportOptions,
+    chunk: BaleDeliveryRenderedChunk,
+    options: BaleDeliveryTransportOptions,
   ) => Promise<void>;
   deleteMessage: (
-    target: TelegramDeliveryTarget,
+    target: BaleDeliveryTarget,
     messageId: number,
   ) => Promise<void>;
   sendChatAction: (
-    target: TelegramDeliveryTarget,
-    action: TelegramDeliveryChatAction,
+    target: BaleDeliveryTarget,
+    action: BaleDeliveryChatAction,
   ) => Promise<void>;
   recordFailure?: (
     operation: "send" | "edit" | "delete" | "chat-action",
     error: unknown,
-    target?: TelegramDeliveryTarget,
+    target?: BaleDeliveryTarget,
   ) => void;
 }
 
 /** @internal */
-export interface TelegramBridgeDeliveryRuntimeDeps {
+export interface BaleBridgeDeliveryRuntimeDeps {
   generation: string;
   captureDrain?: () => (() => void) | undefined;
-  getTargetPolicyView: () => TelegramDeliveryTargetPolicyView;
-  getActiveTurnTarget: () => TelegramDeliveryTarget | undefined;
+  getTargetPolicyView: () => BaleDeliveryTargetPolicyView;
+  getActiveTurnTarget: () => BaleDeliveryTarget | undefined;
   isTransportActive?: () => boolean;
   api: Pick<
-    TelegramBridgeApiRuntime,
+    BaleBridgeApiRuntime,
     "sendMessage" | "editMessageText" | "deleteMessage" | "sendChatAction"
   >;
   recordOwnership: (input: {
     chatId: number;
     messageId: number;
-    target: TelegramDeliveryTarget;
+    target: BaleDeliveryTarget;
   }) => void;
-  recordFailure?: TelegramDeliveryRuntimeDeps["recordFailure"];
+  recordFailure?: BaleDeliveryRuntimeDeps["recordFailure"];
 }
 
 /** @internal */
-export function createTelegramDeliveryLifecycleHooks(
-  createRuntime: () => TelegramDeliveryRuntime,
+export function createBaleDeliveryLifecycleHooks(
+  createRuntime: () => BaleDeliveryRuntime,
 ): {
   onSessionStart: () => Promise<void>;
   onSessionShutdown: () => Promise<void>;
-  hasPendingTarget: (target: TelegramDeliveryTarget) => boolean | undefined;
+  hasPendingTarget: (target: BaleDeliveryTarget) => boolean | undefined;
 } {
-  let runtime: TelegramDeliveryRuntime | undefined;
-  let unbind: ReturnType<typeof bindTelegramDeliveryRuntime> | undefined;
+  let runtime: BaleDeliveryRuntime | undefined;
+  let unbind: ReturnType<typeof bindBaleDeliveryRuntime> | undefined;
   const stopCurrentRuntime = () => {
     unbind?.();
     unbind = undefined;
@@ -203,7 +203,7 @@ export function createTelegramDeliveryLifecycleHooks(
     onSessionStart: async () => {
       stopCurrentRuntime();
       runtime = createRuntime();
-      unbind = bindTelegramDeliveryRuntime(runtime);
+      unbind = bindBaleDeliveryRuntime(runtime);
     },
     onSessionShutdown: async () => {
       stopCurrentRuntime();
@@ -211,27 +211,27 @@ export function createTelegramDeliveryLifecycleHooks(
   };
 }
 
-export function createTelegramDeliveryGenerationSeed(
+export function createBaleDeliveryGenerationSeed(
   instanceId: string,
 ): string {
   return `${instanceId}:${Date.now()}`;
 }
 
 /** @internal */
-export function createTelegramBridgeDeliveryLifecycleHooks<TTransportStamp>(
+export function createBaleBridgeDeliveryLifecycleHooks<TTransportStamp>(
   deps: Omit<
-    TelegramBridgeDeliveryRuntimeDeps,
+    BaleBridgeDeliveryRuntimeDeps,
     "generation" | "isTransportActive"
   > & {
     generationSeed: string;
     getTransportStamp?: () => TTransportStamp;
     isTransportStampActive?: (stamp: TTransportStamp) => boolean;
   },
-): ReturnType<typeof createTelegramDeliveryLifecycleHooks> {
+): ReturnType<typeof createBaleDeliveryLifecycleHooks> {
   let generationSequence = 0;
-  return createTelegramDeliveryLifecycleHooks(() => {
+  return createBaleDeliveryLifecycleHooks(() => {
     const transportStamp = deps.getTransportStamp?.();
-    return createTelegramBridgeDeliveryRuntime({
+    return createBaleBridgeDeliveryRuntime({
       ...deps,
       generation: `${deps.generationSeed}:${++generationSequence}`,
       isTransportActive:
@@ -242,36 +242,36 @@ export function createTelegramBridgeDeliveryLifecycleHooks<TTransportStamp>(
   });
 }
 
-interface TelegramDeliveryRuntimeRegistry {
-  runtime?: TelegramDeliveryRuntime;
+interface BaleDeliveryRuntimeRegistry {
+  runtime?: BaleDeliveryRuntime;
 }
 
-function getTelegramDeliveryRuntimeRegistry(): TelegramDeliveryRuntimeRegistry {
+function getBaleDeliveryRuntimeRegistry(): BaleDeliveryRuntimeRegistry {
   const globals = globalThis as Record<string, unknown>;
-  const existing = globals[TELEGRAM_DELIVERY_RUNTIME_KEY];
+  const existing = globals[BALE_DELIVERY_RUNTIME_KEY];
   if (existing && typeof existing === "object" && "runtime" in existing) {
-    return existing as TelegramDeliveryRuntimeRegistry;
+    return existing as BaleDeliveryRuntimeRegistry;
   }
-  const registry: TelegramDeliveryRuntimeRegistry = {};
-  globals[TELEGRAM_DELIVERY_RUNTIME_KEY] = registry;
+  const registry: BaleDeliveryRuntimeRegistry = {};
+  globals[BALE_DELIVERY_RUNTIME_KEY] = registry;
   return registry;
 }
 
 function failure<T>(
-  reason: TelegramDeliveryFailureReason,
+  reason: BaleDeliveryFailureReason,
   message: string,
   partial?: T,
   retryAfterMs?: number,
-): TelegramDeliveryResult<T> {
+): BaleDeliveryResult<T> {
   const retry = retryAfterMs === undefined ? {} : { retryAfterMs };
   return partial === undefined
     ? { ok: false, reason, message, ...retry }
     : { ok: false, reason, message, partial, ...retry };
 }
 
-function classifyTelegramDeliveryTransportError(error: unknown): {
+function classifyBaleDeliveryTransportError(error: unknown): {
   reason: Extract<
-    TelegramDeliveryFailureReason,
+    BaleDeliveryFailureReason,
     | "commit-unknown"
     | "message-unavailable"
     | "rate-limited"
@@ -280,47 +280,47 @@ function classifyTelegramDeliveryTransportError(error: unknown): {
   >;
   retryAfterMs?: number;
 } {
-  if (isTelegramApiCommitUnknownError(error))
+  if (isBaleApiCommitUnknownError(error))
     return { reason: "commit-unknown" };
-  if (isTelegramMessageUnavailableError(error))
+  if (isBaleMessageUnavailableError(error))
     return { reason: "message-unavailable" };
-  const retryAfterMs = getTelegramApiRetryAfterMs(error);
+  const retryAfterMs = getBaleApiRetryAfterMs(error);
   if (retryAfterMs !== undefined)
     return { reason: "rate-limited", retryAfterMs };
-  if (isRetryableTelegramApiError(error))
+  if (isRetryableBaleApiError(error))
     return { reason: "transport-retryable" };
   return { reason: "transport-failed" };
 }
 
 /** @internal */
-export interface TelegramDeliveryTargetPolicyView {
+export interface BaleDeliveryTargetPolicyView {
   canDeliver: boolean;
   ownsDirect: boolean;
   threaded?: boolean;
   allowedChatId?: number;
-  followerTarget?: TelegramDeliveryTarget;
-  leaderTarget?: TelegramDeliveryTarget;
-  liveTargets?: readonly TelegramDeliveryTarget[];
+  followerTarget?: BaleDeliveryTarget;
+  leaderTarget?: BaleDeliveryTarget;
+  liveTargets?: readonly BaleDeliveryTarget[];
 }
 
 /** @internal */
-export interface TelegramDeliveryTargetPolicyRuntime {
-  getTargetPolicyView(): TelegramDeliveryTargetPolicyView;
-  getActiveTurnTarget(): TelegramDeliveryTarget | undefined;
+export interface BaleDeliveryTargetPolicyRuntime {
+  getTargetPolicyView(): BaleDeliveryTargetPolicyView;
+  getActiveTurnTarget(): BaleDeliveryTarget | undefined;
 }
 
 /** @internal */
-export function createTelegramDeliveryTargetPolicyRuntime(deps: {
+export function createBaleDeliveryTargetPolicyRuntime(deps: {
   ownsDirect(): boolean;
   isThreadedMode?(): boolean;
   isFollowerRegistered(): boolean;
   getAllowedChatId(): number | undefined;
-  getFollowerTarget(): TelegramDeliveryTarget | undefined;
-  getLeaderTarget(): TelegramDeliveryTarget | undefined;
-  listThreadRecords(): readonly { target: TelegramDeliveryTarget }[];
-  getActiveTurnTarget(): TelegramDeliveryTarget | undefined;
+  getFollowerTarget(): BaleDeliveryTarget | undefined;
+  getLeaderTarget(): BaleDeliveryTarget | undefined;
+  listThreadRecords(): readonly { target: BaleDeliveryTarget }[];
+  getActiveTurnTarget(): BaleDeliveryTarget | undefined;
   getActiveGuestQueryId(): string | undefined;
-}): TelegramDeliveryTargetPolicyRuntime {
+}): BaleDeliveryTargetPolicyRuntime {
   return {
     getTargetPolicyView() {
       const ownsDirect = deps.ownsDirect();
@@ -342,14 +342,14 @@ export function createTelegramDeliveryTargetPolicyRuntime(deps: {
   };
 }
 
-function isThreadedDelivery(view: TelegramDeliveryTargetPolicyView): boolean {
+function isThreadedDelivery(view: BaleDeliveryTargetPolicyView): boolean {
   return view.threaded === true || view.followerTarget?.threadId !== undefined || view.leaderTarget?.threadId !== undefined;
 }
 
 /** @internal */
-export function resolveTelegramDeliveryInstanceTarget(
-  view: TelegramDeliveryTargetPolicyView,
-): TelegramDeliveryTarget | undefined {
+export function resolveBaleDeliveryInstanceTarget(
+  view: BaleDeliveryTargetPolicyView,
+): BaleDeliveryTarget | undefined {
   if (!view.canDeliver) return undefined;
   const target = view.followerTarget ?? view.leaderTarget ??
     (view.allowedChatId === undefined ? undefined : { chatId: view.allowedChatId });
@@ -357,18 +357,18 @@ export function resolveTelegramDeliveryInstanceTarget(
 }
 
 /** @internal */
-export function resolveTelegramDeliveryAggregateTarget(
-  view: TelegramDeliveryTargetPolicyView,
-): TelegramDeliveryTarget | undefined {
+export function resolveBaleDeliveryAggregateTarget(
+  view: BaleDeliveryTargetPolicyView,
+): BaleDeliveryTarget | undefined {
   return !view.canDeliver || view.allowedChatId === undefined || isThreadedDelivery(view)
     ? undefined
     : { chatId: view.allowedChatId };
 }
 
 /** @internal */
-export function isTelegramDeliveryExplicitTargetAuthorized(
-  candidate: TelegramDeliveryTarget,
-  view: TelegramDeliveryTargetPolicyView,
+export function isBaleDeliveryExplicitTargetAuthorized(
+  candidate: BaleDeliveryTarget,
+  view: BaleDeliveryTargetPolicyView,
 ): boolean {
   if (
     !view.canDeliver ||
@@ -393,25 +393,25 @@ export function isTelegramDeliveryExplicitTargetAuthorized(
   });
 }
 
-function cloneTarget(target: TelegramDeliveryTarget): TelegramDeliveryTarget {
+function cloneTarget(target: BaleDeliveryTarget): BaleDeliveryTarget {
   return target.threadId === undefined
     ? { chatId: target.chatId }
     : { chatId: target.chatId, threadId: target.threadId };
 }
 
-function targetKey(target: TelegramDeliveryTarget): string {
+function targetKey(target: BaleDeliveryTarget): string {
   return `${target.chatId}:${target.threadId ?? "root"}`;
 }
 
-function resolveTelegramDeliveryTarget(
-  scope: TelegramDeliveryScope,
-  deps: TelegramDeliveryTargetResolverDeps,
-): TelegramDeliveryResult<TelegramDeliveryTarget> {
+function resolveBaleDeliveryTarget(
+  scope: BaleDeliveryScope,
+  deps: BaleDeliveryTargetResolverDeps,
+): BaleDeliveryResult<BaleDeliveryTarget> {
   if (scope.kind === "target") {
     if (!deps.isExplicitTargetAuthorized(scope.target)) {
       return failure(
         "target-unauthorized",
-        "Telegram delivery target is not authorized for this runtime.",
+        "Bale delivery target is not authorized for this runtime.",
       );
     }
     return { ok: true, value: cloneTarget(scope.target) };
@@ -425,7 +425,7 @@ function resolveTelegramDeliveryTarget(
   if (!target) {
     return failure(
       "target-unavailable",
-      `Telegram delivery ${scope.kind} target is unavailable.`,
+      `Bale delivery ${scope.kind} target is unavailable.`,
     );
   }
   return { ok: true, value: cloneTarget(target) };
@@ -444,10 +444,10 @@ function captureDeliveryDrainObserver(capture?: () => (() => void) | undefined):
   } catch { return () => {}; }
 }
 
-function createTelegramDeliveryTargetQueue(captureDrain?: () => (() => void) | undefined) {
+function createBaleDeliveryTargetQueue(captureDrain?: () => (() => void) | undefined) {
   const queues = new Map<string, Promise<void>>();
   async function run<T>(
-    target: TelegramDeliveryTarget,
+    target: BaleDeliveryTarget,
     operation: () => Promise<T>,
   ): Promise<T> {
     const key = targetKey(target);
@@ -467,18 +467,18 @@ function createTelegramDeliveryTargetQueue(captureDrain?: () => (() => void) | u
   }
   return {
     run,
-    hasPendingTarget: (target: TelegramDeliveryTarget) =>
+    hasPendingTarget: (target: BaleDeliveryTarget) =>
       queues.has(targetKey(target)),
   };
 }
 
 function getChunkTransportOptions(
-  view: TelegramDeliveryView,
+  view: BaleDeliveryView,
   index: number,
   chunkCount: number,
   replyToMessageId?: number,
   editing = false,
-): TelegramDeliveryTransportOptions {
+): BaleDeliveryTransportOptions {
   const isFirst = index === 0;
   const isLast = index === chunkCount - 1;
   return {
@@ -492,22 +492,22 @@ function getChunkTransportOptions(
 }
 
 /** @internal */
-export function createTelegramDeliveryRuntime(
-  deps: TelegramDeliveryRuntimeDeps,
-): TelegramDeliveryRuntime {
+export function createBaleDeliveryRuntime(
+  deps: BaleDeliveryRuntimeDeps,
+): BaleDeliveryRuntime {
   let active = true;
   const handleBindings = new WeakMap<
-    TelegramDeliveryHandle,
-    { target: TelegramDeliveryTarget; messageIds: readonly number[] }
+    BaleDeliveryHandle,
+    { target: BaleDeliveryTarget; messageIds: readonly number[] }
   >();
-  const targetQueue = createTelegramDeliveryTargetQueue(() => {
+  const targetQueue = createBaleDeliveryTargetQueue(() => {
     const notify = deps.captureDrain?.();
     return () => active ? notify?.() : undefined;
   });
   const runForTarget = targetQueue.run;
   const render = (
-    view: TelegramDeliveryView,
-  ): TelegramDeliveryResult<readonly TelegramDeliveryRenderedChunk[]> => {
+    view: BaleDeliveryView,
+  ): BaleDeliveryResult<readonly BaleDeliveryRenderedChunk[]> => {
     const chunks = deps.renderView(view);
     if (
       chunks.length === 0 ||
@@ -518,40 +518,40 @@ export function createTelegramDeliveryRuntime(
     ) {
       return failure(
         "invalid-view",
-        "Telegram delivery view rendered no content.",
+        "Bale delivery view rendered no content.",
       );
     }
     return { ok: true, value: chunks };
   };
-  const inactive = <T>(): TelegramDeliveryResult<T> =>
+  const inactive = <T>(): BaleDeliveryResult<T> =>
     failure(
       "runtime-unavailable",
-      "Telegram delivery runtime generation is inactive.",
+      "Bale delivery runtime generation is inactive.",
     );
   const transportFailure = <T>(
     operation: "send" | "edit" | "delete" | "chat-action",
     error: unknown,
-    target?: TelegramDeliveryTarget,
+    target?: BaleDeliveryTarget,
     partial?: T,
-  ): TelegramDeliveryResult<T> => {
+  ): BaleDeliveryResult<T> => {
     deps.recordFailure?.(operation, error, target);
-    if (error instanceof TelegramDeliveryTransportGenerationError) {
+    if (error instanceof BaleDeliveryTransportGenerationError) {
       return inactive();
     }
-    const classified = classifyTelegramDeliveryTransportError(error);
+    const classified = classifyBaleDeliveryTransportError(error);
     return failure(
       classified.reason,
       classified.reason === "commit-unknown"
-        ? `Telegram delivery ${operation} may have committed before transport failed.`
-        : `Telegram delivery ${operation} failed.`,
+        ? `Bale delivery ${operation} may have committed before transport failed.`
+        : `Bale delivery ${operation} failed.`,
       partial,
       classified.retryAfterMs,
     );
   };
   const createHandle = (
-    target: TelegramDeliveryTarget,
+    target: BaleDeliveryTarget,
     messageIds: readonly number[],
-  ): TelegramDeliveryHandle => {
+  ): BaleDeliveryHandle => {
     const canonicalTarget = Object.freeze(cloneTarget(target));
     const canonicalMessageIds = Object.freeze([...messageIds]);
     const handle = Object.freeze({
@@ -566,9 +566,9 @@ export function createTelegramDeliveryRuntime(
     return handle;
   };
   const resolveHandle = (
-    handle: TelegramDeliveryHandle,
-  ): TelegramDeliveryResult<{
-    target: TelegramDeliveryTarget;
+    handle: BaleDeliveryHandle,
+  ): BaleDeliveryResult<{
+    target: BaleDeliveryTarget;
     messageIds: readonly number[];
   }> => {
     if (!active) return inactive();
@@ -576,10 +576,10 @@ export function createTelegramDeliveryRuntime(
     if (!binding || handle.generation !== deps.generation) {
       return failure(
         "stale-handle",
-        "Telegram delivery handle belongs to an inactive runtime generation.",
+        "Bale delivery handle belongs to an inactive runtime generation.",
       );
     }
-    const authorized = resolveTelegramDeliveryTarget(
+    const authorized = resolveBaleDeliveryTarget(
       { kind: "target", target: binding.target },
       deps,
     );
@@ -596,7 +596,7 @@ export function createTelegramDeliveryRuntime(
     },
     async sendView(view, options) {
       if (!active) return inactive();
-      const resolved = resolveTelegramDeliveryTarget(options.scope, deps);
+      const resolved = resolveBaleDeliveryTarget(options.scope, deps);
       if (!resolved.ok) return failure(resolved.reason, resolved.message);
       const rendered = render(view);
       if (!rendered.ok) return failure(rendered.reason, rendered.message);
@@ -727,7 +727,7 @@ export function createTelegramDeliveryRuntime(
     },
     async sendChatAction(action, scope) {
       if (!active) return inactive();
-      const resolved = resolveTelegramDeliveryTarget(scope, deps);
+      const resolved = resolveBaleDeliveryTarget(scope, deps);
       if (!resolved.ok) return failure(resolved.reason, resolved.message);
       const target = resolved.value;
       return runForTarget(target, async () => {
@@ -747,20 +747,20 @@ export function createTelegramDeliveryRuntime(
 }
 
 /** @internal */
-export function createTelegramBridgeDeliveryRuntime(
-  deps: TelegramBridgeDeliveryRuntimeDeps,
-): TelegramDeliveryRuntime {
+export function createBaleBridgeDeliveryRuntime(
+  deps: BaleBridgeDeliveryRuntimeDeps,
+): BaleDeliveryRuntime {
   const getPolicyView = deps.getTargetPolicyView;
   const assertTransportActive = (): void => {
     if (deps.isTransportActive?.() === false) {
-      throw new TelegramDeliveryTransportGenerationError();
+      throw new BaleDeliveryTransportGenerationError();
     }
   };
-  const assertOutputTarget = (target: TelegramDeliveryTarget): void => {
+  const assertOutputTarget = (target: BaleDeliveryTarget): void => {
     if (isThreadedDelivery(getPolicyView()) && target.threadId === undefined)
-      throw new Error("Telegram All is input-only in Threaded Mode.");
+      throw new Error("Bale All is input-only in Threaded Mode.");
   };
-  return createTelegramDeliveryRuntime({
+  return createBaleDeliveryRuntime({
     generation: deps.generation,
     captureDrain: deps.captureDrain,
     getActiveTurnTarget() {
@@ -768,20 +768,20 @@ export function createTelegramBridgeDeliveryRuntime(
       return target && (!isThreadedDelivery(getPolicyView()) || target.threadId !== undefined) ? target : undefined;
     },
     getInstanceTarget() {
-      return resolveTelegramDeliveryInstanceTarget(getPolicyView());
+      return resolveBaleDeliveryInstanceTarget(getPolicyView());
     },
     getAggregateTarget() {
-      return resolveTelegramDeliveryAggregateTarget(getPolicyView());
+      return resolveBaleDeliveryAggregateTarget(getPolicyView());
     },
     isExplicitTargetAuthorized(target) {
-      return isTelegramDeliveryExplicitTargetAuthorized(
+      return isBaleDeliveryExplicitTargetAuthorized(
         target,
         getPolicyView(),
       );
     },
     renderView(view) {
-      assertTelegramInlineKeyboardCallbackData(view.replyMarkup);
-      return renderTelegramMessage(view.text, {
+      assertBaleInlineKeyboardCallbackData(view.replyMarkup);
+      return renderBaleMessage(view.text, {
         mode: view.parseMode ?? "plain",
       }).map(function (chunk) {
         return {
@@ -793,7 +793,7 @@ export function createTelegramBridgeDeliveryRuntime(
     async sendChunk(target, chunk, options) {
       assertTransportActive();
       assertOutputTarget(target);
-      const sent = await withTelegramReplyParameters(
+      const sent = await withBaleReplyParameters(
         target.chatId,
         options.replyToMessageId,
         target,
@@ -804,7 +804,7 @@ export function createTelegramBridgeDeliveryRuntime(
             ...(chunk.parseMode === "html"
               ? { parse_mode: "HTML" as const }
               : {}),
-            ...getTelegramTargetThreadParams(target),
+            ...getBaleTargetThreadParams(target),
             ...(replyParameters ? { reply_parameters: replyParameters } : {}),
             ...(options.replyMarkup
               ? { reply_markup: options.replyMarkup }
@@ -850,52 +850,52 @@ export function createTelegramBridgeDeliveryRuntime(
   });
 }
 
-function getBoundTelegramDeliveryRuntime():
-  TelegramDeliveryRuntime | TelegramDeliveryResult<never> {
-  const runtime = getTelegramDeliveryRuntimeRegistry().runtime;
+function getBoundBaleDeliveryRuntime():
+  BaleDeliveryRuntime | BaleDeliveryResult<never> {
+  const runtime = getBaleDeliveryRuntimeRegistry().runtime;
   return (
     runtime ??
     failure(
       "runtime-unavailable",
-      "Telegram delivery runtime is unavailable in this Pi session.",
+      "Bale delivery runtime is unavailable in this Pi session.",
     )
   );
 }
 
 function isFailure(
-  value: TelegramDeliveryRuntime | TelegramDeliveryResult<never>,
-): value is TelegramDeliveryResult<never> {
+  value: BaleDeliveryRuntime | BaleDeliveryResult<never>,
+): value is BaleDeliveryResult<never> {
   return "ok" in value;
 }
 
 function validateView<T>(
-  view: TelegramDeliveryView,
-): TelegramDeliveryResult<T> | undefined {
+  view: BaleDeliveryView,
+): BaleDeliveryResult<T> | undefined {
   if (typeof view.text !== "string" || view.text.trim().length === 0) {
-    return failure("invalid-view", "Telegram delivery view text is empty.");
+    return failure("invalid-view", "Bale delivery view text is empty.");
   }
   return undefined;
 }
 
 async function runDeliveryOperation<T>(
   operation: (
-    runtime: TelegramDeliveryRuntime,
-  ) => Promise<TelegramDeliveryResult<T>>,
-): Promise<TelegramDeliveryResult<T>> {
-  const runtime = getBoundTelegramDeliveryRuntime();
+    runtime: BaleDeliveryRuntime,
+  ) => Promise<BaleDeliveryResult<T>>,
+): Promise<BaleDeliveryResult<T>> {
+  const runtime = getBoundBaleDeliveryRuntime();
   if (isFailure(runtime)) return runtime;
   try {
     return await operation(runtime);
   } catch {
-    return failure("transport-failed", "Telegram delivery failed.");
+    return failure("transport-failed", "Bale delivery failed.");
   }
 }
 
 /** @internal */
-export function bindTelegramDeliveryRuntime(
-  runtime: TelegramDeliveryRuntime,
+export function bindBaleDeliveryRuntime(
+  runtime: BaleDeliveryRuntime,
 ): () => void {
-  const registry = getTelegramDeliveryRuntimeRegistry();
+  const registry = getBaleDeliveryRuntimeRegistry();
   if (registry.runtime !== runtime) registry.runtime?.shutdown();
   registry.runtime = runtime;
   return () => {
@@ -904,41 +904,41 @@ export function bindTelegramDeliveryRuntime(
 }
 
 /** @internal */
-export function clearTelegramDeliveryRuntime(): void {
-  const registry = getTelegramDeliveryRuntimeRegistry();
+export function clearBaleDeliveryRuntime(): void {
+  const registry = getBaleDeliveryRuntimeRegistry();
   registry.runtime?.shutdown();
   registry.runtime = undefined;
 }
 
 /** @internal */
-export function isTelegramDeliveryHandleCurrent(
-  handle: TelegramDeliveryHandle,
+export function isBaleDeliveryHandleCurrent(
+  handle: BaleDeliveryHandle,
 ): boolean {
-  const runtime = getTelegramDeliveryRuntimeRegistry().runtime;
+  const runtime = getBaleDeliveryRuntimeRegistry().runtime;
   return runtime !== undefined && runtime.generation === handle.generation;
 }
 
-export async function sendTelegramView(
-  view: TelegramDeliveryView,
-  options: SendTelegramViewOptions,
-): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>> {
-  const invalid = validateView<TelegramDeliveryHandle>(view);
+export async function sendBaleView(
+  view: BaleDeliveryView,
+  options: SendBaleViewOptions,
+): Promise<BaleDeliveryResult<BaleDeliveryHandle>> {
+  const invalid = validateView<BaleDeliveryHandle>(view);
   if (invalid) return invalid;
   return runDeliveryOperation((runtime) => runtime.sendView(view, options));
 }
 
-export async function editTelegramView(
-  handle: TelegramDeliveryHandle,
-  view: TelegramDeliveryView,
-): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>> {
-  const invalid = validateView<TelegramDeliveryHandle>(view);
+export async function editBaleView(
+  handle: BaleDeliveryHandle,
+  view: BaleDeliveryView,
+): Promise<BaleDeliveryResult<BaleDeliveryHandle>> {
+  const invalid = validateView<BaleDeliveryHandle>(view);
   if (invalid) return invalid;
   return runDeliveryOperation((runtime) => {
     if (runtime.generation !== handle.generation) {
       return Promise.resolve(
         failure(
           "stale-handle",
-          "Telegram delivery handle belongs to an inactive runtime generation.",
+          "Bale delivery handle belongs to an inactive runtime generation.",
         ),
       );
     }
@@ -946,15 +946,15 @@ export async function editTelegramView(
   });
 }
 
-export async function deleteTelegramView(
-  handle: TelegramDeliveryHandle,
-): Promise<TelegramDeliveryResult<void>> {
+export async function deleteBaleView(
+  handle: BaleDeliveryHandle,
+): Promise<BaleDeliveryResult<void>> {
   return runDeliveryOperation((runtime) => {
     if (runtime.generation !== handle.generation) {
       return Promise.resolve(
         failure(
           "stale-handle",
-          "Telegram delivery handle belongs to an inactive runtime generation.",
+          "Bale delivery handle belongs to an inactive runtime generation.",
         ),
       );
     }
@@ -962,10 +962,10 @@ export async function deleteTelegramView(
   });
 }
 
-export async function sendTelegramChatAction(
-  action: TelegramDeliveryChatAction,
-  options: { scope: TelegramDeliveryScope },
-): Promise<TelegramDeliveryResult<void>> {
+export async function sendBaleChatAction(
+  action: BaleDeliveryChatAction,
+  options: { scope: BaleDeliveryScope },
+): Promise<BaleDeliveryResult<void>> {
   return runDeliveryOperation((runtime) =>
     runtime.sendChatAction(action, options.scope),
   );

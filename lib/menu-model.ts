@@ -1,41 +1,41 @@
 /**
- * Telegram model menu UI helpers
- * Zones: telegram ui, model controls, menu composition
+ * Bale model menu UI helpers
+ * Zones: bale ui, model controls, menu composition
  * Owns model-menu state, scoped model pages, model callback planning, and model-menu message rendering
  */
 
-import type { TelegramInlineKeyboardMarkup } from "./keyboard.ts";
+import type { BaleInlineKeyboardMarkup } from "./keyboard.ts";
 import {
   getCanonicalModelId,
   type MenuModel,
   modelsMatch,
-  parseTelegramCliScopedModelPatterns,
+  parseBaleCliScopedModelPatterns,
   resolveScopedModelPatterns,
-  type ScopedTelegramModel,
+  type ScopedBaleModel,
   sortScopedModels,
-  type TelegramModelSwitchContinuationSource,
+  type BaleModelSwitchContinuationSource,
   type ThinkingLevel,
 } from "./model.ts";
-import type { TelegramTarget } from "./target.ts";
+import type { BaleTarget } from "./target.ts";
 import {
-  TelegramApiAuthorityError,
-  type TelegramApiCallOptions,
-} from "./telegram-api.ts";
+  BaleApiAuthorityError,
+  type BaleApiCallOptions,
+} from "./bale-api.ts";
 
-const TELEGRAM_MODEL_MENU_CACHE_TTL_MS = 5000;
-const TELEGRAM_MODEL_MENU_STATE_TTL_MS = 10 * 60 * 1000;
-const MAX_STORED_TELEGRAM_MODEL_MENUS = 50;
+const BALE_MODEL_MENU_CACHE_TTL_MS = 5000;
+const BALE_MODEL_MENU_STATE_TTL_MS = 10 * 60 * 1000;
+const MAX_STORED_BALE_MODEL_MENUS = 50;
 
-export type TelegramModelScope = "all" | "scoped";
+export type BaleModelScope = "all" | "scoped";
 
-export interface TelegramModelMenuState<TModel extends MenuModel = MenuModel> {
+export interface BaleModelMenuState<TModel extends MenuModel = MenuModel> {
   chatId: number;
   threadId?: number;
   messageId: number;
   page: number;
-  scope: TelegramModelScope;
-  scopedModels: ScopedTelegramModel<TModel>[];
-  allModels: ScopedTelegramModel<TModel>[];
+  scope: BaleModelScope;
+  scopedModels: ScopedBaleModel<TModel>[];
+  allModels: ScopedBaleModel<TModel>[];
   note?: string;
   selectedModelIndex?: number;
   selectedModelKey?: string;
@@ -51,20 +51,20 @@ export interface TelegramModelMenuState<TModel extends MenuModel = MenuModel> {
     | "settings";
 }
 
-export interface StoredTelegramModelMenuState<
+export interface StoredBaleModelMenuState<
   TModel extends MenuModel = MenuModel,
 > {
-  state: TelegramModelMenuState<TModel>;
+  state: BaleModelMenuState<TModel>;
   updatedAt: number;
 }
 
-export interface TelegramModelMenuStoreOptions {
+export interface BaleModelMenuStoreOptions {
   maxAgeMs: number;
   maxStoredMenus: number;
   now?: number;
 }
 
-export interface CachedTelegramModelMenuInputs<
+export interface CachedBaleModelMenuInputs<
   TModel extends MenuModel = MenuModel,
 > {
   expiresAt: number;
@@ -73,7 +73,7 @@ export interface CachedTelegramModelMenuInputs<
   cliScopedModelPatterns?: string[];
 }
 
-export interface TelegramModelMenuInputCacheDeps<
+export interface BaleModelMenuInputCacheDeps<
   TModel extends MenuModel = MenuModel,
 > {
   cacheTtlMs: number;
@@ -84,7 +84,7 @@ export interface TelegramModelMenuInputCacheDeps<
   getCliScopedModelPatterns: () => string[] | undefined;
 }
 
-export interface TelegramModelMenuRuntimeContext<
+export interface BaleModelMenuRuntimeContext<
   TModel extends MenuModel = MenuModel,
 > {
   modelRegistry: {
@@ -93,14 +93,14 @@ export interface TelegramModelMenuRuntimeContext<
   };
 }
 
-export interface TelegramModelMenuRuntimeOptions<
-  TContext extends TelegramModelMenuRuntimeContext<TModel>,
+export interface BaleModelMenuRuntimeOptions<
+  TContext extends BaleModelMenuRuntimeContext<TModel>,
   TModel extends MenuModel = MenuModel,
 > {
   chatId: number;
   threadId?: number;
   activeModel: TModel | undefined;
-  cachedInputs: CachedTelegramModelMenuInputs<TModel> | undefined;
+  cachedInputs: CachedBaleModelMenuInputs<TModel> | undefined;
   cacheTtlMs: number;
   ctx: TContext;
   reloadSettings: () => Promise<void>;
@@ -115,50 +115,50 @@ export interface MenuSettingsManager {
   setEnabledModels?: (patterns: string[] | undefined) => void;
 }
 
-export type TelegramModelMenuStateBuilderContext<
+export type BaleModelMenuStateBuilderContext<
   TModel extends MenuModel = MenuModel,
-> = TelegramModelMenuRuntimeContext<TModel> & { cwd: string };
+> = BaleModelMenuRuntimeContext<TModel> & { cwd: string };
 
-export interface TelegramModelMenuStateBuilderDeps<
+export interface BaleModelMenuStateBuilderDeps<
   TModel extends MenuModel = MenuModel,
-  TContext extends TelegramModelMenuStateBuilderContext<TModel> =
-    TelegramModelMenuStateBuilderContext<TModel>,
+  TContext extends BaleModelMenuStateBuilderContext<TModel> =
+    BaleModelMenuStateBuilderContext<TModel>,
 > {
-  runtime: TelegramModelMenuRuntime<TModel>;
+  runtime: BaleModelMenuRuntime<TModel>;
   createSettingsManager: (
     cwd: string,
   ) => MenuSettingsManager | PromiseLike<MenuSettingsManager>;
   getActiveModel: (ctx: TContext) => TModel | undefined;
 }
 
-export type TelegramReplyMarkup = TelegramInlineKeyboardMarkup;
+export type BaleReplyMarkup = BaleInlineKeyboardMarkup;
 
-export interface TelegramMenuMessageRuntimeDeps {
+export interface BaleMenuMessageRuntimeDeps {
   editInteractiveMessage: (
     chatId: number,
     messageId: number,
     text: string,
     mode: "markdown" | "html" | "plain",
-    replyMarkup: TelegramReplyMarkup,
+    replyMarkup: BaleReplyMarkup,
   ) => Promise<void>;
   sendInteractiveMessage: (
     chatId: number,
     text: string,
     mode: "markdown" | "html" | "plain",
-    replyMarkup: TelegramReplyMarkup,
-    options?: { target?: TelegramTarget } & Pick<
-      TelegramApiCallOptions,
+    replyMarkup: BaleReplyMarkup,
+    options?: { target?: BaleTarget } & Pick<
+      BaleApiCallOptions,
       "assertAuthority"
     >,
   ) => Promise<number | undefined>;
 }
 
 /** Per-open delivery lifetime; never retain this guard in stored callback state. */
-export function createTelegramMenuDelivery<TModel extends MenuModel>(
-  target: TelegramTarget,
-  options: Pick<TelegramApiCallOptions, "assertAuthority"> | undefined,
-  deps: Pick<TelegramMenuMessageRuntimeDeps, "sendInteractiveMessage"> & {
-    storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
+export function createBaleMenuDelivery<TModel extends MenuModel>(
+  target: BaleTarget,
+  options: Pick<BaleApiCallOptions, "assertAuthority"> | undefined,
+  deps: Pick<BaleMenuMessageRuntimeDeps, "sendInteractiveMessage"> & {
+    storeModelMenuState: (state: BaleModelMenuState<TModel>) => void;
   },
 ) {
   const assertAuthority = options?.assertAuthority,
@@ -170,7 +170,7 @@ export function createTelegramMenuDelivery<TModel extends MenuModel>(
     try {
       assertAuthority?.();
     } catch {
-      throw new TelegramApiAuthorityError(requestIssued);
+      throw new BaleApiAuthorityError(requestIssued);
     }
   };
   assertCurrent();
@@ -179,7 +179,7 @@ export function createTelegramMenuDelivery<TModel extends MenuModel>(
     assertAuthority,
     sendInteractiveMessage: async (
       ...args: Parameters<
-        TelegramMenuMessageRuntimeDeps["sendInteractiveMessage"]
+        BaleMenuMessageRuntimeDeps["sendInteractiveMessage"]
       >
     ) => {
       assertCurrent();
@@ -197,14 +197,14 @@ export function createTelegramMenuDelivery<TModel extends MenuModel>(
       assertCurrent();
       return messageId;
     },
-    storeModelMenuState: (state: TelegramModelMenuState<TModel>) => {
+    storeModelMenuState: (state: BaleModelMenuState<TModel>) => {
       assertCurrent();
       if (
         assertAuthority &&
         (state.chatId !== capturedTarget.chatId ||
           state.threadId !== capturedTarget.threadId)
       ) {
-        throw new TelegramApiAuthorityError(requestIssued);
+        throw new BaleApiAuthorityError(requestIssued);
       }
       storeModelMenuState(state);
       assertCurrent();
@@ -212,7 +212,7 @@ export function createTelegramMenuDelivery<TModel extends MenuModel>(
   };
 }
 
-export type TelegramModelMenuCallbackDeps<
+export type BaleModelMenuCallbackDeps<
   TModel extends MenuModel = MenuModel,
 > = {
   answerCallbackQuery: (
@@ -226,32 +226,32 @@ export type TelegramModelMenuCallbackDeps<
   setCurrentModel: (model: TModel) => void;
   setThinkingLevel: (level: ThinkingLevel) => void;
   stagePendingModelSwitch: (
-    selection: ScopedTelegramModel<TModel>,
-    continuationTurn: TelegramModelSwitchContinuationSource,
+    selection: ScopedBaleModel<TModel>,
+    continuationTurn: BaleModelSwitchContinuationSource,
   ) => void;
-  restartInterruptedTelegramTurn: (
-    selection: ScopedTelegramModel<TModel>,
-    continuationTurn: TelegramModelSwitchContinuationSource,
+  restartInterruptedBaleTurn: (
+    selection: ScopedBaleModel<TModel>,
+    continuationTurn: BaleModelSwitchContinuationSource,
   ) => Promise<boolean> | boolean;
 };
 
-export interface TelegramModelMenuOpenDeps<
+export interface BaleModelMenuOpenDeps<
   TModel extends MenuModel = MenuModel,
 > {
   isIdle: () => boolean;
   canOfferInFlightModelSwitch: () => boolean;
   sendBusyMessage: () => Promise<void>;
   sendNoModelsMessage: () => Promise<void>;
-  getModelMenuState: () => Promise<TelegramModelMenuState<TModel>>;
+  getModelMenuState: () => Promise<BaleModelMenuState<TModel>>;
   getActiveModel: () => TModel | undefined;
   sendModelMenu: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     activeModel: TModel | undefined,
   ) => Promise<number | undefined>;
-  storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
+  storeModelMenuState: (state: BaleModelMenuState<TModel>) => void;
 }
 
-export interface BuildTelegramModelMenuStateParams<
+export interface BuildBaleModelMenuStateParams<
   TModel extends MenuModel = MenuModel,
 > {
   chatId: number;
@@ -262,49 +262,49 @@ export interface BuildTelegramModelMenuStateParams<
   cliScopedModelPatterns?: string[];
 }
 
-export type TelegramMenuMutationResult = "invalid" | "unchanged" | "changed";
-export type TelegramMenuSelectionResult<TModel extends MenuModel = MenuModel> =
+export type BaleMenuMutationResult = "invalid" | "unchanged" | "changed";
+export type BaleMenuSelectionResult<TModel extends MenuModel = MenuModel> =
   | { kind: "invalid" }
   | { kind: "missing" }
-  | { kind: "selected"; selection: ScopedTelegramModel<TModel> };
+  | { kind: "selected"; selection: ScopedBaleModel<TModel> };
 
-export interface TelegramModelMenuPage<TModel extends MenuModel = MenuModel> {
+export interface BaleModelMenuPage<TModel extends MenuModel = MenuModel> {
   page: number;
   pageCount: number;
   start: number;
-  items: ScopedTelegramModel<TModel>[];
+  items: ScopedBaleModel<TModel>[];
 }
 
-export interface TelegramMenuRenderPayload {
-  nextMode: TelegramModelMenuState["mode"];
+export interface BaleMenuRenderPayload {
+  nextMode: BaleModelMenuState["mode"];
   text: string;
   mode: "markdown" | "html" | "plain";
-  replyMarkup: TelegramReplyMarkup;
+  replyMarkup: BaleReplyMarkup;
 }
 
-export type TelegramModelCallbackPlan<TModel extends MenuModel = MenuModel> =
+export type BaleModelCallbackPlan<TModel extends MenuModel = MenuModel> =
   | { kind: "ignore" }
   | { kind: "answer"; text?: string }
   | { kind: "update-menu"; text?: string }
   | { kind: "persist-scope"; patterns: string[]; text: string }
   | {
       kind: "refresh-status";
-      selection: ScopedTelegramModel<TModel>;
+      selection: ScopedBaleModel<TModel>;
       callbackText: string;
       shouldApplyThinkingLevel: boolean;
     }
   | {
       kind: "switch-model";
-      selection: ScopedTelegramModel<TModel>;
+      selection: ScopedBaleModel<TModel>;
       mode: "idle" | "restart-now" | "restart-after-tool";
       callbackText: string;
     };
 
-export interface BuildTelegramModelCallbackPlanParams<
+export interface BuildBaleModelCallbackPlanParams<
   TModel extends MenuModel = MenuModel,
 > {
   data: string | undefined;
-  state: TelegramModelMenuState<TModel>;
+  state: BaleModelMenuState<TModel>;
   activeModel: TModel | undefined;
   currentThinkingLevel: ThinkingLevel;
   isIdle: boolean;
@@ -312,41 +312,41 @@ export interface BuildTelegramModelCallbackPlanParams<
   hasActiveToolExecutions: boolean;
 }
 
-export interface TelegramModelMenuRuntime<
+export interface BaleModelMenuRuntime<
   TModel extends MenuModel = MenuModel,
 > {
-  storeState: (state: TelegramModelMenuState<TModel>) => void;
+  storeState: (state: BaleModelMenuState<TModel>) => void;
   getState: (
     messageId: number | undefined,
     chatId?: number,
-  ) => TelegramModelMenuState<TModel> | undefined;
+  ) => BaleModelMenuState<TModel> | undefined;
   clear: () => void;
   clearCachedInputs: () => void;
-  buildState: <TContext extends TelegramModelMenuRuntimeContext<TModel>>(
+  buildState: <TContext extends BaleModelMenuRuntimeContext<TModel>>(
     options: Omit<
-      TelegramModelMenuRuntimeOptions<TContext, TModel>,
+      BaleModelMenuRuntimeOptions<TContext, TModel>,
       "cachedInputs" | "cacheTtlMs"
     >,
-  ) => Promise<TelegramModelMenuState<TModel>>;
+  ) => Promise<BaleModelMenuState<TModel>>;
 }
 
-export const TELEGRAM_MODEL_PAGE_SIZE = 6;
-const TELEGRAM_MODEL_PAGE_PICKER_ROW_SIZE = 4;
+export const BALE_MODEL_PAGE_SIZE = 6;
+const BALE_MODEL_PAGE_PICKER_ROW_SIZE = 4;
 export const MODEL_MENU_TITLE = "<b>🤖 Choose a model:</b>";
 export const MODEL_PAGE_MENU_TITLE = "<b>Choose a page:</b>";
 const MODEL_DETAIL_MENU_TITLE = "<b>🤖 Model:</b>";
 
-function truncateTelegramButtonLabel(label: string, maxLength = 56): string {
+function truncateBaleButtonLabel(label: string, maxLength = 56): string {
   return label.length <= maxLength
     ? label
     : `${label.slice(0, maxLength - 1)}…`;
 }
 
-function getTelegramCliScopedModelPatterns(): string[] | undefined {
-  return parseTelegramCliScopedModelPatterns(process.argv.slice(2));
+function getBaleCliScopedModelPatterns(): string[] | undefined {
+  return parseBaleCliScopedModelPatterns(process.argv.slice(2));
 }
 
-function parseTelegramModelMenuCallbackAction(data: string | undefined):
+function parseBaleModelMenuCallbackAction(data: string | undefined):
   | {
       action:
         | "noop"
@@ -381,21 +381,21 @@ function parseTelegramModelMenuCallbackAction(data: string | undefined):
   return undefined;
 }
 
-function applyTelegramMenuRenderPayload(
-  state: TelegramModelMenuState,
-  payload: TelegramMenuRenderPayload,
-): TelegramMenuRenderPayload {
+function applyBaleMenuRenderPayload(
+  state: BaleModelMenuState,
+  payload: BaleMenuRenderPayload,
+): BaleMenuRenderPayload {
   state.mode = payload.nextMode;
   return payload;
 }
 
 /** Apply the payload mode to state, then edit the existing menu message in place. */
-export async function editTelegramMenuMessage(
-  state: TelegramModelMenuState,
-  payload: TelegramMenuRenderPayload,
-  deps: TelegramMenuMessageRuntimeDeps,
+export async function editBaleMenuMessage(
+  state: BaleModelMenuState,
+  payload: BaleMenuRenderPayload,
+  deps: BaleMenuMessageRuntimeDeps,
 ): Promise<void> {
-  const appliedPayload = applyTelegramMenuRenderPayload(state, payload);
+  const appliedPayload = applyBaleMenuRenderPayload(state, payload);
   await deps.editInteractiveMessage(
     state.chatId,
     state.messageId,
@@ -406,12 +406,12 @@ export async function editTelegramMenuMessage(
 }
 
 /** Apply the payload mode to state, then send a fresh menu message to its exact chat/Thread. */
-export function sendTelegramMenuMessage(
-  state: TelegramModelMenuState,
-  payload: TelegramMenuRenderPayload,
-  deps: TelegramMenuMessageRuntimeDeps,
+export function sendBaleMenuMessage(
+  state: BaleModelMenuState,
+  payload: BaleMenuRenderPayload,
+  deps: BaleMenuMessageRuntimeDeps,
 ): Promise<number | undefined> {
-  const appliedPayload = applyTelegramMenuRenderPayload(state, payload);
+  const appliedPayload = applyBaleMenuRenderPayload(state, payload);
   return deps.sendInteractiveMessage(
     state.chatId,
     appliedPayload.text,
@@ -426,37 +426,37 @@ export function sendTelegramMenuMessage(
 export function formatScopedModelButtonText<
   TModel extends MenuModel = MenuModel,
 >(
-  entry: ScopedTelegramModel<TModel>,
+  entry: ScopedBaleModel<TModel>,
   currentModel: TModel | undefined,
 ): string {
   let label = `${modelsMatch(entry.model, currentModel) ? "🟢 " : ""}${entry.model.provider}/${entry.model.id}`;
   if (entry.thinkingLevel) {
     label += ` (${entry.thinkingLevel})`;
   }
-  return truncateTelegramButtonLabel(label);
+  return truncateBaleButtonLabel(label);
 }
 
 export function formatStatusButtonLabel(label: string, value: string): string {
-  return truncateTelegramButtonLabel(`${label}: ${value}`, 64);
+  return truncateBaleButtonLabel(`${label}: ${value}`, 64);
 }
 
 export function getModelMenuItems<TModel extends MenuModel = MenuModel>(
-  state: TelegramModelMenuState<TModel>,
-): ScopedTelegramModel<TModel>[] {
+  state: BaleModelMenuState<TModel>,
+): ScopedBaleModel<TModel>[] {
   return state.scope === "scoped" && state.scopedModels.length > 0
     ? state.scopedModels
     : state.allModels;
 }
 
-function getTelegramMenuStateKey(chatId: number, messageId: number): string {
+function getBaleMenuStateKey(chatId: number, messageId: number): string {
   return `${chatId}:${messageId}`;
 }
 
-export function pruneStoredTelegramModelMenus<
+export function pruneStoredBaleModelMenus<
   TModel extends MenuModel = MenuModel,
 >(
-  menus: Map<string, StoredTelegramModelMenuState<TModel>>,
-  options: TelegramModelMenuStoreOptions,
+  menus: Map<string, StoredBaleModelMenuState<TModel>>,
+  options: BaleModelMenuStoreOptions,
 ): void {
   const now = options.now ?? Date.now();
   for (const [messageId, entry] of menus.entries()) {
@@ -470,36 +470,36 @@ export function pruneStoredTelegramModelMenus<
   }
 }
 
-export function storeTelegramModelMenuState<
+export function storeBaleModelMenuState<
   TModel extends MenuModel = MenuModel,
 >(
-  menus: Map<string, StoredTelegramModelMenuState<TModel>>,
-  state: TelegramModelMenuState<TModel>,
-  options: TelegramModelMenuStoreOptions,
+  menus: Map<string, StoredBaleModelMenuState<TModel>>,
+  state: BaleModelMenuState<TModel>,
+  options: BaleModelMenuStoreOptions,
 ): void {
   const now = options.now ?? Date.now();
-  pruneStoredTelegramModelMenus(menus, { ...options, now });
-  menus.set(getTelegramMenuStateKey(state.chatId, state.messageId), {
+  pruneStoredBaleModelMenus(menus, { ...options, now });
+  menus.set(getBaleMenuStateKey(state.chatId, state.messageId), {
     state,
     updatedAt: now,
   });
-  pruneStoredTelegramModelMenus(menus, { ...options, now });
+  pruneStoredBaleModelMenus(menus, { ...options, now });
 }
 
-export function getStoredTelegramModelMenuState<
+export function getStoredBaleModelMenuState<
   TModel extends MenuModel = MenuModel,
 >(
-  menus: Map<string, StoredTelegramModelMenuState<TModel>>,
+  menus: Map<string, StoredBaleModelMenuState<TModel>>,
   messageId: number | undefined,
-  options: TelegramModelMenuStoreOptions,
+  options: BaleModelMenuStoreOptions,
   chatId?: number,
-): TelegramModelMenuState<TModel> | undefined {
+): BaleModelMenuState<TModel> | undefined {
   if (messageId === undefined) return undefined;
   const now = options.now ?? Date.now();
-  pruneStoredTelegramModelMenus(menus, { ...options, now });
+  pruneStoredBaleModelMenus(menus, { ...options, now });
   const key =
     typeof chatId === "number"
-      ? getTelegramMenuStateKey(chatId, messageId)
+      ? getBaleMenuStateKey(chatId, messageId)
       : [...menus.keys()].find((candidate) =>
           candidate.endsWith(`:${messageId}`),
         );
@@ -512,24 +512,24 @@ export function getStoredTelegramModelMenuState<
   return entry.state;
 }
 
-export function createTelegramModelMenuRuntime<
+export function createBaleModelMenuRuntime<
   TModel extends MenuModel = MenuModel,
 >(
-  options: Partial<TelegramModelMenuStoreOptions> = {},
-): TelegramModelMenuRuntime<TModel> {
-  const menus = new Map<string, StoredTelegramModelMenuState<TModel>>();
-  let cachedInputs: CachedTelegramModelMenuInputs<TModel> | undefined;
-  const getStoreOptions = (): TelegramModelMenuStoreOptions => ({
-    maxAgeMs: options.maxAgeMs ?? TELEGRAM_MODEL_MENU_STATE_TTL_MS,
-    maxStoredMenus: options.maxStoredMenus ?? MAX_STORED_TELEGRAM_MODEL_MENUS,
+  options: Partial<BaleModelMenuStoreOptions> = {},
+): BaleModelMenuRuntime<TModel> {
+  const menus = new Map<string, StoredBaleModelMenuState<TModel>>();
+  let cachedInputs: CachedBaleModelMenuInputs<TModel> | undefined;
+  const getStoreOptions = (): BaleModelMenuStoreOptions => ({
+    maxAgeMs: options.maxAgeMs ?? BALE_MODEL_MENU_STATE_TTL_MS,
+    maxStoredMenus: options.maxStoredMenus ?? MAX_STORED_BALE_MODEL_MENUS,
     now: options.now,
   });
   return {
     storeState: (state) => {
-      storeTelegramModelMenuState(menus, state, getStoreOptions());
+      storeBaleModelMenuState(menus, state, getStoreOptions());
     },
     getState: (messageId, chatId) =>
-      getStoredTelegramModelMenuState(
+      getStoredBaleModelMenuState(
         menus,
         messageId,
         getStoreOptions(),
@@ -543,10 +543,10 @@ export function createTelegramModelMenuRuntime<
       cachedInputs = undefined;
     },
     buildState: async (stateOptions) => {
-      const result = await buildTelegramModelMenuStateRuntime({
+      const result = await buildBaleModelMenuStateRuntime({
         ...stateOptions,
         cachedInputs,
-        cacheTtlMs: TELEGRAM_MODEL_MENU_CACHE_TTL_MS,
+        cacheTtlMs: BALE_MODEL_MENU_CACHE_TTL_MS,
       });
       cachedInputs = result.cachedInputs;
       return result.state;
@@ -554,17 +554,17 @@ export function createTelegramModelMenuRuntime<
   };
 }
 
-export function createTelegramModelMenuStateBuilder<
+export function createBaleModelMenuStateBuilder<
   TModel extends MenuModel = MenuModel,
-  TContext extends TelegramModelMenuStateBuilderContext<TModel> =
-    TelegramModelMenuStateBuilderContext<TModel>,
+  TContext extends BaleModelMenuStateBuilderContext<TModel> =
+    BaleModelMenuStateBuilderContext<TModel>,
 >(
-  deps: TelegramModelMenuStateBuilderDeps<TModel, TContext>,
+  deps: BaleModelMenuStateBuilderDeps<TModel, TContext>,
 ): (
   chatId: number,
   ctx: TContext,
   threadId?: number,
-) => Promise<TelegramModelMenuState<TModel>> {
+) => Promise<BaleModelMenuState<TModel>> {
   return async (chatId, ctx, threadId) => {
     const settingsManager = await deps.createSettingsManager(ctx.cwd);
     return deps.runtime.buildState({
@@ -581,12 +581,12 @@ export function createTelegramModelMenuStateBuilder<
   };
 }
 
-export async function resolveCachedTelegramModelMenuInputs<
+export async function resolveCachedBaleModelMenuInputs<
   TModel extends MenuModel = MenuModel,
 >(
-  cachedInputs: CachedTelegramModelMenuInputs<TModel> | undefined,
-  deps: TelegramModelMenuInputCacheDeps<TModel>,
-): Promise<CachedTelegramModelMenuInputs<TModel>> {
+  cachedInputs: CachedBaleModelMenuInputs<TModel> | undefined,
+  deps: BaleModelMenuInputCacheDeps<TModel>,
+): Promise<CachedBaleModelMenuInputs<TModel>> {
   const now = deps.now ?? Date.now();
   if (cachedInputs && cachedInputs.expiresAt > now) return cachedInputs;
   await deps.reloadSettings();
@@ -602,11 +602,11 @@ export async function resolveCachedTelegramModelMenuInputs<
   };
 }
 
-export function buildTelegramModelMenuState<
+export function buildBaleModelMenuState<
   TModel extends MenuModel = MenuModel,
 >(
-  params: BuildTelegramModelMenuStateParams<TModel>,
-): TelegramModelMenuState<TModel> {
+  params: BuildBaleModelMenuStateParams<TModel>,
+): BaleModelMenuState<TModel> {
   const allModels = sortScopedModels(
     params.availableModels.map((model) => ({ model })),
     params.activeModel,
@@ -646,16 +646,16 @@ export function buildTelegramModelMenuState<
   };
 }
 
-export async function buildTelegramModelMenuStateRuntime<
-  TContext extends TelegramModelMenuRuntimeContext<TModel>,
+export async function buildBaleModelMenuStateRuntime<
+  TContext extends BaleModelMenuRuntimeContext<TModel>,
   TModel extends MenuModel = MenuModel,
 >(
-  options: TelegramModelMenuRuntimeOptions<TContext, TModel>,
+  options: BaleModelMenuRuntimeOptions<TContext, TModel>,
 ): Promise<{
-  state: TelegramModelMenuState<TModel>;
-  cachedInputs: CachedTelegramModelMenuInputs<TModel>;
+  state: BaleModelMenuState<TModel>;
+  cachedInputs: CachedBaleModelMenuInputs<TModel>;
 }> {
-  const cachedInputs = await resolveCachedTelegramModelMenuInputs(
+  const cachedInputs = await resolveCachedBaleModelMenuInputs(
     options.cachedInputs,
     {
       cacheTtlMs: options.cacheTtlMs,
@@ -667,12 +667,12 @@ export async function buildTelegramModelMenuStateRuntime<
       getConfiguredScopedModelPatterns:
         options.getConfiguredScopedModelPatterns,
       getCliScopedModelPatterns:
-        options.getCliScopedModelPatterns ?? getTelegramCliScopedModelPatterns,
+        options.getCliScopedModelPatterns ?? getBaleCliScopedModelPatterns,
     },
   );
   return {
     cachedInputs,
-    state: buildTelegramModelMenuState({
+    state: buildBaleModelMenuState({
       chatId: options.chatId,
       threadId: options.threadId,
       activeModel: options.activeModel,
@@ -683,10 +683,10 @@ export async function buildTelegramModelMenuStateRuntime<
   };
 }
 
-export function applyTelegramModelScopeSelection(
-  state: TelegramModelMenuState,
+export function applyBaleModelScopeSelection(
+  state: BaleModelMenuState,
   value: string | undefined,
-): TelegramMenuMutationResult {
+): BaleMenuMutationResult {
   if (value !== "all" && value !== "scoped") return "invalid";
   if (value === state.scope) return "unchanged";
   state.scope = value;
@@ -694,10 +694,10 @@ export function applyTelegramModelScopeSelection(
   return "changed";
 }
 
-export function applyTelegramModelPageSelection(
-  state: TelegramModelMenuState,
+export function applyBaleModelPageSelection(
+  state: BaleModelMenuState,
   value: string | undefined,
-): TelegramMenuMutationResult {
+): BaleMenuMutationResult {
   const page = Number(value);
   if (!Number.isFinite(page)) return "invalid";
   if (page === state.page) return "unchanged";
@@ -705,10 +705,10 @@ export function applyTelegramModelPageSelection(
   return "changed";
 }
 
-export function getTelegramModelSelection<TModel extends MenuModel = MenuModel>(
-  state: TelegramModelMenuState<TModel>,
+export function getBaleModelSelection<TModel extends MenuModel = MenuModel>(
+  state: BaleModelMenuState<TModel>,
   value: string | undefined,
-): TelegramMenuSelectionResult<TModel> {
+): BaleMenuSelectionResult<TModel> {
   const index = Number(value);
   if (!Number.isFinite(index)) return { kind: "invalid" };
   const selection = getModelMenuItems(state)[index];
@@ -716,10 +716,10 @@ export function getTelegramModelSelection<TModel extends MenuModel = MenuModel>(
   return { kind: "selected", selection };
 }
 
-function applyTelegramModelDetailSelection(
-  state: TelegramModelMenuState,
+function applyBaleModelDetailSelection(
+  state: BaleModelMenuState,
   value: string | undefined,
-): TelegramMenuMutationResult {
+): BaleMenuMutationResult {
   const index = Number(value);
   if (!Number.isFinite(index)) return "invalid";
   const selection = getModelMenuItems(state)[index];
@@ -730,10 +730,10 @@ function applyTelegramModelDetailSelection(
   return "changed";
 }
 
-function getTelegramSelectedDetailModel<TModel extends MenuModel = MenuModel>(
-  state: TelegramModelMenuState<TModel>,
-): TelegramMenuSelectionResult<TModel> {
-  const indexedSelection = getTelegramModelSelection(
+function getBaleSelectedDetailModel<TModel extends MenuModel = MenuModel>(
+  state: BaleModelMenuState<TModel>,
+): BaleMenuSelectionResult<TModel> {
+  const indexedSelection = getBaleModelSelection(
     state,
     state.selectedModelIndex?.toString(),
   );
@@ -756,8 +756,8 @@ function getTelegramSelectedDetailModel<TModel extends MenuModel = MenuModel>(
   return indexedSelection;
 }
 
-function isTelegramModelScoped(
-  state: TelegramModelMenuState,
+function isBaleModelScoped(
+  state: BaleModelMenuState,
   model: MenuModel,
 ): boolean {
   const key = getCanonicalModelId(model);
@@ -766,10 +766,10 @@ function isTelegramModelScoped(
   );
 }
 
-function focusTelegramModelListPage(
-  state: TelegramModelMenuState,
+function focusBaleModelListPage(
+  state: BaleModelMenuState,
   model: MenuModel,
-  pageSize = TELEGRAM_MODEL_PAGE_SIZE,
+  pageSize = BALE_MODEL_PAGE_SIZE,
 ): void {
   const key = getCanonicalModelId(model).toLowerCase();
   const index = getModelMenuItems(state).findIndex(
@@ -779,13 +779,13 @@ function focusTelegramModelListPage(
   state.mode = "model";
 }
 
-function formatScopedModelPattern(entry: ScopedTelegramModel): string {
+function formatScopedModelPattern(entry: ScopedBaleModel): string {
   const key = getCanonicalModelId(entry.model);
   return entry.thinkingLevel ? `${key}:${entry.thinkingLevel}` : key;
 }
 
-function setTelegramModelScope(
-  state: TelegramModelMenuState,
+function setBaleModelScope(
+  state: BaleModelMenuState,
   model: MenuModel,
   enabled: boolean,
 ): { patterns: string[]; enabled: boolean } {
@@ -827,16 +827,16 @@ function setTelegramModelScope(
   return { patterns, enabled };
 }
 
-export function buildTelegramModelCallbackPlan<
+export function buildBaleModelCallbackPlan<
   TModel extends MenuModel = MenuModel,
 >(
-  params: BuildTelegramModelCallbackPlanParams<TModel>,
-): TelegramModelCallbackPlan<TModel> {
-  const action = parseTelegramModelMenuCallbackAction(params.data);
+  params: BuildBaleModelCallbackPlanParams<TModel>,
+): BaleModelCallbackPlan<TModel> {
+  const action = parseBaleModelMenuCallbackAction(params.data);
   if (!action) return { kind: "ignore" };
   if (action.action === "noop") return { kind: "answer" };
   if (action.action === "scope") {
-    const scopeResult = applyTelegramModelScopeSelection(
+    const scopeResult = applyBaleModelScopeSelection(
       params.state,
       action.value,
     );
@@ -860,7 +860,7 @@ export function buildTelegramModelCallbackPlan<
     return { kind: "update-menu" };
   }
   if (action.action === "page") {
-    const pageResult = applyTelegramModelPageSelection(
+    const pageResult = applyBaleModelPageSelection(
       params.state,
       action.value,
     );
@@ -874,7 +874,7 @@ export function buildTelegramModelCallbackPlan<
     return { kind: "update-menu" };
   }
   if (action.action === "open") {
-    const detailResult = applyTelegramModelDetailSelection(
+    const detailResult = applyBaleModelDetailSelection(
       params.state,
       action.value,
     );
@@ -894,19 +894,19 @@ export function buildTelegramModelCallbackPlan<
         text: "Model scope is controlled by CLI --models",
       };
     }
-    const selectionResult = getTelegramSelectedDetailModel(params.state);
+    const selectionResult = getBaleSelectedDetailModel(params.state);
     if (selectionResult.kind !== "selected") {
       return { kind: "answer", text: "Selected model is no longer available" };
     }
     const model = selectionResult.selection.model;
     const enabled =
       action.action === "scope-toggle"
-        ? !isTelegramModelScoped(params.state, model)
+        ? !isBaleModelScoped(params.state, model)
         : action.action === "scope-enable";
-    if (enabled === isTelegramModelScoped(params.state, model)) {
+    if (enabled === isBaleModelScoped(params.state, model)) {
       return { kind: "answer" };
     }
-    const result = setTelegramModelScope(params.state, model, enabled);
+    const result = setBaleModelScope(params.state, model, enabled);
     return {
       kind: "persist-scope",
       patterns: result.patterns,
@@ -920,8 +920,8 @@ export function buildTelegramModelCallbackPlan<
   }
   const selectionResult =
     action.action === "pick-selected"
-      ? getTelegramSelectedDetailModel(params.state)
-      : getTelegramModelSelection(params.state, action.value);
+      ? getBaleSelectedDetailModel(params.state)
+      : getBaleModelSelection(params.state, action.value);
   if (selectionResult.kind === "invalid") {
     return { kind: "answer", text: "Invalid model selection" };
   }
@@ -931,7 +931,7 @@ export function buildTelegramModelCallbackPlan<
   const selection = selectionResult.selection;
   if (modelsMatch(selection.model, params.activeModel)) {
     if (action.action === "pick-selected") {
-      focusTelegramModelListPage(params.state, selection.model);
+      focusBaleModelListPage(params.state, selection.model);
     }
     return {
       kind: "refresh-status",
@@ -968,9 +968,9 @@ export function buildTelegramModelCallbackPlan<
   };
 }
 
-export async function openTelegramModelMenu<
+export async function openBaleModelMenu<
   TModel extends MenuModel = MenuModel,
->(deps: TelegramModelMenuOpenDeps<TModel>): Promise<void> {
+>(deps: BaleModelMenuOpenDeps<TModel>): Promise<void> {
   if (!deps.isIdle() && !deps.canOfferInFlightModelSwitch()) {
     await deps.sendBusyMessage();
     return;
@@ -987,14 +987,14 @@ export async function openTelegramModelMenu<
   deps.storeModelMenuState(state);
 }
 
-export async function handleTelegramModelMenuCallbackAction<
+export async function handleBaleModelMenuCallbackAction<
   TModel extends MenuModel = MenuModel,
 >(
   callbackQueryId: string,
-  params: BuildTelegramModelCallbackPlanParams<TModel>,
-  deps: TelegramModelMenuCallbackDeps<TModel>,
+  params: BuildBaleModelCallbackPlanParams<TModel>,
+  deps: BaleModelMenuCallbackDeps<TModel>,
 ): Promise<boolean> {
-  const plan = buildTelegramModelCallbackPlan(params);
+  const plan = buildBaleModelCallbackPlan(params);
   if (plan.kind === "ignore") return false;
   if (plan.kind === "answer") {
     await deps.answerCallbackQuery(callbackQueryId, plan.text);
@@ -1035,7 +1035,7 @@ export async function handleTelegramModelMenuCallbackAction<
   if (plan.selection.thinkingLevel) {
     deps.setThinkingLevel(plan.selection.thinkingLevel);
   }
-  const continuationTurn: TelegramModelSwitchContinuationSource = {
+  const continuationTurn: BaleModelSwitchContinuationSource = {
     chatId: params.state.chatId,
     replyToMessageId: params.state.messageId,
     target: {
@@ -1052,7 +1052,7 @@ export async function handleTelegramModelMenuCallbackAction<
     return true;
   }
   if (plan.mode === "restart-now") {
-    const restarted = await deps.restartInterruptedTelegramTurn(
+    const restarted = await deps.restartInterruptedBaleTurn(
       plan.selection,
       continuationTurn,
     );
@@ -1071,10 +1071,10 @@ export async function handleTelegramModelMenuCallbackAction<
   return true;
 }
 
-export function getTelegramModelMenuPage(
-  state: TelegramModelMenuState,
+export function getBaleModelMenuPage(
+  state: BaleModelMenuState,
   pageSize: number,
-): TelegramModelMenuPage {
+): BaleModelMenuPage {
   const items = getModelMenuItems(state);
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
   const page = Math.max(0, Math.min(state.page, pageCount - 1));
@@ -1088,11 +1088,11 @@ export function getTelegramModelMenuPage(
 }
 
 export function buildModelMenuReplyMarkup(
-  state: TelegramModelMenuState,
+  state: BaleModelMenuState,
   currentModel: MenuModel | undefined,
   pageSize: number,
-): TelegramReplyMarkup {
-  const menuPage = getTelegramModelMenuPage(state, pageSize);
+): BaleReplyMarkup {
+  const menuPage = getBaleModelMenuPage(state, pageSize);
   const rows = [[{ text: "⬆️ Main menu", callback_data: "menu:back" }]];
   if (state.scopedModels.length > 0) {
     rows.push([
@@ -1132,10 +1132,10 @@ export function buildModelMenuReplyMarkup(
 }
 
 function buildModelDetailMenuReplyMarkup(
-  state: TelegramModelMenuState,
+  state: BaleModelMenuState,
   currentModel: MenuModel | undefined,
-): TelegramReplyMarkup {
-  const selection = getTelegramSelectedDetailModel(state);
+): BaleReplyMarkup {
+  const selection = getBaleSelectedDetailModel(state);
   if (selection.kind !== "selected") {
     return {
       inline_keyboard: [
@@ -1145,7 +1145,7 @@ function buildModelDetailMenuReplyMarkup(
   }
   const model = selection.selection.model;
   const active = modelsMatch(model, currentModel);
-  const scoped = isTelegramModelScoped(state, model);
+  const scoped = isBaleModelScoped(state, model);
   return {
     inline_keyboard: [
       [{ text: "⬆️ Back", callback_data: "model:pages:back" }],
@@ -1169,29 +1169,29 @@ function buildModelDetailMenuReplyMarkup(
   };
 }
 
-function buildModelDetailMenuText(state: TelegramModelMenuState): string {
-  const selection = getTelegramSelectedDetailModel(state);
+function buildModelDetailMenuText(state: BaleModelMenuState): string {
+  const selection = getBaleSelectedDetailModel(state);
   if (selection.kind !== "selected") return MODEL_DETAIL_MENU_TITLE;
   const model = selection.selection.model;
   return `${MODEL_DETAIL_MENU_TITLE}\n${getCanonicalModelId(model)}`;
 }
 
 export function buildModelPageMenuReplyMarkup(
-  state: TelegramModelMenuState,
+  state: BaleModelMenuState,
   pageSize: number,
-): TelegramReplyMarkup {
-  const menuPage = getTelegramModelMenuPage(state, pageSize);
+): BaleReplyMarkup {
+  const menuPage = getBaleModelMenuPage(state, pageSize);
   const rows = [[{ text: "⬆️ Back", callback_data: "model:pages:back" }]];
   for (
     let page = 0;
     page < menuPage.pageCount;
-    page += TELEGRAM_MODEL_PAGE_PICKER_ROW_SIZE
+    page += BALE_MODEL_PAGE_PICKER_ROW_SIZE
   ) {
     rows.push(
       Array.from(
         {
           length: Math.min(
-            TELEGRAM_MODEL_PAGE_PICKER_ROW_SIZE,
+            BALE_MODEL_PAGE_PICKER_ROW_SIZE,
             menuPage.pageCount - page,
           ),
         },
@@ -1211,23 +1211,23 @@ export function buildModelPageMenuReplyMarkup(
   return { inline_keyboard: rows };
 }
 
-export function buildTelegramModelPageMenuRenderPayload(
-  state: TelegramModelMenuState,
-): TelegramMenuRenderPayload {
+export function buildBaleModelPageMenuRenderPayload(
+  state: BaleModelMenuState,
+): BaleMenuRenderPayload {
   return {
     nextMode: "model-pages",
     text: MODEL_PAGE_MENU_TITLE,
     mode: "html",
-    replyMarkup: buildModelPageMenuReplyMarkup(state, TELEGRAM_MODEL_PAGE_SIZE),
+    replyMarkup: buildModelPageMenuReplyMarkup(state, BALE_MODEL_PAGE_SIZE),
   };
 }
 
-export function buildTelegramModelMenuRenderPayload(
-  state: TelegramModelMenuState,
+export function buildBaleModelMenuRenderPayload(
+  state: BaleModelMenuState,
   activeModel: MenuModel | undefined,
-): TelegramMenuRenderPayload {
+): BaleMenuRenderPayload {
   if (state.mode === "model-pages") {
-    return buildTelegramModelPageMenuRenderPayload(state);
+    return buildBaleModelPageMenuRenderPayload(state);
   }
   if (state.mode === "model-detail") {
     return {
@@ -1244,31 +1244,31 @@ export function buildTelegramModelMenuRenderPayload(
     replyMarkup: buildModelMenuReplyMarkup(
       state,
       activeModel,
-      TELEGRAM_MODEL_PAGE_SIZE,
+      BALE_MODEL_PAGE_SIZE,
     ),
   };
 }
 
-export async function updateTelegramModelMenuMessage(
-  state: TelegramModelMenuState,
+export async function updateBaleModelMenuMessage(
+  state: BaleModelMenuState,
   activeModel: MenuModel | undefined,
-  deps: TelegramMenuMessageRuntimeDeps,
+  deps: BaleMenuMessageRuntimeDeps,
 ): Promise<void> {
-  await editTelegramMenuMessage(
+  await editBaleMenuMessage(
     state,
-    buildTelegramModelMenuRenderPayload(state, activeModel),
+    buildBaleModelMenuRenderPayload(state, activeModel),
     deps,
   );
 }
 
-export function sendTelegramModelMenuMessage(
-  state: TelegramModelMenuState,
+export function sendBaleModelMenuMessage(
+  state: BaleModelMenuState,
   activeModel: MenuModel | undefined,
-  deps: TelegramMenuMessageRuntimeDeps,
+  deps: BaleMenuMessageRuntimeDeps,
 ): Promise<number | undefined> {
-  return sendTelegramMenuMessage(
+  return sendBaleMenuMessage(
     state,
-    buildTelegramModelMenuRenderPayload(state, activeModel),
+    buildBaleModelMenuRenderPayload(state, activeModel),
     deps,
   );
 }

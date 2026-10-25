@@ -1,20 +1,20 @@
 /**
- * Telegram inline-keyboard structural contracts
- * Zones: telegram ui, shared structure
+ * Bale inline-keyboard structural contracts
+ * Zones: bale ui, shared structure
  * Owns the shared Bot API reply-markup shape while feature domains own their button semantics
  */
-const TELEGRAM_CALLBACK_DATA_MAX_BYTES = 64;
-function getTelegramCallbackDataByteLength(value) {
+const BALE_CALLBACK_DATA_MAX_BYTES = 64;
+function getBaleCallbackDataByteLength(value) {
     return new TextEncoder().encode(value).byteLength;
 }
-export function assertTelegramCallbackData(callbackData, context = "Telegram callback_data") {
-    const byteLength = getTelegramCallbackDataByteLength(callbackData);
-    if (byteLength > TELEGRAM_CALLBACK_DATA_MAX_BYTES) {
-        throw new Error(`${context} exceeds ${TELEGRAM_CALLBACK_DATA_MAX_BYTES} bytes (${byteLength}). Use a shorter action/payload or store state behind a compact key.`);
+export function assertBaleCallbackData(callbackData, context = "Bale callback_data") {
+    const byteLength = getBaleCallbackDataByteLength(callbackData);
+    if (byteLength > BALE_CALLBACK_DATA_MAX_BYTES) {
+        throw new Error(`${context} exceeds ${BALE_CALLBACK_DATA_MAX_BYTES} bytes (${byteLength}). Use a shorter action/payload or store state behind a compact key.`);
     }
     return callbackData;
 }
-export function assertTelegramInlineKeyboardCallbackData(replyMarkup, context = "Telegram inline keyboard callback_data") {
+export function assertBaleInlineKeyboardCallbackData(replyMarkup, context = "Bale inline keyboard callback_data") {
     if (!replyMarkup || typeof replyMarkup !== "object")
         return;
     const keyboard = replyMarkup
@@ -31,7 +31,7 @@ export function assertTelegramInlineKeyboardCallbackData(replyMarkup, context = 
                 .callback_data;
             if (typeof callbackData !== "string")
                 continue;
-            assertTelegramCallbackData(callbackData, context);
+            assertBaleCallbackData(callbackData, context);
         }
     }
 }

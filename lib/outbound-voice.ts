@@ -1,28 +1,28 @@
 /**
- * Telegram outbound voice delivery helpers
- * Zones: telegram outbound, voice delivery
- * Owns native Telegram voice upload orchestration across configured voice handlers, programmatic outbound voice handlers, and registered synthesis providers
+ * Bale outbound voice delivery helpers
+ * Zones: bale outbound, voice delivery
+ * Owns native Bale voice upload orchestration across configured voice handlers, programmatic outbound voice handlers, and registered synthesis providers
  */
 
 import { unlink } from "node:fs/promises";
 import { basename, extname } from "node:path";
 
-import { assertTelegramInlineKeyboardCallbackData } from "./keyboard.ts";
-import { withTelegramReplyParameters } from "./replies.ts";
+import { assertBaleInlineKeyboardCallbackData } from "./keyboard.ts";
+import { withBaleReplyParameters } from "./replies.ts";
 import {
-  getTelegramTargetThreadParams,
-  type TelegramTarget,
+  getBaleTargetThreadParams,
+  type BaleTarget,
 } from "./target.ts";
-import { isTelegramApiCommitUnknownError } from "./telegram-api.ts";
-import { getTelegramVoiceSynthesisProviders } from "./voice.ts";
+import { isBaleApiCommitUnknownError } from "./bale-api.ts";
+import { getBaleVoiceSynthesisProviders } from "./voice.ts";
 
-export interface TelegramVoiceReplyTurnView {
+export interface BaleVoiceReplyTurnView {
   chatId: number;
   replyToMessageId: number;
-  target?: TelegramTarget;
+  target?: BaleTarget;
 }
 
-export interface TelegramVoiceReplySenderDeps {
+export interface BaleVoiceReplySenderDeps {
   execCommand: (
     command: string,
     args: string[],
@@ -59,12 +59,12 @@ export interface TelegramVoiceReplySenderDeps {
   ) => void;
 }
 
-export type TelegramOutboundProgrammaticVoiceHandler = (
+export type BaleOutboundProgrammaticVoiceHandler = (
   text: string,
   options?: { lang?: string; rate?: string },
 ) => Promise<string>;
 
-export interface TelegramVoiceReplySenderPorts<THandler = unknown> {
+export interface BaleVoiceReplySenderPorts<THandler = unknown> {
   findVoiceHandlers?: (handlers: unknown[] | undefined) => THandler[];
   generateVoiceFile?: (
     text: string,
@@ -74,13 +74,13 @@ export interface TelegramVoiceReplySenderPorts<THandler = unknown> {
       handler: THandler;
       tempDir?: string;
       cwd?: string;
-      execCommand: TelegramVoiceReplySenderDeps["execCommand"];
+      execCommand: BaleVoiceReplySenderDeps["execCommand"];
     },
   ) => Promise<string | undefined>;
-  getProgrammaticVoiceHandlers?: () => TelegramOutboundProgrammaticVoiceHandler[];
+  getProgrammaticVoiceHandlers?: () => BaleOutboundProgrammaticVoiceHandler[];
 }
 
-async function ensureTelegramVoiceFileFormat(
+async function ensureBaleVoiceFileFormat(
   filePath: string,
 ): Promise<string> {
   const ext = extname(filePath).toLowerCase();
@@ -92,7 +92,7 @@ async function ensureTelegramVoiceFileFormat(
 }
 
 async function sendVoiceChatAction(
-  deps: TelegramVoiceReplySenderDeps,
+  deps: BaleVoiceReplySenderDeps,
   chatId: number,
 ) {
   if (deps.sendRecordVoiceAction) {
@@ -102,12 +102,12 @@ async function sendVoiceChatAction(
   }
 }
 
-export function createTelegramVoiceReplySender<THandler = unknown>(
-  deps: TelegramVoiceReplySenderDeps,
-  ports: TelegramVoiceReplySenderPorts<THandler> = {},
+export function createBaleVoiceReplySender<THandler = unknown>(
+  deps: BaleVoiceReplySenderDeps,
+  ports: BaleVoiceReplySenderPorts<THandler> = {},
 ) {
   const uploadVoiceFile = async (
-    turn: TelegramVoiceReplyTurnView,
+    turn: BaleVoiceReplyTurnView,
     filePath: string,
     options?: {
       replyToPrompt?: boolean;
@@ -115,12 +115,12 @@ export function createTelegramVoiceReplySender<THandler = unknown>(
     },
   ): Promise<void> => {
     if (deps.isDeliveryActive?.() === false) return;
-    const voiceFilePath = await ensureTelegramVoiceFileFormat(filePath);
-    assertTelegramInlineKeyboardCallbackData(options?.replyMarkup);
+    const voiceFilePath = await ensureBaleVoiceFileFormat(filePath);
+    assertBaleInlineKeyboardCallbackData(options?.replyMarkup);
     if (deps.isDeliveryActive?.() === false) return;
     await sendVoiceChatAction(deps, turn.chatId);
     if (deps.isDeliveryActive?.() === false) return;
-    await withTelegramReplyParameters(
+    await withBaleReplyParameters(
       turn.chatId,
       options?.replyToPrompt === false ? undefined : turn.replyToMessageId,
       turn.target,
@@ -135,7 +135,7 @@ export function createTelegramVoiceReplySender<THandler = unknown>(
             ...(turn.target
               ? Object.fromEntries(
                   Object.entries(
-                    getTelegramTargetThreadParams(turn.target),
+                    getBaleTargetThreadParams(turn.target),
                   ).map(([key, value]) => [key, String(value)]),
                 )
               : {}),
@@ -157,7 +157,7 @@ export function createTelegramVoiceReplySender<THandler = unknown>(
   };
 
   return async (
-    turn: TelegramVoiceReplyTurnView,
+    turn: BaleVoiceReplyTurnView,
     text: string,
     options?: {
       lang?: string;
@@ -185,7 +185,7 @@ export function createTelegramVoiceReplySender<THandler = unknown>(
         });
         return;
       } catch (error) {
-        if (isTelegramApiCommitUnknownError(error)) throw error;
+        if (isBaleApiCommitUnknownError(error)) throw error;
         deps.recordRuntimeEvent?.("voice", error, {
           phase: "template-handler-send",
         });
@@ -206,14 +206,14 @@ export function createTelegramVoiceReplySender<THandler = unknown>(
         });
         return;
       } catch (error) {
-        if (isTelegramApiCommitUnknownError(error)) throw error;
+        if (isBaleApiCommitUnknownError(error)) throw error;
         deps.recordRuntimeEvent?.("voice", error, {
           phase: "programmatic-handler-send",
         });
       }
     }
 
-    const providers = getTelegramVoiceSynthesisProviders();
+    const providers = getBaleVoiceSynthesisProviders();
 
     for (const provider of providers) {
       if (deps.isDeliveryActive?.() === false) return;
@@ -254,7 +254,7 @@ export function createTelegramVoiceReplySender<THandler = unknown>(
         });
         return;
       } catch (error) {
-        if (isTelegramApiCommitUnknownError(error)) throw error;
+        if (isBaleApiCommitUnknownError(error)) throw error;
         deps.recordRuntimeEvent?.("voice", error, { phase: "send" });
       } finally {
         if (voiceFilePath && voiceFilePath !== originalFilePath) {

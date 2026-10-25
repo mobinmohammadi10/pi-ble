@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram prompt-template bridge helpers
+ * Regression tests for Bale prompt-template bridge helpers
  * Covers Pi prompt-template discovery filtering and command expansion
  */
 
@@ -7,14 +7,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  createTelegramPromptTemplateCommandGetter,
-  expandTelegramPromptTemplateCommand,
-  getTelegramPromptTemplateCommands,
-  mapPiPromptTemplateNameToTelegramCommandName,
+  createBalePromptTemplateCommandGetter,
+  expandBalePromptTemplateCommand,
+  getBalePromptTemplateCommands,
+  mapPiPromptTemplateNameToBaleCommandName,
   parsePromptTemplateArgs,
   substitutePromptTemplateArgs,
 } from "../lib/prompt-templates.ts";
-import { TELEGRAM_RESERVED_COMMAND_NAMES } from "../lib/commands.ts";
+import { BALE_RESERVED_COMMAND_NAMES } from "../lib/commands.ts";
 import type { PiSlashCommandInfo } from "../lib/pi.ts";
 
 function createCommand(
@@ -35,8 +35,8 @@ function createCommand(
   };
 }
 
-test("Prompt-template helpers expose valid Telegram command templates", () => {
-  const commands = getTelegramPromptTemplateCommands(
+test("Prompt-template helpers expose valid Bale command templates", () => {
+  const commands = getBalePromptTemplateCommands(
     [
       createCommand("review", "prompt", "Review changes"),
       createCommand("fix-tests", "prompt", "Fix failing tests"),
@@ -45,7 +45,7 @@ test("Prompt-template helpers expose valid Telegram command templates", () => {
       createCommand("skill", "skill", "Not a prompt"),
       createCommand("review", "prompt", "Duplicate"),
     ],
-    new Set(TELEGRAM_RESERVED_COMMAND_NAMES),
+    new Set(BALE_RESERVED_COMMAND_NAMES),
   );
   assert.deepEqual(commands, [
     {
@@ -67,23 +67,23 @@ test("Prompt-template helpers skip commands without source paths", () => {
     description: "Review changes",
     source: "prompt",
   } as PiSlashCommandInfo;
-  const commands = getTelegramPromptTemplateCommands(
+  const commands = getBalePromptTemplateCommands(
     [commandWithoutSourcePath],
-    new Set(TELEGRAM_RESERVED_COMMAND_NAMES),
+    new Set(BALE_RESERVED_COMMAND_NAMES),
   );
   assert.deepEqual(commands, []);
 });
 
-test("Prompt-template helpers map pi template names to Telegram commands", () => {
+test("Prompt-template helpers map pi template names to Bale commands", () => {
   assert.equal(
-    mapPiPromptTemplateNameToTelegramCommandName("fix-tests"),
+    mapPiPromptTemplateNameToBaleCommandName("fix-tests"),
     "fix_tests",
   );
   assert.equal(
-    mapPiPromptTemplateNameToTelegramCommandName("Review PR"),
+    mapPiPromptTemplateNameToBaleCommandName("Review PR"),
     "review_pr",
   );
-  assert.equal(mapPiPromptTemplateNameToTelegramCommandName("---"), undefined);
+  assert.equal(mapPiPromptTemplateNameToBaleCommandName("---"), undefined);
 });
 
 test("Prompt-template command getter hides extension command conflicts", () => {
@@ -92,9 +92,9 @@ test("Prompt-template command getter hides extension command conflicts", () => {
     createCommand("start", "prompt", "Conflicts with built-in"),
     createCommand("status", "prompt", "Conflicts with hidden shortcut"),
   ];
-  const getPromptTemplateCommands = createTelegramPromptTemplateCommandGetter({
+  const getPromptTemplateCommands = createBalePromptTemplateCommandGetter({
     getCommands,
-    reservedCommandNames: TELEGRAM_RESERVED_COMMAND_NAMES,
+    reservedCommandNames: BALE_RESERVED_COMMAND_NAMES,
   });
   assert.deepEqual(
     getPromptTemplateCommands().map((command) => command.command),
@@ -115,7 +115,7 @@ test("Prompt-template helpers parse and substitute arguments like pi templates",
 });
 
 test("Prompt-template helpers expand command content from template files", () => {
-  const expanded = expandTelegramPromptTemplateCommand(
+  const expanded = expandBalePromptTemplateCommand(
     "review",
     "staged changes",
     [{ command: "review", description: "Review", path: "/prompts/review.md" }],
@@ -123,7 +123,7 @@ test("Prompt-template helpers expand command content from template files", () =>
   );
   assert.equal(expanded, "Review staged changes");
   assert.equal(
-    expandTelegramPromptTemplateCommand("missing", "", [], () => "unused"),
+    expandBalePromptTemplateCommand("missing", "", [], () => "unused"),
     undefined,
   );
 });

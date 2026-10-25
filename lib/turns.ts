@@ -1,136 +1,136 @@
 /**
- * Telegram turn-building helpers
- * Zones: telegram inbound, pi agent prompt content, queue
- * Owns prompt-turn summary and content construction so queued Telegram turns are assembled consistently
+ * Bale turn-building helpers
+ * Zones: bale inbound, pi agent prompt content, queue
+ * Owns prompt-turn summary and content construction so queued Bale turns are assembled consistently
  */
 
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import {
-  appendTelegramAttachmentSection,
-  appendTelegramListSection,
-  buildTelegramReplyContextBlock,
-  collectTelegramFileInfos,
-  collectTelegramMessageIds,
-  downloadTelegramMessageFiles,
-  extractTelegramForwardContextText,
-  extractTelegramMessagesPromptText,
-  extractTelegramMessagesText,
-  extractTelegramMessageText,
-  formatTelegramHistoryText,
+  appendBaleAttachmentSection,
+  appendBaleListSection,
+  buildBaleReplyContextBlock,
+  collectBaleFileInfos,
+  collectBaleMessageIds,
+  downloadBaleMessageFiles,
+  extractBaleForwardContextText,
+  extractBaleMessagesPromptText,
+  extractBaleMessagesText,
+  extractBaleMessageText,
+  formatBaleHistoryText,
   guessMediaType,
-  type DownloadedTelegramMessageFile,
-  type DownloadTelegramMessageFilesDeps,
-  type TelegramMediaMessage,
+  type DownloadedBaleMessageFile,
+  type DownloadBaleMessageFilesDeps,
+  type BaleMediaMessage,
 } from "./media.ts";
 import {
-  createTelegramQueueAdmissionReceipt,
-  truncateTelegramQueueSummary,
-  type PendingTelegramTurn,
-  type TelegramPreparedPromptTurn,
-  type TelegramPromptContent,
-  type TelegramQueueAdmissionReceipt,
-  type TelegramQueueItem,
-  type TelegramQueueStore,
+  createBaleQueueAdmissionReceipt,
+  truncateBaleQueueSummary,
+  type PendingBaleTurn,
+  type BalePreparedPromptTurn,
+  type BalePromptContent,
+  type BaleQueueAdmissionReceipt,
+  type BaleQueueItem,
+  type BaleQueueStore,
 } from "./queue.ts";
 
 import {
   computeVoicePromptContribution,
   computeVoiceTurnFlags,
-  getTelegramVoiceReplyMode,
-  type TelegramVoiceReplyMode,
+  getBaleVoiceReplyMode,
+  type BaleVoiceReplyMode,
 } from "./voice.ts";
 
-export const TELEGRAM_PREFIX = "[telegram]";
+export const BALE_PREFIX = "[bale]";
 
-const REPLY_ANCHOR_SUPPRESSED = Symbol.for("@llblab/pi-telegram:reply-anchor-suppressed");
+const REPLY_ANCHOR_SUPPRESSED = Symbol.for("@llblab/pi-bale:reply-anchor-suppressed");
 
 /** A routed source keeps its unique message/file/group identity, but cannot quote an anchor in its former tab. */
-export function withoutTelegramTurnReplyAnchor<TMessage extends object>(message: TMessage): TMessage {
+export function withoutBaleTurnReplyAnchor<TMessage extends object>(message: TMessage): TMessage {
   return { ...message, [REPLY_ANCHOR_SUPPRESSED]: true };
 }
 
 /** A confirmed same-target copy may replace the former-tab suppression on a warm input projection. */
-export function withTelegramTurnReplyAnchor<TMessage extends { message_id: number }>(message: TMessage): TMessage {
+export function withBaleTurnReplyAnchor<TMessage extends { message_id: number }>(message: TMessage): TMessage {
   if (!Number.isSafeInteger(message.message_id) || message.message_id <= 0)
-    throw new Error("Telegram reply anchor requires a positive message ID.");
+    throw new Error("Bale reply anchor requires a positive message ID.");
   return { ...message, [REPLY_ANCHOR_SUPPRESSED]: false };
 }
 
-export const TELEGRAM_GUEST_TURN_NOTE =
+export const BALE_GUEST_TURN_NOTE =
   "[guest] delivery: answer quickly with one concise, self-contained reply";
 
-export interface TelegramTurnTarget {
+export interface BaleTurnTarget {
   chatId: number;
   threadId?: number;
 }
 
-export interface TelegramTurnMessage {
+export interface BaleTurnMessage {
   message_id: number;
   message_thread_id?: number;
-  pi_telegram_agent_source_thread?: string;
-  pi_telegram_source_update_id?: number;
+  pi_bale_agent_source_thread?: string;
+  pi_bale_source_update_id?: number;
   chat: { id: number; type?: string };
 }
 
-export type DownloadedTelegramTurnFile = DownloadedTelegramMessageFile;
+export type DownloadedBaleTurnFile = DownloadedBaleMessageFile;
 
-function getTelegramTurnTarget(
-  message: TelegramTurnMessage,
-): TelegramTurnTarget {
+function getBaleTurnTarget(
+  message: BaleTurnMessage,
+): BaleTurnTarget {
   return Number.isInteger(message.message_thread_id)
     ? { chatId: message.chat.id, threadId: message.message_thread_id }
     : { chatId: message.chat.id };
 }
 
-function formatTelegramPrefixAttributeValue(value: string): string {
+function formatBalePrefixAttributeValue(value: string): string {
   return value
     .replace(/[\]\n\r|]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-export function createTelegramTurnPrefix(
+export function createBaleTurnPrefix(
   attributes: Record<string, string | undefined> = {},
 ): string {
-  const parts = [TELEGRAM_PREFIX.slice(1, -1)];
+  const parts = [BALE_PREFIX.slice(1, -1)];
   for (const [key, value] of Object.entries(attributes)) {
-    const normalized = value ? formatTelegramPrefixAttributeValue(value) : "";
+    const normalized = value ? formatBalePrefixAttributeValue(value) : "";
     if (normalized) parts.push(`${key}:${normalized}`);
   }
   return `[${parts.join("|")}]`;
 }
 
-function formatTelegramTurnPrefix(
-  _message: TelegramTurnMessage,
-  basePrefix = TELEGRAM_PREFIX,
+function formatBaleTurnPrefix(
+  _message: BaleTurnMessage,
+  basePrefix = BALE_PREFIX,
 ): string {
   return basePrefix;
 }
 
-export { truncateTelegramQueueSummary };
+export { truncateBaleQueueSummary };
 
-export function formatTelegramTurnStatusSummary(
+export function formatBaleTurnStatusSummary(
   rawText: string,
-  files: DownloadedTelegramTurnFile[],
+  files: DownloadedBaleTurnFile[],
   handlerOutputs: string[] = [],
 ): string {
-  const textSummary = truncateTelegramQueueSummary(rawText);
+  const textSummary = truncateBaleQueueSummary(rawText);
   if (textSummary) return textSummary;
-  const handlerSummary = truncateTelegramQueueSummary(handlerOutputs.join(" "));
+  const handlerSummary = truncateBaleQueueSummary(handlerOutputs.join(" "));
   if (handlerSummary) return handlerSummary;
   if (files.length === 1) {
     const fileName = basename(
       files[0]?.fileName || files[0]?.path || "attachment",
     );
-    return `📎 ${truncateTelegramQueueSummary(fileName, 4, 32) || "attachment"}`;
+    return `📎 ${truncateBaleQueueSummary(fileName, 4, 32) || "attachment"}`;
   }
   if (files.length > 1) return `📎 ${files.length} attachments`;
   return "(empty message)";
 }
 
-function appendTelegramSourceContext(
+function appendBaleSourceContext(
   text: string,
   sourceContext: string | undefined,
 ): string {
@@ -138,10 +138,10 @@ function appendTelegramSourceContext(
   return text ? `${text}\n\n${sourceContext}` : sourceContext;
 }
 
-function buildTelegramForwardContextBlock(options: {
+function buildBaleForwardContextBlock(options: {
   context: string;
   text: string;
-  files: DownloadedTelegramTurnFile[];
+  files: DownloadedBaleTurnFile[];
 }): string {
   const metadata = options.context.replace(/:\s+/g, ":");
   const from = metadata.match(/^from:(.+)$/)?.[1];
@@ -159,13 +159,13 @@ function buildTelegramForwardContextBlock(options: {
   return block;
 }
 
-function appendTelegramPromptText(prompt: string, rawText: string): string {
+function appendBalePromptText(prompt: string, rawText: string): string {
   if (!rawText) return prompt;
   if (rawText.startsWith("\n")) return `${prompt}${rawText}`;
   return `${prompt} ${rawText}`;
 }
 
-function appendTelegramVoiceContext(
+function appendBaleVoiceContext(
   prompt: string,
   entries: Record<string, string>,
 ): string {
@@ -182,59 +182,59 @@ function appendTelegramVoiceContext(
 
 // --- Voice Policy And Tagging ---
 
-export function buildTelegramTurnPrompt(options: {
-  telegramPrefix: string;
+export function buildBaleTurnPrompt(options: {
+  balePrefix: string;
   rawText: string;
-  files: DownloadedTelegramTurnFile[];
-  promptFiles?: DownloadedTelegramTurnFile[];
-  displayFiles?: DownloadedTelegramTurnFile[];
+  files: DownloadedBaleTurnFile[];
+  promptFiles?: DownloadedBaleTurnFile[];
+  displayFiles?: DownloadedBaleTurnFile[];
   handlerOutputs?: string[];
   sourceContext?: string;
-  historyTurns?: Pick<PendingTelegramTurn, "historyText">[];
+  historyTurns?: Pick<PendingBaleTurn, "historyText">[];
   timeLine?: string | null;
   voiceContext?: Record<string, string>;
   guestTurn?: boolean;
 }): string {
-  let prompt = options.telegramPrefix;
+  let prompt = options.balePrefix;
   if ((options.historyTurns?.length ?? 0) > 0) {
     prompt +=
-      "\n\nEarlier Telegram messages arrived after an aborted turn. Treat them as prior user messages, in order:";
+      "\n\nEarlier Bale messages arrived after an aborted turn. Treat them as prior user messages, in order:";
     for (const [index, turn] of (options.historyTurns ?? []).entries()) {
       prompt += `\n\n${index + 1}. ${turn.historyText}`;
     }
-    prompt += "\n\nCurrent Telegram message:";
+    prompt += "\n\nCurrent Bale message:";
   }
   if (options.rawText.length > 0) {
     prompt =
       (options.historyTurns?.length ?? 0) > 0
         ? `${prompt}\n${options.rawText}`
-        : appendTelegramPromptText(prompt, options.rawText);
+        : appendBalePromptText(prompt, options.rawText);
   }
   const displayFiles =
     options.displayFiles ?? options.promptFiles ?? options.files;
-  prompt = appendTelegramAttachmentSection(prompt, displayFiles);
-  prompt = appendTelegramListSection(
+  prompt = appendBaleAttachmentSection(prompt, displayFiles);
+  prompt = appendBaleListSection(
     prompt,
     "outputs",
     options.handlerOutputs ?? [],
   );
-  prompt = appendTelegramSourceContext(prompt, options.sourceContext);
+  prompt = appendBaleSourceContext(prompt, options.sourceContext);
   if (options.voiceContext) {
-    prompt = appendTelegramVoiceContext(prompt, options.voiceContext);
+    prompt = appendBaleVoiceContext(prompt, options.voiceContext);
   }
   if (options.timeLine) {
     prompt = `${prompt}\n\n[time] ${options.timeLine}`;
   }
   if (options.guestTurn) {
-    prompt = `${prompt}\n\n${TELEGRAM_GUEST_TURN_NOTE}`;
+    prompt = `${prompt}\n\n${BALE_GUEST_TURN_NOTE}`;
   }
   return prompt;
 }
 
-function splitTelegramPromptAttachmentSuffix(prompt: string): {
+function splitBalePromptAttachmentSuffix(prompt: string): {
   promptWithoutAttachments: string;
   attachmentSuffix: string;
-  attachmentFiles: DownloadedTelegramTurnFile[];
+  attachmentFiles: DownloadedBaleTurnFile[];
 } {
   const marker = "\n\n[attachments]";
   const markerIndex = prompt.indexOf(marker);
@@ -276,14 +276,14 @@ function splitTelegramPromptAttachmentSuffix(prompt: string): {
   return { promptWithoutAttachments, attachmentSuffix, attachmentFiles };
 }
 
-function buildEditedTelegramPromptText(options: {
+function buildEditedBalePromptText(options: {
   existingPrompt: string;
-  telegramPrefix: string;
+  balePrefix: string;
   rawText: string;
-}): { text: string; attachmentFiles: DownloadedTelegramTurnFile[] } {
+}): { text: string; attachmentFiles: DownloadedBaleTurnFile[] } {
   const { promptWithoutAttachments, attachmentSuffix, attachmentFiles } =
-    splitTelegramPromptAttachmentSuffix(options.existingPrompt);
-  const currentMessageMarker = "Current Telegram message:";
+    splitBalePromptAttachmentSuffix(options.existingPrompt);
+  const currentMessageMarker = "Current Bale message:";
   const currentMessageIndex =
     promptWithoutAttachments.lastIndexOf(currentMessageMarker);
   if (currentMessageIndex !== -1) {
@@ -298,26 +298,26 @@ function buildEditedTelegramPromptText(options: {
     };
   }
   return {
-    text: `${appendTelegramPromptText(
-      options.telegramPrefix,
+    text: `${appendBalePromptText(
+      options.balePrefix,
       options.rawText,
     )}${attachmentSuffix}`,
     attachmentFiles,
   };
 }
 
-export function updateTelegramPromptTurnText(options: {
-  turn: PendingTelegramTurn;
-  telegramPrefix: string;
+export function updateBalePromptTurnText(options: {
+  turn: PendingBaleTurn;
+  balePrefix: string;
   rawText: string;
   statusText?: string;
-}): PendingTelegramTurn {
-  let attachmentFiles: DownloadedTelegramTurnFile[] = [];
+}): PendingBaleTurn {
+  let attachmentFiles: DownloadedBaleTurnFile[] = [];
   const nextContent = options.turn.content.map((block, index) => {
     if (index !== 0 || block.type !== "text") return block;
-    const updated = buildEditedTelegramPromptText({
+    const updated = buildEditedBalePromptText({
       existingPrompt: block.text,
-      telegramPrefix: options.telegramPrefix,
+      balePrefix: options.balePrefix,
       rawText: options.rawText,
     });
     attachmentFiles = updated.attachmentFiles;
@@ -329,23 +329,23 @@ export function updateTelegramPromptTurnText(options: {
   return {
     ...options.turn,
     content: nextContent,
-    historyText: formatTelegramHistoryText(options.rawText, attachmentFiles),
-    statusSummary: formatTelegramTurnStatusSummary(
+    historyText: formatBaleHistoryText(options.rawText, attachmentFiles),
+    statusSummary: formatBaleTurnStatusSummary(
       options.statusText ?? options.rawText,
       attachmentFiles,
     ),
   };
 }
 
-export function updateQueuedTelegramPromptTurnText<
+export function updateQueuedBalePromptTurnText<
   TContext = unknown,
 >(options: {
-  items: TelegramQueueItem<TContext>[];
+  items: BaleQueueItem<TContext>[];
   sourceMessageId: number | undefined;
-  telegramPrefix: string;
+  balePrefix: string;
   rawText: string;
   statusText?: string;
-}): { items: TelegramQueueItem<TContext>[]; changed: boolean } {
+}): { items: BaleQueueItem<TContext>[]; changed: boolean } {
   if (options.sourceMessageId === undefined) {
     return { items: options.items, changed: false };
   }
@@ -358,9 +358,9 @@ export function updateQueuedTelegramPromptTurnText<
       return item;
     }
     changed = true;
-    return updateTelegramPromptTurnText({
+    return updateBalePromptTurnText({
       turn: item,
-      telegramPrefix: options.telegramPrefix,
+      balePrefix: options.balePrefix,
       rawText: options.rawText,
       statusText: options.statusText,
     });
@@ -368,24 +368,24 @@ export function updateQueuedTelegramPromptTurnText<
   return { items, changed };
 }
 
-export interface TelegramQueuedPromptEditRuntimeDeps<
+export interface BaleQueuedPromptEditRuntimeDeps<
   TContext = unknown,
-> extends TelegramQueueStore<TContext> {
+> extends BaleQueueStore<TContext> {
   updateStatus: (ctx: TContext) => void;
 }
 
-export function createTelegramQueuedPromptEditRuntime<
-  TMessage extends TelegramMediaMessage,
+export function createBaleQueuedPromptEditRuntime<
+  TMessage extends BaleMediaMessage,
   TContext = unknown,
->(deps: TelegramQueuedPromptEditRuntimeDeps<TContext>) {
+>(deps: BaleQueuedPromptEditRuntimeDeps<TContext>) {
   return {
     updateFromEditedMessage: (message: TMessage, ctx: TContext): boolean => {
-      const { changed, items } = updateQueuedTelegramPromptTurnText({
+      const { changed, items } = updateQueuedBalePromptTurnText({
         items: deps.getQueuedItems(),
         sourceMessageId: message.message_id,
-        telegramPrefix: TELEGRAM_PREFIX,
-        rawText: extractTelegramMessagesPromptText([message]),
-        statusText: extractTelegramMessagesText([message]),
+        balePrefix: BALE_PREFIX,
+        rawText: extractBaleMessagesPromptText([message]),
+        statusText: extractBaleMessagesText([message]),
       });
       deps.setQueuedItems(items);
       if (changed) deps.updateStatus(ctx);
@@ -394,73 +394,73 @@ export function createTelegramQueuedPromptEditRuntime<
   };
 }
 
-export interface BuildTelegramPromptTurnOptions {
-  telegramPrefix: string;
-  messages: TelegramTurnMessage[];
-  historyTurns?: PendingTelegramTurn[];
+export interface BuildBalePromptTurnOptions {
+  balePrefix: string;
+  messages: BaleTurnMessage[];
+  historyTurns?: PendingBaleTurn[];
   queueOrder: number;
   rawText: string;
   statusText?: string;
-  files: DownloadedTelegramTurnFile[];
-  promptFiles?: DownloadedTelegramTurnFile[];
-  displayFiles?: DownloadedTelegramTurnFile[];
+  files: DownloadedBaleTurnFile[];
+  promptFiles?: DownloadedBaleTurnFile[];
+  displayFiles?: DownloadedBaleTurnFile[];
   handlerOutputs?: string[];
   sourceContext?: string;
   timeLine?: string | null;
   readBinaryFile: (path: string) => Promise<Uint8Array>;
   inferImageMimeType: (path: string) => string | undefined;
-  voiceReplyMode?: TelegramVoiceReplyMode;
+  voiceReplyMode?: BaleVoiceReplyMode;
   voicePromptContribution?: string;
   admissionScope?: string;
   admissionJournalBinding?: string;
 }
 
-export type BuildTelegramPromptTurnRuntimeOptions = Omit<
-  BuildTelegramPromptTurnOptions,
+export type BuildBalePromptTurnRuntimeOptions = Omit<
+  BuildBalePromptTurnOptions,
   "readBinaryFile"
 >;
 
-export interface TelegramPromptTurnRuntimeBuilderDeps<
+export interface BalePromptTurnRuntimeBuilderDeps<
   TContext = unknown,
-> extends DownloadTelegramMessageFilesDeps {
+> extends DownloadBaleMessageFilesDeps {
   allocateQueueOrder: () => number;
   processAttachments?: (
-    files: DownloadedTelegramTurnFile[],
+    files: DownloadedBaleTurnFile[],
     rawText: string,
     ctx: TContext,
   ) => Promise<{
     rawText: string;
-    promptFiles?: DownloadedTelegramTurnFile[];
+    promptFiles?: DownloadedBaleTurnFile[];
     handlerOutputs?: string[];
   }>;
   resolveTimeLine?: (chatId: number) => string | null;
-  getVoiceReplyMode?: () => TelegramVoiceReplyMode;
+  getVoiceReplyMode?: () => BaleVoiceReplyMode;
   /** Returns the visible thread label for a message target, used to add thread context to the prompt prefix. */
-  getTelegramThreadLabel?: (message: {
+  getBaleThreadLabel?: (message: {
     chat: { id: number };
     message_thread_id?: number;
   }) => string | undefined;
   getAllowedUserId?: () => number | undefined;
   getAdmissionScope?: () => string | undefined;
   getAdmissionJournalBinding?: () => string | undefined;
-  assertExecutionCurrent?: (message: TelegramTurnMessage) => void;
+  assertExecutionCurrent?: (message: BaleTurnMessage) => void;
 }
 
-export function createTelegramPromptTurnRuntimePreparer<
-  TMessage extends TelegramTurnMessage & TelegramMediaMessage,
+export function createBalePromptTurnRuntimePreparer<
+  TMessage extends BaleTurnMessage & BaleMediaMessage,
   TContext = unknown,
 >(
-  deps: TelegramPromptTurnRuntimeBuilderDeps<TContext>,
+  deps: BalePromptTurnRuntimeBuilderDeps<TContext>,
 ): (
   messages: TMessage[],
   ctx?: TContext,
-) => Promise<TelegramPreparedPromptTurn> {
+) => Promise<BalePreparedPromptTurn> {
   return async (messages, ctx) => {
-    const rawText = extractTelegramMessagesText(messages);
+    const rawText = extractBaleMessagesText(messages);
     const firstMessage = messages[0];
     if (firstMessage) deps.assertExecutionCurrent?.(firstMessage);
     const replyFiles = firstMessage?.reply_to_message
-      ? await downloadTelegramMessageFiles(
+      ? await downloadBaleMessageFiles(
           [firstMessage.reply_to_message as typeof firstMessage],
           { downloadFile: deps.downloadFile },
         )
@@ -472,14 +472,14 @@ export function createTelegramPromptTurnRuntimePreparer<
         : undefined;
     if (firstMessage) deps.assertExecutionCurrent?.(firstMessage);
     const replyContext = firstMessage
-      ? buildTelegramReplyContextBlock(
+      ? buildBaleReplyContextBlock(
           firstMessage,
           processedReply?.promptFiles ?? replyFiles,
           processedReply?.handlerOutputs,
         )
       : "";
     const forwardEntries = messages.flatMap((message) => {
-      const context = extractTelegramForwardContextText(
+      const context = extractBaleForwardContextText(
         message,
         deps.getAllowedUserId?.(),
       );
@@ -487,10 +487,10 @@ export function createTelegramPromptTurnRuntimePreparer<
         ? [
             {
               context,
-              text: extractTelegramMessageText(message),
+              text: extractBaleMessageText(message),
               message,
               fileNames: new Set(
-                collectTelegramFileInfos([message]).map(
+                collectBaleFileInfos([message]).map(
                   (file) => file.fileName,
                 ),
               ),
@@ -498,7 +498,7 @@ export function createTelegramPromptTurnRuntimePreparer<
           ]
         : [];
     });
-    const files = await downloadTelegramMessageFiles(messages, {
+    const files = await downloadBaleMessageFiles(messages, {
       downloadFile: deps.downloadFile,
     });
     if (firstMessage) deps.assertExecutionCurrent?.(firstMessage);
@@ -518,7 +518,7 @@ export function createTelegramPromptTurnRuntimePreparer<
     if (forwardEntries.length === 1 && messages.length === 1) {
       const [forward] = forwardEntries;
       sourceBlocks.push(
-        buildTelegramForwardContextBlock({
+        buildBaleForwardContextBlock({
           context: forward!.context,
           text: processed.rawText,
           files: getForwardFiles(forward!),
@@ -531,12 +531,12 @@ export function createTelegramPromptTurnRuntimePreparer<
       );
       promptRawText = messages
         .filter((message) => !forwardedMessages.has(message))
-        .map(extractTelegramMessageText)
+        .map(extractBaleMessageText)
         .filter(Boolean)
         .join("\n\n");
       sourceBlocks.push(
         ...forwardEntries.map((entry) =>
-          buildTelegramForwardContextBlock({
+          buildBaleForwardContextBlock({
             context: entry.context,
             text: entry.text,
             files: getForwardFiles(entry),
@@ -546,7 +546,7 @@ export function createTelegramPromptTurnRuntimePreparer<
     } else if (forwardEntries.length > 0) {
       sourceBlocks.push(
         ...forwardEntries.map((entry) =>
-          buildTelegramForwardContextBlock({
+          buildBaleForwardContextBlock({
             context: entry.context,
             text: "",
             files: getForwardFiles(entry),
@@ -564,14 +564,14 @@ export function createTelegramPromptTurnRuntimePreparer<
         ? deps.resolveTimeLine(chatId)
         : null;
     const threadLabel = firstMessage
-      ? deps.getTelegramThreadLabel?.(firstMessage)
+      ? deps.getBaleThreadLabel?.(firstMessage)
       : undefined;
-    const telegramPrefix = createTelegramTurnPrefix({
+    const balePrefix = createBaleTurnPrefix({
       thread: threadLabel,
-      "from-thread": firstMessage?.pi_telegram_agent_source_thread,
+      "from-thread": firstMessage?.pi_bale_agent_source_thread,
     });
-    const buildTurn = await prepareTelegramPromptTurn({
-      telegramPrefix,
+    const buildTurn = await prepareBalePromptTurn({
+      balePrefix,
       messages,
       readBinaryFile: readFile,
       rawText: promptRawText,
@@ -601,8 +601,8 @@ export function createTelegramPromptTurnRuntimePreparer<
   };
 }
 
-function getTelegramVoicePromptContext(
-  voiceReplyMode: TelegramVoiceReplyMode,
+function getBaleVoicePromptContext(
+  voiceReplyMode: BaleVoiceReplyMode,
   hasVoiceFile: boolean,
 ): Record<string, string> | undefined {
   if (
@@ -614,14 +614,14 @@ function getTelegramVoicePromptContext(
   return { delivery: "automatic voice" };
 }
 
-function collectTelegramTurnAdmissionReceipts(
-  messages: TelegramTurnMessage[],
-  historyTurns: PendingTelegramTurn[],
+function collectBaleTurnAdmissionReceipts(
+  messages: BaleTurnMessage[],
+  historyTurns: PendingBaleTurn[],
   admissionScope: string | undefined,
   admissionJournalBinding: string | undefined,
-): TelegramQueueAdmissionReceipt[] {
-  const receipts = new Map<string, TelegramQueueAdmissionReceipt>();
-  const addReceipt = (receipt: TelegramQueueAdmissionReceipt): void => {
+): BaleQueueAdmissionReceipt[] {
+  const receipts = new Map<string, BaleQueueAdmissionReceipt>();
+  const addReceipt = (receipt: BaleQueueAdmissionReceipt): void => {
     const existing = receipts.get(receipt.receiptId);
     if (existing) {
       if (
@@ -633,7 +633,7 @@ function collectTelegramTurnAdmissionReceipts(
         )
       ) {
         throw new Error(
-          `Conflicting Telegram turn receipt: ${receipt.receiptId}`,
+          `Conflicting Bale turn receipt: ${receipt.receiptId}`,
         );
       }
       return;
@@ -644,12 +644,12 @@ function collectTelegramTurnAdmissionReceipts(
     for (const receipt of turn.admissionReceipts ?? []) addReceipt(receipt);
   }
   const sourceUpdateIds = messages.flatMap((message) =>
-    typeof message.pi_telegram_source_update_id === "number"
-      ? [message.pi_telegram_source_update_id]
+    typeof message.pi_bale_source_update_id === "number"
+      ? [message.pi_bale_source_update_id]
       : [],
   );
   if (sourceUpdateIds.length > 0) {
-    const currentReceipt = createTelegramQueueAdmissionReceipt({
+    const currentReceipt = createBaleQueueAdmissionReceipt({
       queueKind: "prompt",
       scope: admissionScope ?? "",
       sourceUpdateIds,
@@ -666,15 +666,15 @@ function collectTelegramTurnAdmissionReceipts(
   return [...receipts.values()];
 }
 
-async function prepareTelegramPromptTurn(
-  options: Omit<BuildTelegramPromptTurnOptions, "queueOrder" | "historyTurns">,
+async function prepareBalePromptTurn(
+  options: Omit<BuildBalePromptTurnOptions, "queueOrder" | "historyTurns">,
 ): Promise<
   (
     queueOrder: number,
-    historyTurns: PendingTelegramTurn[],
-  ) => PendingTelegramTurn
+    historyTurns: PendingBaleTurn[],
+  ) => PendingBaleTurn
 > {
-  const images: TelegramPromptContent[] = [];
+  const images: BalePromptContent[] = [];
   for (const file of options.files) {
     if (!file.isImage) continue;
     const mediaType = file.mimeType || options.inferImageMimeType(file.path);
@@ -687,31 +687,31 @@ async function prepareTelegramPromptTurn(
     });
   }
   return (queueOrder, historyTurns) =>
-    buildPreparedTelegramPromptTurn(
+    buildPreparedBalePromptTurn(
       { ...options, queueOrder, historyTurns },
       images,
     );
 }
 
-function buildPreparedTelegramPromptTurn(
-  options: BuildTelegramPromptTurnOptions,
-  images: TelegramPromptContent[],
-): PendingTelegramTurn {
+function buildPreparedBalePromptTurn(
+  options: BuildBalePromptTurnOptions,
+  images: BalePromptContent[],
+): PendingBaleTurn {
   const firstMessage = options.messages[0];
   if (!firstMessage) {
-    throw new Error("Missing Telegram message for turn creation");
+    throw new Error("Missing Bale message for turn creation");
   }
   const hasVoiceFile = options.files.some(
     (f) => f.kind === "voice" || f.kind === "audio",
   );
-  const voiceReplyMode = options.voiceReplyMode ?? getTelegramVoiceReplyMode();
-  const content: TelegramPromptContent[] = [
+  const voiceReplyMode = options.voiceReplyMode ?? getBaleVoiceReplyMode();
+  const content: BalePromptContent[] = [
     {
       type: "text",
-      text: buildTelegramTurnPrompt({
-        telegramPrefix: formatTelegramTurnPrefix(
+      text: buildBaleTurnPrompt({
+        balePrefix: formatBaleTurnPrefix(
           firstMessage,
-          options.telegramPrefix,
+          options.balePrefix,
         ),
         rawText: options.rawText,
         files: options.files,
@@ -721,7 +721,7 @@ function buildPreparedTelegramPromptTurn(
         sourceContext: options.sourceContext,
         historyTurns: options.historyTurns,
         timeLine: options.timeLine,
-        voiceContext: getTelegramVoicePromptContext(
+        voiceContext: getBaleVoicePromptContext(
           voiceReplyMode,
           hasVoiceFile,
         ),
@@ -736,7 +736,7 @@ function buildPreparedTelegramPromptTurn(
       textItem.text = `${textItem.text}\n\n${options.voicePromptContribution.trim()}`;
     }
   }
-  const admissionReceipts = collectTelegramTurnAdmissionReceipts(
+  const admissionReceipts = collectBaleTurnAdmissionReceipts(
     options.messages,
     options.historyTurns ?? [],
     options.admissionScope,
@@ -746,23 +746,23 @@ function buildPreparedTelegramPromptTurn(
   return {
     kind: "prompt",
     chatId: firstMessage.chat.id,
-    target: getTelegramTurnTarget(firstMessage),
+    target: getBaleTurnTarget(firstMessage),
     replyToMessageId: Reflect.get(firstMessage, REPLY_ANCHOR_SUPPRESSED) === true ? 0 : firstMessage.message_id,
-    sourceMessageIds: collectTelegramMessageIds(options.messages),
+    sourceMessageIds: collectBaleMessageIds(options.messages),
     queueOrder: options.queueOrder,
     queueLane: "default",
     laneOrder: options.queueOrder,
     queuedAttachments: [],
     content,
-    historyText: appendTelegramSourceContext(
-      formatTelegramHistoryText(
+    historyText: appendBaleSourceContext(
+      formatBaleHistoryText(
         options.rawText,
         options.displayFiles ?? options.promptFiles ?? options.files,
         options.handlerOutputs,
       ),
       options.sourceContext,
     ),
-    statusSummary: formatTelegramTurnStatusSummary(
+    statusSummary: formatBaleTurnStatusSummary(
       options.statusText ?? options.rawText,
       options.displayFiles ?? options.promptFiles ?? options.files,
       options.handlerOutputs,
@@ -773,17 +773,17 @@ function buildPreparedTelegramPromptTurn(
   };
 }
 
-export async function buildTelegramPromptTurn(
-  options: BuildTelegramPromptTurnOptions,
-): Promise<PendingTelegramTurn> {
-  const buildTurn = await prepareTelegramPromptTurn(options);
+export async function buildBalePromptTurn(
+  options: BuildBalePromptTurnOptions,
+): Promise<PendingBaleTurn> {
+  const buildTurn = await prepareBalePromptTurn(options);
   return buildTurn(options.queueOrder, options.historyTurns ?? []);
 }
 
-export async function buildTelegramPromptTurnRuntime(
-  options: BuildTelegramPromptTurnRuntimeOptions,
-): Promise<PendingTelegramTurn> {
-  return buildTelegramPromptTurn({
+export async function buildBalePromptTurnRuntime(
+  options: BuildBalePromptTurnRuntimeOptions,
+): Promise<PendingBaleTurn> {
+  return buildBalePromptTurn({
     ...options,
     readBinaryFile: readFile,
   });

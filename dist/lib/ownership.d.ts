@@ -1,14 +1,14 @@
 /**
- * Telegram message ownership helpers
- * Zones: telegram routing, multi-instance bus, in-memory coordination
+ * Bale message ownership helpers
+ * Zones: bale routing, multi-instance bus, in-memory coordination
  * Owns message-id ownership and live forwarding projections so inbound updates resolve back to the instance/target that owns them
  */
-import { type TelegramBusFollowerView, type TelegramBusForwardOwnership } from "./bus.ts";
-import { type TelegramTarget } from "./target.ts";
-export interface TelegramMessageOwnershipRecord {
+import { type BaleBusFollowerView, type BaleBusForwardOwnership } from "./bus.ts";
+import { type BaleTarget } from "./target.ts";
+export interface BaleMessageOwnershipRecord {
     chatId: number;
     messageId: number;
-    target: TelegramTarget;
+    target: BaleTarget;
     instanceId: string;
     profileKey?: string;
     ownerGeneration?: string;
@@ -16,62 +16,62 @@ export interface TelegramMessageOwnershipRecord {
     createdAt: number;
     updatedAt: number;
 }
-export interface TelegramMessageOwnershipStore {
+export interface BaleMessageOwnershipStore {
     record: (input: {
         chatId: number;
         messageId: number;
-        target?: TelegramTarget;
+        target?: BaleTarget;
         instanceId: string;
         profileKey?: string;
         ownerGeneration?: string;
         recipientBindingKey?: string;
         now?: number;
-    }) => TelegramMessageOwnershipRecord;
-    get: (chatId: number, messageId: number) => TelegramMessageOwnershipRecord | undefined;
+    }) => BaleMessageOwnershipRecord;
+    get: (chatId: number, messageId: number) => BaleMessageOwnershipRecord | undefined;
     forget: (chatId: number, messageId: number) => boolean;
-    forgetTarget: (target: TelegramTarget) => number;
+    forgetTarget: (target: BaleTarget) => number;
     prune: (options: {
         now: number;
         maxAgeMs?: number;
         maxRecords?: number;
     }) => number;
-    entries: () => TelegramMessageOwnershipRecord[];
+    entries: () => BaleMessageOwnershipRecord[];
     clear: () => void;
 }
-export type TelegramFollowerOwnershipView = Pick<TelegramBusFollowerView, "instanceId" | "connectedAtMs" | "profileKey" | "registrationGeneration" | "protocol">;
-export interface TelegramBusMessageOwnershipRuntime {
-    store: TelegramMessageOwnershipStore;
-    getForwardOwnership(chatId: number, messageId: number): TelegramBusForwardOwnership | undefined;
+export type BaleFollowerOwnershipView = Pick<BaleBusFollowerView, "instanceId" | "connectedAtMs" | "profileKey" | "registrationGeneration" | "protocol">;
+export interface BaleBusMessageOwnershipRuntime {
+    store: BaleMessageOwnershipStore;
+    getForwardOwnership(chatId: number, messageId: number): BaleBusForwardOwnership | undefined;
     recordLocal(input: {
         chatId: number;
         messageId: number;
-        target?: TelegramTarget;
-    }): TelegramMessageOwnershipRecord;
+        target?: BaleTarget;
+    }): BaleMessageOwnershipRecord;
     recordRouted(input: {
         chatId: number;
         messageId: number;
-        target?: TelegramTarget;
+        target?: BaleTarget;
         instanceId: string;
-    }): TelegramMessageOwnershipRecord;
+    }): BaleMessageOwnershipRecord;
     recordFollower(input: {
         chatId: number;
         messageId: number;
-        target?: TelegramTarget;
-        follower: TelegramFollowerOwnershipView;
-    }): TelegramMessageOwnershipRecord;
+        target?: BaleTarget;
+        follower: BaleFollowerOwnershipView;
+    }): BaleMessageOwnershipRecord;
     isOwnedByFollower(input: {
         chatId: number;
         messageId: number;
-        follower: TelegramFollowerOwnershipView;
+        follower: BaleFollowerOwnershipView;
     }): boolean;
 }
-export declare function createTelegramBusMessageOwnershipRuntime(deps: {
+export declare function createBaleBusMessageOwnershipRuntime(deps: {
     instanceId: string;
     getProfileKey(): string;
-    listFollowers(): readonly TelegramFollowerOwnershipView[];
-}): TelegramBusMessageOwnershipRuntime;
-export declare function createTelegramMessageOwnershipStore(options?: {
+    listFollowers(): readonly BaleFollowerOwnershipView[];
+}): BaleBusMessageOwnershipRuntime;
+export declare function createBaleMessageOwnershipStore(options?: {
     getProfileKey?: () => string | undefined;
-    isOwnerGenerationLive?: (record: TelegramMessageOwnershipRecord) => boolean;
-    resolveOwnerReplacement?: (record: TelegramMessageOwnershipRecord) => Pick<TelegramMessageOwnershipRecord, "instanceId" | "ownerGeneration" | "recipientBindingKey"> | undefined;
-}): TelegramMessageOwnershipStore;
+    isOwnerGenerationLive?: (record: BaleMessageOwnershipRecord) => boolean;
+    resolveOwnerReplacement?: (record: BaleMessageOwnershipRecord) => Pick<BaleMessageOwnershipRecord, "instanceId" | "ownerGeneration" | "recipientBindingKey"> | undefined;
+}): BaleMessageOwnershipStore;

@@ -1,75 +1,75 @@
 /**
- * Regression tests for Telegram multi-instance bus leader helpers
+ * Regression tests for Bale multi-instance bus leader helpers
  * Covers leader activation, envelope handling, authorization, and polling runtime behavior
  */
 
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { withWorkspaceRestoreFixture } from "./fixtures/workspace.ts";
-import { withTelegramFileTransaction, createTelegramLockRuntime } from "../lib/locks.ts";
+import { withBaleFileTransaction, createBaleLockRuntime } from "../lib/locks.ts";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
-  createTelegramBusFollowerDeliveryIdentity,
-  createTelegramBusFollowerRegistry,
-  createTelegramBusLocalServer,
-  createTelegramBusProtocolIdentity,
-  resolveTelegramBusSocketPath,
-  sendTelegramBusLocalEnvelope,
-  TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-  TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND,
-  TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF,
-  TELEGRAM_BUS_CAPABILITY_QUEUE_STEER,
-  TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE,
-  TELEGRAM_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
-  TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
-  TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE,
-  TELEGRAM_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
-  type TelegramBusFollowerView,
-  type TelegramBusSelectedMenuDelivery,
-  type TelegramBusEnvelope,
-  TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
+  createBaleBusFollowerDeliveryIdentity,
+  createBaleBusFollowerRegistry,
+  createBaleBusLocalServer,
+  createBaleBusProtocolIdentity,
+  resolveBaleBusSocketPath,
+  sendBaleBusLocalEnvelope,
+  BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+  BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND,
+  BALE_BUS_CAPABILITY_QUEUE_HANDOFF,
+  BALE_BUS_CAPABILITY_QUEUE_STEER,
+  BALE_BUS_CAPABILITY_WORKSPACE_RESTORE,
+  BALE_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
+  BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
+  BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE,
+  BALE_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
+  type BaleBusFollowerView,
+  type BaleBusSelectedMenuDelivery,
+  type BaleBusEnvelope,
+  BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
 } from "../lib/bus.ts";
 import {
-  createTelegramBusFollowerConfirmedDeadHandler,
-  createTelegramBusFollowerDisconnectHandler,
-  createTelegramBusFollowerSessionReplacementAuthority,
-  createTelegramBusFollowerTargetProvisioner,
-  createTelegramBusInstanceLifecycleAnnouncement,
-  createTelegramBusLeaderApiProxy,
-  createTelegramBusSelectedMenuDeliveryHandler,
-  createTelegramBusLeaderEnvelopeHandler as createRawTelegramBusLeaderEnvelopeHandler,
-  createTelegramBusLeaderRuntime as createRawTelegramBusLeaderRuntime,
-  createTelegramBusLeaderRuntimeAssembly,
-  createTelegramBusLeaderTargetProvisioner,
-  TELEGRAM_BUS_FOLLOWER_STALE_AFTER_MS,
-  type TelegramBusLeaderRuntimeDeps,
+  createBaleBusFollowerConfirmedDeadHandler,
+  createBaleBusFollowerDisconnectHandler,
+  createBaleBusFollowerSessionReplacementAuthority,
+  createBaleBusFollowerTargetProvisioner,
+  createBaleBusInstanceLifecycleAnnouncement,
+  createBaleBusLeaderApiProxy,
+  createBaleBusSelectedMenuDeliveryHandler,
+  createBaleBusLeaderEnvelopeHandler as createRawBaleBusLeaderEnvelopeHandler,
+  createBaleBusLeaderRuntime as createRawBaleBusLeaderRuntime,
+  createBaleBusLeaderRuntimeAssembly,
+  createBaleBusLeaderTargetProvisioner,
+  BALE_BUS_FOLLOWER_STALE_AFTER_MS,
+  type BaleBusLeaderRuntimeDeps,
 } from "../lib/bus-leader.ts";
-import type { TelegramThreadDisplayMode } from "../lib/config.ts";
-import { createTelegramUpdateJournalStore, createTelegramUpdateJournalBotIdentity, createTelegramUpdateJournalBindingKey } from "../lib/journal.ts";
-import { createTelegramThreadDisplayNameRenameBinding, createTelegramThreadDisplayNameResetBinding } from "../lib/commands.ts";
+import type { BaleThreadDisplayMode } from "../lib/config.ts";
+import { createBaleUpdateJournalStore, createBaleUpdateJournalBotIdentity, createBaleUpdateJournalBindingKey } from "../lib/journal.ts";
+import { createBaleThreadDisplayNameRenameBinding, createBaleThreadDisplayNameResetBinding } from "../lib/commands.ts";
 import {
-  createTelegramTopicTargetStore,
-  createTelegramConsolidatedWorkspaceStorage,
-  createTelegramTopicTargetProvisioner,
-  createTelegramWorkspaceBindingIdentity,
+  createBaleTopicTargetStore,
+  createBaleConsolidatedWorkspaceStorage,
+  createBaleTopicTargetProvisioner,
+  createBaleWorkspaceBindingIdentity,
 } from "../lib/threads.ts";
 import {
-  TelegramApiCommitUnknownError,
-  TelegramApiStaleTargetError,
-  createTelegramApiClient,
-  createTelegramBridgeApiRuntime,
-  type TelegramApiCallOptions,
-} from "../lib/telegram-api.ts";
+  BaleApiCommitUnknownError,
+  BaleApiStaleTargetError,
+  createBaleApiClient,
+  createBaleBridgeApiRuntime,
+  type BaleApiCallOptions,
+} from "../lib/bale-api.ts";
 import {
-  createTelegramWorkspaceAdmissionLedger,
-  runWithTelegramWorkspaceAdmissionsAsync,
+  createBaleWorkspaceAdmissionLedger,
+  runWithBaleWorkspaceAdmissionsAsync,
 } from "../lib/workspace-admission.ts";
 import {
-  createTelegramWorkspaceExternalProtectionCapture,
-  createTelegramWorkspaceOperationRuntime,
+  createBaleWorkspaceExternalProtectionCapture,
+  createBaleWorkspaceOperationRuntime,
 } from "../lib/workspace-retirement.ts";
 
 for (const effect of ["send-text", "edit-text"] as const) {
@@ -78,15 +78,15 @@ for (const fault of ["current", "missing-owner", "local-capability", "peer-capab
   "transport-during", "port-during", "lost-response", "record-loss", "mutable-request", "scope-during", "token-loss", "json-loss", "false-publication", "release-drift", "authorization-drift", "process-during", "birth-during", "slot-during", "cwd-during", "endpoint-during", "protocol-during", "admission-drift", "old-protocol", "group", "runtime-current", "runtime-no-owner", "runtime-owner-before", "runtime-owner-during", "runtime-protocol-before", "runtime-secret-before", "runtime-registry-before", "runtime-stop", "runtime-stop-restart"] as const) {
   test(`Selected menu leader ${effect} fences actual Workspace/direct API and ownership (${fault})`, async () => {
     await withWorkspaceRestoreFixture(async f => {
-      const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY] });
-      const registry = createTelegramBusFollowerRegistry();
+      const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY] });
+      const registry = createBaleBusFollowerRegistry();
       const captured = { instanceId: "old", registrationGeneration: "registration", profileKey: f.request.owner.profileKey, sessionId: "session", sessionGeneration: 1,
         cwd: "/repo", slot: "A", target: f.request.target, pid: process.pid, processBirthId: "birth", protocol, connectedAtMs: 1 };
       registry.register(captured);
       if (fault !== "group") f.request.source.updateIds = [100];
       const intent = (await f.store.commitLiveRebind(f.request, { kind: "follower", instanceId: "old", sessionId: "session", generation: "registration" }, f.auth))!;
       f.store.advanceLiveRebind(intent, "release", f.auth);
-      const wire: TelegramBusSelectedMenuDelivery & { auth?: string } = { kind: "follower.deliverSelectedMenu", requestId: "effect", auth: "secret", instanceId: "old",
+      const wire: BaleBusSelectedMenuDelivery & { auth?: string } = { kind: "follower.deliverSelectedMenu", requestId: "effect", auth: "secret", instanceId: "old",
         registrationGeneration: "registration", operationId: f.request.operationId, recipient: { sessionId: "session", sessionGeneration: 1, processId: process.pid,
           processBirthId: "birth", profileKey: captured.profileKey, journalBindingKey: "recipient-journal", target: f.request.target },
         executor: { instanceId: "leader", leaderEpoch: "epoch" }, operatorUserId: 7,
@@ -94,8 +94,8 @@ for (const fault of ["current", "missing-owner", "local-capability", "peer-capab
       let authority = true, epoch = "epoch", operator = 7, journal = "recipient-journal", scopeKey = "profile:bot", calls = 0;
       const records: unknown[] = [], bodies: Record<string, unknown>[] = [];
       const entered = Promise.withResolvers<void>(), finish = Promise.withResolvers<void>();
-      const ledger = createTelegramWorkspaceAdmissionLedger({ path: `${f.path}.menu-admission`, profileKey: "profile:bot", owner: { processId: process.pid, processBirthId: `${process.pid}:menu` }, getProcessLiveness: () => "alive" });
-      const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => ledger });
+      const ledger = createBaleWorkspaceAdmissionLedger({ path: `${f.path}.menu-admission`, profileKey: "profile:bot", owner: { processId: process.pid, processBirthId: `${process.pid}:menu` }, getProcessLiveness: () => "alive" });
+      const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => ledger });
       const originalFetch = globalThis.fetch;
       globalThis.fetch = async (_url, init) => {
         calls++; bodies.push(JSON.parse(String(init?.body))); assert.ok(ledger.read().leases.length);
@@ -105,9 +105,9 @@ for (const fault of ["current", "missing-owner", "local-capability", "peer-capab
         if (fault === "json-loss") { const text = response.text.bind(response); response.text = async () => { const result = await text(); authority = false; return result; }; }
         return response;
       };
-      const client = createTelegramApiClient(() => { if (fault === "token-loss") authority = false; return "123:fixture"; });
+      const client = createBaleApiClient(() => { if (fault === "token-loss") authority = false; return "123:fixture"; });
       const runtimeOptions = { client, tempDir: dirname(f.path), maxFileSizeBytes: 1024, tempFileMaxAgeMs: 1000, recordRuntimeEvent() {} };
-      const api = createTelegramBridgeApiRuntime(runtimeOptions);
+      const api = createBaleBridgeApiRuntime(runtimeOptions);
       const run: typeof operations.run = async (input, operation) => {
         if (fault === "admission-drift") { await Promise.resolve(); epoch = "replacement"; }
         const result = await operations.run(input, operation); if (fault === "release-drift") epoch = "replacement"; return result;
@@ -123,24 +123,24 @@ for (const fault of ["current", "missing-owner", "local-capability", "peer-capab
           if (fault === "false-publication") return false;
           records.push(record); return true;
         } } };
-      const delivery = createTelegramBusSelectedMenuDeliveryHandler(ports);
-      const envelopeHandler = createRawTelegramBusLeaderEnvelopeHandler({ followerRegistry: registry, authSecret: "secret", protocolIdentity: protocol,
+      const delivery = createBaleBusSelectedMenuDeliveryHandler(ports);
+      const envelopeHandler = createRawBaleBusLeaderEnvelopeHandler({ followerRegistry: registry, authSecret: "secret", protocolIdentity: protocol,
         selectedMenuDelivery: fault === "missing-owner" ? undefined : delivery,
         callApi() { assert.fail("Selected effects cannot use ordinary API proxy"); } });
       const runtimeMode = fault.startsWith("runtime-"), endpoint = join(dirname(f.path), "selected-runtime.sock");
-      const completedDelivery = Promise.withResolvers<TelegramBusEnvelope>(); let replacements = 0;
-      const runtimeDeps: TelegramBusLeaderRuntimeDeps<object> = { socketPath: endpoint, followerRegistry: registry, authSecret: "secret", protocolIdentity: protocol,
+      const completedDelivery = Promise.withResolvers<BaleBusEnvelope>(); let replacements = 0;
+      const runtimeDeps: BaleBusLeaderRuntimeDeps<object> = { socketPath: endpoint, followerRegistry: registry, authSecret: "secret", protocolIdentity: protocol,
         isFollowerProcessAlive: () => true, startPolling() {}, stopPolling() {},
         selectedMenuDelivery: fault === "runtime-no-owner" ? undefined : async (input, current) => { const result = await delivery(input, current); completedDelivery.resolve(result); return result; },
         callApi() { assert.fail("Selected runtime effects cannot use ordinary API proxy"); } };
-      const leaderRuntime = runtimeMode ? createRawTelegramBusLeaderRuntime(runtimeDeps) : undefined;
-      const handle = leaderRuntime ? (input: TelegramBusEnvelope) => sendTelegramBusLocalEnvelope({ socketPath: endpoint, timeoutMs: 250, envelope: input }) : envelopeHandler;
+      const leaderRuntime = runtimeMode ? createRawBaleBusLeaderRuntime(runtimeDeps) : undefined;
+      const handle = leaderRuntime ? (input: BaleBusEnvelope) => sendBaleBusLocalEnvelope({ socketPath: endpoint, timeoutMs: 250, envelope: input }) : envelopeHandler;
       if (fault === "runtime-owner-before") runtimeDeps.selectedMenuDelivery = async input => { replacements++; throw new Error(input.requestId); };
       if (fault === "runtime-protocol-before") runtimeDeps.protocolIdentity = structuredClone(protocol);
       if (fault === "runtime-secret-before") runtimeDeps.authSecret = "replacement";
-      if (fault === "runtime-registry-before") runtimeDeps.followerRegistry = createTelegramBusFollowerRegistry();
+      if (fault === "runtime-registry-before") runtimeDeps.followerRegistry = createBaleBusFollowerRegistry();
       if (fault === "local-capability") protocol.capabilities = [];
-      if (fault === "peer-capability") registry.register({ ...captured, protocol: createTelegramBusProtocolIdentity({ runtimeBuild: "old", capabilities: [] }) });
+      if (fault === "peer-capability") registry.register({ ...captured, protocol: createBaleBusProtocolIdentity({ runtimeBuild: "old", capabilities: [] }) });
       if (fault === "old-protocol") registry.register({ ...captured, protocol: { ...protocol, protocolVersion: protocol.protocolVersion + 1 } });
       if (fault === "wrong-auth") wire.auth = "wrong";
       if (fault === "stale-registration") wire.registrationGeneration = "old";
@@ -163,7 +163,7 @@ for (const fault of ["current", "missing-owner", "local-capability", "peer-capab
           if (fault === "operator-during") operator = 8;
           if (fault === "canonical-during") f.store.advanceLiveRebind(f.store.listLiveRebindings()[0]!, "not-issued", f.auth);
           if (fault === "transport-during") authority = false;
-          if (fault === "port-during") ports.api.runtime = createTelegramBridgeApiRuntime(runtimeOptions);
+          if (fault === "port-during") ports.api.runtime = createBaleBridgeApiRuntime(runtimeOptions);
           if (fault === "scope-during") scopeKey = "foreign-bot";
           if (fault === "process-during") registry.register({ ...captured, pid: process.pid + 1 });
           if (fault === "birth-during") registry.register({ ...captured, processBirthId: "replacement" });
@@ -209,28 +209,28 @@ async function waitForUnrefBackgroundTask(promise: Promise<void>): Promise<void>
   }
 }
 
-const TEST_BUS_PROTOCOL_IDENTITY = createTelegramBusProtocolIdentity({
+const TEST_BUS_PROTOCOL_IDENTITY = createBaleBusProtocolIdentity({
   runtimeBuild: "test",
   capabilities: [
-    TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-    TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF,
-    TELEGRAM_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
-    TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
+    BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+    BALE_BUS_CAPABILITY_QUEUE_HANDOFF,
+    BALE_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
+    BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
   ],
 });
 
-function createTelegramBusLeaderEnvelopeHandler(
+function createBaleBusLeaderEnvelopeHandler(
   deps: Omit<
-    Parameters<typeof createRawTelegramBusLeaderEnvelopeHandler>[0],
+    Parameters<typeof createRawBaleBusLeaderEnvelopeHandler>[0],
     "protocolIdentity"
   > & {
     protocolIdentity?: Parameters<
-      typeof createRawTelegramBusLeaderEnvelopeHandler
+      typeof createRawBaleBusLeaderEnvelopeHandler
     >[0]["protocolIdentity"];
   },
 ) {
   const { protocolIdentity = TEST_BUS_PROTOCOL_IDENTITY, ...ports } = deps;
-  const handle = createRawTelegramBusLeaderEnvelopeHandler({
+  const handle = createRawBaleBusLeaderEnvelopeHandler({
     ...ports,
     protocolIdentity,
   });
@@ -258,13 +258,13 @@ function createTelegramBusLeaderEnvelopeHandler(
   };
 }
 
-function createTelegramBusLeaderRuntime<TContext>(
-  deps: Omit<TelegramBusLeaderRuntimeDeps<TContext>, "protocolIdentity"> & {
-    protocolIdentity?: TelegramBusLeaderRuntimeDeps<TContext>["protocolIdentity"];
+function createBaleBusLeaderRuntime<TContext>(
+  deps: Omit<BaleBusLeaderRuntimeDeps<TContext>, "protocolIdentity"> & {
+    protocolIdentity?: BaleBusLeaderRuntimeDeps<TContext>["protocolIdentity"];
   },
 ) {
   const { protocolIdentity = TEST_BUS_PROTOCOL_IDENTITY, ...ports } = deps;
-  return createRawTelegramBusLeaderRuntime({ ...ports, protocolIdentity });
+  return createRawBaleBusLeaderRuntime({ ...ports, protocolIdentity });
 }
 
 for (const fault of ["normal", "unauthorized", "stale", "local-capability", "peer-capability", "missing-epoch",
@@ -273,11 +273,11 @@ for (const fault of ["normal", "unauthorized", "stale", "local-capability", "pee
   test(`Native heartbeat observations fence Restore hints (${fault})`, async () => {
     const directory = mkdtempSync(join(tmpdir(), "pi-restore-heartbeat-"));
     const socketPath = join(directory, "bus.sock");
-    const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
-      ...TEST_BUS_PROTOCOL_IDENTITY.capabilities, ...(fault === "local-capability" ? [] : [TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE])] });
-    const peerProtocol = createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
-      ...TEST_BUS_PROTOCOL_IDENTITY.capabilities, ...(fault === "peer-capability" ? [] : [TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE])] });
-    const registry = createTelegramBusFollowerRegistry();
+    const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
+      ...TEST_BUS_PROTOCOL_IDENTITY.capabilities, ...(fault === "local-capability" ? [] : [BALE_BUS_CAPABILITY_WORKSPACE_RESTORE])] });
+    const peerProtocol = createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
+      ...TEST_BUS_PROTOCOL_IDENTITY.capabilities, ...(fault === "peer-capability" ? [] : [BALE_BUS_CAPABILITY_WORKSPACE_RESTORE])] });
+    const registry = createBaleBusFollowerRegistry();
     const registration = { instanceId: "peer", registrationGeneration: "generation", profileKey: "manual:peer",
       cwd: "/repo", sessionId: "session", slot: "A", target: { chatId: 7, threadId: 42 }, protocol: peerProtocol, connectedAtMs: 100 };
     registry.register(registration);
@@ -285,16 +285,16 @@ for (const fault of ["normal", "unauthorized", "stale", "local-capability", "pee
     let operator: number | undefined = fault === "missing-operator" ? undefined : 7;
     let profile: string | undefined = fault === "default-profile" ? undefined : "default";
     let now = 100;
-    const observations: TelegramBusFollowerView[] = [];
+    const observations: BaleBusFollowerView[] = [];
     const frames: Array<() => boolean> = [];
     const errors: unknown[] = [];
     let releaseFirst!: () => void, releaseSecond!: () => void;
     const first = new Promise<void>(resolve => { releaseFirst = resolve; });
     const second = new Promise<void>(resolve => { releaseSecond = resolve; });
-    const runtime = createTelegramBusLeaderRuntime<string>({ socketPath, followerRegistry: registry,
+    const runtime = createBaleBusLeaderRuntime<string>({ socketPath, followerRegistry: registry,
       authSecret: fault === "no-secret" ? undefined : "secret", protocolIdentity: protocol,
       getCurrentLeaderEpoch: () => epoch, getAllowedUserId: () => operator,
-      getTelegramProfile: fault === "missing-profile-reader" ? undefined : () => {
+      getBaleProfile: fault === "missing-profile-reader" ? undefined : () => {
         if (fault === "scope-error") throw new Error("Observation scope unavailable");
         return profile;
       },
@@ -305,7 +305,7 @@ for (const fault of ["normal", "unauthorized", "stale", "local-capability", "pee
         if (fault === "operator") operator = 8;
         if (fault === "replacement") registry.register({ ...registration, registrationGeneration: "replacement" });
         if (fault === "metadata") registry.register({ ...registry.get("peer")!, threadName: "Updated", connectedAtMs: 200 });
-        if (fault === "capability-change") protocol.capabilities = protocol.capabilities.filter(value => value !== TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE);
+        if (fault === "capability-change") protocol.capabilities = protocol.capabilities.filter(value => value !== BALE_BUS_CAPABILITY_WORKSPACE_RESTORE);
         return "A";
       },
       onWorkspaceRestoreRecipientObserved(follower, isCurrent) {
@@ -323,7 +323,7 @@ for (const fault of ["normal", "unauthorized", "stale", "local-capability", "pee
       },
     });
     let request = 0;
-    const heartbeat = () => sendTelegramBusLocalEnvelope({ socketPath, timeoutMs: 1000, envelope: {
+    const heartbeat = () => sendBaleBusLocalEnvelope({ socketPath, timeoutMs: 1000, envelope: {
       kind: "follower.heartbeat", requestId: `heartbeat:${++request}`, auth: fault === "unauthorized" ? "wrong" : "secret",
       instanceId: "peer", registrationGeneration: fault === "stale" ? "stale" : "generation", sentAtMs: now,
     } });
@@ -371,9 +371,9 @@ for (const fault of ["normal", "unauthorized", "stale", "local-capability", "pee
 
 for (const fault of ["normal", "missing-port", "no-publication", "duplicate", "unknown-publication", "epoch-before", "profile-before", "operator-before", "epoch-after", "replaced-after", "metadata-after"] as const) {
   test(`Bootstrap publication callback and ACK remain fenced (${fault})`, async () => {
-    const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "test", capabilities: [
-      ...TEST_BUS_PROTOCOL_IDENTITY.capabilities, TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE] });
-    const registry = createTelegramBusFollowerRegistry();
+    const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "test", capabilities: [
+      ...TEST_BUS_PROTOCOL_IDENTITY.capabilities, BALE_BUS_CAPABILITY_WORKSPACE_RESTORE] });
+    const registry = createBaleBusFollowerRegistry();
     let publicationAttempts = 0;
     if (fault === "unknown-publication") {
       const register = registry.register;
@@ -385,8 +385,8 @@ for (const fault of ["normal", "missing-port", "no-publication", "duplicate", "u
     let provisions = 0;
     let notifications = 0;
     let retained: (() => void) | undefined;
-    const handle = createTelegramBusLeaderEnvelopeHandler({ followerRegistry: registry, protocolIdentity: protocol,
-      authSecret: "secret", getCurrentLeaderEpoch: () => epoch, getTelegramProfile: () => profile, getAllowedUserId: () => operator,
+    const handle = createBaleBusLeaderEnvelopeHandler({ followerRegistry: registry, protocolIdentity: protocol,
+      authSecret: "secret", getCurrentLeaderEpoch: () => epoch, getBaleProfile: () => profile, getAllowedUserId: () => operator,
       provisionFollowerTarget: () => { provisions += 1; return { chatId: 7, threadId: 42, slot: "A" }; },
       onFollowerRegistered() { notifications += 1; },
       ...(fault === "missing-port" ? {} : { async commitFollowerRegistration(_input, publish) {
@@ -433,18 +433,18 @@ for (const fault of ["normal", "late-recovery", "epoch", "operator", "profile"] 
   test(`Native bootstrap commits registry under fresh admission and snapshot transaction (${fault})`, async () => {
     await withWorkspaceRestoreFixture(async ({ store, threads, request, auth, path }) => {
       const committed = (await store.commit(request, auth))!;
-      const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "test", capabilities: [
-        ...TEST_BUS_PROTOCOL_IDENTITY.capabilities, TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE] });
-      const registry = createTelegramBusFollowerRegistry();
-      const admission = createTelegramWorkspaceAdmissionLedger({ path: `${path}.admission`, profileKey: "profile:bootstrap",
+      const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "test", capabilities: [
+        ...TEST_BUS_PROTOCOL_IDENTITY.capabilities, BALE_BUS_CAPABILITY_WORKSPACE_RESTORE] });
+      const registry = createBaleBusFollowerRegistry();
+      const admission = createBaleWorkspaceAdmissionLedger({ path: `${path}.admission`, profileKey: "profile:bootstrap",
         owner: { processId: process.pid, processBirthId: `${process.pid}:bootstrap` }, getProcessLiveness: () => "alive" });
-      const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
+      const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
       const nativeRegister = registry.register;
       let publications = 0;
       registry.register = registration => {
         assert.ok(admission.read().leases.some(lease => lease.operationKind === "workspace.publish-follower-registration"));
-        assert.throws(() => withTelegramFileTransaction(`${path}.transaction`, () => assert.fail("publication lock missing"),
-          { attempts: 1, retryDelayMs: 0 }), /Timed out acquiring Telegram lock transaction/);
+        assert.throws(() => withBaleFileTransaction(`${path}.transaction`, () => assert.fail("publication lock missing"),
+          { attempts: 1, retryDelayMs: 0 }), /Timed out acquiring Bale lock transaction/);
         publications += 1;
         return nativeRegister(registration);
       };
@@ -453,10 +453,10 @@ for (const fault of ["normal", "late-recovery", "epoch", "operator", "profile"] 
       let profile = "default";
       let publicationAttempts = 0;
       const socketPath = `${path}.sock`;
-      const runtime = createTelegramBusLeaderRuntimeAssembly({
+      const runtime = createBaleBusLeaderRuntimeAssembly({
         runtime: { socketPath, followerRegistry: registry, protocolIdentity: protocol, authSecret: "secret", startPolling() {}, stopPolling() {} },
         getAllowedUserId: () => allowed, instanceId: "leader", topicTargetStore: threads,
-        getCurrentLeaderEpoch: () => epoch, getTelegramProfile: () => profile, getWorkspaceAdmission: () => admission,
+        getCurrentLeaderEpoch: () => epoch, getBaleProfile: () => profile, getWorkspaceAdmission: () => admission,
         runWorkspaceOperation: (input, operation) => {
           if (input.operationKind === "workspace.reconcile-follower-provision") return Promise.reject(new Error("Background reconciliation excluded from fixture"));
           return operations.run(input, async () => {
@@ -480,7 +480,7 @@ for (const fault of ["normal", "late-recovery", "epoch", "operator", "profile"] 
       });
       try {
         await runtime.startPolling("ctx"); allowed = 7;
-        const response = await sendTelegramBusLocalEnvelope({ socketPath, timeoutMs: 2000, envelope: {
+        const response = await sendBaleBusLocalEnvelope({ socketPath, timeoutMs: 2000, envelope: {
           kind: "follower.register", requestId: "register", auth: "secret", registration: {
             instanceId: "successor", previousInstanceId: request.owner.instanceId, profileKey: "manual:successor",
             registrationGeneration: "generation", cwd: request.binding.cwd, sessionId: request.binding.sessionId,
@@ -501,8 +501,8 @@ for (const fault of ["normal", "late-recovery", "epoch", "operator", "profile"] 
 }
 
 test("Bus leader preserves a binding through follower reload handoff", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-gap-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-gap-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
@@ -519,7 +519,7 @@ test("Bus leader preserves a binding through follower reload handoff", async () 
   });
   const calls: unknown[] = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -570,7 +570,7 @@ for (const scenario of ["old-target", "missing-identity", "foreign-session", "va
       let expectedSnapshot = readFileSync(path, "utf8");
       const records = threads.list();
       const calls: string[] = [];
-      const provision = createTelegramBusFollowerTargetProvisioner({
+      const provision = createBaleBusFollowerTargetProvisioner({
         getAllowedUserId: () => 7, topicTargetStore: threads, getNowMs: () => 1001,
         getSyncState: () => ({}), setSyncState() {}, recordRuntimeEvent() {},
         async runWorkspaceOperation() { throw new Error("Background reconciliation excluded from fixture"); },
@@ -615,14 +615,14 @@ for (const scenario of ["old-target", "missing-identity", "foreign-session", "va
 test("Follower recovery shortcuts preserve pending evidence under exact cleanup or closed protection", async () => {
   for (const recovery of ["reconnect", "carried-target"] as const) {
     for (const protection of ["cleanup", "closed", "other-chat"] as const) {
-      const dir = mkdtempSync(join(tmpdir(), "pi-telegram-pending-follower-protection-"));
+      const dir = mkdtempSync(join(tmpdir(), "pi-bale-pending-follower-protection-"));
       const path = join(dir, "state.json");
-      const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+      const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
       try {
         const identity = store.claimWorkspaceIdentity("/repo/workspace", "follower-a")!;
         const request = { instanceId: "follower-a", profileKey: "manual:follower-a",
           workspaceBindingKey: identity.bindingKey, workspaceCwd: identity.cwd };
-        const create = createTelegramTopicTargetProvisioner({
+        const create = createBaleTopicTargetProvisioner({
           topicChatId: 7, store, getNowMs: () => 1000,
           resolveInitialWorkspaceDisplayTitle: () => "workspace",
           async callApi<TResponse>() { return { message_thread_id: 42 } as TResponse; },
@@ -642,7 +642,7 @@ test("Follower recovery shortcuts preserve pending evidence under exact cleanup 
         const cleanups = store.listPendingCleanups();
         const records = store.list();
         const apiCalls: string[] = [];
-        const provision = createTelegramBusFollowerTargetProvisioner({
+        const provision = createBaleBusFollowerTargetProvisioner({
           getAllowedUserId: () => 7, topicTargetStore: store, getNowMs: () => 1002,
           getSyncState: () => ({}), setSyncState() {}, recordRuntimeEvent() {},
           async runWorkspaceOperation() { throw new Error("Background reconciliation excluded from fixture"); },
@@ -659,7 +659,7 @@ test("Follower recovery shortcuts preserve pending evidence under exact cleanup 
           assert.deepEqual(store.list(), records);
           assert.deepEqual(store.listPendingProvisions(), pending);
           assert.equal(store.getWorkspaceBinding(identity.cwd), undefined);
-          const reloaded = createTelegramTopicTargetStore({ path });
+          const reloaded = createBaleTopicTargetStore({ path });
           await reloaded.load();
           assert.deepEqual(reloaded.listPendingProvisions(), pending);
         }
@@ -673,26 +673,26 @@ test("Follower recovery shortcuts preserve pending evidence under exact cleanup 
 
 for (const state of ["dead", "alive", "unknown", "registered", "other-session", "ambiguous", "unknown-runtime", "missing-liveness", "missing-registry"] as const) {
   test(`Cold restore-only follower reclaims the retained Thread after predecessor death (${state})`, async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pi-telegram-cold-follower-"));
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
+    const dir = mkdtempSync(join(tmpdir(), "pi-bale-cold-follower-"));
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
     await store.load();
-    const identity = createTelegramWorkspaceBindingIdentity("/repo", 1, "session")!;
+    const identity = createBaleWorkspaceBindingIdentity("/repo", 1, "session")!;
     const target = { chatId: 7, threadId: 42 }, oldRuntime = state === "unknown-runtime" ? "opaque-runtime" : "424242:1000";
     store.upsertWorkspaceBinding({ ...identity, target, slot: "S", threadName: "Signal", displayTitle: "Home", updatedAtMs: 1,
       journalBindingKeys: ["retained-journal"], journalSources: [{ sessionId: "session", recipientBindingKey: "manual:stable" }], journalBindingsComplete: true });
     store.upsert({ profileKey: "manual:stable", owner: { kind: "manual-follower", instanceId: "stable" }, instanceId: oldRuntime,
       target, slot: "S", threadName: "Signal", status: "active", createdAtMs: 1, updatedAtMs: 1 });
     if (state === "ambiguous") {
-      store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", 2, "session")!, target: { chatId: 7, threadId: 43 },
+      store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", 2, "session")!, target: { chatId: 7, threadId: 43 },
         slot: "T", threadName: "Topaz", updatedAtMs: 1 });
       store.upsert({ profileKey: "manual:other", owner: { kind: "manual-follower", instanceId: "other" }, instanceId: "424243:1000",
         target: { chatId: 7, threadId: 43 }, slot: "T", threadName: "Topaz", status: "active", createdAtMs: 1, updatedAtMs: 1 });
     }
     await store.persist();
-    const before = readFileSync(join(dir, "state.json"), "utf8"), registry = createTelegramBusFollowerRegistry();
+    const before = readFileSync(join(dir, "state.json"), "utf8"), registry = createBaleBusFollowerRegistry();
     if (state === "registered") registry.register({ instanceId: oldRuntime, cwd: "/repo", sessionId: "session", target, connectedAtMs: 1 });
     const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
-    const provision = createTelegramBusFollowerTargetProvisioner({ topicTargetStore: store, getAllowedUserId: () => 7,
+    const provision = createBaleBusFollowerTargetProvisioner({ topicTargetStore: store, getAllowedUserId: () => 7,
       getLiveFollowers: state === "missing-registry" ? undefined : registry.list,
       isFollowerProcessAlive: state === "missing-liveness" ? undefined : (pid) => { assert.ok(pid === 424242 || pid === 424243); if (state === "unknown") throw new Error("PID metadata unavailable"); return state === "alive"; },
       async callApi<TResponse>(method: string, body: Record<string, unknown>) { calls.push({ method, body }); return true as TResponse; },
@@ -718,10 +718,10 @@ for (const state of ["dead", "alive", "unknown", "registered", "other-session", 
 }
 
 test("A new session in a folder with no live predecessor adopts the retained Thread", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-session-adoption-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-session-adoption-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
   await store.load();
-  const identity = createTelegramWorkspaceBindingIdentity("/repo", 1, "session")!;
+  const identity = createBaleWorkspaceBindingIdentity("/repo", 1, "session")!;
   const target = { chatId: 7, threadId: 42 };
   store.upsertWorkspaceBinding({ ...identity, target, slot: "S", threadName: "Signal", displayTitle: "Home", updatedAtMs: 1 });
   store.upsert({ profileKey: "manual:stable", owner: { kind: "manual-follower", instanceId: "stable" }, instanceId: "424242:1000",
@@ -731,7 +731,7 @@ test("A new session in a folder with no live predecessor adopts the retained Thr
   assert.equal(sourceSlot, "b");
   let alive = true;
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
-  const provision = createTelegramBusFollowerTargetProvisioner({ topicTargetStore: store, getAllowedUserId: () => 7,
+  const provision = createBaleBusFollowerTargetProvisioner({ topicTargetStore: store, getAllowedUserId: () => 7,
     getLiveFollowers: () => [],
     isFollowerProcessAlive: () => alive,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) { calls.push({ method, body }); return { message_thread_id: 43 } as TResponse; },
@@ -750,13 +750,13 @@ test("A new session in a folder with no live predecessor adopts the retained Thr
 });
 
 test("Bus leader restore-only provisioning does not allocate a missing Workspace", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-restore-only-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-restore-only-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
   const calls: string[] = [];
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string) {
@@ -795,14 +795,14 @@ test("Bus leader restore-only provisioning does not allocate a missing Workspace
 });
 
 test("Bus leader reclaims a dormant follower Thread by Workspace cwd", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-workspace-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-workspace-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -868,15 +868,15 @@ test("Bus leader reclaims a dormant follower Thread by Workspace cwd", async () 
 });
 
 test("Failed missing-slot restore leaves migration uncommitted and retries the same free letter", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-missing-slot-retry-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
-  store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/occupied")!,
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-missing-slot-retry-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
+  store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/occupied")!,
     target: { chatId: 7, threadId: 41 }, slot: "A", threadName: "Anchor", updatedAtMs: 1 });
-  store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/legacy")!,
+  store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/legacy")!,
     target: { chatId: 7, threadId: 42 }, threadName: "Briar", updatedAtMs: 1 });
   let failProbe = true;
   const calls: string[] = [];
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7, topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
       calls.push(`${method}:${body.message_thread_id ?? "new"}`);
@@ -898,7 +898,7 @@ test("Failed missing-slot restore leaves migration uncommitted and retries the s
     assert.deepEqual(restored, { chatId: 7, threadId: 42, slot: "B", threadName: "Briar" });
     assert.equal(store.getWorkspaceBinding("/legacy")?.slot, "B");
     assert.equal(store.getWorkspaceBinding("/legacy")?.bindingKey,
-      createTelegramWorkspaceBindingIdentity("/legacy")?.bindingKey);
+      createBaleWorkspaceBindingIdentity("/legacy")?.bindingKey);
     assert.equal(store.getWorkspaceBinding("/legacy")?.inactiveSinceMs, undefined);
     assert.deepEqual(store.getWorkspaceBinding("/legacy")?.journalBindingKeys, ["manual:retry"]);
     assert.equal(store.getWorkspaceBinding("/legacy")?.journalBindingsComplete, undefined);
@@ -913,9 +913,9 @@ test("Failed missing-slot restore leaves migration uncommitted and retries the s
 });
 
 test("Bus leader migrates a persisted manual follower record into its Workspace", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-workspace-migration-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-workspace-migration-"));
   const path = join(dir, "state.json");
-  const oldStore = createTelegramTopicTargetStore({ path });
+  const oldStore = createBaleTopicTargetStore({ path });
   oldStore.upsert({
     profileKey: "manual:worker-profile",
     owner: { kind: "manual-follower", instanceId: "worker-profile" },
@@ -929,13 +929,13 @@ test("Bus leader migrates a persisted manual follower record into its Workspace"
   });
   await oldStore.persist();
 
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path,
     getNowMs: () => 1000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -969,7 +969,7 @@ test("Bus leader migrates a persisted manual follower record into its Workspace"
       42,
     );
 
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.equal(
       restored.getWorkspaceBinding("/repo/workspace")?.threadName,
@@ -981,11 +981,11 @@ test("Bus leader migrates a persisted manual follower record into its Workspace"
 });
 
 test("Bus leader allocates a Workspace b binding for a concurrent same-cwd follower", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-workspace-b-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-workspace-b-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   let nextThreadId = 41;
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string) {
@@ -1036,11 +1036,11 @@ test("Bus leader allocates a Workspace b binding for a concurrent same-cwd follo
 });
 
 test("Cold same-Workspace reopen assigns dormant bindings by claim order", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-workspace-reopen-order-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-workspace-reopen-order-"));
   const path = join(dir, "state.json");
-  const oldStore = createTelegramTopicTargetStore({ path });
-  const firstIdentity = createTelegramWorkspaceBindingIdentity("/repo/workspace");
-  const secondIdentity = createTelegramWorkspaceBindingIdentity(
+  const oldStore = createBaleTopicTargetStore({ path });
+  const firstIdentity = createBaleWorkspaceBindingIdentity("/repo/workspace");
+  const secondIdentity = createBaleWorkspaceBindingIdentity(
     "/repo/workspace",
     1,
   );
@@ -1062,10 +1062,10 @@ test("Cold same-Workspace reopen assigns dormant bindings by claim order", async
   });
   await oldStore.persist();
 
-  const store = createTelegramTopicTargetStore({ path });
+  const store = createBaleTopicTargetStore({ path });
   const calls: string[] = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string) {
@@ -1103,9 +1103,9 @@ test("Cold same-Workspace reopen assigns dormant bindings by claim order", async
 });
 
 test("Explicit same-cwd follower provisioning leaves the active leader target untouched", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-same-cwd-leader-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-  const identity = createTelegramWorkspaceBindingIdentity("/repo");
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-same-cwd-leader-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+  const identity = createBaleWorkspaceBindingIdentity("/repo");
   assert.ok(identity);
   store.upsertWorkspaceBinding({
     ...identity,
@@ -1127,7 +1127,7 @@ test("Explicit same-cwd follower provisioning leaves the active leader target un
   });
   const calls: Array<{ method: string; threadId: unknown }> = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -1168,19 +1168,19 @@ test("Explicit same-cwd follower provisioning leaves the active leader target un
 });
 
 test("Explicit follower connect recovers unknown creation without changing another binding", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-connect-recovery-"));
-  const path = join(dir, "state.json"), store = createTelegramTopicTargetStore({ path });
-  const identity = createTelegramWorkspaceBindingIdentity("/other", 0, "other-session")!;
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-connect-recovery-"));
+  const path = join(dir, "state.json"), store = createBaleTopicTargetStore({ path });
+  const identity = createBaleWorkspaceBindingIdentity("/other", 0, "other-session")!;
   store.upsertWorkspaceBinding({ ...identity, target: { chatId: 7, threadId: 80 }, slot: "A", updatedAtMs: 1 });
   await store.persist();
   const before = store.listWorkspaceBindings();
   let creates = 0, syncState = {};
   const events: unknown[] = [];
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7, topicTargetStore: store, getCurrentLeaderEpoch: () => "epoch",
     async callApi<TResponse>(method: string) {
       if (method === "createForumTopic") {
-        if (++creates === 1) throw new TelegramApiCommitUnknownError(method, new Error("response lost"));
+        if (++creates === 1) throw new BaleApiCommitUnknownError(method, new Error("response lost"));
         return { message_thread_id: 42 } as TResponse;
       }
       return true as TResponse;
@@ -1208,14 +1208,14 @@ test("Explicit follower connect recovers unknown creation without changing anoth
 
 test("Follower connect reuses a known pending Thread across runtime replacement without another create", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pi-follower-targeted-recovery-"));
-  const path = join(dir, "state.json"), store = createTelegramTopicTargetStore({ path });
-  const identity = createTelegramWorkspaceBindingIdentity("/repo", 0, "session")!;
+  const path = join(dir, "state.json"), store = createBaleTopicTargetStore({ path });
+  const identity = createBaleWorkspaceBindingIdentity("/repo", 0, "session")!;
   store.upsertPendingProvision({ id: "known", owner: "manual-follower", instanceId: "old",
     profileKey: "manual:stable", workspaceBindingKey: identity.bindingKey, status: "ambiguous",
     target: { chatId: 7, threadId: 42 }, slot: "B", threadName: "Boreal", startedAtMs: 1 });
   await store.persist();
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7, topicTargetStore: store, getCurrentLeaderEpoch: () => "epoch",
     async callApi<TResponse>(method: string) {
       assert.notEqual(method, "createForumTopic"); assert.notEqual(method, "deleteForumTopic");
@@ -1233,11 +1233,11 @@ test("Follower connect reuses a known pending Thread across runtime replacement 
 });
 
 test("Bus leader releases a failed follower Workspace claim", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-workspace-fail-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-workspace-fail-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   let fail = true;
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string) {
@@ -1275,14 +1275,14 @@ test("Bus leader releases a failed follower Workspace claim", async () => {
 });
 
 test("Bus leader verifies message delivery again across an immediate follower session handoff", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-notice-handoff-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-notice-handoff-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -1332,8 +1332,8 @@ test("Bus leader verifies message delivery again across an immediate follower se
 });
 
 test("Bus leader migrates a reloaded follower from generation to stable identity", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-identity-migration-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-identity-migration-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
@@ -1353,7 +1353,7 @@ test("Bus leader migrates a reloaded follower from generation to stable identity
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -1406,7 +1406,7 @@ test("Bus leader migrates a reloaded follower from generation to stable identity
 test("Bus leader API proxy forwards supported methods and recovers stale targets", async () => {
   const calls: unknown[] = [];
   const recovered: unknown[] = [];
-  const proxy = createTelegramBusLeaderApiProxy({
+  const proxy = createBaleBusLeaderApiProxy({
     async call(method, body, options) {
       calls.push({ kind: "call", method, body, options });
       if (method === "sendMessage") throw new Error("stale topic");
@@ -1493,12 +1493,12 @@ async function waitForCondition(
 }
 
 test("Bus leader follower disconnect preserves binding when deletion is unconfirmed", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-disconnect-fail-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-disconnect-fail-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
-  store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo")!,
+  store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo")!,
     target: { chatId: 7, threadId: 42 }, slot: "A", threadName: "Anchor", updatedAtMs: 500,
   });
   store.upsert({
@@ -1510,7 +1510,7 @@ test("Bus leader follower disconnect preserves binding when deletion is unconfir
     updatedAtMs: 500,
     instanceId: "follower-a",
   });
-  const disconnect = createTelegramBusFollowerDisconnectHandler({
+  const disconnect = createBaleBusFollowerDisconnectHandler({
     topicTargetStore: store,
     async callApi<TResponse>(method: string) {
       if (method === "deleteForumTopic") {
@@ -1546,12 +1546,12 @@ test("Bus leader follower disconnect preserves binding when deletion is unconfir
 
 for (const registrationThreadName of ["workspace", "Override"]) {
 test(`Confirmed-dead cleanup preserves Workspace identity despite registration name ${registrationThreadName}`, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-workspace-dead-reopen-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-workspace-dead-reopen-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
-  const workspaceIdentity = createTelegramWorkspaceBindingIdentity(
+  const workspaceIdentity = createBaleWorkspaceBindingIdentity(
     "/repo/workspace",
   );
   assert.ok(workspaceIdentity);
@@ -1575,7 +1575,7 @@ test(`Confirmed-dead cleanup preserves Workspace identity despite registration n
   });
   const cleanupCalls: string[] = [];
   let syncState = {};
-  const cleanup = createTelegramBusFollowerConfirmedDeadHandler({
+  const cleanup = createBaleBusFollowerConfirmedDeadHandler({
     topicTargetStore: store,
     async callApi<TResponse>(method: string) {
       cleanupCalls.push(method);
@@ -1615,15 +1615,15 @@ test(`Confirmed-dead cleanup preserves Workspace identity despite registration n
     const reopenCalls: string[] = [];
     const probeEvents: unknown[] = [];
     let probeErrorExpected: boolean | undefined;
-    const provision = createTelegramBusFollowerTargetProvisioner({
+    const provision = createBaleBusFollowerTargetProvisioner({
       getAllowedUserId: () => 7,
       topicTargetStore: store,
-      async callApi<TResponse>(method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) {
+      async callApi<TResponse>(method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) {
         reopenCalls.push(`${method}:${body.message_thread_id ?? "new"}`);
         if (method === "sendMessage" && body.message_thread_id === 42) {
           assert.match(String(body.text), /Cedar/);
-          const error = new TelegramApiStaleTargetError(
-            "Telegram API sendMessage failed: message thread not found",
+          const error = new BaleApiStaleTargetError(
+            "Bale API sendMessage failed: message thread not found",
             { chatId: 7, threadId: 42 },
           );
           // The probe owns this expected answer, so the generic API log must stay quiet.
@@ -1681,8 +1681,8 @@ test(`Confirmed-dead cleanup preserves Workspace identity despite registration n
 }
 
 test("Successor leader replays durable cleanup intent before provisioning its own thread", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-successor-cleanup-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-successor-cleanup-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -1708,7 +1708,7 @@ test("Successor leader replays durable cleanup intent before provisioning its ow
   await store.persist();
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let syncState = {};
-  const provision = createTelegramBusLeaderTargetProvisioner({
+  const provision = createBaleBusLeaderTargetProvisioner({
     getAllowedUserId: () => 7,
     instanceId: "leader-new",
     getCwd: () => "/repo/new",
@@ -1743,8 +1743,8 @@ test("Successor leader replays durable cleanup intent before provisioning its ow
 });
 
 test("Successor leader reuses its stable thread before cancelling superseded cleanup", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-successor-reuse-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-successor-reuse-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -1770,13 +1770,13 @@ test("Successor leader reuses its stable thread before cancelling superseded cle
   });
   await store.persist();
   let leaderTarget: { target: { chatId: number; threadId?: number } } | undefined;
-  const provision = createTelegramBusLeaderTargetProvisioner({
+  const provision = createBaleBusLeaderTargetProvisioner({
     getAllowedUserId: () => 7,
     instanceId: "leader-new",
     getCwd: () => "/repo",
     topicTargetStore: store,
     async callApi(method: string) {
-      throw new Error(`Unexpected Telegram API call: ${method}`);
+      throw new Error(`Unexpected Bale API call: ${method}`);
     },
     getCurrentLeaderEpoch: () => 2,
     getSyncState: () => ({}),
@@ -1802,16 +1802,16 @@ test("Successor leader reuses its stable thread before cancelling superseded cle
 
 test("Bus leader follower target provisioner creates thread and announces connection", async () => {
   const dir = mkdtempSync(
-    join(tmpdir(), "pi-telegram-bus-follower-provision-"),
+    join(tmpdir(), "pi-bale-bus-follower-provision-"),
   );
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let syncState = {};
   let provisioning = 0;
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -1878,19 +1878,19 @@ test("Bus leader follower target provisioner creates thread and announces connec
 });
 
 test("Bus leader reconciles a stale follower record slot to its Workspace claim", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-slot-reconcile-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-slot-reconcile-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
   store.upsertWorkspaceBinding({
-    ...createTelegramWorkspaceBindingIdentity("/old", 0, "session-old")!,
+    ...createBaleWorkspaceBindingIdentity("/old", 0, "session-old")!,
     target: { chatId: 7, threadId: 11 },
     slot: "P",
     updatedAtMs: 100,
   });
   store.upsertWorkspaceBinding({
-    ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session-a")!,
+    ...createBaleWorkspaceBindingIdentity("/repo", 0, "session-a")!,
     target: { chatId: 7, threadId: 12 },
     slot: "Q",
     updatedAtMs: 200,
@@ -1908,7 +1908,7 @@ test("Bus leader reconciles a stale follower record slot to its Workspace claim"
   });
   const calls: string[] = [];
   const phases: string[] = [];
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string) {
@@ -1960,9 +1960,9 @@ for (const recordSlot of ["S", "T"] as const) {
 for (const boundary of ["current", "binding-drift", "epoch-loss"] as const) {
 for (const mode of ["manual", "cold-restore"] as const) {
   test(`Follower registration ACK uses the committed retained slot and preserves source history (${recordSlot}, ${boundary}, ${mode})`, async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pi-telegram-committed-follower-slot-"));
+    const dir = mkdtempSync(join(tmpdir(), "pi-bale-committed-follower-slot-"));
     const path = join(dir, "state.json"), socketPath = join(dir, "bus.sock");
-    const owner = createTelegramLockRuntime({ statePath: path, key: () => "default", instanceId: "leader",
+    const owner = createBaleLockRuntime({ statePath: path, key: () => "default", instanceId: "leader",
       runtimeGeneration: 1, isProcessAlive: () => true });
     assert.equal(owner.acquire({ cwd: "/leader" }).ok, true);
     const consolidated = {
@@ -1972,21 +1972,21 @@ for (const mode of ["manual", "cold-restore"] as const) {
       },
       publishIfOwned: owner.publishStateSectionIfOwned!,
     };
-    const storage = createTelegramConsolidatedWorkspaceStorage({ getPath: () => path, getProfile: () => "default", ...consolidated });
-    const store = createTelegramTopicTargetStore({ path, consolidated,
+    const storage = createBaleConsolidatedWorkspaceStorage({ getPath: () => path, getProfile: () => "default", ...consolidated });
+    const store = createBaleTopicTargetStore({ path, consolidated,
       getNowMs: () => 1000, canPersist: () => owner.owns() });
     await store.load();
-    const sourcePath = join(dir, "retained-source.json"), botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "fixture-slot-history" });
-    const source = createTelegramUpdateJournalStore({ path: sourcePath, profileName: "default", botIdentity });
+    const sourcePath = join(dir, "retained-source.json"), botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "fixture-slot-history" });
+    const source = createBaleUpdateJournalStore({ path: sourcePath, profileName: "default", botIdentity });
     source.appendBatch([{ update_id: 41 }]);
-    const sourceKey = createTelegramUpdateJournalBindingKey({ path: sourcePath, profileName: "default", botIdentity });
+    const sourceKey = createBaleUpdateJournalBindingKey({ path: sourcePath, profileName: "default", botIdentity });
     const sourceBytes = readFileSync(sourcePath, "utf8");
     const target = { chatId: 7, threadId: 42 }, neighborTarget = { chatId: 7, threadId: 77 };
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", mode === "cold-restore" ? 1 : 0, "session")!, target,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", mode === "cold-restore" ? 1 : 0, "session")!, target,
       slot: "S", threadName: "Signal", manualThreadName: "Home", displayTitle: "Home", updatedAtMs: 1,
       journalBindingKeys: [sourceKey], journalSources: [{ sessionId: "session", recipientBindingKey: "manual:old-source" }],
       journalBindingsComplete: true });
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", 0, "other-session")!, target: neighborTarget,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", 0, "other-session")!, target: neighborTarget,
       slot: "T", threadName: "Topaz", updatedAtMs: 1, journalBindingKeys: ["unrelated-source"], journalBindingsComplete: true });
     store.upsert({ profileKey: "manual:neighbor", owner: { kind: "manual-follower", instanceId: "neighbor" },
       instanceId: "neighbor-runtime", target: neighborTarget, slot: "T", threadName: "Topaz", status: "active", createdAtMs: 1, updatedAtMs: 1 });
@@ -1995,8 +1995,8 @@ for (const mode of ["manual", "cold-restore"] as const) {
     await store.persist();
     const neighborBinding = store.getWorkspaceBindingByTarget(neighborTarget, "other-session");
     const neighborRecord = store.getByProfileKey("manual:neighbor");
-    const registry = createTelegramBusFollowerRegistry();
-    const admission = createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"), profileKey: "default",
+    const registry = createBaleBusFollowerRegistry();
+    const admission = createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"), profileKey: "default",
       owner: { processId: process.pid, processBirthId: `${process.pid}:committed-slot` }, getProcessLiveness: () => "alive" });
     const commitRegistration = store.commitWorkspaceRestoreRegistration;
     store.commitWorkspaceRestoreRegistration = (candidate, publish) => {
@@ -2011,10 +2011,10 @@ for (const mode of ["manual", "cold-restore"] as const) {
     };
     let allowedUserId: number | undefined;
     const calls: string[] = [], notices: string[] = [], events: Array<{ message: string; phase?: string }> = [];
-    const runtime = createTelegramBusLeaderRuntimeAssembly({
+    const runtime = createBaleBusLeaderRuntimeAssembly({
       runtime: { socketPath, followerRegistry: registry, authSecret: "fixture", protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
         startPolling() {}, stopPolling() {}, isFollowerProcessAlive: pid => mode !== "cold-restore" || pid !== 424242 },
-      instanceId: "leader", getTelegramProfile: () => undefined, getAllowedUserId: () => allowedUserId,
+      instanceId: "leader", getBaleProfile: () => undefined, getAllowedUserId: () => allowedUserId,
       getCurrentLeaderEpoch: owner.getOwnedLeaderEpoch, topicTargetStore: store, getWorkspaceAdmission: () => admission,
       async callApi<TResponse>(method: string, body: Record<string, unknown>) {
         calls.push(method);
@@ -2029,7 +2029,7 @@ for (const mode of ["manual", "cold-restore"] as const) {
     try {
       await runtime.startPolling("ctx"); allowedUserId = 7;
       assert.equal(store.getByProfileKey("manual:stable")?.instanceId, mode === "cold-restore" ? "424242:1000" : "old-runtime", "Startup must retain the source owner record");
-      const response = await sendTelegramBusLocalEnvelope({ socketPath, timeoutMs: 2000, envelope: {
+      const response = await sendBaleBusLocalEnvelope({ socketPath, timeoutMs: 2000, envelope: {
         kind: mode === "cold-restore" ? "follower.restoreWorkspace" : "follower.register", requestId: "register-new", auth: "fixture", registration: {
           instanceId: "new-runtime", profileKey: "manual:stable", cwd: "/repo", sessionId: "session", target,
           registrationGeneration: "new-runtime:1", protocol: TEST_BUS_PROTOCOL_IDENTITY, connectedAtMs: 1000,
@@ -2056,7 +2056,7 @@ for (const mode of ["manual", "cold-restore"] as const) {
         assert.equal(response.ok, false); assert.equal(registry.get("new-runtime"), undefined);
         if (boundary === "binding-drift") assert.match(response.message ?? "", /binding changed before publication/);
       }
-      const canonical = createTelegramTopicTargetStore({ path, consolidated, canPersist: () => false });
+      const canonical = createBaleTopicTargetStore({ path, consolidated, canPersist: () => false });
       await canonical.load();
       const binding = canonical.getWorkspaceBindingByTarget(target, "session")!; assert.ok(binding);
       assert.equal(binding.instanceSlot, "b");
@@ -2083,23 +2083,23 @@ for (const mode of ["manual", "cold-restore"] as const) {
 }
 
 test("Bus leader replaces only the stale session-qualified follower target", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-session-target-replace-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-session-target-replace-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
   store.upsertWorkspaceBinding({
-    ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session-a")!,
+    ...createBaleWorkspaceBindingIdentity("/repo", 0, "session-a")!,
     target: { chatId: 7, threadId: 12 },
     slot: "A", threadName: "Atlas", updatedAtMs: 500,
   });
   store.upsertWorkspaceBinding({
-    ...createTelegramWorkspaceBindingIdentity("/repo", 1, "session-b")!,
+    ...createBaleWorkspaceBindingIdentity("/repo", 1, "session-b")!,
     target: { chatId: 7, threadId: 20 },
     slot: "B", threadName: "Beacon", updatedAtMs: 500,
   });
   await store.persist();
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -2135,8 +2135,8 @@ test("Bus leader replaces only the stale session-qualified follower target", asy
 });
 
 test("Bus leader follower target provisioner transfers a live session-reload target", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-reload-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-reload-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
@@ -2153,7 +2153,7 @@ test("Bus leader follower target provisioner transfers a live session-reload tar
     slot: "E",
     threadName: "Ember",
   });
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -2198,8 +2198,8 @@ test("Bus leader follower target provisioner transfers a live session-reload tar
 });
 
 for (const sameProcess of [true, false]) test(`Bus leader keeps the acknowledged Thread title across a follower session handoff (same process=${sameProcess})`, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-new-session-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-new-session-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
@@ -2216,7 +2216,7 @@ for (const sameProcess of [true, false]) test(`Bus leader keeps the acknowledged
     threadName: "Yale",
   });
   store.upsertWorkspaceBinding({
-    ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session-a")!,
+    ...createBaleWorkspaceBindingIdentity("/repo", 0, "session-a")!,
     target,
     slot: "Y",
     threadName: "Yale",
@@ -2226,7 +2226,7 @@ for (const sameProcess of [true, false]) test(`Bus leader keeps the acknowledged
   await store.persist();
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -2286,8 +2286,8 @@ for (const sameProcess of [true, false]) test(`Bus leader keeps the acknowledged
 });
 
 for (const exactHandoff of [false, true]) test(`Bus leader replaces a deleted follower target even when typing would succeed (exact handoff=${exactHandoff})`, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-stale-tab-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-stale-tab-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
@@ -2304,7 +2304,7 @@ for (const exactHandoff of [false, true]) test(`Bus leader replaces a deleted fo
     slot: "E",
     threadName: "Ember",
   });
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -2346,8 +2346,8 @@ for (const exactHandoff of [false, true]) test(`Bus leader replaces a deleted fo
 });
 
 test("Bus leader rejects cross-session registration when visibility remains ambiguous", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-ambiguous-tab-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-ambiguous-tab-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
@@ -2363,13 +2363,13 @@ test("Bus leader rejects cross-session registration when visibility remains ambi
     slot: "E",
     threadName: "Ember",
   });
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
       calls.push({ method, body });
       if (calls.length === 1) {
-        throw new Error("Telegram send acknowledgement was lost");
+        throw new Error("Bale send acknowledgement was lost");
       }
       return { ok: true } as TResponse;
     },
@@ -2415,9 +2415,9 @@ test("Bus leader rejects cross-session registration when visibility remains ambi
 });
 
 test("Reloaded bus leader reuses a surviving follower's persisted target", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-leader-reload-follower-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-leader-reload-follower-"));
   const path = join(dir, "state.json");
-  const previousStore = createTelegramTopicTargetStore({ path });
+  const previousStore = createBaleTopicTargetStore({ path });
   previousStore.upsert({
     profileKey: "manual:owner-a",
     owner: { kind: "manual-follower", instanceId: "owner-a" },
@@ -2430,10 +2430,10 @@ test("Reloaded bus leader reuses a surviving follower's persisted target", async
     threadName: "Ember",
   });
   await previousStore.persist();
-  const reloadedStore = createTelegramTopicTargetStore({ path });
+  const reloadedStore = createBaleTopicTargetStore({ path });
   const calls: unknown[] = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: reloadedStore,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -2464,9 +2464,9 @@ test("Reloaded bus leader reuses a surviving follower's persisted target", async
 });
 
 test("Bus leader recovers a live follower target missing from persisted state", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-live-target-recovery-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-live-target-recovery-"));
   const path = join(dir, "state.json");
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path,
     getNowMs: () => 2000,
   });
@@ -2498,13 +2498,13 @@ test("Bus leader recovers a live follower target missing from persisted state", 
   });
   await store.persist();
   await store.persistStatus();
-  const reloadedStore = createTelegramTopicTargetStore({
+  const reloadedStore = createBaleTopicTargetStore({
     path,
     getNowMs: () => 2000,
   });
   const calls: unknown[] = [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: reloadedStore,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -2548,9 +2548,9 @@ test("Bus leader recovers a live follower target missing from persisted state", 
 });
 
 test("Bus leader reprobes an unresolved absent carried target on targetless retry", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-carried-probe-retry-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-carried-probe-retry-"));
   const path = join(dir, "state.json");
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path,
     getNowMs: () => 2000,
   });
@@ -2560,7 +2560,7 @@ test("Bus leader reprobes an unresolved absent carried target on targetless retr
     if (attempts === 1) throw new Error("acknowledgement lost");
     return { ok: true } as TResponse;
   };
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     callApi,
@@ -2581,11 +2581,11 @@ test("Bus leader reprobes an unresolved absent carried target on targetless retr
     );
     assert.equal(store.list()[0]?.status, "probe-required");
 
-    const reloadedStore = createTelegramTopicTargetStore({
+    const reloadedStore = createBaleTopicTargetStore({
       path,
       getNowMs: () => 2100,
     });
-    const retryProvision = createTelegramBusFollowerTargetProvisioner({
+    const retryProvision = createBaleBusFollowerTargetProvisioner({
       getAllowedUserId: () => 7,
       topicTargetStore: reloadedStore,
       callApi,
@@ -2615,14 +2615,14 @@ test("Bus leader reprobes an unresolved absent carried target on targetless retr
 });
 
 test("Bus leader keeps an absent carried target provisional until visibility succeeds", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-carried-probe-pending-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-carried-probe-pending-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
   let resolveProbe: (() => void) | undefined;
   let probeStarted = false;
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>() {
@@ -2660,13 +2660,13 @@ test("Bus leader keeps an absent carried target provisional until visibility suc
 });
 
 test("Bus leader replaces a carried target proven deleted after disconnect acknowledgement loss", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-disconnect-ack-loss-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-disconnect-ack-loss-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -2706,9 +2706,9 @@ test("Bus leader replaces a carried target proven deleted after disconnect ackno
 
 test("Bus leader follower target provisioner restores an existing manual follower thread", async () => {
   const dir = mkdtempSync(
-    join(tmpdir(), "pi-telegram-bus-follower-stale-provision-"),
+    join(tmpdir(), "pi-bale-bus-follower-stale-provision-"),
   );
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
@@ -2728,7 +2728,7 @@ test("Bus leader follower target provisioner restores an existing manual followe
   const events: Array<{ category: string; details?: Record<string, unknown> }> =
     [];
   let syncState = {};
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -2766,16 +2766,16 @@ test("Bus leader follower target provisioner restores an existing manual followe
 
 test("Bus leader follower target provisioner coalesces concurrent follower registrations", async () => {
   const dir = mkdtempSync(
-    join(tmpdir(), "pi-telegram-bus-follower-concurrent-provision-"),
+    join(tmpdir(), "pi-bale-bus-follower-concurrent-provision-"),
   );
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let createTopicResolve:
     ((value: { message_thread_id: number }) => void) | undefined;
-  const provision = createTelegramBusFollowerTargetProvisioner({
+  const provision = createBaleBusFollowerTargetProvisioner({
     getAllowedUserId: () => 7,
     topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -2819,9 +2819,9 @@ test("Bus leader follower target provisioner coalesces concurrent follower regis
 });
 
 test("Bus leader visibility-probes and reclaims a dormant Workspace Thread", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-leader-workspace-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-  const workspaceIdentity = createTelegramWorkspaceBindingIdentity(
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-leader-workspace-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+  const workspaceIdentity = createBaleWorkspaceBindingIdentity(
     "/repo/workspace", 0, "session-a",
   );
   assert.ok(workspaceIdentity);
@@ -2834,7 +2834,7 @@ test("Bus leader visibility-probes and reclaims a dormant Workspace Thread", asy
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let leaderTarget: unknown;
-  const provision = createTelegramBusLeaderTargetProvisioner({
+  const provision = createBaleBusLeaderTargetProvisioner({
     getAllowedUserId: () => 7,
     instanceId: "leader-new",
     getCwd: (ctx: { cwd: string }) => ctx.cwd,
@@ -2888,9 +2888,9 @@ test("Bus leader visibility-probes and reclaims a dormant Workspace Thread", asy
 });
 
 test("Bus leader keeps the Workspace Thread across follower promotion", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-leader-workspace-promotion-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-  const workspaceIdentity = createTelegramWorkspaceBindingIdentity("/repo");
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-leader-workspace-promotion-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+  const workspaceIdentity = createBaleWorkspaceBindingIdentity("/repo");
   assert.ok(workspaceIdentity);
   store.upsert({
     profileKey: "manual:shared",
@@ -2912,13 +2912,13 @@ test("Bus leader keeps the Workspace Thread across follower promotion", async ()
     updatedAtMs: 1000,
   });
   let leaderTarget: unknown;
-  const provision = createTelegramBusLeaderTargetProvisioner({
+  const provision = createBaleBusLeaderTargetProvisioner({
     getAllowedUserId: () => 7,
     instanceId: "shared",
     getCwd: (ctx: { cwd: string }) => ctx.cwd,
     topicTargetStore: store,
     async callApi() {
-      throw new Error("promotion must not mutate Telegram");
+      throw new Error("promotion must not mutate Bale");
     },
     getSyncState: () => ({}),
     setSyncState() {},
@@ -2946,8 +2946,8 @@ test("Bus leader keeps the Workspace Thread across follower promotion", async ()
 });
 
 test("Former leader reopens restore-only after follower promotion without changing Workspace display identity", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-promotion-reopen-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 2000 });
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-promotion-reopen-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 2000 });
   for (const [cwd, instanceId, ownerKind, slot, threadName, displayTitle, threadId] of [
     ["/alpha", "old-leader", "leader", "A", "Anchor", "A", 41],
     ["/beta", "new-leader", "manual-follower", "B", "Beacon", "B", 42],
@@ -2956,7 +2956,7 @@ test("Former leader reopens restore-only after follower promotion without changi
       owner: ownerKind === "leader" ? { kind: ownerKind, cwd, instanceId } : { kind: ownerKind, instanceId },
       instanceId, target: { chatId: 7, threadId }, slot, threadName,
       status: "active", createdAtMs: 1, updatedAtMs: 1 });
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity(cwd)!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity(cwd)!,
       target: { chatId: 7, threadId }, slot, threadName, displayTitle, updatedAtMs: 1 });
   }
   const calls: Array<{ method: string; threadId?: unknown }> = [];
@@ -2970,14 +2970,14 @@ test("Former leader reopens restore-only after follower promotion without changi
     store.markOfflineByInstanceId("old-leader");
     await store.persist();
     let promoted: unknown;
-    const promote = createTelegramBusLeaderTargetProvisioner({
+    const promote = createBaleBusLeaderTargetProvisioner({
       getAllowedUserId: () => 7, instanceId: "new-leader", getCwd: (ctx: { cwd: string }) => ctx.cwd,
       topicTargetStore: store, callApi, getSyncState: () => ({}), setSyncState() {},
       setLeaderTarget(target) { promoted = target; }, recordRuntimeEvent() {}, getNowMs: () => 2000,
     });
     await promote({ cwd: "/beta" });
     assert.deepEqual(promoted, { target: { chatId: 7, threadId: 42 }, slot: "B", threadName: "Beacon" });
-    const restore = createTelegramBusFollowerTargetProvisioner({
+    const restore = createBaleBusFollowerTargetProvisioner({
       getAllowedUserId: () => 7, topicTargetStore: store, callApi,
       getSyncState: () => ({}), setSyncState() {}, recordRuntimeEvent() {}, getNowMs: () => 3000,
     });
@@ -3000,9 +3000,9 @@ test("Former leader reopens restore-only after follower promotion without changi
 });
 
 test("Bus leader replaces a dormant Workspace Thread proven stale", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-leader-workspace-stale-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-  const workspaceIdentity = createTelegramWorkspaceBindingIdentity("/repo");
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-leader-workspace-stale-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+  const workspaceIdentity = createBaleWorkspaceBindingIdentity("/repo");
   assert.ok(workspaceIdentity);
   store.upsertWorkspaceBinding({
     ...workspaceIdentity,
@@ -3013,7 +3013,7 @@ test("Bus leader replaces a dormant Workspace Thread proven stale", async () => 
     updatedAtMs: 1000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
-  const provision = createTelegramBusLeaderTargetProvisioner({
+  const provision = createBaleBusLeaderTargetProvisioner({
     getAllowedUserId: () => 7,
     instanceId: "leader-new",
     getCwd: (ctx: { cwd: string }) => ctx.cwd,
@@ -3022,7 +3022,7 @@ test("Bus leader replaces a dormant Workspace Thread proven stale", async () => 
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
       calls.push({ method, body });
       if (method === "sendMessage" && body.message_thread_id === 41) {
-        throw new TelegramApiStaleTargetError("topic deleted", {
+        throw new BaleApiStaleTargetError("topic deleted", {
           chatId: 7,
           threadId: 41,
         });
@@ -3057,16 +3057,16 @@ test("Bus leader replaces a dormant Workspace Thread proven stale", async () => 
 });
 
 test("Display-mode follower creation and stale replacement acknowledge the initial title without redundant edits", async () => {
-  const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "test",
-    capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
+  const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "test",
+    capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
   for (const mode of ["letters", "names", "directories"] as const) {
     for (const replacing of [false, true]) {
-      const dir = mkdtempSync(join(tmpdir(), "pi-telegram-initial-follower-title-"));
+      const dir = mkdtempSync(join(tmpdir(), "pi-bale-initial-follower-title-"));
       const socketPath = join(dir, "bus.sock");
       const path = join(dir, "state.json");
-      const store = createTelegramTopicTargetStore({ path });
+      const store = createBaleTopicTargetStore({ path });
       if (replacing) store.upsertWorkspaceBinding({
-        ...createTelegramWorkspaceBindingIdentity(
+        ...createBaleWorkspaceBindingIdentity(
           "/repo/extensions", 0, "session-a")!,
         target: { chatId: 7, threadId: 41 }, slot: "A", threadName: "Anchor",
         displayTitle: "previous-title", showSlotSuffix: true, updatedAtMs: 1,
@@ -3074,15 +3074,15 @@ test("Display-mode follower creation and stale replacement acknowledge the initi
       let allowedUserId: number | undefined;
       const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
       const errors: unknown[] = [];
-      const runtime = createTelegramBusLeaderRuntimeAssembly({
-        runtime: { socketPath, followerRegistry: createTelegramBusFollowerRegistry(),
+      const runtime = createBaleBusLeaderRuntimeAssembly({
+        runtime: { socketPath, followerRegistry: createBaleBusFollowerRegistry(),
           protocolIdentity: protocol, startPolling() {}, stopPolling() {} },
         getAllowedUserId: () => allowedUserId, instanceId: "leader", topicTargetStore: store,
         getCurrentLeaderEpoch: () => 1, getThreadDisplayMode: () => mode,
         async callApi<TResponse>(method: string, body: Record<string, unknown>) {
           calls.push({ method, body });
           if (method === "sendMessage" && body.message_thread_id === 41) {
-            throw new TelegramApiStaleTargetError("topic deleted", { chatId: 7, threadId: 41 });
+            throw new BaleApiStaleTargetError("topic deleted", { chatId: 7, threadId: 41 });
           }
           return (method === "createForumTopic" ? { message_thread_id: 42 } : true) as TResponse;
         },
@@ -3094,7 +3094,7 @@ test("Display-mode follower creation and stale replacement acknowledge the initi
         await store.persist();
         await runtime.startPolling("ctx");
         allowedUserId = 7;
-        const response = await sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+        const response = await sendBaleBusLocalEnvelope({ socketPath, envelope: {
           kind: "follower.register", requestId: "register:1",
           registration: { instanceId: "follower", registrationGeneration: "follower:1",
             cwd: "/repo/extensions", sessionId: "session-a",
@@ -3115,7 +3115,7 @@ test("Display-mode follower creation and stale replacement acknowledge the initi
           `<b>📡 Instance <i>${expected}</i> connected.</b>`);
         assert.deepEqual(await runtime.reconcileThreadDisplay!(), { changed: 0 });
         assert.equal(calls.filter((call) => call.method === "editForumTopic").length, 0);
-        const restored = createTelegramTopicTargetStore({ path });
+        const restored = createBaleTopicTargetStore({ path });
         await restored.load();
         assert.equal(restored.getWorkspaceBinding(
           "/repo/extensions", "a", "session-a")?.displayTitle, expected);
@@ -3131,8 +3131,8 @@ test("Display-mode follower creation and stale replacement acknowledge the initi
 });
 
 test("Bus leader target provisioner creates thread and announces connection", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-leader-provision-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-leader-provision-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 1000,
   });
@@ -3140,7 +3140,7 @@ test("Bus leader target provisioner creates thread and announces connection", as
   let syncState = {};
   let leaderTarget: unknown;
   let provisioning = 0;
-  const provision = createTelegramBusLeaderTargetProvisioner({
+  const provision = createBaleBusLeaderTargetProvisioner({
     getAllowedUserId: () => 7,
     instanceId: "leader-a",
     getCwd: (ctx: { cwd: string }) => ctx.cwd,
@@ -3212,7 +3212,7 @@ test("Bus leader target provisioner creates thread and announces connection", as
 
 test("Bus leader builds connected lifecycle announcements with thread name before slot", () => {
   assert.deepEqual(
-    createTelegramBusInstanceLifecycleAnnouncement({
+    createBaleBusInstanceLifecycleAnnouncement({
       target: { chatId: 123, threadId: 45 },
       threadName: "Cedar",
       slot: "C",
@@ -3227,7 +3227,7 @@ test("Bus leader builds connected lifecycle announcements with thread name befor
 });
 
 test("Bus leader routes authenticated queue handoff between exact follower generations", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   const routed: unknown[] = [];
   registry.register({
     instanceId: "donor",
@@ -3241,7 +3241,7 @@ test("Bus leader routes authenticated queue handoff between exact follower gener
     protocol: TEST_BUS_PROTOCOL_IDENTITY,
     connectedAtMs: 1,
   });
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     authSecret: "secret",
     routeQueueHandoff(follower, envelope) {
@@ -3304,7 +3304,7 @@ test("Bus leader routes authenticated queue handoff between exact follower gener
       kind: "bus.ack",
       requestId: "handoff:2",
       ok: false,
-      message: "Stale Telegram bus follower registration generation.",
+      message: "Stale Bale bus follower registration generation.",
     },
   );
   assert.deepEqual(
@@ -3317,19 +3317,19 @@ test("Bus leader routes authenticated queue handoff between exact follower gener
       kind: "bus.ack",
       requestId: "handoff:3",
       ok: false,
-      message: "Stale Telegram queue handoff recipient registration generation.",
+      message: "Stale Bale queue handoff recipient registration generation.",
     },
   );
   assert.equal(routed.length, 1);
-  const steerProtocol = createTelegramBusProtocolIdentity({ runtimeBuild: "steer", capabilities: [TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF, TELEGRAM_BUS_CAPABILITY_QUEUE_STEER] });
+  const steerProtocol = createBaleBusProtocolIdentity({ runtimeBuild: "steer", capabilities: [BALE_BUS_CAPABILITY_QUEUE_HANDOFF, BALE_BUS_CAPABILITY_QUEUE_STEER] });
   for (const missing of ["leader", "donor", "recipient", "none"] as const) {
-    const peers = createTelegramBusFollowerRegistry();
+    const peers = createBaleBusFollowerRegistry();
     peers.register({ instanceId: "donor", registrationGeneration: "donor-generation", connectedAtMs: 1,
       protocol: missing === "donor" ? TEST_BUS_PROTOCOL_IDENTITY : steerProtocol });
     peers.register({ instanceId: "recipient", registrationGeneration: "recipient-generation", connectedAtMs: 1,
       protocol: missing === "recipient" ? TEST_BUS_PROTOCOL_IDENTITY : steerProtocol });
     let stages = 0;
-    const handler = createTelegramBusLeaderEnvelopeHandler({ followerRegistry: peers, authSecret: "secret",
+    const handler = createBaleBusLeaderEnvelopeHandler({ followerRegistry: peers, authSecret: "secret",
       protocolIdentity: missing === "leader" ? TEST_BUS_PROTOCOL_IDENTITY : steerProtocol,
       routeQueueHandoff: () => { stages += 1; return { status: "staged", receiptId: "receipt-1", sourceUpdateIds: [1] }; },
     });
@@ -3340,8 +3340,8 @@ test("Bus leader routes authenticated queue handoff between exact follower gener
 });
 
 test("Bus leader envelope handler registers and heartbeats followers", async () => {
-  const registry = createTelegramBusFollowerRegistry();
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const registry = createBaleBusFollowerRegistry();
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     getNowMs: () => 2000,
   });
@@ -3391,7 +3391,7 @@ test("Bus leader envelope handler registers and heartbeats followers", async () 
 });
 
 test("Bus leader generation-fences and commits follower Workspace Thread rename", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     connectedAtMs: 1000,
@@ -3401,7 +3401,7 @@ test("Bus leader generation-fences and commits follower Workspace Thread rename"
     protocol: TEST_BUS_PROTOCOL_IDENTITY,
   });
   const renames: string[] = [];
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     renameFollowerThread: async (_follower, threadName) => {
       renames.push(threadName);
@@ -3441,7 +3441,7 @@ test("Bus leader generation-fences and commits follower Workspace Thread rename"
       kind: "bus.ack",
       requestId: "inst-a:wrong-target",
       ok: false,
-      message: "Stale Telegram bus follower registration generation.",
+      message: "Stale Bale bus follower registration generation.",
     },
   );
   assert.deepEqual(renames, ["Navigator"]);
@@ -3459,7 +3459,7 @@ test("Bus leader generation-fences and commits follower Workspace Thread rename"
       kind: "bus.ack",
       requestId: "inst-a:3",
       ok: false,
-      message: "Stale Telegram bus follower registration generation.",
+      message: "Stale Bale bus follower registration generation.",
     },
   );
   assert.deepEqual(renames, ["Navigator"]);
@@ -3467,20 +3467,20 @@ test("Bus leader generation-fences and commits follower Workspace Thread rename"
 
 for (const mode of ["before", "during-provision", "supported", "leader-only-reader"] as const) {
   test(`Shared pre-dispatch evidence fences incompatible follower readers (${mode})`, async () => {
-    const registry = createTelegramBusFollowerRegistry();
+    const registry = createBaleBusFollowerRegistry();
     let needed = mode !== "during-provision", provisions = 0;
-    const protocolIdentity = createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
-      TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION, TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND,
+    const protocolIdentity = createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
+      BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION, BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND,
     ] });
-    const handle = createTelegramBusLeaderEnvelopeHandler({ followerRegistry: registry, protocolIdentity,
+    const handle = createBaleBusLeaderEnvelopeHandler({ followerRegistry: registry, protocolIdentity,
       requiresPreDispatchRebindReader: () => needed,
       async provisionFollowerTarget() { provisions++; needed = true; return undefined; },
     });
     const reply = await handle({ kind: "follower.register", requestId: "reader", registration: {
       instanceId: "reader", registrationGeneration: "reader:1", connectedAtMs: 1000,
-      protocol: createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
-        TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-        ...(mode === "supported" ? [TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND] : mode === "leader-only-reader" ? ["live-rebind-pre-dispatch-reader-v1"] : []),
+      protocol: createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
+        BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+        ...(mode === "supported" ? [BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND] : mode === "leader-only-reader" ? ["live-rebind-pre-dispatch-reader-v1"] : []),
       ] }),
     } });
     assert.equal(reply.kind === "bus.ack" && reply.ok, mode === "supported");
@@ -3491,10 +3491,10 @@ for (const mode of ["before", "during-provision", "supported", "leader-only-read
 
 test("Explicit connect recovery refuses missing negotiated capability before provisioning", async () => {
   let provisions = 0;
-  const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "no-recovery",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] });
-  const handler = createRawTelegramBusLeaderEnvelopeHandler({
-    followerRegistry: createTelegramBusFollowerRegistry(), protocolIdentity: protocol,
+  const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "no-recovery",
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] });
+  const handler = createRawBaleBusLeaderEnvelopeHandler({
+    followerRegistry: createBaleBusFollowerRegistry(), protocolIdentity: protocol,
     provisionFollowerTarget() { provisions++; return { chatId: 7, threadId: 42 }; },
   });
   const ack = await handler({ kind: "follower.register", requestId: "recovery", recoverConnection: true,
@@ -3504,13 +3504,13 @@ test("Explicit connect recovery refuses missing negotiated capability before pro
 });
 
 test("Bus leader rejects incompatible protocol before follower provisioning", async () => {
-  const registry = createTelegramBusFollowerRegistry();
-  const protocolIdentity = createTelegramBusProtocolIdentity({
+  const registry = createBaleBusFollowerRegistry();
+  const protocolIdentity = createBaleBusProtocolIdentity({
     runtimeBuild: "0.27.12",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
   });
   let provisions = 0;
-  const handleEnvelope = createRawTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createRawBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     protocolIdentity,
     provisionFollowerTarget: () => {
@@ -3534,7 +3534,7 @@ test("Bus leader rejects incompatible protocol before follower provisioning", as
     ok: false,
     protocol: protocolIdentity,
     error: { code: "incompatible-protocol" },
-    message: "Incompatible Telegram bus protocol: missing-identity.",
+    message: "Incompatible Bale bus protocol: missing-identity.",
   });
 
   const mismatched = await handleEnvelope({
@@ -3570,7 +3570,7 @@ test("Bus leader rejects incompatible protocol before follower provisioning", as
     registration: {
       instanceId: "legacy",
       registrationGeneration: "legacy:1",
-      protocol: createTelegramBusProtocolIdentity({
+      protocol: createBaleBusProtocolIdentity({
         runtimeBuild: "0.28.0",
       }),
       connectedAtMs: 1000,
@@ -3580,14 +3580,14 @@ test("Bus leader rejects incompatible protocol before follower provisioning", as
     missingCapability.kind === "bus.ack"
       ? missingCapability.message
       : undefined,
-    "Incompatible Telegram bus protocol: missing-capability.",
+    "Incompatible Bale bus protocol: missing-capability.",
   );
   assert.equal(registry.list().length, 0);
   assert.equal(provisions, 0);
 
-  const compatible = createTelegramBusProtocolIdentity({
+  const compatible = createBaleBusProtocolIdentity({
     runtimeBuild: "0.28.1",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
   });
   const accepted = await handleEnvelope({
     kind: "follower.register",
@@ -3609,9 +3609,9 @@ test("Bus leader rejects incompatible protocol before follower provisioning", as
 });
 
 test("Session-native leader rejects a pre-session protocol follower", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   let provisionedSessionId: string | undefined = "not-called";
-  const handleEnvelope = createRawTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createRawBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
     provisionFollowerTarget(registration) {
@@ -3622,7 +3622,7 @@ test("Session-native leader rejects a pre-session protocol follower", async () =
   const legacyProtocol = {
     protocolVersion: 1,
     runtimeBuild: "0.45.11",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
   };
   const response = await handleEnvelope({
     kind: "follower.register",
@@ -3643,13 +3643,13 @@ test("Session-native leader rejects a pre-session protocol follower", async () =
 });
 
 test("Non-default display modes reject incompatible followers before provisioning and live publication", async () => {
-  const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "test",
-    capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
+  const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "test",
+    capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
   for (const scenario of ["names", "letters", "directories", "switching"] as const) {
-    let mode: TelegramThreadDisplayMode = scenario === "switching" ? "names" : scenario;
-    const registry = createTelegramBusFollowerRegistry();
+    let mode: BaleThreadDisplayMode = scenario === "switching" ? "names" : scenario;
+    const registry = createBaleBusFollowerRegistry();
     let provisions = 0;
-    const handler = createRawTelegramBusLeaderEnvelopeHandler({
+    const handler = createRawBaleBusLeaderEnvelopeHandler({
       followerRegistry: registry, protocolIdentity: protocol,
       getThreadDisplayMode: () => mode,
       provisionFollowerTarget() {
@@ -3673,8 +3673,8 @@ test("Non-default display modes reject incompatible followers before provisionin
 
 test("Bus leader requires negotiated capability for Workspace auto-connect", async () => {
   let provisions = 0;
-  const handleEnvelope = createRawTelegramBusLeaderEnvelopeHandler({
-    followerRegistry: createTelegramBusFollowerRegistry(),
+  const handleEnvelope = createRawBaleBusLeaderEnvelopeHandler({
+    followerRegistry: createBaleBusFollowerRegistry(),
     protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
     provisionFollowerTarget: () => {
       provisions += 1;
@@ -3689,12 +3689,12 @@ test("Bus leader requires negotiated capability for Workspace auto-connect", asy
       instanceId: "legacy",
       registrationGeneration: "legacy:restore:1",
       cwd: "/repo",
-      protocol: createTelegramBusProtocolIdentity({
+      protocol: createBaleBusProtocolIdentity({
         runtimeBuild: "legacy",
         capabilities: [
-          TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-          TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF,
-          TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
+          BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+          BALE_BUS_CAPABILITY_QUEUE_HANDOFF,
+          BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
         ],
       }),
       connectedAtMs: 1000,
@@ -3710,14 +3710,14 @@ test("Bus leader requires negotiated capability for Workspace auto-connect", asy
 });
 
 test("Bus leader rejects generationless registration and disconnect envelopes", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     connectedAtMs: 1000,
     registrationGeneration: "inst-a:1",
   });
   let disconnects = 0;
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     onFollowerDisconnected() {
       disconnects += 1;
@@ -3737,7 +3737,7 @@ test("Bus leader rejects generationless registration and disconnect envelopes", 
       kind: "bus.ack",
       requestId: "inst-b:1",
       ok: false,
-      message: "Telegram follower registration requires an exact generation.",
+      message: "Bale follower registration requires an exact generation.",
     },
   );
   assert.deepEqual(
@@ -3751,7 +3751,7 @@ test("Bus leader rejects generationless registration and disconnect envelopes", 
       kind: "bus.ack",
       requestId: "inst-a:2",
       ok: false,
-      message: "Stale Telegram bus follower registration generation.",
+      message: "Stale Bale bus follower registration generation.",
     },
   );
   assert.equal(disconnects, 0);
@@ -3759,7 +3759,7 @@ test("Bus leader rejects generationless registration and disconnect envelopes", 
 });
 
 test("Bus leader serializes disconnect cleanup before cross-session registration", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     profileKey: "manual:owner-a",
@@ -3772,7 +3772,7 @@ test("Bus leader serializes disconnect cleanup before cross-session registration
   const cleanupStarted = new Promise<void>((resolve) => {
     markCleanupStarted = resolve;
   });
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     async onFollowerDisconnected() {
       markCleanupStarted?.();
@@ -3831,9 +3831,9 @@ test("Bus leader serializes disconnect cleanup before cross-session registration
 });
 
 test("Bus leader stamps follower liveness after slow target provisioning", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   let nowMs = 1000;
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     getNowMs: () => nowMs,
     provisionFollowerTarget() {
@@ -3866,8 +3866,8 @@ test("Bus leader stamps follower liveness after slow target provisioning", async
 });
 
 test("Bus leader envelope handler rejects unknown follower heartbeats", async () => {
-  const registry = createTelegramBusFollowerRegistry();
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const registry = createBaleBusFollowerRegistry();
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
   });
 
@@ -3882,15 +3882,15 @@ test("Bus leader envelope handler rejects unknown follower heartbeats", async ()
       kind: "bus.ack",
       requestId: "missing:1",
       ok: false,
-      message: "Unknown Telegram bus follower instance.",
+      message: "Unknown Bale bus follower instance.",
     },
   );
 });
 
 test("Follower registration holds profile admission through provisioning and registry publication", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-admission-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-admission-"));
   try {
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "workspace-admission.json"),
       profileKey: "profile:bus",
       owner: {
@@ -3899,17 +3899,17 @@ test("Follower registration holds profile admission through provisioning and reg
       },
       getProcessLiveness: () => "alive",
     });
-    const registry = createTelegramBusFollowerRegistry();
+    const registry = createBaleBusFollowerRegistry();
     let provisions = 0;
     let blockedDuringProvision = false;
     let observedRegistryPublication = false;
-    const handleEnvelope = createRawTelegramBusLeaderEnvelopeHandler({
+    const handleEnvelope = createRawBaleBusLeaderEnvelopeHandler({
       followerRegistry: registry,
       protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
       runWorkspaceAdmission(input, operation) {
         assert.equal(input.operationKind, "workspace.register-follower");
         assert.deepEqual(input.scopes, [{ kind: "profile" }]);
-        return runWithTelegramWorkspaceAdmissionsAsync({
+        return runWithBaleWorkspaceAdmissionsAsync({
           ledger: admission,
           ...input,
           operation,
@@ -3975,7 +3975,7 @@ test("Follower registration holds profile admission through provisioning and reg
     assert.equal(rejected.kind === "bus.ack" && rejected.ok, false);
     assert.equal(
       rejected.kind === "bus.ack" ? rejected.message : undefined,
-      "Telegram Workspace operation is blocked by retirement.",
+      "Bale Workspace operation is blocked by retirement.",
     );
     assert.equal(provisions, 1);
     assert.equal(registry.get("blocked"), undefined);
@@ -3985,10 +3985,10 @@ test("Follower registration holds profile admission through provisioning and reg
 });
 
 test("Deferred follower reconciliation reacquires profile admission through settlement", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-background-admission-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-background-admission-"));
   let releaseCleanup: (() => void) | undefined;
   try {
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "workspace-admission.json"),
       profileKey: "profile:background-reconcile",
       owner: {
@@ -3997,10 +3997,10 @@ test("Deferred follower reconciliation reacquires profile admission through sett
       },
       getProcessLiveness: () => "alive",
     });
-    const operationRuntime = createTelegramWorkspaceOperationRuntime({
+    const operationRuntime = createBaleWorkspaceOperationRuntime({
       getWorkspaceAdmission: () => admission,
     });
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path: join(dir, "state.json"),
       getNowMs: () => 2000,
     });
@@ -4023,7 +4023,7 @@ test("Deferred follower reconciliation reacquires profile admission through sett
       cleanupEntered = resolve;
     });
     let reconciliation: Promise<unknown> | undefined;
-    const provision = createTelegramBusFollowerTargetProvisioner({
+    const provision = createBaleBusFollowerTargetProvisioner({
       getAllowedUserId: () => 7,
       topicTargetStore: store,
       getCurrentLeaderEpoch: () => 1,
@@ -4091,9 +4091,9 @@ test("Deferred follower reconciliation reacquires profile admission through sett
 
 test("Retained fence blocks deferred follower reconciliation before cleanup mutation", async () => {
   for (const phase of ["fenced", "deletion-issued"] as const) {
-    const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-background-fence-"));
+    const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-background-fence-"));
     try {
-      const admission = createTelegramWorkspaceAdmissionLedger({
+      const admission = createBaleWorkspaceAdmissionLedger({
         path: join(dir, "workspace-admission.json"),
         profileKey: `profile:background-${phase}`,
         owner: {
@@ -4102,10 +4102,10 @@ test("Retained fence blocks deferred follower reconciliation before cleanup muta
         },
         getProcessLiveness: () => "alive",
       });
-      const operationRuntime = createTelegramWorkspaceOperationRuntime({
+      const operationRuntime = createBaleWorkspaceOperationRuntime({
         getWorkspaceAdmission: () => admission,
       });
-      const store = createTelegramTopicTargetStore({
+      const store = createBaleTopicTargetStore({
         path: join(dir, "state.json"),
         getNowMs: () => 2000,
       });
@@ -4124,7 +4124,7 @@ test("Retained fence blocks deferred follower reconciliation before cleanup muta
       const reconciliationStarted = Promise.withResolvers<void>();
       let reconciliationSettled: Promise<void> | undefined;
       const errors: unknown[] = [];
-      const provision = createTelegramBusFollowerTargetProvisioner({
+      const provision = createBaleBusFollowerTargetProvisioner({
         getAllowedUserId: () => 7,
         topicTargetStore: store,
         getCurrentLeaderEpoch: () => 1,
@@ -4159,7 +4159,7 @@ test("Retained fence blocks deferred follower reconciliation before cleanup muta
         },
         recordRuntimeEvent(category, error, details) {
           if (
-            category === "telegram" &&
+            category === "bale" &&
             details?.phase === "follower-register-background-reconcile"
           ) {
             errors.push(error);
@@ -4199,9 +4199,9 @@ test("Retained fence blocks deferred follower reconciliation before cleanup muta
 });
 
 test("Bus leader provisions targets before registering followers", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   const provisioned: unknown[] = [];
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     provisionFollowerTarget(registration) {
       provisioned.push(registration);
@@ -4246,11 +4246,11 @@ test("Bus leader provisions targets before registering followers", async () => {
 });
 
 test("Bus leader does not acknowledge registration after ambiguous visibility failure", async () => {
-  const registry = createTelegramBusFollowerRegistry();
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const registry = createBaleBusFollowerRegistry();
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     async provisionFollowerTarget() {
-      throw new Error("Telegram send acknowledgement was lost");
+      throw new Error("Bale send acknowledgement was lost");
     },
   });
 
@@ -4269,16 +4269,16 @@ test("Bus leader does not acknowledge registration after ambiguous visibility fa
       kind: "bus.ack",
       requestId: "inst-a:1",
       ok: false,
-      message: "Telegram send acknowledgement was lost",
+      message: "Bale send acknowledgement was lost",
     },
   );
   assert.equal(registry.get("inst-a"), undefined);
 });
 
 test("Bus leader rejects follower registration after provisioning loses epoch", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   let leaderEpoch: number | undefined = 1;
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     getCurrentLeaderEpoch: () => leaderEpoch,
     async provisionFollowerTarget() {
@@ -4301,14 +4301,14 @@ test("Bus leader rejects follower registration after provisioning loses epoch", 
       kind: "bus.ack",
       requestId: "inst-a:lost",
       ok: false,
-      message: "Telegram follower registration lost leader ownership.",
+      message: "Bale follower registration lost leader ownership.",
     },
   );
   assert.equal(registry.get("inst-a"), undefined);
 });
 
 test("Bus leader records ownership for follower-sent messages", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     connectedAtMs: 1000,
@@ -4316,7 +4316,7 @@ test("Bus leader records ownership for follower-sent messages", async () => {
     target: { chatId: 1, threadId: 42 },
   });
   const ownership: unknown[] = [];
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     getNowMs: () => 4000,
     callApi() {
@@ -4353,14 +4353,14 @@ test("Bus leader records ownership for follower-sent messages", async () => {
 });
 
 test("Bus leader handles follower API call envelopes for registered followers", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     registrationGeneration: "generation-a",
     connectedAtMs: 1000,
   });
   const calls: unknown[] = [];
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     getNowMs: () => 4000,
     callApi(method, args) {
@@ -4403,23 +4403,23 @@ test("Bus leader handles follower API call envelopes for registered followers", 
       kind: "bus.ack",
       requestId: "missing:1",
       ok: false,
-      message: "Unknown Telegram bus follower instance.",
+      message: "Unknown Bale bus follower instance.",
     },
   );
 });
 
 test("Bus leader returns exact stale-target evidence to the owning follower", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     registrationGeneration: "generation-a",
     connectedAtMs: 1000,
   });
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     callApi() {
-      throw new TelegramApiStaleTargetError(
-        "Telegram API sendMessage failed: HTTP 400: Bad Request: message thread not found",
+      throw new BaleApiStaleTargetError(
+        "Bale API sendMessage failed: HTTP 400: Bad Request: message thread not found",
         { chatId: 1, threadId: 42 },
       );
     },
@@ -4443,21 +4443,21 @@ test("Bus leader returns exact stale-target evidence to the owning follower", as
       requestId: "inst-a:stale:1",
       ok: false,
       message:
-        "Telegram API sendMessage failed: HTTP 400: Bad Request: message thread not found",
+        "Bale API sendMessage failed: HTTP 400: Bad Request: message thread not found",
       error: { code: "stale-target", chatId: 1, threadId: 42 },
     },
   );
 });
 
 test("Bus leader rejects delayed API calls from a replaced follower generation", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     connectedAtMs: 2000,
     registrationGeneration: "generation-new",
   });
   let apiCalls = 0;
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     callApi() {
       apiCalls += 1;
@@ -4479,23 +4479,23 @@ test("Bus leader rejects delayed API calls from a replaced follower generation",
       kind: "bus.ack",
       requestId: "inst-a:old:1",
       ok: false,
-      message: "Stale Telegram bus follower registration generation.",
+      message: "Stale Bale bus follower registration generation.",
     },
   );
   assert.equal(apiCalls, 0);
 });
 
 test("Bus leader encodes commit-unknown API failures structurally", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     registrationGeneration: "generation-a",
     connectedAtMs: 1000,
   });
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     async callApi() {
-      throw new TelegramApiCommitUnknownError(
+      throw new BaleApiCommitUnknownError(
         "sendMessage",
         new Error("response lost"),
       );
@@ -4517,17 +4517,17 @@ test("Bus leader encodes commit-unknown API failures structurally", async () => 
       requestId: "inst-a:ambiguous:1",
       ok: false,
       message:
-        "Telegram API sendMessage may have committed before transport failed.",
+        "Bale API sendMessage may have committed before transport failed.",
       error: { code: "commit-unknown", method: "sendMessage" },
     },
   );
 });
 
 test("Bus leader proxies only exact-generation traffic and preserves durable receipts", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-exact-proxy-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-exact-proxy-"));
   const followerSocketPath = join(dir, "follower.sock");
   let forwarded = 0;
-  const followerServer = createTelegramBusLocalServer({
+  const followerServer = createBaleBusLocalServer({
     socketPath: followerSocketPath,
     handleEnvelope(envelope) {
       forwarded += 1;
@@ -4545,18 +4545,18 @@ test("Bus leader proxies only exact-generation traffic and preserves durable rec
       };
     },
   });
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     registrationGeneration: "generation-a",
     busSocketPath: followerSocketPath,
     connectedAtMs: 1000,
   });
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
   });
   const delivery = (sourceUpdateId: number) =>
-    createTelegramBusFollowerDeliveryIdentity({
+    createBaleBusFollowerDeliveryIdentity({
       kind: "leader.forwardMessage",
       recipientBindingKey: "manual:owner-a",
       sourceUpdateId,
@@ -4594,7 +4594,7 @@ test("Bus leader proxies only exact-generation traffic and preserves durable rec
         kind: "bus.ack",
         requestId: "leader:stale",
         ok: false,
-        message: "Stale Telegram bus follower registration generation.",
+        message: "Stale Bale bus follower registration generation.",
       },
     );
     assert.deepEqual(
@@ -4607,7 +4607,7 @@ test("Bus leader proxies only exact-generation traffic and preserves durable rec
         kind: "bus.ack",
         requestId: "nested-response",
         ok: false,
-        message: "Telegram bus response envelope cannot be used as a request.",
+        message: "Bale bus response envelope cannot be used as a request.",
       },
     );
     assert.equal(forwarded, 1);
@@ -4618,8 +4618,8 @@ test("Bus leader proxies only exact-generation traffic and preserves durable rec
 });
 
 test("Bus leader rejects unauthenticated envelopes when a secret is configured", async () => {
-  const registry = createTelegramBusFollowerRegistry();
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const registry = createBaleBusFollowerRegistry();
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     authSecret: "secret",
   });
@@ -4653,7 +4653,7 @@ test("Bus leader rejects unauthenticated envelopes when a secret is configured",
       requestId: "leader:4",
       recipientInstanceId: "inst-a",
       recipientRegistrationGeneration: "inst-a:1",
-      delivery: createTelegramBusFollowerDeliveryIdentity({
+      delivery: createBaleBusFollowerDeliveryIdentity({
         kind: "leader.forwardMessage",
         recipientBindingKey: "manual:owner-a",
         sourceUpdateId: 1,
@@ -4666,13 +4666,13 @@ test("Bus leader rejects unauthenticated envelopes when a secret is configured",
       kind: "bus.ack",
       requestId: envelope.requestId,
       ok: false,
-      message: "Unauthorized Telegram bus envelope.",
+      message: "Unauthorized Bale bus envelope.",
     });
   }
 });
 
 test("Bus leader generation-fences agent message routing", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     connectedAtMs: 1000,
@@ -4680,7 +4680,7 @@ test("Bus leader generation-fences agent message routing", async () => {
     target: { chatId: 100, threadId: 42 },
   });
   const routed: unknown[] = [];
-  const handle = createTelegramBusLeaderEnvelopeHandler({
+  const handle = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     resolveAgentTarget: (_follower, selector) =>
       selector.threadName === "Hazel"
@@ -4736,14 +4736,14 @@ test("Bus leader generation-fences agent message routing", async () => {
       kind: "bus.ack",
       requestId: "stale",
       ok: false,
-      message: "Stale Telegram bus follower registration generation.",
+      message: "Stale Bale bus follower registration generation.",
     },
   );
   assert.equal(routed.length, 1);
 });
 
 test("Bus leader authorizes scoped follower API calls", async () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "inst-a",
     connectedAtMs: 1000,
@@ -4751,7 +4751,7 @@ test("Bus leader authorizes scoped follower API calls", async () => {
     target: { chatId: 100, threadId: 42 },
   });
   const calls: unknown[] = [];
-  const handleEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     authorizeFollowerApiCall({ follower, method, args }) {
       const body = args[1] as Record<string, unknown> | undefined;
@@ -4825,7 +4825,7 @@ test("Bus leader authorizes scoped follower API calls", async () => {
       kind: "bus.ack",
       requestId: "inst-a:denied",
       ok: false,
-      message: "Telegram bus API call is not allowed for this follower.",
+      message: "Bale bus API call is not allowed for this follower.",
       error: { code: "follower-api-not-allowed", method: "deleteMessage" },
     },
   );
@@ -4848,15 +4848,15 @@ test("Bus leader authorizes scoped follower API calls", async () => {
 });
 
 test("Bus leader assembly wires provisioners, reconciliation, API, and runtime", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-leader-assembly-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-leader-assembly-"));
   const socketPath = join(dir, "bus.sock");
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   const events: string[] = [];
   let syncState = {};
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
+  const runtime = createBaleBusLeaderRuntimeAssembly({
     runtime: {
       socketPath,
-      followerRegistry: createTelegramBusFollowerRegistry(),
+      followerRegistry: createBaleBusFollowerRegistry(),
       protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
       startPolling: () => {
         events.push("poll-start");
@@ -4889,10 +4889,10 @@ test("Bus leader assembly wires provisioners, reconciliation, API, and runtime",
 });
 
 test("Leader assembly holds chat admission through leader target provisioning", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-leader-admission-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-leader-admission-"));
   const socketPath = join(dir, "bus.sock");
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-  const admission = createTelegramWorkspaceAdmissionLedger({
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+  const admission = createBaleWorkspaceAdmissionLedger({
     path: join(dir, "workspace-admission.json"),
     profileKey: "profile:bus",
     owner: {
@@ -4904,10 +4904,10 @@ test("Leader assembly holds chat admission through leader target provisioning", 
   let observedAdmission = false;
   let createdTitle: unknown;
   let displayEdits = 0;
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
+  const runtime = createBaleBusLeaderRuntimeAssembly({
     runtime: {
       socketPath,
-      followerRegistry: createTelegramBusFollowerRegistry(),
+      followerRegistry: createBaleBusFollowerRegistry(),
       protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
       startPolling() {},
       stopPolling() {},
@@ -4996,8 +4996,8 @@ test("Leader assembly holds chat admission through leader target provisioning", 
 });
 
 test("Leader assembly blocks Workspace mutations behind a retained retirement fence", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-leader-mutation-fence-"));
-  const admission = createTelegramWorkspaceAdmissionLedger({
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-leader-mutation-fence-"));
+  const admission = createBaleWorkspaceAdmissionLedger({
     path: join(dir, "workspace-admission.json"),
     profileKey: "profile:bus-mutations",
     owner: {
@@ -5016,24 +5016,24 @@ test("Leader assembly blocks Workspace mutations behind a retained retirement fe
     retirementRequestedAtMs: 1,
   });
   assert.equal(fence.kind, "acquired");
-  let mode: TelegramThreadDisplayMode = "names";
+  let mode: BaleThreadDisplayMode = "names";
   let mutationRan = false;
   let apiCalls = 0;
   let stateReads = 0;
-  const topicTargetStore = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const topicTargetStore = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   const list = topicTargetStore.list.bind(topicTargetStore);
   topicTargetStore.list = () => { stateReads++; return list(); };
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
+  const runtime = createBaleBusLeaderRuntimeAssembly({
     runtime: {
       socketPath: join(dir, "bus.sock"),
-      followerRegistry: createTelegramBusFollowerRegistry(),
+      followerRegistry: createBaleBusFollowerRegistry(),
       protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
       startPolling() {},
       stopPolling() {},
     },
     getAllowedUserId: () => 7,
     instanceId: "leader-fenced",
-    getTelegramProfile: () => "default",
+    getBaleProfile: () => "default",
     getThreadDisplayMode: () => mode,
     async persistThreadDisplayMode(nextMode) {
       mode = nextMode;
@@ -5091,9 +5091,9 @@ test("Leader assembly blocks Workspace mutations behind a retained retirement fe
 });
 
 test("Leader assembly serializes follower provisioning through its shared Workspace gate", async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-workspace-gate-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-workspace-gate-"));
   const socketPath = join(dir, "bus.sock");
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   const startedAt = performance.now(), stages: Array<{ stage: string; elapsedMs: number }> = [];
   const trace = (stage: string) => {
     if (stages.length < 24) stages.push({ stage, elapsedMs: Math.round(performance.now() - startedAt) });
@@ -5105,8 +5105,8 @@ test("Leader assembly serializes follower provisioning through its shared Worksp
   };
   let allowedUserId: number | undefined;
   const calls: string[] = [];
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
-    runtime: { socketPath, followerRegistry: createTelegramBusFollowerRegistry(),
+  const runtime = createBaleBusLeaderRuntimeAssembly({
+    runtime: { socketPath, followerRegistry: createBaleBusFollowerRegistry(),
       protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
     getAllowedUserId: () => allowedUserId, instanceId: "leader", topicTargetStore: store,
     captureWorkspaceExternalProtection: () => ({ liveOwner: "clear",
@@ -5138,7 +5138,7 @@ test("Leader assembly serializes follower provisioning through its shared Worksp
     });
     await started;
     trace("blocker-entered");
-    const registration = sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+    const registration = sendBaleBusLocalEnvelope({ socketPath, envelope: {
       kind: "follower.register", requestId: "follower:1",
       registration: { instanceId: "follower", registrationGeneration: "follower:1",
         cwd: "/repo", sessionId: "session-a", connectedAtMs: 1,
@@ -5169,20 +5169,20 @@ test("Leader assembly serializes follower provisioning through its shared Worksp
 test("Workspace rotation integrates leader and follower allocation without bypassing admission", async (t) => {
   for (const scenario of ["leader", "followers", "already-absent", "protected", "unknown-delete"] as const) {
     await t.test(scenario, async () => {
-      const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "test", capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
-      const dir = mkdtempSync(join(tmpdir(), "pi-telegram-rotation-"));
+      const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "test", capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
+      const dir = mkdtempSync(join(tmpdir(), "pi-bale-rotation-"));
       const socketPath = join(dir, "bus.sock");
-      const admission = createTelegramWorkspaceAdmissionLedger({
+      const admission = createBaleWorkspaceAdmissionLedger({
         path: join(dir, "admission.json"), profileKey: "default",
         owner: { processId: process.pid, processBirthId: `${process.pid}:rotation` },
         getProcessLiveness: () => "alive",
       });
-      const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
-      const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"),
+      const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
+      const store = createBaleTopicTargetStore({ path: join(dir, "state.json"),
         getExternalReservedSlots: admission.listReservedSlots });
       for (let index = 0; index < 26; index++) {
         store.upsertWorkspaceBinding({
-          ...createTelegramWorkspaceBindingIdentity(`/old/${index}`, 0, "old-session")!,
+          ...createBaleWorkspaceBindingIdentity(`/old/${index}`, 0, "old-session")!,
           target: { chatId: 7, threadId: 100 + index }, slot: String.fromCharCode(65 + index),
           inactiveSinceMs: index === 1 ? 1 : index + 100, updatedAtMs: 200,
           threadName: `Workspace${index}`, displayTitle: String.fromCharCode(65 + index),
@@ -5193,8 +5193,8 @@ test("Workspace rotation integrates leader and follower allocation without bypas
       let allowedUserId = scenario === "leader" ? 7 : undefined;
       let nextTarget = 1000;
       const effects: string[] = [];
-      const runtime = createTelegramBusLeaderRuntimeAssembly({
-        runtime: { socketPath, followerRegistry: createTelegramBusFollowerRegistry(),
+      const runtime = createBaleBusLeaderRuntimeAssembly({
+        runtime: { socketPath, followerRegistry: createBaleBusFollowerRegistry(),
           protocolIdentity: protocol, startPolling() {}, stopPolling() {} },
         getAllowedUserId: () => allowedUserId, instanceId: "leader",
         getCwd: () => scenario === "leader" ? "/fresh-leader" : undefined,
@@ -5235,7 +5235,7 @@ test("Workspace rotation integrates leader and follower allocation without bypas
         getSyncState: () => ({}), setSyncState() {}, setLeaderTarget() {}, recordRuntimeEvent() {},
       });
       const register = (instanceId: string, restore = false, cwd = `/fresh/${instanceId}`, sessionId = "fresh-session") =>
-        sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+        sendBaleBusLocalEnvelope({ socketPath, envelope: {
           kind: restore ? "follower.restoreWorkspace" : "follower.register", requestId: `register:${instanceId}`,
           registration: { instanceId, cwd, sessionId, registrationGeneration: `${instanceId}:1`,
             connectedAtMs: 1, protocol },
@@ -5284,12 +5284,12 @@ test("Workspace rotation integrates leader and follower allocation without bypas
 });
 
 test("Follower provisioning without rotation reports pressure without deleting or reusing retained slots", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-pressure-disabled-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-pressure-disabled-"));
   const socketPath = join(dir, "bus.sock");
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   for (const [index, slot] of Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").entries()) {
     store.upsertWorkspaceBinding({
-      ...createTelegramWorkspaceBindingIdentity(`/old/${index}`)!,
+      ...createBaleWorkspaceBindingIdentity(`/old/${index}`)!,
       target: { chatId: 7, threadId: 100 + index }, slot,
       inactiveSinceMs: index + 1, updatedAtMs: index + 1,
       journalBindingKeys: [], journalBindingsComplete: true,
@@ -5297,11 +5297,11 @@ test("Follower provisioning without rotation reports pressure without deleting o
   }
   let allowedUserId: number | undefined;
   const calls: string[] = [];
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
-    runtime: { socketPath, followerRegistry: createTelegramBusFollowerRegistry(),
+  const runtime = createBaleBusLeaderRuntimeAssembly({
+    runtime: { socketPath, followerRegistry: createBaleBusFollowerRegistry(),
       protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
     getAllowedUserId: () => allowedUserId, instanceId: "leader", topicTargetStore: store,
-    getCurrentLeaderEpoch: () => 1, getTelegramProfile: () => undefined,
+    getCurrentLeaderEpoch: () => 1, getBaleProfile: () => undefined,
     captureWorkspaceExternalProtection: () => ({ liveOwner: "clear",
       acceptedWork: "clear", deliveryAuthority: "clear" }),
     async callApi<TResponse>(method: string) { calls.push(method); return true as TResponse; },
@@ -5312,7 +5312,7 @@ test("Follower provisioning without rotation reports pressure without deleting o
     await runtime.startPolling("ctx");
     allowedUserId = 7;
     for (const [instanceId, cwd] of [["fresh", "/fresh"], ["legacy", undefined]] as const) {
-      const response = await sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+      const response = await sendBaleBusLocalEnvelope({ socketPath, envelope: {
         kind: "follower.register", requestId: `pressure:${instanceId}`,
         registration: { instanceId, registrationGeneration: `${instanceId}:1`,
           ...(cwd ? { cwd, sessionId: "session-a" } : {}), connectedAtMs: 1,
@@ -5320,9 +5320,9 @@ test("Follower provisioning without rotation reports pressure without deleting o
       } });
       assert.ok(response?.kind === "bus.ack");
       assert.equal(response.ok, false);
-      assert.equal(response.message, "Telegram Workspace slot reservation is unavailable.");
+      assert.equal(response.message, "Bale Workspace slot reservation is unavailable.");
     }
-    const carried = await sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+    const carried = await sendBaleBusLocalEnvelope({ socketPath, envelope: {
       kind: "follower.register", requestId: "pressure:carried",
       registration: { instanceId: "carried", registrationGeneration: "carried:1",
         target: { chatId: 7, threadId: 900 }, slot: "A",
@@ -5330,7 +5330,7 @@ test("Follower provisioning without rotation reports pressure without deleting o
     } });
     assert.ok(carried?.kind === "bus.ack");
     assert.equal(carried.ok, false);
-    assert.equal(carried.message, "Telegram Workspace slot reservation is unavailable.");
+    assert.equal(carried.message, "Bale Workspace slot reservation is unavailable.");
     assert.deepEqual(calls, []);
     assert.equal(store.listWorkspaceBindings().length, 26);
     assert.equal(store.getWorkspaceBinding("/old/0")?.slot, "A");
@@ -5343,16 +5343,16 @@ test("Follower provisioning without rotation reports pressure without deleting o
 });
 
 test("Leader assembly applies display titles and publishes them through heartbeat ACKs", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-display-assembly-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-display-assembly-"));
   const socketPath = join(dir, "bus.sock");
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-  const registry = createTelegramBusFollowerRegistry();
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+  const registry = createBaleBusFollowerRegistry();
   for (const [cwd, instanceId, slot, threadName, threadId] of [
     ["/leader", "leader", "A", "Anchor", 41],
     ["/follower", "follower", "B", "Beacon", 42],
   ] as const) {
     store.upsertWorkspaceBinding({
-      ...createTelegramWorkspaceBindingIdentity(cwd)!,
+      ...createBaleWorkspaceBindingIdentity(cwd)!,
       slot, threadName, target: { chatId: 7, threadId }, updatedAtMs: 1,
     });
     if (instanceId === "leader") store.upsert({
@@ -5364,13 +5364,13 @@ test("Leader assembly applies display titles and publishes them through heartbea
   registry.register({
     instanceId: "follower", target: { chatId: 7, threadId: 42 },
     registrationGeneration: "follower:1", connectedAtMs: Date.now(),
-    protocol: createTelegramBusProtocolIdentity({ runtimeBuild: "test",
-      capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE] }),
+    protocol: createBaleBusProtocolIdentity({ runtimeBuild: "test",
+      capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE] }),
     threadName: "Beacon", slot: "B",
   });
   const titles: unknown[] = [];
-  let displayMode: TelegramThreadDisplayMode = "letters";
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
+  let displayMode: BaleThreadDisplayMode = "letters";
+  const runtime = createBaleBusLeaderRuntimeAssembly({
     runtime: { socketPath, followerRegistry: registry, protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
       startPolling() {}, stopPolling() {} },
     getAllowedUserId: () => undefined,
@@ -5396,7 +5396,7 @@ test("Leader assembly applies display titles and publishes them through heartbea
     await runtime.startPolling("ctx");
     await runtime.reconcileThreadDisplay?.();
     assert.deepEqual(titles, ["A", "B"]);
-    const response = await sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+    const response = await sendBaleBusLocalEnvelope({ socketPath, envelope: {
       kind: "follower.heartbeat", requestId: "follower:2", instanceId: "follower",
       registrationGeneration: "follower:1", sentAtMs: Date.now(),
     } });
@@ -5418,14 +5418,14 @@ test("Leader assembly applies display titles and publishes them through heartbea
 
 for (const drift of ["current", "recipient", "epoch", "operator", "profile", "session", "slot", "owner", "binding", "admission", "persistence"] as const) {
   test(`Guarded leader manual rename retains exact recipient authority (${drift})`, async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pi-telegram-guarded-leader-name-"));
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    const dir = mkdtempSync(join(tmpdir(), "pi-bale-guarded-leader-name-"));
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
     const target = { chatId: 7, threadId: 41 };
     const record = { profileKey: "cwd:/repo", owner: { kind: "leader" as const, cwd: "/repo", instanceId: "leader" },
       instanceId: "leader", target, slot: "A", threadName: "Atlas", status: "active" as const, createdAtMs: 1, updatedAtMs: 1 };
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session")!, target, slot: "A", threadName: "Atlas", updatedAtMs: 1 };
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo", 0, "session")!, target, slot: "A", threadName: "Atlas", updatedAtMs: 1 };
     store.upsert(record); store.upsertWorkspaceBinding(binding);
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", 1, "other-session")!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", 1, "other-session")!,
       target: { chatId: 7, threadId: 42 }, slot: "B", threadName: "Briar", updatedAtMs: 1 });
     await store.persist();
     const unrelated = store.listWorkspaceBindings().find(value => value.sessionId === "other-session");
@@ -5437,16 +5437,16 @@ for (const drift of ["current", "recipient", "epoch", "operator", "profile", "se
       if (drift === "persistence") current = false;
       return publishName(...args);
     };
-    const runtime = createTelegramBusLeaderRuntimeAssembly({
-      runtime: { socketPath: join(dir, "bus.sock"), followerRegistry: createTelegramBusFollowerRegistry(),
+    const runtime = createBaleBusLeaderRuntimeAssembly({
+      runtime: { socketPath: join(dir, "bus.sock"), followerRegistry: createBaleBusFollowerRegistry(),
         protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
-      getAllowedUserId: () => user, getTelegramProfile: () => profile,
+      getAllowedUserId: () => user, getBaleProfile: () => profile,
       instanceId: "leader", getCurrentLeaderEpoch: () => epoch, topicTargetStore: store,
       runWorkspaceOperation: async (_input, operation) => {
         if (drift === "admission") epoch++;
         return operation();
       },
-      async callApi<TResponse>(_method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) {
+      async callApi<TResponse>(_method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) {
         edits++;
         assert.deepEqual(body, { chat_id: 7, message_thread_id: 41, name: "Azure" });
         assert.equal(typeof options?.assertAuthority, "function");
@@ -5458,7 +5458,7 @@ for (const drift of ["current", "recipient", "epoch", "operator", "profile", "se
         if (drift === "session" || drift === "binding") {
           store.upsertWorkspaceBinding({ ...binding, target: { chatId: 7, threadId: 99 } });
           store.upsertWorkspaceBinding({ ...binding,
-            ...createTelegramWorkspaceBindingIdentity("/repo", drift === "binding" ? 2 : 0,
+            ...createBaleWorkspaceBindingIdentity("/repo", drift === "binding" ? 2 : 0,
               drift === "session" ? "replacement" : "session")!,
           });
         }
@@ -5477,7 +5477,7 @@ for (const drift of ["current", "recipient", "epoch", "operator", "profile", "se
       if (drift === "current") {
         const renamed = await pending;
         assert.equal(renamed.manualThreadName, "Azure");
-        const reopened = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+        const reopened = createBaleTopicTargetStore({ path: join(dir, "state.json") });
         await reopened.load();
         assert.equal(reopened.getWorkspaceBindingByTarget(target, "session")?.manualThreadName, "Azure");
       } else await assert.rejects(pending, /authority|changed|ownership/);
@@ -5487,7 +5487,7 @@ for (const drift of ["current", "recipient", "epoch", "operator", "profile", "se
       if (drift === "persistence") {
         store.setBotState({ threadMode: "enabled" });
         await persist();
-        const reopened = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+        const reopened = createBaleTopicTargetStore({ path: join(dir, "state.json") });
         await reopened.load();
         assert.equal(reopened.getWorkspaceBindingByTarget(target, "session")?.manualThreadName, undefined,
           "An ordinary persist cannot borrow refused manual-name publication authority");
@@ -5504,7 +5504,7 @@ for (const drift of ["current", "recipient", "epoch", "operator", "profile", "se
 for (const boundary of ["current", "response-loss", "binding-renewal"] as const) {
   test(`Guarded command rename binding reaches native staged leader publication (${boundary})`, async () => {
     await withWorkspaceRestoreFixture(async f => {
-      const command = createTelegramThreadDisplayNameRenameBinding();
+      const command = createBaleThreadDisplayNameRenameBinding();
       let current = true, edits = 0, publications = 0;
       const publish = f.threads.renameByTargetAndPersist.bind(f.threads);
       f.threads.renameByTargetAndPersist = async (...args) => {
@@ -5512,12 +5512,12 @@ for (const boundary of ["current", "response-loss", "binding-renewal"] as const)
         if (boundary === "binding-renewal") command.bind(rename);
         return publish(...args);
       };
-      const runtime = createTelegramBusLeaderRuntimeAssembly({
-        runtime: { socketPath: join(f.path, "..", "bus.sock"), followerRegistry: createTelegramBusFollowerRegistry(),
+      const runtime = createBaleBusLeaderRuntimeAssembly({
+        runtime: { socketPath: join(f.path, "..", "bus.sock"), followerRegistry: createBaleBusFollowerRegistry(),
           protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
-        getAllowedUserId: () => 7, getTelegramProfile: () => "default",
+        getAllowedUserId: () => 7, getBaleProfile: () => "default",
         instanceId: "old", getCurrentLeaderEpoch: () => 1, topicTargetStore: f.threads,
-        async callApi<TResponse>(_method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) {
+        async callApi<TResponse>(_method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) {
           edits++;
           assert.deepEqual(body, { chat_id: 7, message_thread_id: 10, name: "Azure" });
           options?.assertAuthority?.();
@@ -5542,7 +5542,7 @@ for (const boundary of ["current", "response-loss", "binding-renewal"] as const)
         else await assert.rejects(pending, /authority|binding.*changed/i);
         f.threads.setBotState({ threadMode: "enabled" });
         await f.threads.persist();
-        const reopened = createTelegramTopicTargetStore({ path: f.path });
+        const reopened = createBaleTopicTargetStore({ path: f.path });
         await reopened.load();
         assert.equal(reopened.getWorkspaceBindingByTarget({ chatId: 7, threadId: 10 }, "session")?.manualThreadName,
           boundary === "current" ? "Azure" : "My workspace",
@@ -5560,7 +5560,7 @@ for (const layout of ["standalone", "consolidated"] as const) {
       await withWorkspaceRestoreFixture(async fixture => {
         const dir = join(fixture.path, "..");
         const rootPath = join(dir, "consolidated.json");
-        const owner = createTelegramLockRuntime({ statePath: rootPath, key: () => "default", pid: 10,
+        const owner = createBaleLockRuntime({ statePath: rootPath, key: () => "default", pid: 10,
           instanceId: "owner", runtimeGeneration: 1, isProcessAlive: () => true });
         owner.acquire({ cwd: "/repo" });
         const f = { dir, consolidated: {
@@ -5571,21 +5571,21 @@ for (const layout of ["standalone", "consolidated"] as const) {
           publishIfOwned: owner.publishStateSectionIfOwned!,
         } };
         const path = layout === "consolidated" ? rootPath : join(f.dir, "reset.json");
-        const store = createTelegramTopicTargetStore({ path, telegramProfile: "default",
+        const store = createBaleTopicTargetStore({ path, baleProfile: "default",
           ...(layout === "consolidated" ? { consolidated: f.consolidated } : {}) });
         await store.load();
         const target = { chatId: 7, threadId: 41 };
         const record = { owner: { kind: "leader" as const, cwd: "/repo", instanceId: "leader" }, profileKey: "cwd:/repo",
           instanceId: "leader", target, slot: "A", threadName: "Anchor", status: "active" as const, createdAtMs: 1, updatedAtMs: 1 };
-        const binding = { ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session")!,
+        const binding = { ...createBaleWorkspaceBindingIdentity("/repo", 0, "session")!,
           target, slot: "A", threadName: "Anchor", updatedAtMs: 1 };
         store.upsert(record); store.upsertWorkspaceBinding(binding); store.renameByTarget(target, "Retained");
-        store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/other", 0, "other-session")!,
+        store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/other", 0, "other-session")!,
           target: { chatId: 7, threadId: 42 }, slot: "B", threadName: "Beacon", updatedAtMs: 1 });
         await store.persist();
         const neighbor = store.getWorkspaceBindingByTarget({ chatId: 7, threadId: 42 }, "other-session");
         let current = boundary !== "entry-loss", epoch = 1, user = 7, profile = "default";
-        let mode: TelegramThreadDisplayMode = "letters";
+        let mode: BaleThreadDisplayMode = "letters";
         let edits = 0, publications = 0, admissions = 0;
         const persist = store.persist.bind(store), publish = store.clearManualNameByTargetAndPersist.bind(store);
         store.clearManualNameByTargetAndPersist = async (...args) => {
@@ -5597,10 +5597,10 @@ for (const layout of ["standalone", "consolidated"] as const) {
           if (boundary === "lost-publication") throw new Error("Reset publication reply lost");
           return result;
         };
-        const deps: Parameters<typeof createTelegramBusLeaderRuntimeAssembly>[0] = {
-          runtime: { socketPath: join(f.dir, "bus.sock"), followerRegistry: createTelegramBusFollowerRegistry(),
+        const deps: Parameters<typeof createBaleBusLeaderRuntimeAssembly>[0] = {
+          runtime: { socketPath: join(f.dir, "bus.sock"), followerRegistry: createBaleBusFollowerRegistry(),
             protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
-          instanceId: "leader", getAllowedUserId: () => user, getTelegramProfile: () => profile,
+          instanceId: "leader", getAllowedUserId: () => user, getBaleProfile: () => profile,
           getCurrentLeaderEpoch: () => epoch, getThreadDisplayMode: () => mode, topicTargetStore: store,
           runWorkspaceOperation: async (_input, operation) => {
             admissions++;
@@ -5612,7 +5612,7 @@ for (const layout of ["standalone", "consolidated"] as const) {
             }
             return operation();
           },
-          async callApi<TResponse>(method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) {
+          async callApi<TResponse>(method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) {
             edits++;
             assert.equal(method, "editForumTopic");
             assert.deepEqual(body, { chat_id: 7, message_thread_id: 41, name: "A" });
@@ -5633,7 +5633,7 @@ for (const layout of ["standalone", "consolidated"] as const) {
           callMultipart: async () => true, downloadFile: async () => undefined,
           getSyncState: () => ({}), setSyncState() {}, setLeaderTarget() {}, recordRuntimeEvent() {},
         };
-        const runtime = createTelegramBusLeaderRuntimeAssembly(deps);
+        const runtime = createBaleBusLeaderRuntimeAssembly(deps);
         try {
           const pending = runtime.resetLeaderThreadName(target, () => { if (!current) throw new Error("Recipient authority lost"); });
           if (boundary === "current" || boundary === "captured-ports") assert.deepEqual(await pending, { threadName: "A" });
@@ -5643,7 +5643,7 @@ for (const layout of ["standalone", "consolidated"] as const) {
           assert.equal(edits, issued ? 1 : 0);
           assert.equal(admissions, boundary === "entry-loss" ? 0 : 1);
           assert.equal(publications, committed || boundary === "publication-loss" ? 1 : 0);
-          const reopen = () => createTelegramTopicTargetStore({ path, telegramProfile: "default",
+          const reopen = () => createBaleTopicTargetStore({ path, baleProfile: "default",
             ...(layout === "consolidated" ? { consolidated: f.consolidated } : {}) });
           const canonical = reopen(); await canonical.load();
           assert.equal(canonical.getWorkspaceBindingByTarget({ chatId: 7, threadId: 41 }, "session")?.manualThreadName,
@@ -5666,10 +5666,10 @@ for (const layout of ["standalone", "consolidated"] as const) {
 for (const boundary of ["current", "entry", "response", "parsing", "retry-wait", "admission-fence"] as const) {
   test(`Guarded leader reset retains native admission and direct client fences (${boundary})`, async () => {
     await withWorkspaceRestoreFixture(async f => {
-      const ledger = createTelegramWorkspaceAdmissionLedger({ path: join(f.path, "..", "admission.json"), profileKey: "reset",
+      const ledger = createBaleWorkspaceAdmissionLedger({ path: join(f.path, "..", "admission.json"), profileKey: "reset",
         owner: { processId: process.pid, processBirthId: `${process.pid}:reset-birth` }, getProcessLiveness: () => "alive" });
-      const originalFetch = globalThis.fetch, family = process.env.PI_TELEGRAM_NETWORK_FAMILY;
-      delete process.env.PI_TELEGRAM_NETWORK_FAMILY;
+      const originalFetch = globalThis.fetch, family = process.env.PI_BALE_NETWORK_FAMILY;
+      delete process.env.PI_BALE_NETWORK_FAMILY;
       let current = boundary !== "entry", requests = 0, sleeps = 0, publications = 0;
       const publish = f.threads.clearManualNameByTargetAndPersist.bind(f.threads);
       f.threads.clearManualNameByTargetAndPersist = (...args) => {
@@ -5688,16 +5688,16 @@ for (const boundary of ["current", "entry", "response", "parsing", "retry-wait",
         if (boundary === "parsing") response.text = async () => { current = false; return JSON.stringify({ ok: true, result: true }); };
         return response;
       };
-      const client = createTelegramApiClient(() => "123:fixture");
-      const direct = createTelegramBridgeApiRuntime({ client: { ...client,
+      const client = createBaleApiClient(() => "123:fixture");
+      const direct = createBaleBridgeApiRuntime({ client: { ...client,
         call(method, body, options) {
           assert.equal(typeof options?.assertAuthority, "function");
           return client.call(method, body, { ...options, sleep: async () => { sleeps++; current = false; } });
         } }, tempDir: "/unused", maxFileSizeBytes: 1, tempFileMaxAgeMs: 1, recordRuntimeEvent() {} });
-      const runtime = createTelegramBusLeaderRuntimeAssembly({
-        runtime: { socketPath: join(f.path, "..", "bus.sock"), followerRegistry: createTelegramBusFollowerRegistry(),
+      const runtime = createBaleBusLeaderRuntimeAssembly({
+        runtime: { socketPath: join(f.path, "..", "bus.sock"), followerRegistry: createBaleBusFollowerRegistry(),
           protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
-        getAllowedUserId: () => 7, getTelegramProfile: () => "default", getWorkspaceAdmission: () => ledger,
+        getAllowedUserId: () => 7, getBaleProfile: () => "default", getWorkspaceAdmission: () => ledger,
         instanceId: "old", getCurrentLeaderEpoch: () => 1, topicTargetStore: f.threads, callApi: direct.call,
         callMultipart: async () => true, downloadFile: async () => undefined,
         getSyncState: () => ({}), setSyncState() {}, setLeaderTarget() {}, recordRuntimeEvent() {},
@@ -5711,18 +5711,18 @@ for (const boundary of ["current", "entry", "response", "parsing", "retry-wait",
         });
         if (boundary === "current") assert.deepEqual(await pending, { threadName: "A" });
         else if (boundary === "entry" || boundary === "admission-fence") await assert.rejects(pending, /revoked|fenced|retirement/i);
-        else await assert.rejects(pending, { name: "TelegramApiAuthorityError", requestIssued: true });
+        else await assert.rejects(pending, { name: "BaleApiAuthorityError", requestIssued: true });
         assert.equal(requests, boundary === "entry" || boundary === "admission-fence" ? 0 : 1);
         assert.equal(sleeps, boundary === "retry-wait" ? 1 : 0);
         assert.equal(publications, boundary === "current" ? 1 : 0);
         assert.deepEqual(ledger.read().leases, [], "Every settled path releases its exact admission");
         f.threads.setBotState({ threadMode: "enabled" }); await f.threads.persist();
-        const reopened = createTelegramTopicTargetStore({ path: f.path }); await reopened.load();
+        const reopened = createBaleTopicTargetStore({ path: f.path }); await reopened.load();
         assert.equal(reopened.getWorkspaceBindingByTarget({ chatId: 7, threadId: 10 }, "session")?.manualThreadName,
           boundary === "current" ? undefined : "My workspace");
       } finally {
         globalThis.fetch = originalFetch;
-        if (family === undefined) delete process.env.PI_TELEGRAM_NETWORK_FAMILY; else process.env.PI_TELEGRAM_NETWORK_FAMILY = family;
+        if (family === undefined) delete process.env.PI_BALE_NETWORK_FAMILY; else process.env.PI_BALE_NETWORK_FAMILY = family;
         await runtime.stopPolling();
       }
     });
@@ -5732,7 +5732,7 @@ for (const boundary of ["current", "entry", "response", "parsing", "retry-wait",
 for (const boundary of ["current", "response-loss", "binding-renewal"] as const) {
   test(`Guarded command reset binding reaches admitted staged leader publication (${boundary})`, async () => {
     await withWorkspaceRestoreFixture(async f => {
-      const command = createTelegramThreadDisplayNameResetBinding();
+      const command = createBaleThreadDisplayNameResetBinding();
       let current = true, edits = 0, publications = 0;
       const publish = f.threads.clearManualNameByTargetAndPersist.bind(f.threads);
       f.threads.clearManualNameByTargetAndPersist = async (...args) => {
@@ -5740,12 +5740,12 @@ for (const boundary of ["current", "response-loss", "binding-renewal"] as const)
         if (boundary === "binding-renewal") command.bind(reset);
         return publish(...args);
       };
-      const runtime = createTelegramBusLeaderRuntimeAssembly({
-        runtime: { socketPath: join(f.path, "..", "bus.sock"), followerRegistry: createTelegramBusFollowerRegistry(),
+      const runtime = createBaleBusLeaderRuntimeAssembly({
+        runtime: { socketPath: join(f.path, "..", "bus.sock"), followerRegistry: createBaleBusFollowerRegistry(),
           protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
-        getAllowedUserId: () => 7, getTelegramProfile: () => "default",
+        getAllowedUserId: () => 7, getBaleProfile: () => "default",
         instanceId: "old", getCurrentLeaderEpoch: () => 1, topicTargetStore: f.threads,
-        async callApi<TResponse>(_method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) {
+        async callApi<TResponse>(_method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) {
           edits++;
           assert.deepEqual(body, { chat_id: 7, message_thread_id: 10, name: "A" });
           options?.assertAuthority?.();
@@ -5769,7 +5769,7 @@ for (const boundary of ["current", "response-loss", "binding-renewal"] as const)
         if (boundary === "current") assert.deepEqual(await pending, { ok: true, threadName: "A" });
         else await assert.rejects(pending, /authority|binding.*changed|changed binding/i);
         f.threads.setBotState({ threadMode: "enabled" }); await f.threads.persist();
-        const reopened = createTelegramTopicTargetStore({ path: f.path }); await reopened.load();
+        const reopened = createBaleTopicTargetStore({ path: f.path }); await reopened.load();
         assert.equal(reopened.getWorkspaceBindingByTarget({ chatId: 7, threadId: 10 }, "session")?.manualThreadName,
           boundary === "current" ? undefined : "My workspace");
         assert.equal(edits, 1);
@@ -5783,29 +5783,29 @@ test("Rename and reset reject target replacement during Bot API mutation", async
   for (const operation of [
     "leader-rename", "leader-reset", "follower-rename", "follower-reset",
   ] as const) {
-    const dir = mkdtempSync(join(tmpdir(), `pi-telegram-name-race-${operation}-`));
+    const dir = mkdtempSync(join(tmpdir(), `pi-bale-name-race-${operation}-`));
     const socketPath = join(dir, "bus.sock");
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
     const leaderRecord = {
       profileKey: "cwd:/leader",
       owner: { kind: "leader" as const, cwd: "/leader", instanceId: "leader" },
       instanceId: "leader", target: { chatId: 7, threadId: 41 }, slot: "A",
       threadName: "Anchor", status: "active" as const, createdAtMs: 1, updatedAtMs: 1,
     };
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/leader")!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/leader")!,
       target: leaderRecord.target, slot: "A", threadName: "Anchor",
       manualThreadName: "Manual Leader", updatedAtMs: 1 });
     store.upsert(leaderRecord);
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/follower")!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/follower")!,
       target: { chatId: 7, threadId: 42 }, slot: "B", threadName: "Beacon",
       manualThreadName: "Manual Follower", updatedAtMs: 1 });
-    const registry = createTelegramBusFollowerRegistry();
+    const registry = createBaleBusFollowerRegistry();
     registry.register({ instanceId: "follower", target: { chatId: 7, threadId: 42 },
       registrationGeneration: "follower:1", connectedAtMs: 1,
       protocol: TEST_BUS_PROTOCOL_IDENTITY, slot: "B", threadName: "Beacon" });
     let editCalls = 0;
     let raceArmed = false;
-    const runtime = createTelegramBusLeaderRuntimeAssembly({
+    const runtime = createBaleBusLeaderRuntimeAssembly({
       runtime: { socketPath, followerRegistry: registry,
         protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
       getAllowedUserId: () => undefined,
@@ -5821,7 +5821,7 @@ test("Rename and reset reject target replacement during Bot API mutation", async
           editCalls++;
           if (operation.startsWith("leader")) {
             store.upsertWorkspaceBinding({
-              ...createTelegramWorkspaceBindingIdentity("/leader")!,
+              ...createBaleWorkspaceBindingIdentity("/leader")!,
               target: { chatId: 7, threadId: 99 }, slot: "A", threadName: "Anchor",
               manualThreadName: "Replacement", updatedAtMs: 2,
             });
@@ -5865,7 +5865,7 @@ test("Rename and reset reject target replacement during Bot API mutation", async
           target: { chatId: 7, threadId: 42 },
           sentAtMs: 2,
         };
-        const response = await sendTelegramBusLocalEnvelope({ socketPath, envelope });
+        const response = await sendBaleBusLocalEnvelope({ socketPath, envelope });
         assert.ok(response?.kind === "bus.ack" && !response.ok);
         assert.match(response.message ?? "", /target changed/);
       }
@@ -5889,9 +5889,9 @@ test("Leader startup defers display contraction until the follower roster settle
       scenario === "stopped" ? "leader stops before roster settlement" :
       "leader stops while its startup is still awaiting", async (t) => {
       t.mock.timers.enable({ apis: ["setTimeout"] });
-      const dir = mkdtempSync(join(tmpdir(), "pi-telegram-display-startup-roster-"));
+      const dir = mkdtempSync(join(tmpdir(), "pi-bale-display-startup-roster-"));
       const socketPath = join(dir, "bus.sock");
-      const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+      const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
       const cwd = "/repo/Extensions";
       const leaderIdentity = store.claimWorkspaceIdentity(cwd, "leader", undefined,
         { sessionId: "leader-session" });
@@ -5921,11 +5921,11 @@ test("Leader startup defers display contraction until the follower roster settle
         owner: { kind: "leader", cwd, instanceId: "leader" }, instanceId: "leader",
         target: { chatId: 7, threadId: 41 }, slot: leaderIdentity.slot,
         threadName: "Anchor", status: "active", createdAtMs: 1, updatedAtMs: 1 });
-      const registry = createTelegramBusFollowerRegistry();
+      const registry = createBaleBusFollowerRegistry();
       const titles: string[] = [];
       let releaseStart!: () => void;
       const startGate = new Promise<void>((resolve) => { releaseStart = resolve; });
-      const runtime = createTelegramBusLeaderRuntimeAssembly({
+      const runtime = createBaleBusLeaderRuntimeAssembly({
         runtime: { socketPath, followerRegistry: registry,
           protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, followerStaleAfterMs: 25,
           followerPruneIntervalMs: 1000,
@@ -6000,9 +6000,9 @@ test("Leader startup defers display contraction until the follower roster settle
 });
 
 test("Same-cwd followers keep sticky directory labels until manual rename overrides them", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-display-same-cwd-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-display-same-cwd-"));
   const socketPath = join(dir, "bus.sock");
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   const cwd = "/repo/extensions";
   const leaderIdentity = store.claimWorkspaceIdentity(cwd, "leader");
   assert.ok(leaderIdentity);
@@ -6018,18 +6018,18 @@ test("Same-cwd followers keep sticky directory labels until manual rename overri
   store.upsert({ profileKey: "manual:follower", owner: { kind: "manual-follower", instanceId: "follower" },
     instanceId: "follower", target: { chatId: 7, threadId: 42 }, slot: followerIdentity.slot,
     threadName: "Briar", status: "active", createdAtMs: 1, updatedAtMs: 1 });
-  const registry = createTelegramBusFollowerRegistry();
-  const followerProtocol = createTelegramBusProtocolIdentity({ runtimeBuild: "test",
-    capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
+  const registry = createBaleBusFollowerRegistry();
+  const followerProtocol = createBaleBusProtocolIdentity({ runtimeBuild: "test",
+    capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
   registry.register({ instanceId: "follower", target: { chatId: 7, threadId: 42 },
     registrationGeneration: "follower:1", connectedAtMs: 1, protocol: followerProtocol,
     slot: followerIdentity.slot, threadName: "Briar" });
-  let mode: TelegramThreadDisplayMode = "names";
+  let mode: BaleThreadDisplayMode = "names";
   const titles: string[] = [];
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
+  const runtime = createBaleBusLeaderRuntimeAssembly({
     runtime: { socketPath, followerRegistry: registry, protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
       startPolling() {}, stopPolling() {} }, instanceId: "leader", getAllowedUserId: () => undefined,
-    getCurrentLeaderEpoch: () => 1, getTelegramProfile: () => "default",
+    getCurrentLeaderEpoch: () => 1, getBaleProfile: () => "default",
     getThreadDisplayMode: () => mode,
     async persistThreadDisplayMode(nextMode) { mode = nextMode; }, topicTargetStore: store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -6044,7 +6044,7 @@ test("Same-cwd followers keep sticky directory labels until manual rename overri
     await runtime.setThreadDisplayMode!("directories");
     assert.deepEqual(titles, ["extensions_a", "extensions_b"]);
     assert.deepEqual(store.listWorkspaceBindings().map((binding) => binding.showSlotSuffix), [true, true]);
-    const response = await sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+    const response = await sendBaleBusLocalEnvelope({ socketPath, envelope: {
       kind: "follower.renameThread", requestId: "follower:rename", instanceId: "follower",
       registrationGeneration: "follower:1",
       target: { chatId: 7, threadId: 42 },
@@ -6066,7 +6066,7 @@ test("Same-cwd followers keep sticky directory labels until manual rename overri
     assert.equal(renamed?.slot, "B");
     await runtime.setThreadDisplayMode!("directories");
     assert.equal(titles.at(-1), "extensions_a");
-    const resetResponse = await sendTelegramBusLocalEnvelope({
+    const resetResponse = await sendBaleBusLocalEnvelope({
       socketPath,
       envelope: {
         kind: "follower.resetThreadName",
@@ -6099,21 +6099,21 @@ test("Same-cwd followers keep sticky directory labels until manual rename overri
 });
 
 test("Leader display repair recovers a cold slotless binding without granting it routing ownership", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-slotless-display-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-slotless-display-"));
   const path = join(dir, "state.json");
-  const original = createTelegramTopicTargetStore({ path });
+  const original = createBaleTopicTargetStore({ path });
   original.upsertWorkspaceBinding({
-    ...createTelegramWorkspaceBindingIdentity("/retained")!,
+    ...createBaleWorkspaceBindingIdentity("/retained")!,
     target: { chatId: 7, threadId: 42 }, threadName: "Anchor", displayTitle: "A", updatedAtMs: 1,
   });
   await original.persist();
-  const store = createTelegramTopicTargetStore({ path });
+  const store = createBaleTopicTargetStore({ path });
   await store.load();
   let reject = true;
   let epoch: number | undefined = 1;
   const calls: string[] = [];
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
-    runtime: { socketPath: join(dir, "bus.sock"), followerRegistry: createTelegramBusFollowerRegistry(),
+  const runtime = createBaleBusLeaderRuntimeAssembly({
+    runtime: { socketPath: join(dir, "bus.sock"), followerRegistry: createBaleBusFollowerRegistry(),
       protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
     instanceId: "leader", getAllowedUserId: () => undefined, getCurrentLeaderEpoch: () => epoch,
     getThreadDisplayMode: () => "letters", topicTargetStore: store,
@@ -6137,7 +6137,7 @@ test("Leader display repair recovers a cold slotless binding without granting it
     epoch = 1;
     assert.deepEqual(await runtime.reconcileThreadDisplay!(), { changed: 1 });
     assert.deepEqual(calls, ["Anchor", "Anchor"]);
-    const cold = createTelegramTopicTargetStore({ path });
+    const cold = createBaleTopicTargetStore({ path });
     await cold.load();
     assert.equal(cold.getWorkspaceBinding("/retained")?.displayTitle, "Anchor");
     assert.equal(cold.getWorkspaceBinding("/retained")?.slot, undefined);
@@ -6149,14 +6149,14 @@ test("Leader display repair recovers a cold slotless binding without granting it
 });
 
 test("Leader display application retains acknowledged partial progress and retries only the remainder", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-display-partial-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-  const registry = createTelegramBusFollowerRegistry();
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-display-partial-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+  const registry = createBaleBusFollowerRegistry();
   for (const [cwd, instanceId, slot, threadName, threadId] of [
     ["/leader", "leader", "A", "Anchor", 41],
     ["/follower", "follower", "B", "Beacon", 42],
   ] as const) {
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity(cwd)!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity(cwd)!,
       target: { chatId: 7, threadId }, slot, threadName, updatedAtMs: 1 });
     if (instanceId === "leader") store.upsert({ profileKey: "cwd:/leader",
       owner: { kind: "leader", cwd, instanceId }, instanceId, target: { chatId: 7, threadId },
@@ -6164,17 +6164,17 @@ test("Leader display application retains acknowledged partial progress and retri
   }
   registry.register({ instanceId: "follower", target: { chatId: 7, threadId: 42 },
     registrationGeneration: "follower:1", connectedAtMs: 1,
-    protocol: createTelegramBusProtocolIdentity({ runtimeBuild: "test",
-      capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE] }),
+    protocol: createBaleBusProtocolIdentity({ runtimeBuild: "test",
+      capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE] }),
     threadName: "Beacon", slot: "B" });
-  let mode: TelegramThreadDisplayMode = "names";
+  let mode: BaleThreadDisplayMode = "names";
   let rejectFollower = true;
   const calls: string[] = [];
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
+  const runtime = createBaleBusLeaderRuntimeAssembly({
     runtime: { socketPath: join(dir, "bus.sock"), followerRegistry: registry,
       protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
     instanceId: "leader", getAllowedUserId: () => undefined, getCurrentLeaderEpoch: () => 2,
-    getTelegramProfile: () => "work", getThreadDisplayMode: () => mode,
+    getBaleProfile: () => "work", getThreadDisplayMode: () => mode,
     async persistThreadDisplayMode(nextMode, isCurrent) { assert.equal(isCurrent(), true); mode = nextMode; },
     topicTargetStore: store,
     async callApi<TResponse>(_method: string, body: Record<string, unknown>) {
@@ -6205,28 +6205,28 @@ test("Leader display application retains acknowledged partial progress and retri
 
 test("Leader display application fences late profile and follower-generation changes", async () => {
   for (const scenario of ["profile", "generation"] as const) {
-    const dir = mkdtempSync(join(tmpdir(), `pi-telegram-display-${scenario}-`));
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-    const registry = createTelegramBusFollowerRegistry();
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/follower")!,
+    const dir = mkdtempSync(join(tmpdir(), `pi-bale-display-${scenario}-`));
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+    const registry = createBaleBusFollowerRegistry();
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/follower")!,
       target: { chatId: 7, threadId: 42 }, slot: "B", threadName: "Beacon", updatedAtMs: 1 });
-    const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "test",
-      capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
+    const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "test",
+      capabilities: [...TEST_BUS_PROTOCOL_IDENTITY.capabilities, BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE] });
     registry.register({ instanceId: "follower", target: { chatId: 7, threadId: 42 },
       registrationGeneration: "follower:1", connectedAtMs: 1, protocol,
       threadName: "Beacon", slot: "B" });
     let profile = "work";
-    let mode: TelegramThreadDisplayMode = "names";
+    let mode: BaleThreadDisplayMode = "names";
     let releaseEdit: (() => void) | undefined;
     let announceEdit: (() => void) | undefined;
     const editStarted = new Promise<void>((resolve) => { announceEdit = resolve; });
     const editGate = new Promise<void>((resolve) => { releaseEdit = resolve; });
     let calls = 0;
-    const runtime = createTelegramBusLeaderRuntimeAssembly({
+    const runtime = createBaleBusLeaderRuntimeAssembly({
       runtime: { socketPath: join(dir, "bus.sock"), followerRegistry: registry,
         protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {} },
       instanceId: "leader", getAllowedUserId: () => undefined, getCurrentLeaderEpoch: () => 2,
-      getTelegramProfile: () => profile, getThreadDisplayMode: () => mode,
+      getBaleProfile: () => profile, getThreadDisplayMode: () => mode,
       async persistThreadDisplayMode(nextMode) { mode = nextMode; }, topicTargetStore: store,
       async callApi<TResponse>() {
         calls++;
@@ -6259,9 +6259,9 @@ test("Leader display application fences late profile and follower-generation cha
 });
 
 test("Bus leader runtime exposes direct leader-to-follower queue handoff", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-leader-handoff-route-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-leader-handoff-route-"));
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   const recipientSocketPath = join(dir, "recipient.sock");
   registry.register({
     instanceId: "recipient",
@@ -6272,14 +6272,14 @@ test("Bus leader runtime exposes direct leader-to-follower queue handoff", async
     protocol: TEST_BUS_PROTOCOL_IDENTITY,
     connectedAtMs: 1,
   });
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
     followerRegistry: registry,
     protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
     startPolling: () => undefined,
     stopPolling: () => undefined,
   });
-  const recipientServer = createTelegramBusLocalServer({
+  const recipientServer = createBaleBusLocalServer({
     socketPath: recipientSocketPath,
     handleEnvelope: (envelope) => ({
       kind: "bus.ack",
@@ -6330,8 +6330,8 @@ test("Bus leader runtime exposes direct leader-to-follower queue handoff", async
     });
     const steerOffer = { ...offer, requestId: "handoff:steer", payload: { ...offer.payload, queueLane: "steer" as const } };
     assert.equal((await runtime.routeQueueHandoff(steerOffer) as { ok: boolean }).ok, false);
-    const steerProtocol = createTelegramBusProtocolIdentity({ runtimeBuild: "steer", capabilities: [TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF, TELEGRAM_BUS_CAPABILITY_QUEUE_STEER] });
-    upgraded = createTelegramBusLeaderRuntime({ socketPath: join(dir, "upgraded.sock"), followerRegistry: registry,
+    const steerProtocol = createBaleBusProtocolIdentity({ runtimeBuild: "steer", capabilities: [BALE_BUS_CAPABILITY_QUEUE_HANDOFF, BALE_BUS_CAPABILITY_QUEUE_STEER] });
+    upgraded = createBaleBusLeaderRuntime({ socketPath: join(dir, "upgraded.sock"), followerRegistry: registry,
       protocolIdentity: steerProtocol, startPolling: () => undefined, stopPolling: () => undefined });
     assert.equal((await upgraded.routeQueueHandoff(steerOffer) as { ok: boolean }).ok, false, "Legacy recipient refuses before native IPC");
     registry.register({ ...registry.get("recipient")!, protocol: steerProtocol });
@@ -6346,12 +6346,12 @@ test("Bus leader runtime exposes direct leader-to-follower queue handoff", async
 });
 
 test("Bus leader runtime provisions leader target before polling", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-leader-target-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-leader-target-"));
   const socketPath = join(dir, "bus.sock");
   const events: string[] = [];
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
-    followerRegistry: createTelegramBusFollowerRegistry(),
+    followerRegistry: createBaleBusFollowerRegistry(),
     provisionLeaderTarget: (ctx) => {
       events.push(`leader:${ctx}`);
     },
@@ -6372,16 +6372,16 @@ test("Bus leader runtime provisions leader target before polling", async () => {
 });
 
 test("Bus leader runtime stopped during startup never publishes its follower endpoint", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-stop-during-start-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-stop-during-start-"));
   const socketPath = join(dir, "bus.sock");
   let finishProvisioning!: () => void;
   let provisioningStarted!: () => void;
   const provisioningGate = new Promise<void>((resolve) => { finishProvisioning = resolve; });
   const started = new Promise<void>((resolve) => { provisioningStarted = resolve; });
   let polling = 0;
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
-    followerRegistry: createTelegramBusFollowerRegistry(),
+    followerRegistry: createBaleBusFollowerRegistry(),
     provisionLeaderTarget: async () => {
       provisioningStarted();
       await provisioningGate;
@@ -6397,7 +6397,7 @@ test("Bus leader runtime stopped during startup never publishes its follower end
     finishProvisioning();
     await startup;
     await assert.rejects(() =>
-      sendTelegramBusLocalEnvelope({
+      sendBaleBusLocalEnvelope({
         socketPath,
         timeoutMs: 50,
         envelope: {
@@ -6416,7 +6416,7 @@ test("Bus leader runtime stopped during startup never publishes its follower end
 });
 
 test("Bus leader runtime keeps follower endpoint unpublished during cleanup replay", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-replay-fence-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-replay-fence-"));
   const socketPath = join(dir, "bus.sock");
   let finishProvisioning!: () => void;
   let provisioningStarted!: () => void;
@@ -6426,9 +6426,9 @@ test("Bus leader runtime keeps follower endpoint unpublished during cleanup repl
   const started = new Promise<void>((resolve) => {
     provisioningStarted = resolve;
   });
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
-    followerRegistry: createTelegramBusFollowerRegistry(),
+    followerRegistry: createBaleBusFollowerRegistry(),
     provisionLeaderTarget: async () => {
       provisioningStarted();
       await provisioningGate;
@@ -6440,7 +6440,7 @@ test("Bus leader runtime keeps follower endpoint unpublished during cleanup repl
     const startup = runtime.startPolling("ctx");
     await started;
     const probe = () =>
-      sendTelegramBusLocalEnvelope({
+      sendBaleBusLocalEnvelope({
         socketPath,
         timeoutMs: 50,
         envelope: {
@@ -6465,11 +6465,11 @@ test("Bus leader runtime keeps follower endpoint unpublished during cleanup repl
 });
 
 test("Bus leader runtime starts the local server around polling", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-leader-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-leader-"));
   const socketPath = join(dir, "bus.sock");
   const events: string[] = [];
-  const registry = createTelegramBusFollowerRegistry();
-  const runtime = createTelegramBusLeaderRuntime({
+  const registry = createBaleBusFollowerRegistry();
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
     followerRegistry: registry,
     followerPruneIntervalMs: 10,
@@ -6484,7 +6484,7 @@ test("Bus leader runtime starts the local server around polling", async () => {
     await runtime.startPolling("ctx");
     assert.equal(
       (
-        await sendTelegramBusLocalEnvelope({
+        await sendBaleBusLocalEnvelope({
           socketPath,
           envelope: {
             kind: "follower.register",
@@ -6502,7 +6502,7 @@ test("Bus leader runtime starts the local server around polling", async () => {
     );
     assert.equal(registry.get("inst-a")?.instanceId, "inst-a");
     if (process.platform !== "win32") {
-      const resolvedSocketPath = resolveTelegramBusSocketPath(socketPath);
+      const resolvedSocketPath = resolveBaleBusSocketPath(socketPath);
       unlinkSync(resolvedSocketPath);
       await waitForCondition(() => existsSync(resolvedSocketPath));
     }
@@ -6510,7 +6510,7 @@ test("Bus leader runtime starts the local server around polling", async () => {
     await runtime.stopPolling();
     assert.deepEqual(events, ["poll:start", "poll:stop"]);
     await assert.rejects(
-      sendTelegramBusLocalEnvelope({
+      sendBaleBusLocalEnvelope({
         socketPath,
         envelope: {
           kind: "follower.heartbeat",
@@ -6528,12 +6528,12 @@ test("Bus leader runtime starts the local server around polling", async () => {
 });
 
 test("Bus leader runtime tolerates transient follower heartbeat stalls by default", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-prune-grace-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-prune-grace-"));
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
-  let nowMs = TELEGRAM_BUS_FOLLOWER_STALE_AFTER_MS - 1;
+  const registry = createBaleBusFollowerRegistry();
+  let nowMs = BALE_BUS_FOLLOWER_STALE_AFTER_MS - 1;
   registry.register({ instanceId: "delayed", connectedAtMs: 0 });
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
     followerRegistry: registry,
     getNowMs: () => nowMs,
@@ -6545,7 +6545,7 @@ test("Bus leader runtime tolerates transient follower heartbeat stalls by defaul
     await runtime.startPolling("ctx");
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(registry.get("delayed")?.instanceId, "delayed");
-    nowMs = TELEGRAM_BUS_FOLLOWER_STALE_AFTER_MS + 1;
+    nowMs = BALE_BUS_FOLLOWER_STALE_AFTER_MS + 1;
     await waitForCondition(() => registry.get("delayed") === undefined);
   } finally {
     await runtime.stopPolling();
@@ -6554,16 +6554,16 @@ test("Bus leader runtime tolerates transient follower heartbeat stalls by defaul
 });
 
 test("Bus leader runtime prunes stale followers while polling", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-prune-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-prune-"));
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   const runtimeEvents: string[] = [];
   let nowMs = 1000;
   registry.register({ instanceId: "fresh", connectedAtMs: 950 });
   registry.register({ instanceId: "stale", connectedAtMs: 0 });
   registry.heartbeat("fresh", 950);
   registry.heartbeat("stale", 0);
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
     followerRegistry: registry,
     getNowMs: () => nowMs,
@@ -6583,7 +6583,7 @@ test("Bus leader runtime prunes stale followers while polling", async () => {
     assert.equal(registry.get("fresh")?.instanceId, "fresh");
     assert.equal(
       runtimeEvents.includes(
-        "bus:follower-pruned:stale:Telegram bus follower heartbeat stale; preserving thread binding",
+        "bus:follower-pruned:stale:Bale bus follower heartbeat stale; preserving thread binding",
       ),
       true,
     );
@@ -6594,9 +6594,9 @@ test("Bus leader runtime prunes stale followers while polling", async () => {
 });
 
 test("Bus leader owns one generation-fenced follower prune", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-prune-gate-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-prune-gate-"));
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "dead",
     connectedAtMs: 0,
@@ -6609,7 +6609,7 @@ test("Bus leader owns one generation-fenced follower prune", async () => {
     releasePolicy = resolve;
   });
   const cleaned: string[] = [];
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
     followerRegistry: registry,
     getNowMs: () => 1000,
@@ -6646,9 +6646,9 @@ test("Bus leader owns one generation-fenced follower prune", async () => {
 test("Pruned follower observation retries delayed death and failed preservation without restoring routing", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   for (const initial of ["alive", "unknown", "dead"] as const) {
-    const dir = mkdtempSync(join(tmpdir(), "pi-telegram-delayed-preserve-"));
+    const dir = mkdtempSync(join(tmpdir(), "pi-bale-delayed-preserve-"));
     const socketPath = join(dir, "bus.sock");
-    const registry = createTelegramBusFollowerRegistry();
+    const registry = createBaleBusFollowerRegistry();
     registry.register({ instanceId: "old", profileKey: "owner", pid: 42,
       target: { chatId: 7, threadId: 11 }, connectedAtMs: 0, registrationGeneration: "old:1" });
     let liveness: "alive" | "unknown" | "dead" = initial;
@@ -6657,7 +6657,7 @@ test("Pruned follower observation retries delayed death and failed preservation 
     let completed = 0;
     let failures = 0;
     let deletes = 0;
-    const runtime = createTelegramBusLeaderRuntime({
+    const runtime = createBaleBusLeaderRuntime({
       socketPath, followerRegistry: registry, getNowMs: () => 1000,
       followerStaleAfterMs: 100, getCurrentLeaderEpoch: () => 1,
       isFollowerProcessAlive(pid) {
@@ -6686,7 +6686,7 @@ test("Pruned follower observation retries delayed death and failed preservation 
       await waitForCondition(() => probes > 0);
       await new Promise((resolve) => setImmediate(resolve));
       assert.deepEqual(registry.list(), []);
-      const ack = await sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+      const ack = await sendBaleBusLocalEnvelope({ socketPath, envelope: {
         kind: "follower.heartbeat", requestId: "old:heartbeat", instanceId: "old",
         registrationGeneration: "old:1", sentAtMs: 1000,
       } });
@@ -6716,9 +6716,9 @@ test("Pruned follower observation retries delayed death and failed preservation 
 test("Deferred preservation recovers native publication and admission prefixes without duplicate inactivity or leases", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   for (const failure of ["write", "commit-ack", "admission-ack", "policy", "fenced", "revived"] as const) {
-    const dir = mkdtempSync(join(tmpdir(), "pi-telegram-preserve-prefix-"));
+    const dir = mkdtempSync(join(tmpdir(), "pi-bale-preserve-prefix-"));
     const path = join(dir, "state.json");
-    const registry = createTelegramBusFollowerRegistry();
+    const registry = createBaleBusFollowerRegistry();
     const follower = { instanceId: "old", profileKey: "manual:owner", pid: 42,
       target: { chatId: 7, threadId: 11 }, slot: "A", connectedAtMs: 0, registrationGeneration: "old:1" };
     registry.register(follower);
@@ -6731,10 +6731,10 @@ test("Deferred preservation recovers native publication and admission prefixes w
     let preserved = 0;
     let writes = 0;
     let apiCalls = 0;
-    const admission = createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
+    const admission = createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
       profileKey: "default", owner: { processId: process.pid, processBirthId: `${process.pid}:prefix` },
       getProcessLiveness: () => "alive" });
-    const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => ({
+    const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => ({
       ...admission,
       acquireAdmission(input) {
         const result = admission.acquireAdmission(input);
@@ -6745,7 +6745,7 @@ test("Deferred preservation recovers native publication and admission prefixes w
         return result;
       },
     }) });
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => now,
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => now,
       commitPersist(commit) {
         if (!armed) { commit(); return true; }
         writes++;
@@ -6762,9 +6762,9 @@ test("Deferred preservation recovers native publication and admission prefixes w
     });
     store.upsert({ profileKey: follower.profileKey, instanceId: follower.instanceId,
       target: follower.target, slot: "A", status: "active", createdAtMs: 1, updatedAtMs: 1 });
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/old")!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/old")!,
       target: follower.target, slot: "A", updatedAtMs: 1 });
-    const runtime = createTelegramBusLeaderRuntimeAssembly({
+    const runtime = createBaleBusLeaderRuntimeAssembly({
       runtime: { socketPath: join(dir, "bus.sock"), followerRegistry: registry,
         protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
         startPolling() {}, stopPolling() {}, getNowMs: () => now, followerStaleAfterMs: 100,
@@ -6774,7 +6774,7 @@ test("Deferred preservation recovers native publication and admission prefixes w
           return false;
         } },
       instanceId: "leader", getAllowedUserId: () => undefined, topicTargetStore: store,
-      getCurrentLeaderEpoch: () => 1, getTelegramProfile: () => "default",
+      getCurrentLeaderEpoch: () => 1, getBaleProfile: () => "default",
       runWorkspaceOperation: operations.run,
       async callApi<TResponse>() { apiCalls++; return true as TResponse; },
       callMultipart: async () => true, downloadFile: async () => undefined,
@@ -6801,7 +6801,7 @@ test("Deferred preservation recovers native publication and admission prefixes w
       now = 2000;
       t.mock.timers.tick(1000);
       await waitForCondition(() => failure === "revived" ? preserved === 1 : failures === 1, 2000);
-      const disk = createTelegramTopicTargetStore({ path });
+      const disk = createBaleTopicTargetStore({ path });
       await disk.load();
       assert.equal(disk.list().length, failure === "commit-ack" ? 0 : 1);
       assert.equal(disk.listWorkspaceBindings()[0]?.inactiveSinceMs, failure === "commit-ack" ? 2000 : undefined);
@@ -6830,8 +6830,8 @@ test("Deferred preservation recovers native publication and admission prefixes w
 test("Deferred preservation drops obsolete scopes and never upgrades observations into deletion", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   for (const change of ["instance", "profile-key", "target", "epoch", "profile", "stop", "cleanup-enabled", "cleanup-failure", "missing-generation", "invalid-pid"] as const) {
-    const dir = mkdtempSync(join(tmpdir(), "pi-telegram-preserve-scope-"));
-    const registry = createTelegramBusFollowerRegistry();
+    const dir = mkdtempSync(join(tmpdir(), "pi-bale-preserve-scope-"));
+    const registry = createBaleBusFollowerRegistry();
     const old = { instanceId: "old", profileKey: "owner", target: { chatId: 7, threadId: 11 },
       connectedAtMs: 0, pid: change === "invalid-pid" ? 0 : 42,
       registrationGeneration: change === "missing-generation" ? undefined : "old:1" };
@@ -6843,9 +6843,9 @@ test("Deferred preservation drops obsolete scopes and never upgrades observation
     let ticks = 0;
     let preserved = 0;
     let deletes = 0;
-    const runtime = createTelegramBusLeaderRuntime({
+    const runtime = createBaleBusLeaderRuntime({
       socketPath: join(dir, "bus.sock"), followerRegistry: registry,
-      getCurrentLeaderEpoch: () => epoch, getTelegramProfile: () => profile,
+      getCurrentLeaderEpoch: () => epoch, getBaleProfile: () => profile,
       getNowMs() { ticks++; return 1000; }, followerStaleAfterMs: 100,
       isFollowerProcessAlive: () => alive, shouldCleanupConfirmedDeadFollower: () => cleanup,
       onFollowerConfirmedDead() { deletes++; throw new Error("delete outcome unknown"); },
@@ -6892,8 +6892,8 @@ test("Deferred preservation drops obsolete scopes and never upgrades observation
 
 test("Late old preservation failure cannot erase a replacement runtime's retained observation", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-preserve-restart-"));
-  const registry = createTelegramBusFollowerRegistry();
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-preserve-restart-"));
+  const registry = createBaleBusFollowerRegistry();
   const old = { instanceId: "same", profileKey: "owner", target: { chatId: 7, threadId: 11 },
     connectedAtMs: 0, pid: 42, registrationGeneration: "g1" };
   registry.register(old);
@@ -6904,7 +6904,7 @@ test("Late old preservation failure cannot erase a replacement runtime's retaine
   let newAlive = true;
   let newProbes = 0;
   let completed = 0;
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath: join(dir, "bus.sock"), followerRegistry: registry,
     getCurrentLeaderEpoch: () => 1, getNowMs: () => 1000, followerStaleAfterMs: 100,
     isFollowerProcessAlive(pid) { if (pid === 42) return false; newProbes++; return newAlive; },
@@ -6948,9 +6948,9 @@ test("Late old preservation failure cannot erase a replacement runtime's retaine
 
 test("Admitted replacement provisioning cancels an old observation before live registration", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-preserve-provision-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-preserve-provision-"));
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({ instanceId: "same", profileKey: "old-owner", pid: 42, connectedAtMs: 0,
     target: { chatId: 7, threadId: 11 }, slot: "A", registrationGeneration: "g1" });
   let alive = true;
@@ -6959,7 +6959,7 @@ test("Admitted replacement provisioning cancels an old observation before live r
   let preserved = 0;
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => { release = resolve; });
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath, followerRegistry: registry, getCurrentLeaderEpoch: () => 1,
     getNowMs() { ticks++; return 1000; }, followerStaleAfterMs: 100,
     isFollowerProcessAlive: () => alive, shouldCleanupConfirmedDeadFollower: () => false,
@@ -6971,13 +6971,13 @@ test("Admitted replacement provisioning cancels an old observation before live r
     },
     startPolling() {}, stopPolling() {},
   });
-  let registration: ReturnType<typeof sendTelegramBusLocalEnvelope> | undefined;
+  let registration: ReturnType<typeof sendBaleBusLocalEnvelope> | undefined;
   try {
     await runtime.startPolling("ctx");
     t.mock.timers.tick(1000);
     await waitForCondition(() => registry.list().length === 0);
     await new Promise((resolve) => setImmediate(resolve));
-    registration = sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+    registration = sendBaleBusLocalEnvelope({ socketPath, envelope: {
       kind: "follower.register", requestId: "new:1", registration: {
         instanceId: "same", profileKey: "new-owner", pid: 43, connectedAtMs: 1000,
         target: { chatId: 7, threadId: 11 }, slot: "A", registrationGeneration: "g2", protocol: TEST_BUS_PROTOCOL_IDENTITY,
@@ -7003,8 +7003,8 @@ test("Admitted replacement provisioning cancels an old observation before live r
 
 test("Preservation observation capacity is bounded by A-Z and overflow stays non-destructive", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-preserve-capacity-"));
-  const registry = createTelegramBusFollowerRegistry();
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-preserve-capacity-"));
+  const registry = createBaleBusFollowerRegistry();
   for (let index = 0; index < 27; index++) registry.register({
     instanceId: `f${index}`, profileKey: `owner${index}`, pid: 4000 + index,
     target: { chatId: 7, threadId: 100 + index }, connectedAtMs: 0, registrationGeneration: `g${index}`,
@@ -7013,7 +7013,7 @@ test("Preservation observation capacity is bounded by A-Z and overflow stays non
   let probes = 0;
   let overflow = 0;
   const preserved: string[] = [];
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath: join(dir, "bus.sock"), followerRegistry: registry,
     getCurrentLeaderEpoch: () => 1, getNowMs: () => 1000, followerStaleAfterMs: 100,
     isFollowerProcessAlive() { probes++; return alive; },
@@ -7042,18 +7042,18 @@ test("Preservation observation capacity is bounded by A-Z and overflow stays non
 });
 
 test("Preserved dead followers become inactive durably and rotate only under protected capacity pressure", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-preserved-pressure-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-preserved-pressure-"));
   const path = join(dir, "state.json");
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
-  const admission = createTelegramWorkspaceAdmissionLedger({
+  const registry = createBaleBusFollowerRegistry();
+  const admission = createBaleWorkspaceAdmissionLedger({
     path: join(dir, "admission.json"), profileKey: "default",
     owner: { processId: process.pid, processBirthId: `${process.pid}:preserved` },
     getProcessLiveness: () => "alive",
   });
-  const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
+  const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
   let verifyDetachment = false;
-  const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000,
+  const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000,
     getExternalReservedSlots: admission.listReservedSlots,
     commitPersist(commit) {
       if (verifyDetachment) assert.ok(admission.read().leases.some((lease) =>
@@ -7072,13 +7072,13 @@ test("Preserved dead followers become inactive durably and rotate only under pro
     store.upsert({ profileKey, instanceId, target, slot,
       status: "active", createdAtMs: 1, updatedAtMs: 1 });
     store.upsertWorkspaceBinding({
-      ...createTelegramWorkspaceBindingIdentity(`/old/${String(index).padStart(2, "0")}`, 0, "old-session")!,
+      ...createBaleWorkspaceBindingIdentity(`/old/${String(index).padStart(2, "0")}`, 0, "old-session")!,
       target, slot, updatedAtMs: 1, journalBindingKeys: [], journalBindingsComplete: true,
     });
   }
   const accepted = [{ update: { update_id: 1,
     message: { chat: { id: 7 }, message_thread_id: 100 } } }];
-  const capture = createTelegramWorkspaceExternalProtectionCapture({
+  const capture = createBaleWorkspaceExternalProtectionCapture({
     listFollowers: registry.list, getActiveTurnTarget: () => undefined, getQueuedItems: () => [],
     resolveLeaderJournal: () => ({ journal: { read: () => ({ entries: accepted }) } }),
     createFollowerJournalResolver: () => () => ({ journal: { read: () => ({ entries: [] }) } }),
@@ -7087,7 +7087,7 @@ test("Preserved dead followers become inactive durably and rotate only under pro
   let allowedUserId: number | undefined;
   const effects: string[] = [];
   const errors: unknown[] = [];
-  const runtime = createTelegramBusLeaderRuntimeAssembly({
+  const runtime = createBaleBusLeaderRuntimeAssembly({
     runtime: { socketPath, followerRegistry: registry, protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY,
       startPolling() {}, stopPolling() {}, getNowMs: () => 1000,
       followerPruneIntervalMs: 5, followerStaleAfterMs: 100,
@@ -7113,15 +7113,15 @@ test("Preserved dead followers become inactive durably and rotate only under pro
     verifyDetachment = true;
     await waitForCondition(() => store.list().length === 0, 5000);
     verifyDetachment = false;
-    assert.equal(effects.length, 0, "preservation must issue no Telegram requests");
-    const restored = createTelegramTopicTargetStore({ path });
+    assert.equal(effects.length, 0, "preservation must issue no Bale requests");
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.equal(restored.listWorkspaceBindings().length, 26);
     assert.ok(restored.listWorkspaceBindings().every((binding) => binding.inactiveSinceMs === 1000));
     assert.deepEqual(restored.listSyncObservations(), []);
     assert.equal(capture(restored.listWorkspaceBindings()[0]!).acceptedWork, "protected");
     allowedUserId = 7;
-    const registration = await sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+    const registration = await sendBaleBusLocalEnvelope({ socketPath, envelope: {
       kind: "follower.register", requestId: "fresh:1", registration: {
         instanceId: "fresh", cwd: "/fresh", sessionId: "fresh-session", connectedAtMs: 1000,
         registrationGeneration: "fresh:1", protocol: TEST_BUS_PROTOCOL_IDENTITY,
@@ -7131,7 +7131,7 @@ test("Preserved dead followers become inactive durably and rotate only under pro
     assert.equal(store.getWorkspaceBinding("/fresh", "a", "fresh-session")?.slot, "B");
     assert.ok(store.getWorkspaceBinding("/old/00", "a", "old-session"), "accepted work still protects A");
     assert.deepEqual(effects.filter((effect) => effect.startsWith("delete:")), ["delete:101"]);
-    const reopen = await sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+    const reopen = await sendBaleBusLocalEnvelope({ socketPath, envelope: {
       kind: "follower.restoreWorkspace", requestId: "restore:1", registration: {
         instanceId: "reopen", cwd: "/old/02", sessionId: "old-session", connectedAtMs: 1000,
         registrationGeneration: "reopen:1", protocol: TEST_BUS_PROTOCOL_IDENTITY,
@@ -7154,9 +7154,9 @@ test("Preserved dead followers become inactive durably and rotate only under pro
 
 test("Preserved follower detachment rechecks external authority at commit and respects retirement admission", async () => {
   for (const race of ["replacement", "epoch", "profile", "revived", "stopped", "fenced"] as const) {
-    const dir = mkdtempSync(join(tmpdir(), "pi-telegram-preserved-fence-"));
+    const dir = mkdtempSync(join(tmpdir(), "pi-bale-preserved-fence-"));
     const path = join(dir, "state.json");
-    const registry = createTelegramBusFollowerRegistry();
+    const registry = createBaleBusFollowerRegistry();
     const follower = { instanceId: "old", profileKey: "manual:owner", pid: 42,
       target: { chatId: 7, threadId: 11 }, connectedAtMs: 0, registrationGeneration: "old:1" };
     registry.register(follower);
@@ -7166,10 +7166,10 @@ test("Preserved follower detachment rechecks external authority at commit and re
     let armed = false;
     let loads = 0;
     let stopped: Promise<void> | undefined;
-    const admission = createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
+    const admission = createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
       profileKey: "default", owner: { processId: process.pid, processBirthId: `${process.pid}:detachment` },
       getProcessLiveness: () => "alive" });
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000,
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000,
       commitPersist(commit) {
         if (armed) {
           if (race === "replacement") registry.register({ ...follower, instanceId: "new", registrationGeneration: "new:1" });
@@ -7186,18 +7186,18 @@ test("Preserved follower detachment rechecks external authority at commit and re
     store.load = async () => { if (armed) loads++; await load(); };
     store.upsert({ profileKey: follower.profileKey, instanceId: follower.instanceId,
       target: follower.target, status: "active", slot: "A", createdAtMs: 1, updatedAtMs: 1 });
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/old")!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/old")!,
       target: follower.target, slot: "A", updatedAtMs: 1 });
     const events: string[] = [];
     let apiCalls = 0;
-    const runtime = createTelegramBusLeaderRuntimeAssembly({
+    const runtime = createBaleBusLeaderRuntimeAssembly({
       runtime: { socketPath: join(dir, "bus.sock"), followerRegistry: registry,
         protocolIdentity: TEST_BUS_PROTOCOL_IDENTITY, startPolling() {}, stopPolling() {},
         getNowMs: () => 1000, followerPruneIntervalMs: 5, followerStaleAfterMs: 100,
         isFollowerProcessAlive: () => alive, shouldCleanupConfirmedDeadFollower: () => false },
       instanceId: "leader", getAllowedUserId: () => undefined, topicTargetStore: store,
       getWorkspaceAdmission: () => admission,
-      getCurrentLeaderEpoch: () => epoch, getTelegramProfile: () => profile,
+      getCurrentLeaderEpoch: () => epoch, getBaleProfile: () => profile,
       async callApi<TResponse>() { apiCalls++; return true as TResponse; },
       callMultipart: async () => true, downloadFile: async () => undefined,
       getSyncState: () => ({}), setSyncState() {}, setLeaderTarget() {},
@@ -7216,7 +7216,7 @@ test("Preserved follower detachment rechecks external authority at commit and re
       await stopped;
       assert.equal(store.list()[0]?.instanceId, "old", race);
       assert.equal(store.getWorkspaceBinding("/old")?.inactiveSinceMs, undefined, race);
-      const disk = createTelegramTopicTargetStore({ path });
+      const disk = createBaleTopicTargetStore({ path });
       await disk.load();
       assert.equal(disk.list()[0]?.instanceId, "old", race);
       assert.equal(disk.getWorkspaceBinding("/old")?.inactiveSinceMs, undefined, race);
@@ -7231,9 +7231,9 @@ test("Preserved follower detachment rechecks external authority at commit and re
 });
 
 test("Bus leader cleans up a stale follower only after its process is confirmed dead and cleanup is enabled", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-dead-cleanup-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-dead-cleanup-"));
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "dead",
     connectedAtMs: 0,
@@ -7242,7 +7242,7 @@ test("Bus leader cleans up a stale follower only after its process is confirmed 
     target: { chatId: 7, threadId: 11 },
   });
   const cleaned: string[] = [];
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
     followerRegistry: registry,
     getNowMs: () => 1000,
@@ -7269,9 +7269,9 @@ test("Bus leader cleans up a stale follower only after its process is confirmed 
 });
 
 test("Bus leader serializes confirmed-dead cleanup before replacement registration", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-dead-race-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-dead-race-"));
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "old",
     profileKey: "manual:owner-a",
@@ -7287,7 +7287,7 @@ test("Bus leader serializes confirmed-dead cleanup before replacement registrati
     markCleanupStarted = resolve;
   });
   let provisionStarted = false;
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
     followerRegistry: registry,
     getNowMs: () => 1000,
@@ -7311,7 +7311,7 @@ test("Bus leader serializes confirmed-dead cleanup before replacement registrati
   try {
     await runtime.startPolling("ctx");
     await cleanupStarted;
-    const replacement = sendTelegramBusLocalEnvelope({
+    const replacement = sendBaleBusLocalEnvelope({
       socketPath,
       envelope: {
         kind: "follower.register",
@@ -7344,9 +7344,9 @@ test("Bus leader serializes confirmed-dead cleanup before replacement registrati
 });
 
 test("Bus leader preserves stale follower threads without both confirmed death and enabled cleanup", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-dead-preserve-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-dead-preserve-"));
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({ instanceId: "alive", connectedAtMs: 0, pid: 1 });
   registry.register({ instanceId: "dead-disabled", connectedAtMs: 0, pid: 2,
     registrationGeneration: "dead-disabled:1", target: { chatId: 7, threadId: 11 } });
@@ -7356,7 +7356,7 @@ test("Bus leader preserves stale follower threads without both confirmed death a
   const cleaned: string[] = [];
   const detached: string[] = [];
   const runtimeEvents: string[] = [];
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
     followerRegistry: registry,
     getNowMs: () => 1000,
@@ -7400,12 +7400,12 @@ test("Bus leader preserves stale follower threads without both confirmed death a
 });
 
 test("Bus leader runtime stops stale follower pruning and clears registry on stop", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-prune-stop-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-prune-stop-"));
   const socketPath = join(dir, "bus.sock");
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   let nowMs = 1000;
   registry.register({ instanceId: "stale", connectedAtMs: 0 });
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
     followerRegistry: registry,
     getNowMs: () => nowMs,
@@ -7427,11 +7427,11 @@ test("Bus leader runtime stops stale follower pruning and clears registry on sto
 });
 
 test("Bus leader runtime stops the local server if polling startup fails", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-leader-fail-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-leader-fail-"));
   const socketPath = join(dir, "bus.sock");
-  const runtime = createTelegramBusLeaderRuntime({
+  const runtime = createBaleBusLeaderRuntime({
     socketPath,
-    followerRegistry: createTelegramBusFollowerRegistry(),
+    followerRegistry: createBaleBusFollowerRegistry(),
     startPolling: () => {
       throw new Error("poll failed");
     },
@@ -7440,7 +7440,7 @@ test("Bus leader runtime stops the local server if polling startup fails", async
   try {
     await assert.rejects(runtime.startPolling("ctx"), /poll failed/);
     await assert.rejects(
-      sendTelegramBusLocalEnvelope({
+      sendBaleBusLocalEnvelope({
         socketPath,
         envelope: {
           kind: "follower.heartbeat",
@@ -7458,29 +7458,29 @@ test("Bus leader runtime stops the local server if polling startup fails", async
 });
 
 test("Leader publishes and claims follower session replacement only for exact live authority", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-follower-session-replacement-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-follower-session-replacement-"));
   const path = join(dir, "state.json");
   const target = { chatId: 7, threadId: 42 };
-  const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "test",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT] });
-  const legacyProtocol = createTelegramBusProtocolIdentity({ runtimeBuild: "test" });
+  const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "test",
+    capabilities: [BALE_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT] });
+  const legacyProtocol = createBaleBusProtocolIdentity({ runtimeBuild: "test" });
   try {
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
     store.upsertWorkspaceBinding({
-      ...createTelegramWorkspaceBindingIdentity("/follower", 0, "session-old")!,
+      ...createBaleWorkspaceBindingIdentity("/follower", 0, "session-old")!,
       target, slot: "B", threadName: "Beacon", updatedAtMs: 1,
     });
     await store.persist();
-    const registry = createTelegramBusFollowerRegistry();
+    const registry = createBaleBusFollowerRegistry();
     const source = { instanceId: "follower", cwd: "/follower", sessionId: "session-old",
       target, slot: "B", threadName: "Beacon", registrationGeneration: "follower:1",
       protocol, connectedAtMs: 1 };
     registry.register(source);
     let epoch: number | undefined = 1;
-    const authority = createTelegramBusFollowerSessionReplacementAuthority({
+    const authority = createBaleBusFollowerSessionReplacementAuthority({
       store, getNowMs: () => 1000,
     });
-    const handler = createTelegramBusLeaderEnvelopeHandler({
+    const handler = createBaleBusLeaderEnvelopeHandler({
       followerRegistry: registry,
       protocolIdentity: protocol,
       getNowMs: () => 1000,
@@ -7505,7 +7505,7 @@ test("Leader publishes and claims follower session replacement only for exact li
       return response as Extract<typeof response, { kind: "bus.ack" }>;
     };
     const persisted = async () => {
-      const reopened = createTelegramTopicTargetStore({ path });
+      const reopened = createBaleTopicTargetStore({ path });
       await reopened.load();
       return reopened.getSessionReplacementIntent();
     };

@@ -1,7 +1,7 @@
 /**
- * Generative application kernel and Telegram installation adapter
+ * Generative application kernel and Bale installation adapter
  * Zones: generative application state, isolated methods, pi agent tools
- * Owns Generative App identity, installation, invocation, state history, and telegram_bind
+ * Owns Generative App identity, installation, invocation, state history, and bale_bind
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -22,7 +22,7 @@ import { Worker } from "node:worker_threads";
 import { Type } from "@sinclair/typebox";
 
 import type { ExtensionAPI } from "./pi.ts";
-import { renameTelegramPathWithRetry } from "./locks.ts";
+import { renameBalePathWithRetry } from "./locks.ts";
 import { isProcessAlive } from "./process-identity.ts";
 
 const GENERATIVE_APP_NAME = /^[a-z][a-z0-9-]{0,31}$/u;
@@ -140,18 +140,18 @@ export interface GenerativeAppLiveSurfaceRuntimeDeps<THandle> {
   clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
 }
 
-export interface TelegramBindDeliveryHandle {
+export interface BaleBindDeliveryHandle {
   readonly target: { chatId: number; threadId?: number };
   readonly messageIds: readonly number[];
   readonly generation: string;
 }
 
-export interface TelegramBindLiveHandle {
-  delivery: TelegramBindDeliveryHandle;
+export interface BaleBindLiveHandle {
+  delivery: BaleBindDeliveryHandle;
   view?: { text: string; parseMode: "markdown"; replyMarkup?: unknown };
 }
 
-export function getTelegramBindLiveSurfaceKey(
+export function getBaleBindLiveSurfaceKey(
   app: string,
   profile: string,
   target: { chatId: number; threadId?: number },
@@ -159,20 +159,20 @@ export function getTelegramBindLiveSurfaceKey(
   return `${app}/${profile}/${target.chatId}/${target.threadId ?? 0}`;
 }
 
-export interface TelegramBindToolRegistrationDeps extends GenerativeAppRuntimeOptions {
+export interface BaleBindToolRegistrationDeps extends GenerativeAppRuntimeOptions {
   getActiveProfileName?: () => string | undefined;
   liveSurfaceSetTimer?: GenerativeAppLiveSurfaceRuntimeDeps<unknown>["setTimer"];
   liveSurfaceClearTimer?: GenerativeAppLiveSurfaceRuntimeDeps<unknown>["clearTimer"];
   setLiveSurfaceRuntime?: (
     runtime:
-      GenerativeAppLiveSurfaceRuntime<TelegramBindLiveHandle> | undefined,
+      GenerativeAppLiveSurfaceRuntime<BaleBindLiveHandle> | undefined,
   ) => void;
-  isDeliveryHandleCurrent?: (handle: TelegramBindDeliveryHandle) => boolean;
+  isDeliveryHandleCurrent?: (handle: BaleBindDeliveryHandle) => boolean;
   editView?: (
-    handle: TelegramBindDeliveryHandle,
+    handle: BaleBindDeliveryHandle,
     view: { text: string; parseMode: "markdown"; replyMarkup?: unknown },
   ) => Promise<
-    | { ok: true; value: TelegramBindDeliveryHandle }
+    | { ok: true; value: BaleBindDeliveryHandle }
     | { ok: false; reason: string; message: string; retryAfterMs?: number }
   >;
   getActiveTurn?: () =>
@@ -199,7 +199,7 @@ export interface TelegramBindToolRegistrationDeps extends GenerativeAppRuntimeOp
     view: { text: string; parseMode: "markdown"; replyMarkup?: unknown },
     options: { scope: { kind: "active-turn" }; replyToMessageId: number },
   ) => Promise<
-    | { ok: true; value: TelegramBindDeliveryHandle }
+    | { ok: true; value: BaleBindDeliveryHandle }
     | { ok: false; reason?: string; message: string }
   >;
   recordRuntimeEvent?: (
@@ -312,7 +312,7 @@ async function writeFileAtomic(path: string, content: string): Promise<void> {
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, content, { encoding: "utf8", mode: 0o600 });
   // Windows may briefly deny replacing a file another reader or scanner holds; share the bounded retry.
-  if (!renameTelegramPathWithRetry(temporary, path))
+  if (!renameBalePathWithRetry(temporary, path))
     throw new Error(
       "Generative App staging file disappeared before publication.",
     );
@@ -979,10 +979,10 @@ export async function bindGenerativeApp(
   const hasScript = typeof options.script === "string";
   const hasMethod = typeof options.method === "string";
   if (hasScript === hasMethod) {
-    throw new Error("telegram_bind requires exactly one of script or method.");
+    throw new Error("bale_bind requires exactly one of script or method.");
   }
   if (!hasScript && options.replace !== undefined) {
-    throw new Error("telegram_bind replace is valid only with script.");
+    throw new Error("bale_bind replace is valid only with script.");
   }
   return hasScript
     ? await installGenerativeApp({
@@ -1173,7 +1173,7 @@ export function formatGenerativeAppToolOutput(output: string): string {
 }
 
 export function formatDisplayedGenerativeAppToolOutput(): string {
-  return "\nGenerative App output was delivered directly to the active Telegram turn. Do not repeat, reformat, summarize, or quote it in the assistant reply.";
+  return "\nGenerative App output was delivered directly to the active Bale turn. Do not repeat, reformat, summarize, or quote it in the assistant reply.";
 }
 
 export function formatGenerativeAppToolError(error: unknown): Error {
@@ -1186,14 +1186,14 @@ export function formatGenerativeAppToolError(error: unknown): Error {
 // Provider tool APIs reject recursive $ref schemas (OpenAI) and raw TypeBox
 // optional markers on non-builder objects (Gemini), while llama-server rejects
 // unconstrained subschemas; one bounded builder-made JSON-value union satisfies all.
-const TELEGRAM_BIND_JSON_ARGUMENT_MAX_DEPTH = 4;
+const BALE_BIND_JSON_ARGUMENT_MAX_DEPTH = 4;
 
-function createTelegramBindJsonArgumentSchema(
+function createBaleBindJsonArgumentSchema(
   depth: number,
 ): ReturnType<typeof Type.Union> {
   const scalars = [Type.Null(), Type.Boolean(), Type.Number(), Type.String()];
   if (depth <= 0) return Type.Union(scalars);
-  const nested = createTelegramBindJsonArgumentSchema(depth - 1);
+  const nested = createBaleBindJsonArgumentSchema(depth - 1);
   return Type.Union([
     ...scalars,
     Type.Array(nested),
@@ -1201,14 +1201,14 @@ function createTelegramBindJsonArgumentSchema(
   ]);
 }
 
-export function registerTelegramBindTool(
+export function registerBaleBindTool(
   pi: ExtensionAPI,
-  deps: TelegramBindToolRegistrationDeps,
+  deps: BaleBindToolRegistrationDeps,
 ): void {
   const planFrame = (
     result: GenerativeAppInvocationResult,
-    handle: TelegramBindLiveHandle,
-  ): GenerativeAppLiveSurfaceFrame<TelegramBindLiveHandle> => {
+    handle: BaleBindLiveHandle,
+  ): GenerativeAppLiveSurfaceFrame<BaleBindLiveHandle> => {
     const planned = deps.planOutput!(result.output, {
       binding: {
         generation: result.generation,
@@ -1230,7 +1230,7 @@ export function registerTelegramBindTool(
   };
   const liveSurfaces =
     deps.planOutput && deps.editView && deps.isDeliveryHandleCurrent
-      ? createGenerativeAppLiveSurfaceRuntime<TelegramBindLiveHandle>({
+      ? createGenerativeAppLiveSurfaceRuntime<BaleBindLiveHandle>({
           agentDir: deps.agentDir,
           isCurrent: (surface) =>
             deps.isDeliveryHandleCurrent!(surface.handle.delivery),
@@ -1284,18 +1284,18 @@ export function registerTelegramBindTool(
   deps.setLiveSurfaceRuntime?.(liveSurfaces);
   const surfaceKey = (
     app: string,
-    handle: TelegramBindDeliveryHandle,
+    handle: BaleBindDeliveryHandle,
   ): string =>
-    getTelegramBindLiveSurfaceKey(
+    getBaleBindLiveSurfaceKey(
       app,
       deps.getActiveProfileName?.() ?? "default",
       handle.target,
     );
   pi.registerTool({
-    name: "telegram_bind",
-    label: "Telegram Bind",
+    name: "bale_bind",
+    label: "Bale Bind",
     description:
-      "Install, explicitly replace, or invoke one named method on a managed Generative App; successful output displays directly in the active Telegram turn unless display is false.",
+      "Install, explicitly replace, or invoke one named method on a managed Generative App; successful output displays directly in the active Bale turn unless display is false.",
     parameters: Type.Object(
       {
         app: Type.String(),
@@ -1304,8 +1304,8 @@ export function registerTelegramBindTool(
         replace: Type.Optional(Type.Boolean()),
         display: Type.Optional(Type.Boolean()),
         argument: Type.Optional(
-          createTelegramBindJsonArgumentSchema(
-            TELEGRAM_BIND_JSON_ARGUMENT_MAX_DEPTH,
+          createBaleBindJsonArgumentSchema(
+            BALE_BIND_JSON_ARGUMENT_MAX_DEPTH,
           ),
         ),
       },

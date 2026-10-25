@@ -1,5 +1,5 @@
 /**
- * Telegram multi-instance bus protocol and IPC helpers
+ * Bale multi-instance bus protocol and IPC helpers
  * Zones: multi-instance bus, local IPC contract, live instance routing
  * Owns serializable bus envelopes, socket/auth helpers, local IPC client/server primitives,
  * cross-instance forwarding helpers, and the live follower registry model.
@@ -11,16 +11,16 @@ import { createConnection, createServer, } from "node:net";
 import { platform as getPlatform, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { classifyTelegramBusTransportError, createTelegramBusTransportTimeoutError, delayTelegramBusTransportRetry, getTelegramBusEndpointDiagnostics, getTelegramBusFollowerEndpoint, getTelegramBusLeaderEndpoint, getTelegramBusPipePath, getTelegramBusTransportRetryPolicy, isRetryableTelegramBusTransportError, isTelegramBusPipePath, probeTelegramBusEndpoint, TELEGRAM_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES, } from "./bus-transport.js";
-import { isSameTelegramLockOwner, TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS, } from "./locks.js";
+import { classifyBaleBusTransportError, createBaleBusTransportTimeoutError, delayBaleBusTransportRetry, getBaleBusEndpointDiagnostics, getBaleBusFollowerEndpoint, getBaleBusLeaderEndpoint, getBaleBusPipePath, getBaleBusTransportRetryPolicy, isRetryableBaleBusTransportError, isBaleBusPipePath, probeBaleBusEndpoint, BALE_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES, } from "./bus-transport.js";
+import { isSameBaleLockOwner, BALE_BUS_LEADER_STALE_HEARTBEAT_MS, } from "./locks.js";
 import { resolveAgentDir } from "./paths.js";
-import { getTelegramProcessBirthIdentity } from "./process-identity.js";
-import { parseTelegramQueueHandoffPayload, TELEGRAM_QUEUE_HANDOFF_PAYLOAD_MAX_BYTES, } from "./queue.js";
-import { areTelegramTargetsEqual, parseTelegramTarget as parseTarget, } from "./target.js";
-import { normalizeTelegramSessionReplacementIntent, } from "./threads.js";
+import { getBaleProcessBirthIdentity } from "./process-identity.js";
+import { parseBaleQueueHandoffPayload, BALE_QUEUE_HANDOFF_PAYLOAD_MAX_BYTES, } from "./queue.js";
+import { areBaleTargetsEqual, parseBaleTarget as parseTarget, } from "./target.js";
+import { normalizeBaleSessionReplacementIntent, } from "./threads.js";
 import { hasOnlyWireKeys, isWireRecord as isRecord } from "./wire.js";
-export function createCurrentTelegramBusProcessRuntime(input) {
-    return createTelegramBusProcessRuntime({
+export function createCurrentBaleBusProcessRuntime(input) {
+    return createBaleBusProcessRuntime({
         getActiveProfileName: input.getActiveProfileName,
         endpointLayout: input.endpointLayout,
         pid: input.pid ?? process.pid,
@@ -28,64 +28,64 @@ export function createCurrentTelegramBusProcessRuntime(input) {
         createdAtMs: input.createdAtMs ?? Date.now(),
     });
 }
-export function createTelegramBusProcessRuntime(input) {
+export function createBaleBusProcessRuntime(input) {
     const getActiveProfileName = input.getActiveProfileName, endpointLayout = input.endpointLayout;
     const instanceId = `${input.pid}:${input.createdAtMs}`;
     const ownerPid = input.parentPid || input.pid;
     const manualFollowerOwnerId = input.parentProcessIdentity ??
-        getTelegramProcessBirthIdentity(ownerPid, input.createdAtMs);
+        getBaleProcessBirthIdentity(ownerPid, input.createdAtMs);
     return {
         instanceId,
         processId: input.pid,
-        processBirthId: getTelegramProcessBirthIdentity(input.pid, instanceId),
+        processBirthId: getBaleProcessBirthIdentity(input.pid, instanceId),
         manualFollowerOwnerId,
-        getLeaderSocketPath: () => getTelegramBusSocketPath(undefined, undefined, getActiveProfileName(), endpointLayout),
-        getFollowerSocketPath: () => getTelegramBusFollowerSocketPath(instanceId, undefined, undefined, getActiveProfileName(), endpointLayout),
+        getLeaderSocketPath: () => getBaleBusSocketPath(undefined, undefined, getActiveProfileName(), endpointLayout),
+        getFollowerSocketPath: () => getBaleBusFollowerSocketPath(instanceId, undefined, undefined, getActiveProfileName(), endpointLayout),
     };
 }
-export function createTelegramBusAuthSecret() {
+export function createBaleBusAuthSecret() {
     return randomBytes(32).toString("base64url");
 }
 // v3: journal source serialization left the config transaction; mixed v2/v3 peers would not exclude each other.
-const TELEGRAM_BUS_PROTOCOL_VERSION = 3;
-export const TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION = "durable-follower-admission-v1";
-export const TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF = "queue-handoff-v1";
+const BALE_BUS_PROTOCOL_VERSION = 3;
+export const BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION = "durable-follower-admission-v1";
+export const BALE_BUS_CAPABILITY_QUEUE_HANDOFF = "queue-handoff-v1";
 /** Unspent Steer lane codec; independent from baseline receipt handoff support. */
-export const TELEGRAM_BUS_CAPABILITY_QUEUE_STEER = "queue-steer-v1";
-export const TELEGRAM_BUS_CAPABILITY_CONNECT_RECOVERY = "explicit-connect-recovery-v1";
-export const TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE = "input-custody-reference-v1";
-export const TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME = "workspace-thread-rename-v1";
-export const TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE = "thread-display-mode-v1";
-export const TELEGRAM_BUS_CAPABILITY_DIRECTORY_DISPLAY_FORMAT = "directory-display-format-v1";
-export const TELEGRAM_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT = "workspace-follower-auto-connect-v1";
-export const TELEGRAM_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT = "session-replacement-intent-v1";
-export const TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE = "workspace-restore-v1";
+export const BALE_BUS_CAPABILITY_QUEUE_STEER = "queue-steer-v1";
+export const BALE_BUS_CAPABILITY_CONNECT_RECOVERY = "explicit-connect-recovery-v1";
+export const BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE = "input-custody-reference-v1";
+export const BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME = "workspace-thread-rename-v1";
+export const BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE = "thread-display-mode-v1";
+export const BALE_BUS_CAPABILITY_DIRECTORY_DISPLAY_FORMAT = "directory-display-format-v1";
+export const BALE_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT = "workspace-follower-auto-connect-v1";
+export const BALE_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT = "session-replacement-intent-v1";
+export const BALE_BUS_CAPABILITY_WORKSPACE_RESTORE = "workspace-restore-v1";
 /** Shared Workspace readers understand independent pre-dispatch input/cleanup state. */
-export const TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND = "live-rebind-pre-dispatch-reader-v2";
-export const TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION = "live-rebind-pre-dispatch-v1";
-export const TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SAVE = "live-thread-rebind-save-v1";
-export const TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY = "live-thread-rebind-apply-v1";
-export const TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE = "live-thread-rebind-settle-v1";
+export const BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND = "live-rebind-pre-dispatch-reader-v2";
+export const BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION = "live-rebind-pre-dispatch-v1";
+export const BALE_BUS_CAPABILITY_LIVE_REBIND_SAVE = "live-thread-rebind-save-v1";
+export const BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY = "live-thread-rebind-apply-v1";
+export const BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE = "live-thread-rebind-settle-v1";
 /** Restricted recipient text/menu delivery; negotiated identity and captured effect authority remain required. */
-export const TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY = "selected-menu-delivery-v1";
+export const BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY = "selected-menu-delivery-v1";
 /** Versioned held-command set; syntax is shared, while the captured recipient Commands registry owns supported plans. */
-export const TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET = "live-thread-rebind-command-set-v1";
+export const BALE_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET = "live-thread-rebind-command-set-v1";
 /** Every live rebinding needs the save/apply/settle trio; held command selections additionally need these two. */
-export const TELEGRAM_BUS_LIVE_REBIND_CAPABILITIES = [
-    TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SAVE,
-    TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY,
-    TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE,
+export const BALE_BUS_LIVE_REBIND_CAPABILITIES = [
+    BALE_BUS_CAPABILITY_LIVE_REBIND_SAVE,
+    BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY,
+    BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE,
 ];
-export const TELEGRAM_BUS_HELD_COMMAND_CAPABILITIES = [
-    TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET,
-    TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
+export const BALE_BUS_HELD_COMMAND_CAPABILITIES = [
+    BALE_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET,
+    BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
 ];
 /** Start/help are restricted menu aliases, negotiated separately from the original held-command set. */
-export const TELEGRAM_BUS_CAPABILITY_HELD_MENU_ALIASES = "held-menu-aliases-v1";
-export function getTelegramBusHeldCommandCapabilities(name) {
+export const BALE_BUS_CAPABILITY_HELD_MENU_ALIASES = "held-menu-aliases-v1";
+export function getBaleBusHeldCommandCapabilities(name) {
     return name === "start" || name === "help"
-        ? [...TELEGRAM_BUS_HELD_COMMAND_CAPABILITIES, TELEGRAM_BUS_CAPABILITY_HELD_MENU_ALIASES]
-        : TELEGRAM_BUS_HELD_COMMAND_CAPABILITIES;
+        ? [...BALE_BUS_HELD_COMMAND_CAPABILITIES, BALE_BUS_CAPABILITY_HELD_MENU_ALIASES]
+        : BALE_BUS_HELD_COMMAND_CAPABILITIES;
 }
 function parseSelectedCommandInput(value) {
     if (!isRecord(value) ||
@@ -127,7 +127,7 @@ function parseLiveRebindRecipient(value) {
         }
         : undefined;
 }
-/** Non-empty, duplicate-free, non-negative safe-integer Telegram update ids. */
+/** Non-empty, duplicate-free, non-negative safe-integer Bale update ids. */
 function isUniqueSourceUpdateIds(value) {
     return (Array.isArray(value) &&
         value.length > 0 &&
@@ -154,55 +154,55 @@ function parsePreparedCommandSource(value) {
         sourceSha256: value.sourceSha256,
     };
 }
-export function createTelegramBusProtocolIdentity(input) {
+export function createBaleBusProtocolIdentity(input) {
     const runtimeBuild = input.runtimeBuild.trim();
     if (!runtimeBuild || runtimeBuild.length > 128) {
-        throw new Error("Telegram bus runtime build identity is invalid.");
+        throw new Error("Bale bus runtime build identity is invalid.");
     }
     const capabilities = [...new Set(input.capabilities ?? [])].sort();
     if (capabilities.length > 32 ||
         capabilities.some((capability) => capability.length > 128 || !/^[a-z0-9][a-z0-9._-]*$/u.test(capability))) {
-        throw new Error("Telegram bus capabilities must be canonical identifiers.");
+        throw new Error("Bale bus capabilities must be canonical identifiers.");
     }
     return {
-        protocolVersion: TELEGRAM_BUS_PROTOCOL_VERSION,
+        protocolVersion: BALE_BUS_PROTOCOL_VERSION,
         runtimeBuild,
         capabilities,
     };
 }
-export function createTelegramCurrentBusProtocolIdentity(capabilities = []) {
+export function createBaleCurrentBusProtocolIdentity(capabilities = []) {
     const packageMetadata = createRequire(import.meta.url)("../package.json");
     if (typeof packageMetadata.version !== "string") {
-        throw new Error("Telegram package build identity is unavailable.");
+        throw new Error("Bale package build identity is unavailable.");
     }
-    return createTelegramBusProtocolIdentity({
+    return createBaleBusProtocolIdentity({
         runtimeBuild: packageMetadata.version,
         capabilities,
     });
 }
-export function hasTelegramBusCapability(identity, capability) {
+export function hasBaleBusCapability(identity, capability) {
     return identity?.capabilities.includes(capability) ?? false;
 }
-export function hasTelegramBusSteerQueueHandoffCapability(identity) {
-    return hasTelegramBusCapability(identity, TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF) &&
-        hasTelegramBusCapability(identity, TELEGRAM_BUS_CAPABILITY_QUEUE_STEER);
+export function hasBaleBusSteerQueueHandoffCapability(identity) {
+    return hasBaleBusCapability(identity, BALE_BUS_CAPABILITY_QUEUE_HANDOFF) &&
+        hasBaleBusCapability(identity, BALE_BUS_CAPABILITY_QUEUE_STEER);
 }
-export function getTelegramInputCustodyPeerReadiness(followers) {
+export function getBaleInputCustodyPeerReadiness(followers) {
     return followers.map((follower) => {
         if (!follower.registrationGeneration || !follower.protocol)
             return "unknown";
-        return hasTelegramBusCapability(follower.protocol, TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION) &&
-            hasTelegramBusCapability(follower.protocol, TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE)
+        return hasBaleBusCapability(follower.protocol, BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION) &&
+            hasBaleBusCapability(follower.protocol, BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE)
             ? "ready"
             : "legacy";
     });
 }
 /** Both peers advertise every required capability over a compatible protocol; reads only the two identities. */
-export function hasTelegramBusSharedCapabilities(local, remote, required) {
-    return (required.every((capability) => hasTelegramBusCapability(local, capability) &&
-        hasTelegramBusCapability(remote, capability)) && getTelegramBusProtocolCompatibility({ local, remote }).compatible);
+export function hasBaleBusSharedCapabilities(local, remote, required) {
+    return (required.every((capability) => hasBaleBusCapability(local, capability) &&
+        hasBaleBusCapability(remote, capability)) && getBaleBusProtocolCompatibility({ local, remote }).compatible);
 }
-export function getTelegramBusProtocolCompatibility(input) {
+export function getBaleBusProtocolCompatibility(input) {
     if (!input.remote) {
         return {
             compatible: false,
@@ -219,7 +219,7 @@ export function getTelegramBusProtocolCompatibility(input) {
     }
     const remoteCapabilities = new Set(input.remote.capabilities);
     const missingCapabilities = input.local.capabilities
-        .filter((capability) => capability === TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION)
+        .filter((capability) => capability === BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION)
         .filter((capability) => !remoteCapabilities.has(capability));
     return missingCapabilities.length > 0
         ? {
@@ -229,16 +229,16 @@ export function getTelegramBusProtocolCompatibility(input) {
         }
         : { compatible: true, missingCapabilities: [] };
 }
-export function getTelegramBusSocketPath(agentDir = resolveAgentDir(), platform = getPlatform(), profileName, layout) {
-    return getTelegramBusLeaderEndpoint({
+export function getBaleBusSocketPath(agentDir = resolveAgentDir(), platform = getPlatform(), profileName, layout) {
+    return getBaleBusLeaderEndpoint({
         agentDir,
         platform,
         profileName,
         layout,
     });
 }
-export function getTelegramBusFollowerSocketPath(instanceId, agentDir = resolveAgentDir(), platform = getPlatform(), profileName, layout) {
-    return getTelegramBusFollowerEndpoint({
+export function getBaleBusFollowerSocketPath(instanceId, agentDir = resolveAgentDir(), platform = getPlatform(), profileName, layout) {
+    return getBaleBusFollowerEndpoint({
         agentDir,
         platform,
         instanceId,
@@ -247,7 +247,7 @@ export function getTelegramBusFollowerSocketPath(instanceId, agentDir = resolveA
     });
 }
 /** Whether a live follower is still exactly the captured registration: identity, process, session, endpoint and negotiated protocol. */
-export function isSameTelegramBusFollowerRegistration(live, captured) {
+export function isSameBaleBusFollowerRegistration(live, captured) {
     return (live.instanceId === captured.instanceId &&
         live.profileKey === captured.profileKey &&
         live.sessionId === captured.sessionId &&
@@ -260,14 +260,14 @@ export function isSameTelegramBusFollowerRegistration(live, captured) {
         live.busSocketPath === captured.busSocketPath &&
         isDeepStrictEqual(live.protocol, captured.protocol));
 }
-export function getTelegramFollowerTargetOwnership(input) {
+export function getBaleFollowerTargetOwnership(input) {
     const liveFollower = input.followers.find((follower) => {
         return (follower.target?.chatId === input.target.chatId &&
             follower.target.threadId === input.target.threadId);
     });
     if (liveFollower?.registrationGeneration &&
         liveFollower.profileKey &&
-        liveFollower.protocol?.capabilities.includes(TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION)) {
+        liveFollower.protocol?.capabilities.includes(BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION)) {
         return {
             instanceId: liveFollower.instanceId,
             ownerGeneration: liveFollower.registrationGeneration,
@@ -279,28 +279,28 @@ export function getTelegramFollowerTargetOwnership(input) {
     // authenticated current follower registration may receive forwarded work.
     return undefined;
 }
-const TELEGRAM_BUS_AGGREGATE_DELIVERY_FIELD = "__piTelegramAggregateDelivery";
-const TELEGRAM_BUS_CROSS_TARGET_DELIVERY_FIELD = "__piTelegramCrossTargetDelivery";
-function hasTelegramBusDeliveryMarker(body, marker) {
+const BALE_BUS_AGGREGATE_DELIVERY_FIELD = "__piBaleAggregateDelivery";
+const BALE_BUS_CROSS_TARGET_DELIVERY_FIELD = "__piBaleCrossTargetDelivery";
+function hasBaleBusDeliveryMarker(body, marker) {
     return Boolean(body &&
         typeof body === "object" &&
         !Array.isArray(body) &&
         body[marker] === true);
 }
-export function markTelegramBusCrossTargetDelivery(body) {
-    return { ...body, [TELEGRAM_BUS_CROSS_TARGET_DELIVERY_FIELD]: true };
+export function markBaleBusCrossTargetDelivery(body) {
+    return { ...body, [BALE_BUS_CROSS_TARGET_DELIVERY_FIELD]: true };
 }
-export function stripTelegramBusApiMetadata(body) {
-    if (!(TELEGRAM_BUS_AGGREGATE_DELIVERY_FIELD in body) &&
-        !(TELEGRAM_BUS_CROSS_TARGET_DELIVERY_FIELD in body)) {
+export function stripBaleBusApiMetadata(body) {
+    if (!(BALE_BUS_AGGREGATE_DELIVERY_FIELD in body) &&
+        !(BALE_BUS_CROSS_TARGET_DELIVERY_FIELD in body)) {
         return body;
     }
     const clean = { ...body };
-    delete clean[TELEGRAM_BUS_AGGREGATE_DELIVERY_FIELD];
-    delete clean[TELEGRAM_BUS_CROSS_TARGET_DELIVERY_FIELD];
+    delete clean[BALE_BUS_AGGREGATE_DELIVERY_FIELD];
+    delete clean[BALE_BUS_CROSS_TARGET_DELIVERY_FIELD];
     return clean;
 }
-export function isTelegramFollowerApiCallAllowed(input) {
+export function isBaleFollowerApiCallAllowed(input) {
     const allowedCallMethods = new Set([
         "answerCallbackQuery",
         "answerGuestQuery",
@@ -391,11 +391,11 @@ export function isTelegramFollowerApiCallAllowed(input) {
         if (apiMethod === "sendChatAction")
             return isTargetScoped(input.args[1]);
         if (apiMethod === "sendMessage" &&
-            hasTelegramBusDeliveryMarker(input.args[1], TELEGRAM_BUS_AGGREGATE_DELIVERY_FIELD)) {
+            hasBaleBusDeliveryMarker(input.args[1], BALE_BUS_AGGREGATE_DELIVERY_FIELD)) {
             return false;
         }
         if ((apiMethod === "sendMessage" || apiMethod === "sendRichMessage") &&
-            hasTelegramBusDeliveryMarker(input.args[1], TELEGRAM_BUS_CROSS_TARGET_DELIVERY_FIELD)) {
+            hasBaleBusDeliveryMarker(input.args[1], BALE_BUS_CROSS_TARGET_DELIVERY_FIELD)) {
             return isDifferentTargetScoped(input.args[1]);
         }
         if (apiMethod === "deleteMessage" ||
@@ -419,8 +419,8 @@ export function isTelegramFollowerApiCallAllowed(input) {
     }
     return false;
 }
-export function createTelegramFollowerApiCallAuthorizer(deps) {
-    return (input) => isTelegramFollowerApiCallAllowed({
+export function createBaleFollowerApiCallAuthorizer(deps) {
+    return (input) => isBaleFollowerApiCallAllowed({
         ...input,
         isMessageOwned(chatId, messageId) {
             return deps.isMessageOwned({
@@ -431,7 +431,7 @@ export function createTelegramFollowerApiCallAuthorizer(deps) {
         },
     });
 }
-export function createTelegramBusFollowerDeliveryIdentity(input) {
+export function createBaleBusFollowerDeliveryIdentity(input) {
     if (!input.recipientBindingKey ||
         !Number.isSafeInteger(input.sourceUpdateId) ||
         input.sourceUpdateId < 0 ||
@@ -440,7 +440,7 @@ export function createTelegramBusFollowerDeliveryIdentity(input) {
                 input.sourceClaim.acquisitionId.length > 256 ||
                 !input.sourceClaim.handoffId ||
                 input.sourceClaim.handoffId.length > 256))) {
-        throw new Error("Telegram follower delivery identity is incomplete.");
+        throw new Error("Bale follower delivery identity is incomplete.");
     }
     const deliveryId = createHash("sha256")
         .update(JSON.stringify({
@@ -451,7 +451,7 @@ export function createTelegramBusFollowerDeliveryIdentity(input) {
     }))
         .digest("hex");
     return {
-        deliveryId: `telegram-follower-v1-${deliveryId}`,
+        deliveryId: `bale-follower-v1-${deliveryId}`,
         sourceUpdateId: input.sourceUpdateId,
         recipientBindingKey: input.recipientBindingKey,
         ...(input.sourceRecoveryKey
@@ -460,14 +460,14 @@ export function createTelegramBusFollowerDeliveryIdentity(input) {
         ...(input.sourceClaim ? { sourceClaim: { ...input.sourceClaim } } : {}),
     };
 }
-export function canUseTelegramBusInputCustodyReference(input) {
-    return (hasTelegramBusCapability(input.local, TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE) &&
-        hasTelegramBusCapability(input.remote, TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE));
+export function canUseBaleBusInputCustodyReference(input) {
+    return (hasBaleBusCapability(input.local, BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE) &&
+        hasBaleBusCapability(input.remote, BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE));
 }
-export function createTelegramBusFollowerSourceReferenceDeliveryIdentity(input) {
+export function createBaleBusFollowerSourceReferenceDeliveryIdentity(input) {
     if (!input.sourceRecoveryKey || !input.source.owner.handoffId)
-        throw new Error("Telegram follower source-reference delivery requires an accepted handoff.");
-    return createTelegramBusFollowerDeliveryIdentity({
+        throw new Error("Bale follower source-reference delivery requires an accepted handoff.");
+    return createBaleBusFollowerDeliveryIdentity({
         kind: input.kind,
         recipientBindingKey: input.recipientBindingKey,
         sourceUpdateId: input.source.updateId,
@@ -478,7 +478,7 @@ export function createTelegramBusFollowerSourceReferenceDeliveryIdentity(input) 
         },
     });
 }
-export function getTelegramBusEnvelopeTrafficClass(envelope) {
+export function getBaleBusEnvelopeTrafficClass(envelope) {
     if (envelope.kind === "follower.register" ||
         envelope.kind === "follower.restoreWorkspace" ||
         envelope.kind === "bus.probe")
@@ -487,20 +487,20 @@ export function getTelegramBusEnvelopeTrafficClass(envelope) {
         return "response";
     return "generation-fenced";
 }
-export function createTelegramBusRequestId(input) {
+export function createBaleBusRequestId(input) {
     return `${input.instanceId}:${input.sequence}`;
 }
-export function createTelegramBusRequestIdFactory(instanceId) {
+export function createBaleBusRequestIdFactory(instanceId) {
     let sequence = 0;
     return () => {
         sequence += 1;
-        return createTelegramBusRequestId({ instanceId, sequence });
+        return createBaleBusRequestId({ instanceId, sequence });
     };
 }
-export function encodeTelegramBusEnvelope(envelope) {
+export function encodeBaleBusEnvelope(envelope) {
     return `${JSON.stringify(envelope)}\n`;
 }
-export function parseTelegramBusEnvelope(line) {
+export function parseBaleBusEnvelope(line) {
     let value;
     try {
         value = JSON.parse(line);
@@ -563,7 +563,7 @@ export function parseTelegramBusEnvelope(line) {
         }
         case "follower.publishSessionReplacement":
         case "follower.settleSessionReplacement": {
-            const intent = normalizeTelegramSessionReplacementIntent(value.intent);
+            const intent = normalizeBaleSessionReplacementIntent(value.intent);
             if (typeof value.instanceId === "string" &&
                 typeof value.registrationGeneration === "string" &&
                 typeof value.sentAtMs === "number" &&
@@ -748,8 +748,8 @@ export function parseTelegramBusEnvelope(line) {
         envelope.auth = auth;
     return envelope;
 }
-export function probeTelegramBusLeader(input) {
-    const timeoutMs = input.timeoutMs ?? TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS;
+export function probeBaleBusLeader(input) {
+    const timeoutMs = input.timeoutMs ?? BALE_BUS_LEADER_STALE_HEARTBEAT_MS;
     return new Promise((resolve) => {
         let settled = false;
         let socket;
@@ -764,7 +764,7 @@ export function probeTelegramBusLeader(input) {
         const timer = setTimeout(() => finish("silent"), timeoutMs);
         let connected = false;
         try {
-            socket = createConnection(resolveTelegramBusSocketPath(input.socketPath));
+            socket = createConnection(resolveBaleBusSocketPath(input.socketPath));
         }
         catch {
             finish("unknown");
@@ -772,7 +772,7 @@ export function probeTelegramBusLeader(input) {
         }
         socket.once("connect", () => {
             connected = true;
-            socket.write(encodeTelegramBusEnvelope({
+            socket.write(encodeBaleBusEnvelope({
                 kind: "bus.probe",
                 requestId: `probe:${randomBytes(8).toString("hex")}`,
                 ...(input.secret ? { auth: input.secret } : {}),
@@ -791,24 +791,24 @@ export function probeTelegramBusLeader(input) {
  * confirmed again after one more window (a just-started leader binds its socket well within it). The owner must
  * stay the same throughout; the lock acquisition then CAS-checks that exact owner.
  */
-export async function proveTelegramBusLeaderUnresponsive(input) {
+export async function proveBaleBusLeaderUnresponsive(input) {
     const first = await input.probe();
     if (first === "silent")
         return input.isSameOwner();
     if (first !== "unreachable")
         return false;
-    await input.sleep(input.windowMs ?? TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS);
+    await input.sleep(input.windowMs ?? BALE_BUS_LEADER_STALE_HEARTBEAT_MS);
     if (!input.isSameOwner())
         return false;
     const second = await input.probe();
     return (second === "silent" || second === "unreachable") && input.isSameOwner();
 }
 /** Composition-ready takeover proof for one profile's leader lock and endpoint. */
-export function createTelegramBusLeaderUnresponsivenessProof(deps) {
-    const probe = deps.probe ?? probeTelegramBusLeader;
+export function createBaleBusLeaderUnresponsivenessProof(deps) {
+    const probe = deps.probe ?? probeBaleBusLeader;
     const sleep = deps.sleep ??
         ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-    return (owner) => proveTelegramBusLeaderUnresponsive({
+    return (owner) => proveBaleBusLeaderUnresponsive({
         probe: () => probe({
             socketPath: owner.busSocketPath ?? deps.getLeaderSocketPath(),
             secret: owner.busSecret,
@@ -816,33 +816,33 @@ export function createTelegramBusLeaderUnresponsivenessProof(deps) {
         isSameOwner: () => {
             const state = deps.getLeaderState();
             return (state.kind === "active-elsewhere" &&
-                isSameTelegramLockOwner(state.lock, owner));
+                isSameBaleLockOwner(state.lock, owner));
         },
         sleep,
     });
 }
-const TELEGRAM_ACTIVE_LOCAL_SERVERS = Symbol.for("@llblab/pi-telegram/active-local-servers");
-function getActiveTelegramBusLocalServers() {
+const BALE_ACTIVE_LOCAL_SERVERS = Symbol.for("@llblab/pi-bale/active-local-servers");
+function getActiveBaleBusLocalServers() {
     const root = globalThis;
-    return (root[TELEGRAM_ACTIVE_LOCAL_SERVERS] ??= new Map());
+    return (root[BALE_ACTIVE_LOCAL_SERVERS] ??= new Map());
 }
-export function resolveTelegramBusSocketPath(source, platform = getPlatform()) {
+export function resolveBaleBusSocketPath(source, platform = getPlatform()) {
     const endpoint = typeof source === "function" ? source() : source;
     if (platform === "win32") {
-        if (isTelegramBusPipePath(endpoint))
+        if (isBaleBusPipePath(endpoint))
             return endpoint;
-        return getTelegramBusPipePath({
+        return getBaleBusPipePath({
             agentDir: dirname(endpoint),
             scope: basename(endpoint),
         });
     }
     const ownerScope = process.getuid?.() ?? "user";
-    const fallbackDir = join(tmpdir(), `pi-telegram-${ownerScope}`);
+    const fallbackDir = join(tmpdir(), `pi-bale-${ownerScope}`);
     if (dirname(endpoint) === fallbackDir &&
         /^[0-9a-f]{16}\.sock$/u.test(basename(endpoint))) {
         return endpoint;
     }
-    if (Buffer.byteLength(endpoint) <= TELEGRAM_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES) {
+    if (Buffer.byteLength(endpoint) <= BALE_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES) {
         return endpoint;
     }
     const digest = createHash("sha256")
@@ -852,17 +852,17 @@ export function resolveTelegramBusSocketPath(source, platform = getPlatform()) {
     return join(fallbackDir, `${digest}.sock`);
 }
 /** Local IPC issuance proof only: this callback/error never enters the envelope or certifies a remote API effect. */
-export class TelegramBusLocalAuthorityError extends Error {
+export class BaleBusLocalAuthorityError extends Error {
     requestIssued;
     constructor(requestIssued, reason) {
         super(reason
-            ? `Telegram bus local authority is unavailable: ${reason}`
-            : "Telegram bus local authority is unavailable.");
-        this.name = "TelegramBusLocalAuthorityError";
+            ? `Bale bus local authority is unavailable: ${reason}`
+            : "Bale bus local authority is unavailable.");
+        this.name = "BaleBusLocalAuthorityError";
         this.requestIssued = requestIssued;
     }
 }
-export function isTelegramBusForwardOwnershipCurrent(expected, current) {
+export function isBaleBusForwardOwnershipCurrent(expected, current) {
     return Boolean(current &&
         current.instanceId === expected.instanceId &&
         current.ownerGeneration === expected.ownerGeneration &&
@@ -870,16 +870,16 @@ export function isTelegramBusForwardOwnershipCurrent(expected, current) {
         JSON.stringify(current.protocolIdentity) ===
             JSON.stringify(expected.protocolIdentity));
 }
-function getTelegramBusForwardSourceUpdateId(value) {
+function getBaleBusForwardSourceUpdateId(value) {
     if (!isRecord(value))
         return undefined;
-    const updateId = value.pi_telegram_source_update_id;
+    const updateId = value.pi_bale_source_update_id;
     return Number.isSafeInteger(updateId) && updateId >= 0
         ? updateId
         : undefined;
 }
-function createTelegramBusForwardDelivery(kind, sourceUpdateId, recipientBindingKey) {
-    return createTelegramBusFollowerDeliveryIdentity({
+function createBaleBusForwardDelivery(kind, sourceUpdateId, recipientBindingKey) {
+    return createBaleBusFollowerDeliveryIdentity({
         kind,
         recipientBindingKey,
         sourceUpdateId,
@@ -889,8 +889,8 @@ function createTelegramBusForwardDelivery(kind, sourceUpdateId, recipientBinding
  * Leader-to-follower forwards and control replies share the stale-liveness window: a follower doing journal work or stalled
  * by an ordinary multi-second Pi/TUI turn, or a slower Windows named pipe, is not a lost recipient.
  */
-const TELEGRAM_BUS_FOLLOWER_CONTROL_TIMEOUT_MS = TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS;
-export function createTelegramBusForeignOwnedUpdateForwarder(deps) {
+const BALE_BUS_FOLLOWER_CONTROL_TIMEOUT_MS = BALE_BUS_LEADER_STALE_HEARTBEAT_MS;
+export function createBaleBusForeignOwnedUpdateForwarder(deps) {
     const getNowMs = deps.getNowMs ?? Date.now;
     const reject = (input) => {
         const settlement = {
@@ -914,13 +914,13 @@ export function createTelegramBusForeignOwnedUpdateForwarder(deps) {
         return settlement;
     };
     const prepare = (kind, value, ownership) => {
-        const sourceUpdateId = getTelegramBusForwardSourceUpdateId(value);
+        const sourceUpdateId = getBaleBusForwardSourceUpdateId(value);
         if (sourceUpdateId === undefined) {
             return {
                 settlement: reject({
                     status: "terminal-rejected",
                     failureClass: "source-update-identity-missing",
-                    message: "Forwarded Telegram update has no durable source identity.",
+                    message: "Forwarded Bale update has no durable source identity.",
                     envelopeKind: kind,
                     ownership,
                 }),
@@ -931,14 +931,14 @@ export function createTelegramBusForeignOwnedUpdateForwarder(deps) {
                 settlement: reject({
                     status: "terminal-rejected",
                     failureClass: "recipient-binding-missing",
-                    message: "Forwarded Telegram update has no stable recipient binding.",
+                    message: "Forwarded Bale update has no stable recipient binding.",
                     envelopeKind: kind,
                     ownership,
                     sourceUpdateId,
                 }),
             };
         }
-        const sourceReference = canUseTelegramBusInputCustodyReference({
+        const sourceReference = canUseBaleBusInputCustodyReference({
             local: deps.localProtocolIdentity,
             remote: ownership.protocolIdentity,
         });
@@ -953,26 +953,26 @@ export function createTelegramBusForeignOwnedUpdateForwarder(deps) {
                 settlement: reject({
                     status: "retryable",
                     failureClass: "source-reference-missing",
-                    message: "Forwarded Telegram update has no exact custody reference.",
+                    message: "Forwarded Bale update has no exact custody reference.",
                     envelopeKind: kind,
                     ownership,
                     sourceUpdateId,
                 }),
             };
         const delivery = reference
-            ? createTelegramBusFollowerSourceReferenceDeliveryIdentity({
+            ? createBaleBusFollowerSourceReferenceDeliveryIdentity({
                 kind: "leader.wakeInputCustody",
                 recipientBindingKey: ownership.recipientBindingKey,
                 sourceRecoveryKey: reference.sourceRecoveryKey,
                 source: reference.source,
             })
-            : createTelegramBusForwardDelivery(kind, sourceUpdateId, ownership.recipientBindingKey);
+            : createBaleBusForwardDelivery(kind, sourceUpdateId, ownership.recipientBindingKey);
         if (!ownership.ownerGeneration) {
             return {
                 settlement: reject({
                     status: "retryable",
                     failureClass: "recipient-generation-missing",
-                    message: "Forwarded Telegram update has no live recipient generation.",
+                    message: "Forwarded Bale update has no live recipient generation.",
                     envelopeKind: kind,
                     ownership,
                     delivery,
@@ -991,28 +991,28 @@ export function createTelegramBusForeignOwnedUpdateForwarder(deps) {
             return reject({
                 status: "retryable",
                 failureClass: "recipient-ownership-stale",
-                message: "Telegram follower ownership changed before forwarding.",
+                message: "Bale follower ownership changed before forwarding.",
                 envelopeKind: envelope.kind,
                 ownership,
                 delivery: envelope.delivery,
             });
         if (deps.getAuthSecret)
             envelope.auth = deps.getAuthSecret();
-        const socketPath = resolveTelegramBusSocketPath(deps.socketPath);
+        const socketPath = resolveBaleBusSocketPath(deps.socketPath);
         let response;
         try {
-            response = await sendTelegramBusLocalEnvelope({
+            response = await sendBaleBusLocalEnvelope({
                 socketPath,
                 envelope,
-                timeoutMs: deps.timeoutMs ?? TELEGRAM_BUS_FOLLOWER_CONTROL_TIMEOUT_MS,
-                retry: assertAuthority ? { attempts: 1, delayMs: 0 } : getTelegramBusTransportRetryPolicy({
+                timeoutMs: deps.timeoutMs ?? BALE_BUS_FOLLOWER_CONTROL_TIMEOUT_MS,
+                retry: assertAuthority ? { attempts: 1, delayMs: 0 } : getBaleBusTransportRetryPolicy({
                     endpoint: socketPath,
                     operation: "operation",
                 }),
                 ...(assertAuthority || deps.validateForwardOwnership ? { assertAuthority() {
                         assertAuthority?.();
                         if (deps.validateForwardOwnership && !deps.validateForwardOwnership(ownership))
-                            throw new Error("Telegram follower forwarding ownership changed.");
+                            throw new Error("Bale follower forwarding ownership changed.");
                     } } : {}),
             });
         }
@@ -1022,7 +1022,7 @@ export function createTelegramBusForeignOwnedUpdateForwarder(deps) {
                 failureClass: "transport-failed",
                 message: error instanceof Error
                     ? error.message
-                    : "Telegram follower forwarding transport failed.",
+                    : "Bale follower forwarding transport failed.",
                 envelopeKind: envelope.kind,
                 ownership,
                 delivery: envelope.delivery,
@@ -1052,7 +1052,7 @@ export function createTelegramBusForeignOwnedUpdateForwarder(deps) {
             return reject({
                 status: "retryable",
                 failureClass: "acknowledgement-rejected",
-                message: response.message ?? "Follower rejected forwarded Telegram update.",
+                message: response.message ?? "Follower rejected forwarded Bale update.",
                 envelopeKind: envelope.kind,
                 ownership,
                 delivery: envelope.delivery,
@@ -1132,7 +1132,7 @@ export function createTelegramBusForeignOwnedUpdateForwarder(deps) {
         })),
     };
 }
-export function listTelegramBusLiveThreadTargets(input) {
+export function listBaleBusLiveThreadTargets(input) {
     const targets = [];
     if (input.leaderTarget?.threadId !== undefined) {
         targets.push(input.leaderTarget);
@@ -1144,7 +1144,7 @@ export function listTelegramBusLiveThreadTargets(input) {
     return targets;
 }
 /** Caller owns the durable one-shot apply grant. Inspections never grant another apply. */
-export function createTelegramBusWorkspaceRestoreController(deps) {
+export function createBaleBusWorkspaceRestoreController(deps) {
     return async (input) => {
         const isCurrent = input.isCurrent.bind(input);
         if (!isCurrent())
@@ -1156,7 +1156,7 @@ export function createTelegramBusWorkspaceRestoreController(deps) {
             !follower.busSocketPath ||
             follower.sessionId !== input.sessionId ||
             follower.slot !== input.slot ||
-            !hasTelegramBusSharedCapabilities(deps.localProtocolIdentity, follower.protocol, [TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE]))
+            !hasBaleBusSharedCapabilities(deps.localProtocolIdentity, follower.protocol, [BALE_BUS_CAPABILITY_WORKSPACE_RESTORE]))
             return undefined;
         const captured = structuredClone(follower);
         const expected = {
@@ -1170,7 +1170,7 @@ export function createTelegramBusWorkspaceRestoreController(deps) {
         const current = () => {
             if (!isCurrent() ||
                 deps.getAuthSecret() !== secret ||
-                !hasTelegramBusCapability(deps.localProtocolIdentity, TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE))
+                !hasBaleBusCapability(deps.localProtocolIdentity, BALE_BUS_CAPABILITY_WORKSPACE_RESTORE))
                 return false;
             const live = deps.getFollower(captured.instanceId);
             return (!!live &&
@@ -1181,8 +1181,8 @@ export function createTelegramBusWorkspaceRestoreController(deps) {
                 live.busSocketPath === captured.busSocketPath &&
                 live.target?.chatId === captured.target?.chatId &&
                 live.target?.threadId === captured.target?.threadId &&
-                hasTelegramBusCapability(live.protocol, TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE) &&
-                getTelegramBusProtocolCompatibility({
+                hasBaleBusCapability(live.protocol, BALE_BUS_CAPABILITY_WORKSPACE_RESTORE) &&
+                getBaleBusProtocolCompatibility({
                     local: deps.localProtocolIdentity,
                     remote: live.protocol,
                 }).compatible);
@@ -1190,9 +1190,9 @@ export function createTelegramBusWorkspaceRestoreController(deps) {
         if (!current())
             return undefined;
         const requestId = deps.createRequestId();
-        const response = await sendTelegramBusLocalEnvelope({
+        const response = await sendBaleBusLocalEnvelope({
             socketPath: captured.busSocketPath,
-            timeoutMs: deps.timeoutMs ?? TELEGRAM_BUS_FOLLOWER_CONTROL_TIMEOUT_MS,
+            timeoutMs: deps.timeoutMs ?? BALE_BUS_FOLLOWER_CONTROL_TIMEOUT_MS,
             retry: { attempts: 1, delayMs: 0 },
             envelope: {
                 kind: "leader.workspaceRestore",
@@ -1242,7 +1242,7 @@ export function createTelegramBusWorkspaceRestoreController(deps) {
     };
 }
 /** Each capability has its own effect boundary; transport retries never replay save/dispatch/disposal. */
-export function createTelegramBusLiveRebindController(deps) {
+export function createBaleBusLiveRebindController(deps) {
     return async (input) => {
         const isCurrent = input.isCurrent.bind(input), localProtocol = structuredClone(deps.localProtocolIdentity);
         const selectedCommand = parseSelectedCommandInput(input.selectedCommand), held = selectedCommand, preparedSource = parsePreparedCommandSource(input.preparedSource);
@@ -1287,7 +1287,7 @@ export function createTelegramBusLiveRebindController(deps) {
             (!held ||
                 ("mode" in input
                     ? input.sourceUpdateIds.length !== 1 ||
-                        !areTelegramTargetsEqual(input.target, held.target)
+                        !areBaleTargetsEqual(input.target, held.target)
                     : input.updates.length !== 1)))
             return undefined;
         const marker = selectedCommand ? { selectedCommand } : {};
@@ -1318,13 +1318,13 @@ export function createTelegramBusLiveRebindController(deps) {
                 observing ||
                 commandObserving);
         const required = [
-            TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SAVE,
+            BALE_BUS_CAPABILITY_LIVE_REBIND_SAVE,
             ...("mode" in expected || held
-                ? [TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY]
+                ? [BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY]
                 : []),
-            ...(settling || held ? [TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE] : []),
-            ...(observingHeld ? [TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION] : []),
-            ...(held ? getTelegramBusHeldCommandCapabilities(held.name) : []),
+            ...(settling || held ? [BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE] : []),
+            ...(observingHeld ? [BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION] : []),
+            ...(held ? getBaleBusHeldCommandCapabilities(held.name) : []),
         ];
         const follower = deps.getFollower(expected.instanceId), secret = deps.getAuthSecret();
         if (!isCurrent() ||
@@ -1332,7 +1332,7 @@ export function createTelegramBusLiveRebindController(deps) {
             !follower?.registrationGeneration ||
             !follower.busSocketPath ||
             follower.sessionId !== expected.sessionId ||
-            !hasTelegramBusSharedCapabilities(deps.localProtocolIdentity, follower.protocol, required))
+            !hasBaleBusSharedCapabilities(deps.localProtocolIdentity, follower.protocol, required))
             return undefined;
         const captured = structuredClone(follower);
         /** The first failed authority condition, by fixed label; undefined while the captured recipient is current. */
@@ -1342,7 +1342,7 @@ export function createTelegramBusLiveRebindController(deps) {
             if (deps.getAuthSecret() !== secret)
                 return "auth secret";
             if (!isDeepStrictEqual(deps.localProtocolIdentity, localProtocol) ||
-                !required.every((cap) => hasTelegramBusCapability(deps.localProtocolIdentity, cap)))
+                !required.every((cap) => hasBaleBusCapability(deps.localProtocolIdentity, cap)))
                 return "local protocol";
             const live = deps.getFollower(expected.instanceId);
             if (!live)
@@ -1361,13 +1361,13 @@ export function createTelegramBusLiveRebindController(deps) {
             if ("mode" in expected
                 ? live.slot !== expected.slot ||
                     !live.target ||
-                    (!areTelegramTargetsEqual(live.target, expected.target) &&
-                        !areTelegramTargetsEqual(live.target, expected.oldTarget))
+                    (!areBaleTargetsEqual(live.target, expected.target) &&
+                        !areBaleTargetsEqual(live.target, expected.oldTarget))
                 : !isDeepStrictEqual(live.target, captured.target))
                 return "follower target";
-            if (!required.every((cap) => hasTelegramBusCapability(live.protocol, cap)) ||
+            if (!required.every((cap) => hasBaleBusCapability(live.protocol, cap)) ||
                 !isDeepStrictEqual(live.protocol, captured.protocol) ||
-                !getTelegramBusProtocolCompatibility({
+                !getBaleBusProtocolCompatibility({
                     local: deps.localProtocolIdentity,
                     remote: live.protocol,
                 }).compatible)
@@ -1378,9 +1378,9 @@ export function createTelegramBusLiveRebindController(deps) {
         if (!current())
             return undefined;
         const requestId = deps.createRequestId();
-        const response = await sendTelegramBusLocalEnvelope({
+        const response = await sendBaleBusLocalEnvelope({
             socketPath: captured.busSocketPath,
-            timeoutMs: deps.timeoutMs ?? TELEGRAM_BUS_FOLLOWER_CONTROL_TIMEOUT_MS,
+            timeoutMs: deps.timeoutMs ?? BALE_BUS_FOLLOWER_CONTROL_TIMEOUT_MS,
             retry: { attempts: 1, delayMs: 0 },
             ...(held
                 ? {
@@ -1586,7 +1586,7 @@ export function createTelegramBusLiveRebindController(deps) {
         };
     };
 }
-export function isTelegramBusEnvelopeAuthorized(envelope, secret) {
+export function isBaleBusEnvelopeAuthorized(envelope, secret) {
     if (!secret)
         return true;
     if (typeof envelope.auth !== "string")
@@ -1596,14 +1596,14 @@ export function isTelegramBusEnvelopeAuthorized(envelope, secret) {
     return auth.length === expected.length && timingSafeEqual(auth, expected);
 }
 /** Negative acknowledgement carrying only a diagnostic message. */
-export const TELEGRAM_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE = "Telegram bus API call is not allowed for this follower.";
-export function rejectTelegramBusRequest(requestId, message) {
+export const BALE_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE = "Bale bus API call is not allowed for this follower.";
+export function rejectBaleBusRequest(requestId, message) {
     return { kind: "bus.ack", requestId, ok: false, message };
 }
 export function createUnauthorizedBusAck(requestId) {
-    return rejectTelegramBusRequest(requestId, "Unauthorized Telegram bus envelope.");
+    return rejectBaleBusRequest(requestId, "Unauthorized Bale bus envelope.");
 }
-export function createTelegramBusLocalServer(deps) {
+export function createBaleBusLocalServer(deps) {
     const requestLedger = new Map();
     const requestLedgerMaxEntries = Math.max(1, deps.requestLedgerMaxEntries ?? 4096);
     const getRequestLedgerKey = (envelope) => {
@@ -1628,7 +1628,7 @@ export function createTelegramBusLocalServer(deps) {
                 kind: "bus.ack",
                 requestId: envelope.requestId,
                 ok: false,
-                message: "Telegram bus request id was reused with a different payload.",
+                message: "Bale bus request id was reused with a different payload.",
                 error: { code: "request-id-collision" },
             });
         }
@@ -1642,7 +1642,7 @@ export function createTelegramBusLocalServer(deps) {
                 kind: "bus.ack",
                 requestId: envelope.requestId,
                 ok: false,
-                message: "Telegram bus request ledger is full.",
+                message: "Bale bus request ledger is full.",
                 error: { code: "ledger-overloaded" },
             });
         }
@@ -1672,20 +1672,20 @@ export function createTelegramBusLocalServer(deps) {
         start: async () => {
             if (server)
                 return;
-            const socketPath = resolveTelegramBusSocketPath(deps.socketPath);
-            const activeServers = getActiveTelegramBusLocalServers();
+            const socketPath = resolveBaleBusSocketPath(deps.socketPath);
+            const activeServers = getActiveBaleBusLocalServers();
             const replacedServer = activeServers.get(socketPath);
             if (replacedServer && replacedServer !== runtime) {
                 await replacedServer.stop();
             }
-            const usesWindowsPipe = isTelegramBusPipePath(socketPath);
+            const usesWindowsPipe = isBaleBusPipePath(socketPath);
             const endpointGeneration = randomBytes(8).toString("hex");
             const listenPath = usesWindowsPipe
                 ? socketPath
                 : join(dirname(socketPath), `.pt-${endpointGeneration}.sock`);
             activeSocketPath = socketPath;
             activeListenPath = listenPath;
-            deps.recordTransportEvent?.("server-start", getTelegramBusEndpointDiagnostics(socketPath));
+            deps.recordTransportEvent?.("server-start", getBaleBusEndpointDiagnostics(socketPath));
             if (!usesWindowsPipe) {
                 const socketDir = dirname(socketPath);
                 mkdirSync(socketDir, { recursive: true, mode: 0o700 });
@@ -1703,16 +1703,16 @@ export function createTelegramBusLocalServer(deps) {
                     }
                     if (!isLegacySocket)
                         break;
-                    const probe = await probeTelegramBusEndpoint({
+                    const probe = await probeBaleBusEndpoint({
                         endpoint: socketPath,
                         timeoutMs: 50,
                     });
                     if (!probe.reachable)
                         break;
                     if (Date.now() >= legacyDeadlineMs) {
-                        throw new Error(`Timed out waiting for legacy Telegram bus endpoint: ${socketPath}`);
+                        throw new Error(`Timed out waiting for legacy Bale bus endpoint: ${socketPath}`);
                     }
-                    await delayTelegramBusTransportRetry(25);
+                    await delayBaleBusTransportRetry(25);
                 }
             }
             if (usesWindowsPipe) {
@@ -1723,7 +1723,7 @@ export function createTelegramBusLocalServer(deps) {
                 if (!committed) {
                     activeSocketPath = undefined;
                     activeListenPath = undefined;
-                    throw new Error("Telegram bus endpoint publication lost transport ownership.");
+                    throw new Error("Bale bus endpoint publication lost transport ownership.");
                 }
             }
             server = createServer((socket) => {
@@ -1735,14 +1735,14 @@ export function createTelegramBusLocalServer(deps) {
                     const lines = buffer.split("\n");
                     buffer = lines.pop() ?? "";
                     for (const line of lines) {
-                        void handleTelegramBusSocketLine(line, socket, handleEnvelopeOnce, deps.recordTransportEvent, socketPath, deps.shouldDropResponse);
+                        void handleBaleBusSocketLine(line, socket, handleEnvelopeOnce, deps.recordTransportEvent, socketPath, deps.shouldDropResponse);
                     }
                 });
                 socket.on("close", () => sockets.delete(socket));
                 socket.on("error", (error) => {
                     deps.recordTransportEvent?.("server-socket-error", {
-                        ...getTelegramBusEndpointDiagnostics(socketPath),
-                        ...classifyTelegramBusTransportError(error),
+                        ...getBaleBusEndpointDiagnostics(socketPath),
+                        ...classifyBaleBusTransportError(error),
                     });
                     closeSocket(socket);
                 });
@@ -1753,15 +1753,15 @@ export function createTelegramBusLocalServer(deps) {
                     server?.listen(listenPath, resolve);
                 });
                 activeServers.set(socketPath, runtime);
-                deps.recordTransportEvent?.("server-started", getTelegramBusEndpointDiagnostics(socketPath));
+                deps.recordTransportEvent?.("server-started", getBaleBusEndpointDiagnostics(socketPath));
             }
             catch (error) {
                 server = undefined;
                 activeSocketPath = undefined;
                 activeListenPath = undefined;
                 deps.recordTransportEvent?.("server-start-failed", {
-                    ...getTelegramBusEndpointDiagnostics(socketPath),
-                    ...classifyTelegramBusTransportError(error),
+                    ...getBaleBusEndpointDiagnostics(socketPath),
+                    ...classifyBaleBusTransportError(error),
                 });
                 throw error;
             }
@@ -1775,7 +1775,7 @@ export function createTelegramBusLocalServer(deps) {
                         ? deps.commitEndpointPublication(() => renameSync(linkPath, socketPath))
                         : (renameSync(linkPath, socketPath), true);
                     if (!committed) {
-                        throw new Error("Telegram bus endpoint publication lost transport ownership.");
+                        throw new Error("Bale bus endpoint publication lost transport ownership.");
                     }
                 }
                 catch (error) {
@@ -1807,8 +1807,8 @@ export function createTelegramBusLocalServer(deps) {
             const socketPath = activeSocketPath;
             const listenPath = activeListenPath;
             if (socketPath &&
-                getActiveTelegramBusLocalServers().get(socketPath) === runtime) {
-                getActiveTelegramBusLocalServers().delete(socketPath);
+                getActiveBaleBusLocalServers().get(socketPath) === runtime) {
+                getActiveBaleBusLocalServers().delete(socketPath);
             }
             server = undefined;
             activeSocketPath = undefined;
@@ -1818,7 +1818,7 @@ export function createTelegramBusLocalServer(deps) {
             if (activeServer) {
                 await new Promise((resolve) => activeServer.close(() => resolve()));
             }
-            if (socketPath && listenPath && !isTelegramBusPipePath(socketPath)) {
+            if (socketPath && listenPath && !isBaleBusPipePath(socketPath)) {
                 try {
                     if (lstatSync(socketPath).isSymbolicLink() &&
                         readlinkSync(socketPath) === basename(listenPath)) {
@@ -1832,21 +1832,21 @@ export function createTelegramBusLocalServer(deps) {
                 }
             }
             if (socketPath) {
-                deps.recordTransportEvent?.("server-stopped", getTelegramBusEndpointDiagnostics(socketPath));
+                deps.recordTransportEvent?.("server-stopped", getBaleBusEndpointDiagnostics(socketPath));
             }
         },
         ensureEndpoint: async () => {
             const socketPath = activeSocketPath;
             if (!server ||
                 !socketPath ||
-                isTelegramBusPipePath(socketPath) ||
+                isBaleBusPipePath(socketPath) ||
                 existsSync(socketPath)) {
                 return false;
             }
             if (endpointRecovery)
                 return endpointRecovery;
             endpointRecovery = (async () => {
-                deps.recordTransportEvent?.("server-endpoint-missing", getTelegramBusEndpointDiagnostics(socketPath));
+                deps.recordTransportEvent?.("server-endpoint-missing", getBaleBusEndpointDiagnostics(socketPath));
                 const recoveryStopGeneration = stopGeneration + 1;
                 await runtime.stop();
                 if (stopGeneration !== recoveryStopGeneration)
@@ -1856,7 +1856,7 @@ export function createTelegramBusLocalServer(deps) {
                     await runtime.stop();
                     return false;
                 }
-                deps.recordTransportEvent?.("server-endpoint-recovered", getTelegramBusEndpointDiagnostics(socketPath));
+                deps.recordTransportEvent?.("server-endpoint-recovered", getBaleBusEndpointDiagnostics(socketPath));
                 return true;
             })();
             try {
@@ -1869,13 +1869,13 @@ export function createTelegramBusLocalServer(deps) {
     };
     return runtime;
 }
-function getTelegramBusEnvelopeDiagnostics(envelope) {
+function getBaleBusEnvelopeDiagnostics(envelope) {
     return {
         envelopeKind: envelope.kind,
         requestId: envelope.requestId,
     };
 }
-function sendTelegramBusLocalEnvelopeOnce(options) {
+function sendBaleBusLocalEnvelopeOnce(options) {
     const timeoutMs = options.timeoutMs ?? 1000;
     return new Promise((resolve, reject) => {
         const assertAuthority = options.assertAuthority;
@@ -1886,7 +1886,7 @@ function sendTelegramBusLocalEnvelopeOnce(options) {
             }
             catch (error) {
                 // The caller's reason is a fixed condition label, never request or credential content.
-                throw new TelegramBusLocalAuthorityError(issued, error instanceof Error ? error.message : undefined);
+                throw new BaleBusLocalAuthorityError(issued, error instanceof Error ? error.message : undefined);
             }
         };
         try {
@@ -1918,7 +1918,7 @@ function sendTelegramBusLocalEnvelopeOnce(options) {
             // second cycle after a long stall, while a silent peer stays bounded.
             timeoutFinalizer = setImmediate(() => {
                 timeoutFinalizer = setImmediate(() => {
-                    settle(() => reject(createTelegramBusTransportTimeoutError("Timed out waiting for Telegram bus response")));
+                    settle(() => reject(createBaleBusTransportTimeoutError("Timed out waiting for Bale bus response")));
                 });
             });
         }, timeoutMs);
@@ -1926,7 +1926,7 @@ function sendTelegramBusLocalEnvelopeOnce(options) {
         socket.once("connect", () => {
             try {
                 assertCurrent();
-                const encoded = encodeTelegramBusEnvelope(options.envelope);
+                const encoded = encodeBaleBusEnvelope(options.envelope);
                 assertCurrent();
                 issued = true;
                 socket.write(encoded);
@@ -1942,7 +1942,7 @@ function sendTelegramBusLocalEnvelopeOnce(options) {
                 return;
             const line = buffer.slice(0, newlineIndex);
             try {
-                const response = parseTelegramBusEnvelope(line);
+                const response = parseBaleBusEnvelope(line);
                 assertCurrent();
                 settle(() => resolve(response));
             }
@@ -1954,35 +1954,35 @@ function sendTelegramBusLocalEnvelopeOnce(options) {
         socket.once("end", () => settle(() => resolve(undefined)));
     });
 }
-export async function sendTelegramBusLocalEnvelope(options) {
+export async function sendBaleBusLocalEnvelope(options) {
     const resolvedOptions = {
         ...options,
-        socketPath: resolveTelegramBusSocketPath(options.socketPath),
+        socketPath: resolveBaleBusSocketPath(options.socketPath),
     };
     const attempts = Math.max(1, resolvedOptions.retry?.attempts ?? 1);
     const delayMs = Math.max(0, resolvedOptions.retry?.delayMs ?? 0);
     // Log the first failure, then only the outcome: a reloading leader would otherwise log every attempt.
     for (let attempt = 1;; attempt += 1) {
         try {
-            const response = await sendTelegramBusLocalEnvelopeOnce(resolvedOptions);
+            const response = await sendBaleBusLocalEnvelopeOnce(resolvedOptions);
             if (attempt > 1)
                 resolvedOptions.recordTransportEvent?.("client-recovered", {
-                    ...getTelegramBusEndpointDiagnostics(resolvedOptions.socketPath),
-                    ...getTelegramBusEnvelopeDiagnostics(resolvedOptions.envelope),
+                    ...getBaleBusEndpointDiagnostics(resolvedOptions.socketPath),
+                    ...getBaleBusEnvelopeDiagnostics(resolvedOptions.envelope),
                     attempt,
                     attempts,
                 });
             return response;
         }
         catch (error) {
-            const info = classifyTelegramBusTransportError(error);
-            const final = error instanceof TelegramBusLocalAuthorityError ||
+            const info = classifyBaleBusTransportError(error);
+            const final = error instanceof BaleBusLocalAuthorityError ||
                 attempt >= attempts ||
-                !isRetryableTelegramBusTransportError(error);
+                !isRetryableBaleBusTransportError(error);
             if (attempt === 1 || final)
                 resolvedOptions.recordTransportEvent?.("client-failed", {
-                    ...getTelegramBusEndpointDiagnostics(resolvedOptions.socketPath),
-                    ...getTelegramBusEnvelopeDiagnostics(resolvedOptions.envelope),
+                    ...getBaleBusEndpointDiagnostics(resolvedOptions.socketPath),
+                    ...getBaleBusEnvelopeDiagnostics(resolvedOptions.envelope),
                     attempt,
                     attempts,
                     ...info,
@@ -1991,21 +1991,21 @@ export async function sendTelegramBusLocalEnvelope(options) {
                 throw error;
             if (attempt === 1)
                 resolvedOptions.recordTransportEvent?.("client-retry", {
-                    ...getTelegramBusEndpointDiagnostics(resolvedOptions.socketPath),
-                    ...getTelegramBusEnvelopeDiagnostics(resolvedOptions.envelope),
+                    ...getBaleBusEndpointDiagnostics(resolvedOptions.socketPath),
+                    ...getBaleBusEnvelopeDiagnostics(resolvedOptions.envelope),
                     attempt,
                     attempts,
                     delayMs,
                     ...info,
                 });
-            await delayTelegramBusTransportRetry(delayMs);
+            await delayBaleBusTransportRetry(delayMs);
         }
     }
 }
-export function createTelegramBusForwardOwnershipValidator(registry) {
+export function createBaleBusForwardOwnershipValidator(registry) {
     return (ownership) => {
         const follower = registry.get(ownership.instanceId);
-        return isTelegramBusForwardOwnershipCurrent(ownership, follower?.registrationGeneration &&
+        return isBaleBusForwardOwnershipCurrent(ownership, follower?.registrationGeneration &&
             follower.profileKey &&
             follower.protocol
             ? {
@@ -2017,7 +2017,7 @@ export function createTelegramBusForwardOwnershipValidator(registry) {
             : undefined);
     };
 }
-function hasTelegramBusFollowerIdentityOverlap(first, second) {
+function hasBaleBusFollowerIdentityOverlap(first, second) {
     return (first.instanceId === second.instanceId ||
         (first.profileKey !== undefined &&
             first.profileKey === second.profileKey) ||
@@ -2025,7 +2025,7 @@ function hasTelegramBusFollowerIdentityOverlap(first, second) {
             first.target.chatId === second.target?.chatId &&
             first.target.threadId === second.target.threadId));
 }
-export function createTelegramBusFollowerRegistry() {
+export function createBaleBusFollowerRegistry() {
     const followers = new Map();
     const observations = new Set();
     const clone = (follower) => ({
@@ -2046,7 +2046,7 @@ export function createTelegramBusFollowerRegistry() {
             for (const [instanceId, follower] of followers.entries()) {
                 if (instanceId === registration.instanceId)
                     continue;
-                if (hasTelegramBusFollowerIdentityOverlap(registration, follower))
+                if (hasBaleBusFollowerIdentityOverlap(registration, follower))
                     followers.delete(instanceId);
             }
             const next = {
@@ -2064,7 +2064,7 @@ export function createTelegramBusFollowerRegistry() {
             };
             followers.set(registration.instanceId, next);
             for (const observation of observations) {
-                if (!hasTelegramBusFollowerIdentityOverlap(next, observation.follower))
+                if (!hasBaleBusFollowerIdentityOverlap(next, observation.follower))
                     continue;
                 observation.current = false;
                 observations.delete(observation);
@@ -2104,7 +2104,7 @@ export function createTelegramBusFollowerRegistry() {
             // This watches replacement, not process death or delivery authority.
             const observation = {
                 follower: clone(follower),
-                current: ![...followers.values()].some((current) => hasTelegramBusFollowerIdentityOverlap(current, follower)),
+                current: ![...followers.values()].some((current) => hasBaleBusFollowerIdentityOverlap(current, follower)),
             };
             if (observation.current)
                 observations.add(observation);
@@ -2128,34 +2128,34 @@ export function createTelegramBusFollowerRegistry() {
         },
     };
 }
-async function handleTelegramBusSocketLine(line, socket, handleEnvelope, recordTransportEvent, socketPath, shouldDropResponse) {
-    const envelope = parseTelegramBusEnvelope(line);
+async function handleBaleBusSocketLine(line, socket, handleEnvelope, recordTransportEvent, socketPath, shouldDropResponse) {
+    const envelope = parseBaleBusEnvelope(line);
     if (!envelope) {
         recordTransportEvent?.("server-invalid-envelope", {
-            ...getTelegramBusEndpointDiagnostics(socketPath),
+            ...getBaleBusEndpointDiagnostics(socketPath),
             byteLength: Buffer.byteLength(line),
         });
-        socket.write(encodeTelegramBusEnvelope({
+        socket.write(encodeBaleBusEnvelope({
             kind: "bus.ack",
             requestId: "invalid",
             ok: false,
-            message: "Invalid Telegram bus envelope.",
+            message: "Invalid Bale bus envelope.",
         }));
         return;
     }
     try {
         const response = await handleEnvelope(envelope);
         if (response && !shouldDropResponse?.(envelope, response)) {
-            socket.write(encodeTelegramBusEnvelope(response));
+            socket.write(encodeBaleBusEnvelope(response));
         }
     }
     catch (error) {
         recordTransportEvent?.("server-handler-failed", {
-            ...getTelegramBusEndpointDiagnostics(socketPath),
-            ...getTelegramBusEnvelopeDiagnostics(envelope),
-            ...classifyTelegramBusTransportError(error),
+            ...getBaleBusEndpointDiagnostics(socketPath),
+            ...getBaleBusEnvelopeDiagnostics(envelope),
+            ...classifyBaleBusTransportError(error),
         });
-        socket.write(encodeTelegramBusEnvelope(rejectTelegramBusRequest(envelope.requestId, "Telegram bus handler failed.")));
+        socket.write(encodeBaleBusEnvelope(rejectBaleBusRequest(envelope.requestId, "Bale bus handler failed.")));
     }
 }
 function parseRegisterEnvelope(value, requestId, kind) {
@@ -2199,11 +2199,11 @@ function parseRenameThreadEnvelope(value, requestId) {
         }
         : undefined;
 }
-function parseTelegramBusFollowerDeliveryIdentity(value) {
+function parseBaleBusFollowerDeliveryIdentity(value) {
     if (!isRecord(value))
         return undefined;
     if (typeof value.deliveryId !== "string" ||
-        !/^telegram-follower-v1-[a-f0-9]{64}$/u.test(value.deliveryId) ||
+        !/^bale-follower-v1-[a-f0-9]{64}$/u.test(value.deliveryId) ||
         !Number.isSafeInteger(value.sourceUpdateId) ||
         value.sourceUpdateId < 0 ||
         typeof value.recipientBindingKey !== "string" ||
@@ -2240,7 +2240,7 @@ function parseTelegramBusFollowerDeliveryIdentity(value) {
     };
 }
 function parseForwardCallbackEnvelope(value, requestId) {
-    const delivery = parseTelegramBusFollowerDeliveryIdentity(value.delivery);
+    const delivery = parseBaleBusFollowerDeliveryIdentity(value.delivery);
     return delivery &&
         typeof value.recipientInstanceId === "string" &&
         typeof value.recipientRegistrationGeneration === "string" &&
@@ -2257,7 +2257,7 @@ function parseForwardCallbackEnvelope(value, requestId) {
         : undefined;
 }
 function parseForwardReactionEnvelope(value, requestId) {
-    const delivery = parseTelegramBusFollowerDeliveryIdentity(value.delivery);
+    const delivery = parseBaleBusFollowerDeliveryIdentity(value.delivery);
     return delivery &&
         typeof value.recipientInstanceId === "string" &&
         typeof value.recipientRegistrationGeneration === "string" &&
@@ -2274,7 +2274,7 @@ function parseForwardReactionEnvelope(value, requestId) {
         : undefined;
 }
 function parseForwardMessageEnvelope(value, requestId, kind) {
-    const delivery = parseTelegramBusFollowerDeliveryIdentity(value.delivery);
+    const delivery = parseBaleBusFollowerDeliveryIdentity(value.delivery);
     return delivery &&
         typeof value.recipientInstanceId === "string" &&
         typeof value.recipientRegistrationGeneration === "string" &&
@@ -2336,7 +2336,7 @@ function parseOfferInputCustodyHandoffEnvelope(value, requestId) {
     };
 }
 function parseWakeInputCustodyEnvelope(value, requestId) {
-    const delivery = parseTelegramBusFollowerDeliveryIdentity(value.delivery);
+    const delivery = parseBaleBusFollowerDeliveryIdentity(value.delivery);
     return delivery &&
         delivery.sourceRecoveryKey &&
         delivery.sourceClaim &&
@@ -2361,10 +2361,10 @@ function parseQueueHandoffEnvelope(value, requestId, kind) {
     catch {
         return undefined;
     }
-    if (serializedPayloadBytes > TELEGRAM_QUEUE_HANDOFF_PAYLOAD_MAX_BYTES) {
+    if (serializedPayloadBytes > BALE_QUEUE_HANDOFF_PAYLOAD_MAX_BYTES) {
         return undefined;
     }
-    const payload = parseTelegramQueueHandoffPayload(value.payload);
+    const payload = parseBaleQueueHandoffPayload(value.payload);
     if (!payload ||
         typeof value.recipientInstanceId !== "string" ||
         typeof value.recipientRegistrationGeneration !== "string" ||
@@ -2484,7 +2484,7 @@ const nonempty = (input, limit = 128) => typeof input === "string" && !!input.tr
 const positive = (input) => Number.isSafeInteger(input) && input > 0;
 const nonnegative = (input) => Number.isSafeInteger(input) && input >= 0;
 /** Shared closed text-effect codec; parsing alone supplies no recipient or issuance authority. */
-export function parseTelegramBusSelectedMenuTextEffect(effect) {
+export function parseBaleBusSelectedMenuTextEffect(effect) {
     if (!isRecord(effect) ||
         (effect.kind !== "send-text" && effect.kind !== "edit-text") ||
         !hasOnlyWireKeys(effect, [
@@ -2540,7 +2540,7 @@ export function parseTelegramBusSelectedMenuTextEffect(effect) {
         : { ...common, kind: "edit-text", messageId: effect.messageId };
 }
 function parseSelectedMenuDeliveryEnvelope(value, requestId) {
-    const recipient = value.recipient, executor = value.executor, effect = parseTelegramBusSelectedMenuTextEffect(value.effect);
+    const recipient = value.recipient, executor = value.executor, effect = parseBaleBusSelectedMenuTextEffect(value.effect);
     if (!hasOnlyWireKeys(value, [
         "kind",
         "requestId",
@@ -2647,7 +2647,7 @@ function parseAckEnvelope(value, requestId) {
     };
     if (Object.hasOwn(value, "result"))
         envelope.result = value.result;
-    const protocol = parseTelegramBusProtocolIdentity(value.protocol);
+    const protocol = parseBaleBusProtocolIdentity(value.protocol);
     if (protocol)
         envelope.protocol = protocol;
     if (isRecord(value.error)) {
@@ -2682,7 +2682,7 @@ function parseAckEnvelope(value, requestId) {
     }
     return envelope;
 }
-function parseTelegramBusProtocolIdentity(value) {
+function parseBaleBusProtocolIdentity(value) {
     if (!isRecord(value))
         return undefined;
     if (!Number.isSafeInteger(value.protocolVersion) ||
@@ -2757,7 +2757,7 @@ function parseRegistration(value) {
     if (typeof value.processBirthId === "string" && value.processBirthId) {
         registration.processBirthId = value.processBirthId;
     }
-    const protocol = parseTelegramBusProtocolIdentity(value.protocol);
+    const protocol = parseBaleBusProtocolIdentity(value.protocol);
     if (protocol)
         registration.protocol = protocol;
     if (target)

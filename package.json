@@ -1,28 +1,21 @@
 {
-  "name": "@llblab/pi-telegram",
+  "name": "@llblab/pi-bale",
   "version": "0.58.1",
   "private": false,
   "publishConfig": {
     "access": "public"
   },
-  "description": "Telegram runtime adapter for Pi",
+  "description": "Bale runtime adapter for Pi",
   "keywords": [
     "pi-package",
     "pi",
-    "telegram",
+    "bale",
     "bot",
     "extension"
   ],
   "type": "module",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/llblab/pi-telegram.git"
-  },
-  "homepage": "https://github.com/llblab/pi-telegram",
-  "bugs": {
-    "url": "https://github.com/llblab/pi-telegram/issues"
-  },
+  "homepage": "https://docs.bale.ai/",
   "engines": {
     "node": ">=22.19.0"
   },
@@ -34,7 +27,7 @@
     "build": "node scripts/build-dist.mjs",
     "build:check": "node scripts/build-dist.mjs --check",
     "prepack": "npm run build",
-    "check": "node -e \"await import('./dist/pi-telegram/index.js'); console.log('pi-telegram: extension import ok')\"",
+    "check": "node -e \"await import('./dist/pi-bale/index.js'); console.log('pi-bale: extension import ok')\"",
     "audit": "npm audit --omit=peer",
     "audit:host": "npm audit",
     "pack:check": "npm pack --dry-run",
@@ -102,12 +95,11 @@
   },
   "pi": {
     "extensions": [
-      "./dist/pi-telegram/index.js"
+      "./dist/pi-bale/index.js"
     ],
     "skills": [
       "./dist/skills"
-    ],
-    "image": "https://raw.githubusercontent.com/llblab/pi-telegram/main/screenshot.png"
+    ]
   },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": ">=1.0.0",

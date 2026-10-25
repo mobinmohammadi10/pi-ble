@@ -1,19 +1,19 @@
 /**
- * Telegram outbound markup parsing helpers
- * Zones: telegram outbound, assistant markup
+ * Bale outbound markup parsing helpers
+ * Zones: bale outbound, assistant markup
  * Owns top-level assistant action comment extraction, attribute parsing, and markup stripping shared by voice and outbound delivery
  */
 
-import { isWireRecord as isTelegramActionPayload } from "./wire.ts";
+import { isWireRecord as isBaleActionPayload } from "./wire.ts";
 
-export interface TelegramTopLevelHtmlComment {
+export interface BaleTopLevelHtmlComment {
   raw: string;
   content: string;
   start: number;
   end: number;
 }
 
-interface TelegramTopLevelFenceState {
+interface BaleTopLevelFenceState {
   marker: "`" | "~";
   length: number;
 }
@@ -33,7 +33,7 @@ function getMarkdownLineText(
 
 function getTopLevelOpeningFence(
   line: string,
-): TelegramTopLevelFenceState | undefined {
+): BaleTopLevelFenceState | undefined {
   const match = line.match(/^(?: {0,3})(`{3,}|~{3,})/);
   const sequence = match?.[1];
   if (!sequence) return undefined;
@@ -45,7 +45,7 @@ function getTopLevelOpeningFence(
 
 function isTopLevelClosingFence(
   line: string,
-  fence: TelegramTopLevelFenceState,
+  fence: BaleTopLevelFenceState,
 ): boolean {
   const match = line.match(/^(?: {0,3})(`{3,}|~{3,})([ \t]*)$/);
   const sequence = match?.[1];
@@ -57,12 +57,12 @@ function isTopLevelClosingFence(
 }
 
 export function collectTopLevelHtmlComments(markdown: string): {
-  comments: TelegramTopLevelHtmlComment[];
+  comments: BaleTopLevelHtmlComment[];
   openCommentStart?: number;
 } {
-  const comments: TelegramTopLevelHtmlComment[] = [];
+  const comments: BaleTopLevelHtmlComment[] = [];
   let offset = 0;
-  let fence: TelegramTopLevelFenceState | undefined;
+  let fence: BaleTopLevelFenceState | undefined;
   while (offset < markdown.length) {
     const lineEnd = getMarkdownLineEnd(markdown, offset);
     const line = getMarkdownLineText(markdown, offset, lineEnd);
@@ -92,14 +92,14 @@ export function collectTopLevelHtmlComments(markdown: string): {
   return { comments };
 }
 
-export function replaceTelegramButtonFences(
+export function replaceBaleButtonFences(
   markdown: string,
   replace: (payload: string, closed: boolean) => string,
 ): string {
   let result = "";
   let copied = 0;
   let offset = 0;
-  let fence: TelegramTopLevelFenceState | undefined;
+  let fence: BaleTopLevelFenceState | undefined;
   let actionStart: number | undefined;
   let contentStart = 0;
   while (offset < markdown.length) {
@@ -122,7 +122,7 @@ export function replaceTelegramButtonFences(
       continue;
     } else {
       fence = getTopLevelOpeningFence(line);
-      if (fence && /^```telegram_button[ \t]*$/.test(line)) {
+      if (fence && /^```bale_button[ \t]*$/.test(line)) {
         actionStart = offset;
         contentStart = end;
       }
@@ -138,7 +138,7 @@ export function replaceTelegramButtonFences(
 
 export function replaceTopLevelHtmlComments(
   markdown: string,
-  replacer: (comment: TelegramTopLevelHtmlComment) => string,
+  replacer: (comment: BaleTopLevelHtmlComment) => string,
 ): string {
   const { comments } = collectTopLevelHtmlComments(markdown);
   if (comments.length === 0) return markdown;
@@ -156,7 +156,7 @@ function findTopLevelOpenOrPartialHtmlCommentIndex(markdown: string): number {
   const { openCommentStart } = collectTopLevelHtmlComments(markdown);
   if (openCommentStart !== undefined) return openCommentStart;
   let offset = 0;
-  let fence: TelegramTopLevelFenceState | undefined;
+  let fence: BaleTopLevelFenceState | undefined;
   while (offset < markdown.length) {
     const lineEnd = getMarkdownLineEnd(markdown, offset);
     const line = getMarkdownLineText(markdown, offset, lineEnd);
@@ -180,7 +180,7 @@ function findTopLevelOpenOrPartialHtmlCommentIndex(markdown: string): number {
   return -1;
 }
 
-function parseTolerantTelegramAttributes(
+function parseTolerantBaleAttributes(
   source: string,
   names: readonly string[],
 ): Record<string, string> | undefined {
@@ -197,7 +197,7 @@ function parseTolerantTelegramAttributes(
   return Object.keys(attributes).length > 0 ? attributes : undefined;
 }
 
-function removeTelegramJsonTrailingCommas(source: string): string {
+function removeBaleJsonTrailingCommas(source: string): string {
   let normalized = "";
   let inString = false;
   let escaped = false;
@@ -225,16 +225,16 @@ function removeTelegramJsonTrailingCommas(source: string): string {
   return normalized;
 }
 
-function parseTelegramJsonObjectCandidate(
+function parseBaleJsonObjectCandidate(
   source: string,
 ): Record<string, unknown> | undefined {
-  const normalized = removeTelegramJsonTrailingCommas(source);
+  const normalized = removeBaleJsonTrailingCommas(source);
   for (const candidate of normalized === source
     ? [source]
     : [source, normalized]) {
     try {
       const value: unknown = JSON.parse(candidate);
-      if (isTelegramActionPayload(value)) return value;
+      if (isBaleActionPayload(value)) return value;
     } catch {
       // Try the bounded trailing-comma normalization before rejecting JSON.
     }
@@ -242,7 +242,7 @@ function parseTelegramJsonObjectCandidate(
   return undefined;
 }
 
-function looksLikeTelegramNamedJsonObject(
+function looksLikeBaleNamedJsonObject(
   source: string,
   offset: number,
 ): boolean {
@@ -250,7 +250,7 @@ function looksLikeTelegramNamedJsonObject(
 }
 
 /** Blank one structured span so tolerant attribute parsing never reads keys inside rejected JSON or matrices. */
-function blankTelegramActionSpan(
+function blankBaleActionSpan(
   text: string,
   start: number,
   end: number,
@@ -262,8 +262,8 @@ function blankTelegramActionSpan(
  * Scans one action comment for its first accepted structured payload. Otherwise returns the attribute envelope
  * with every structured span blanked; implausible `[` starts are skipped without a parse attempt.
  */
-function scanTelegramActionComment<T>(
-  comment: TelegramTopLevelHtmlComment,
+function scanBaleActionComment<T>(
+  comment: BaleTopLevelHtmlComment,
   command: string,
   parseStructured: (content: string, offset: number) => T | undefined,
 ): { payload: T } | { attributeEnvelope: string } | undefined {
@@ -274,37 +274,37 @@ function scanTelegramActionComment<T>(
   for (let offset = 0; offset < content.length; offset += 1) {
     const char = content[offset];
     if (char !== "{" && char !== "[") continue;
-    if (char === "{" || isPlausibleTelegramMatrixStart(content, offset)) {
+    if (char === "{" || isPlausibleBaleMatrixStart(content, offset)) {
       const payload = parseStructured(content, offset);
       if (payload !== undefined) return { payload };
     }
-    const end = findTelegramStructuredPayloadEnd(content, offset);
+    const end = findBaleStructuredPayloadEnd(content, offset);
     if (end === undefined) continue;
-    attributeEnvelope = blankTelegramActionSpan(attributeEnvelope, offset, end);
+    attributeEnvelope = blankBaleActionSpan(attributeEnvelope, offset, end);
     offset = end - 1;
   }
   return { attributeEnvelope };
 }
 
-function parseTelegramActionPayload(
-  comment: TelegramTopLevelHtmlComment,
+function parseBaleActionPayload(
+  comment: BaleTopLevelHtmlComment,
   command: string,
 ): Record<string, unknown> | undefined {
-  const scanned = scanTelegramActionComment(
+  const scanned = scanBaleActionComment(
     comment,
     command,
     (content, offset) =>
       content[offset] === "{"
-        ? parseTelegramAdaptiveActionPayloadRows(
+        ? parseBaleAdaptiveActionPayloadRows(
             content.slice(offset),
-            parseTelegramVoiceCompactActionPayload,
+            parseBaleVoiceCompactActionPayload,
             { allowTrailing: true },
           )?.rows[0]![0]
         : undefined,
   );
   if (!scanned) return undefined;
   if ("payload" in scanned) return scanned.payload;
-  return parseTolerantTelegramAttributes(scanned.attributeEnvelope, [
+  return parseTolerantBaleAttributes(scanned.attributeEnvelope, [
     "text",
     "value",
     "lang",
@@ -312,13 +312,13 @@ function parseTelegramActionPayload(
   ]);
 }
 
-const TELEGRAM_COMPACT_ACTION_CONTROL_PATTERN = /[\u0000-\u001f\u007f-\u009f]/u;
+const BALE_COMPACT_ACTION_CONTROL_PATTERN = /[\u0000-\u001f\u007f-\u009f]/u;
 
-type TelegramCompactActionPayloadParser = (
+type BaleCompactActionPayloadParser = (
   atoms: readonly string[],
 ) => Record<string, unknown> | undefined;
 
-function parseTelegramButtonCompactActionPayload(
+function parseBaleButtonCompactActionPayload(
   atoms: readonly string[],
 ): Record<string, unknown> | undefined {
   const [label, prompt, selectedStyle, disabled] = atoms;
@@ -349,7 +349,7 @@ function parseTelegramButtonCompactActionPayload(
   };
 }
 
-function parseTelegramVoiceCompactActionPayload(
+function parseBaleVoiceCompactActionPayload(
   atoms: readonly string[],
 ): Record<string, unknown> | undefined {
   const [text, lang, rate] = atoms;
@@ -361,9 +361,9 @@ function parseTelegramVoiceCompactActionPayload(
   return { text, lang, rate };
 }
 
-function parseTelegramAdaptiveActionPayloadRows(
+function parseBaleAdaptiveActionPayloadRows(
   source: string,
-  parseCompactPayload: TelegramCompactActionPayloadParser,
+  parseCompactPayload: BaleCompactActionPayloadParser,
   options: { allowTrailing?: boolean; maxCompactAtoms?: number; allowMatrixGroups?: boolean } = {},
 ): { rows: Record<string, unknown>[][]; end: number } | undefined {
   let offset = 0;
@@ -384,7 +384,7 @@ function parseTelegramAdaptiveActionPayloadRows(
   };
   const normalizeAtom = (value: string): string | undefined => {
     const normalized = value.trim();
-    return !TELEGRAM_COMPACT_ACTION_CONTROL_PATTERN.test(normalized)
+    return !BALE_COMPACT_ACTION_CONTROL_PATTERN.test(normalized)
       ? normalized
       : undefined;
   };
@@ -452,7 +452,7 @@ function parseTelegramAdaptiveActionPayloadRows(
         return undefined;
       if (stack.length > 0) continue;
       const candidate = source.slice(start, index + 1);
-      const value = parseTelegramJsonObjectCandidate(candidate);
+      const value = parseBaleJsonObjectCandidate(candidate);
       if (!value) return undefined;
       offset = index + 1;
       return value;
@@ -464,7 +464,7 @@ function parseTelegramAdaptiveActionPayloadRows(
     const jsonCell = parseJsonObjectCell();
     if (jsonCell) return jsonCell;
     offset = start;
-    if (looksLikeTelegramNamedJsonObject(source, start)) return undefined;
+    if (looksLikeBaleNamedJsonObject(source, start)) return undefined;
     return parseCompactCell();
   };
   const parseRow = (): Record<string, unknown>[] | undefined => {
@@ -541,7 +541,7 @@ function parseTelegramAdaptiveActionPayloadRows(
   return { rows, end: offset };
 }
 
-function findTelegramStructuredPayloadEnd(
+function findBaleStructuredPayloadEnd(
   source: string,
   start: number,
 ): number | undefined {
@@ -572,7 +572,7 @@ function findTelegramStructuredPayloadEnd(
   return undefined;
 }
 
-function isPlausibleTelegramMatrixStart(
+function isPlausibleBaleMatrixStart(
   source: string,
   start: number,
 ): boolean {
@@ -583,33 +583,33 @@ function isPlausibleTelegramMatrixStart(
   );
 }
 
-export function parseTelegramButtonPayloadRows(
+export function parseBaleButtonPayloadRows(
   source: string,
 ): Record<string, unknown>[][] | undefined {
-  return parseTelegramAdaptiveActionPayloadRows(
+  return parseBaleAdaptiveActionPayloadRows(
     source.trim(),
-    parseTelegramButtonCompactActionPayload,
+    parseBaleButtonCompactActionPayload,
     { maxCompactAtoms: 4, allowMatrixGroups: true },
   )?.rows;
 }
 
-export function parseTelegramActionPayloadRows(
-  comment: TelegramTopLevelHtmlComment,
+export function parseBaleActionPayloadRows(
+  comment: BaleTopLevelHtmlComment,
   command: string,
 ): Record<string, unknown>[][] | undefined {
-  const scanned = scanTelegramActionComment(
+  const scanned = scanBaleActionComment(
     comment,
     command,
     (content, offset) =>
-      parseTelegramAdaptiveActionPayloadRows(
+      parseBaleAdaptiveActionPayloadRows(
         content.slice(offset),
-        parseTelegramButtonCompactActionPayload,
+        parseBaleButtonCompactActionPayload,
         { allowTrailing: true, maxCompactAtoms: 4, allowMatrixGroups: true },
       )?.rows,
   );
   if (!scanned) return undefined;
   if ("payload" in scanned) return scanned.payload;
-  const attributes = parseTolerantTelegramAttributes(
+  const attributes = parseTolerantBaleAttributes(
     scanned.attributeEnvelope,
     ["label", "prompt", "value", "selected_style", "disabled"],
   );
@@ -630,11 +630,11 @@ function normalizeMarkdownAfterVoiceExtraction(markdown: string): string {
   return markdown.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function isTelegramCommentOnlyLinePrefix(value: string): boolean {
+function isBaleCommentOnlyLinePrefix(value: string): boolean {
   return /^[ \t]*(?:(?:>[ \t]*)+)?(?:(?:[-+*]|\d+[.)])[ \t]+)?$/u.test(value);
 }
 
-function stripTelegramHtmlCommentBlocks(markdown: string): string {
+function stripBaleHtmlCommentBlocks(markdown: string): string {
   let result = "";
   let offset = 0;
   while (offset < markdown.length) {
@@ -647,7 +647,7 @@ function stripTelegramHtmlCommentBlocks(markdown: string): string {
     const lineEnd =
       newlineAfterComment === -1 ? markdown.length : newlineAfterComment;
     const commentOwnsLine =
-      isTelegramCommentOnlyLinePrefix(markdown.slice(lineStart, start)) &&
+      isBaleCommentOnlyLinePrefix(markdown.slice(lineStart, start)) &&
       markdown.slice(afterComment, lineEnd).trim().length === 0;
     result += markdown.slice(offset, commentOwnsLine ? lineStart : start);
     if (close === -1) return result;
@@ -660,9 +660,9 @@ function stripTelegramHtmlCommentBlocks(markdown: string): string {
   return result;
 }
 
-export function stripTelegramCommentMarkupForPreview(markdown: string): string {
-  const withoutClosedBlocks = stripTelegramHtmlCommentBlocks(
-    replaceTelegramButtonFences(markdown, () => ""),
+export function stripBaleCommentMarkupForPreview(markdown: string): string {
+  const withoutClosedBlocks = stripBaleHtmlCommentBlocks(
+    replaceBaleButtonFences(markdown, () => ""),
   );
   const openBlockIndex =
     findTopLevelOpenOrPartialHtmlCommentIndex(withoutClosedBlocks);
@@ -673,10 +673,10 @@ export function stripTelegramCommentMarkupForPreview(markdown: string): string {
   return normalizeMarkdownAfterVoiceExtraction(previewMarkdown);
 }
 
-export function stripTelegramCommentMarkupForDelivery(
+export function stripBaleCommentMarkupForDelivery(
   markdown: string,
 ): string {
-  const withoutClosedBlocks = stripTelegramHtmlCommentBlocks(markdown);
+  const withoutClosedBlocks = stripBaleHtmlCommentBlocks(markdown);
   const openBlockIndex =
     findTopLevelOpenOrPartialHtmlCommentIndex(withoutClosedBlocks);
   const deliveryMarkdown =
@@ -686,21 +686,21 @@ export function stripTelegramCommentMarkupForDelivery(
   return normalizeMarkdownAfterVoiceExtraction(deliveryMarkdown);
 }
 
-export interface TelegramVoiceReplyItem {
+export interface BaleVoiceReplyItem {
   text: string;
   lang?: string;
   rate?: string;
 }
 
-export interface TelegramVoiceReplyPlan {
+export interface BaleVoiceReplyPlan {
   markdown: string;
   voiceText?: string;
-  voiceReplies?: TelegramVoiceReplyItem[];
+  voiceReplies?: BaleVoiceReplyItem[];
   lang?: string;
   rate?: string;
 }
 
-export function getTelegramActionString(
+export function getBaleActionString(
   payload: Record<string, unknown>,
   key: string,
 ): string | undefined {
@@ -710,25 +710,25 @@ export function getTelegramActionString(
   return trimmed || undefined;
 }
 
-export function planTelegramVoiceReply(
+export function planBaleVoiceReply(
   markdown: string,
-): TelegramVoiceReplyPlan {
-  const voiceReplies: TelegramVoiceReplyItem[] = [];
+): BaleVoiceReplyPlan {
+  const voiceReplies: BaleVoiceReplyItem[] = [];
   let lang: string | undefined;
   let rate: string | undefined;
   const stripped = replaceTopLevelHtmlComments(markdown, (comment) => {
-    const command = "telegram_voice";
+    const command = "bale_voice";
     const normalizedContent = comment.content
       .replace(/^\s+/, "")
       .replace(/^!/, "");
     if (!normalizedContent.startsWith(command)) return comment.raw;
-    const payload = parseTelegramActionPayload(comment, command);
+    const payload = parseBaleActionPayload(comment, command);
     if (!payload) return "";
     const text =
-      getTelegramActionString(payload, "text") ??
-      getTelegramActionString(payload, "value");
-    const itemLang = getTelegramActionString(payload, "lang");
-    const itemRate = getTelegramActionString(payload, "rate");
+      getBaleActionString(payload, "text") ??
+      getBaleActionString(payload, "value");
+    const itemLang = getBaleActionString(payload, "lang");
+    const itemRate = getBaleActionString(payload, "rate");
     if (text) {
       voiceReplies.push({
         text,
@@ -745,7 +745,7 @@ export function planTelegramVoiceReply(
     .join("\n\n")
     .trim();
   return {
-    markdown: stripTelegramCommentMarkupForDelivery(stripped),
+    markdown: stripBaleCommentMarkupForDelivery(stripped),
     ...(voiceText ? { voiceText } : {}),
     ...(voiceReplies.length > 0 ? { voiceReplies } : {}),
     ...(lang ? { lang } : {}),

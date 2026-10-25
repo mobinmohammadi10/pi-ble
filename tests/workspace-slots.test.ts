@@ -5,15 +5,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  TELEGRAM_WORKSPACE_SLOTS,
-  planTelegramWorkspaceSlotAllocation,
-  selectTelegramWorkspaceReusableSlot,
-  type TelegramWorkspaceReusableSlot,
-  type TelegramWorkspaceSlotOccupancy,
+  BALE_WORKSPACE_SLOTS,
+  planBaleWorkspaceSlotAllocation,
+  selectBaleWorkspaceReusableSlot,
+  type BaleWorkspaceReusableSlot,
+  type BaleWorkspaceSlotOccupancy,
 } from "../lib/workspace-slots.ts";
 
-function fullProfile(): TelegramWorkspaceSlotOccupancy[] {
-  return Array.from(TELEGRAM_WORKSPACE_SLOTS, (slot, index) => ({
+function fullProfile(): BaleWorkspaceSlotOccupancy[] {
+  return Array.from(BALE_WORKSPACE_SLOTS, (slot, index) => ({
     bindingKey: `/repo/${index}`,
     slot,
     inactiveSinceMs: 100 + index,
@@ -21,7 +21,7 @@ function fullProfile(): TelegramWorkspaceSlotOccupancy[] {
   }));
 }
 
-function reusable(): TelegramWorkspaceReusableSlot[] {
+function reusable(): BaleWorkspaceReusableSlot[] {
   return Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ", (slot, index) => ({
     bindingKey: `/repo/${index}`, slot, live: false, lastUsedMs: 100 + index,
   }));
@@ -29,32 +29,32 @@ function reusable(): TelegramWorkspaceReusableSlot[] {
 
 test("Reusable letter selection prefers detached bindings by age and ignores protection", () => {
   const candidates = reusable();
-  assert.equal(selectTelegramWorkspaceReusableSlot(candidates)?.slot, "A");
+  assert.equal(selectBaleWorkspaceReusableSlot(candidates)?.slot, "A");
   candidates[12].lastUsedMs = 1;
-  assert.equal(selectTelegramWorkspaceReusableSlot(candidates)?.slot, "M");
+  assert.equal(selectBaleWorkspaceReusableSlot(candidates)?.slot, "M");
   // A live owner is the most recently used binding, whatever its stored clock says.
   candidates[12].live = true;
-  assert.equal(selectTelegramWorkspaceReusableSlot(candidates)?.slot, "A");
+  assert.equal(selectBaleWorkspaceReusableSlot(candidates)?.slot, "A");
   for (const candidate of candidates) candidate.live = true;
-  assert.equal(selectTelegramWorkspaceReusableSlot(candidates)?.slot, "M", "all-live pools still reuse the oldest");
+  assert.equal(selectBaleWorkspaceReusableSlot(candidates)?.slot, "M", "all-live pools still reuse the oldest");
   candidates.forEach((candidate) => { candidate.live = false; candidate.lastUsedMs = 5; });
-  assert.equal(selectTelegramWorkspaceReusableSlot(candidates.toReversed())?.slot, "A", "ties resolve by letter");
+  assert.equal(selectBaleWorkspaceReusableSlot(candidates.toReversed())?.slot, "A", "ties resolve by letter");
 });
 
 test("Reusable letter selection refuses empty or malformed candidate sets", () => {
-  assert.equal(selectTelegramWorkspaceReusableSlot([]), undefined);
+  assert.equal(selectBaleWorkspaceReusableSlot([]), undefined);
   const base = reusable().slice(0, 2);
   for (const patch of [{ slot: "a" }, { slot: "AB" }, { bindingKey: "" }, { lastUsedMs: -1 }, { lastUsedMs: 1.5 }, { slot: "A" }, { bindingKey: "/repo/0" }]) {
-    assert.equal(selectTelegramWorkspaceReusableSlot([base[0]!, { ...base[1]!, ...patch }]), undefined, JSON.stringify(patch));
+    assert.equal(selectBaleWorkspaceReusableSlot([base[0]!, { ...base[1]!, ...patch }]), undefined, JSON.stringify(patch));
   }
 });
 
 test("Global allocation uses the first free letter across directories and claims", () => {
   const bindings = fullProfile().slice(0, 2);
-  assert.deepEqual(planTelegramWorkspaceSlotAllocation({
+  assert.deepEqual(planBaleWorkspaceSlotAllocation({
     bindings, reservedSlots: ["c", "e"], nowMs: 1000,
   }), { kind: "free", slot: "d" });
-  assert.deepEqual(planTelegramWorkspaceSlotAllocation({
+  assert.deepEqual(planBaleWorkspaceSlotAllocation({
     bindings: [], reservedSlots: [], nowMs: 1000,
   }), { kind: "free", slot: "a" });
 });
@@ -62,7 +62,7 @@ test("Global allocation uses the first free letter across directories and claims
 test("Pressure proposes the oldest eligible binding instead of alphabetic wrap", () => {
   const bindings = fullProfile();
   bindings[12].inactiveSinceMs = 1;
-  const result = planTelegramWorkspaceSlotAllocation({
+  const result = planBaleWorkspaceSlotAllocation({
     bindings, reservedSlots: [], nowMs: 1000,
   });
   assert.equal(result.kind, "reclaim");
@@ -75,7 +75,7 @@ test("Pressure proposes the oldest eligible binding instead of alphabetic wrap",
 });
 
 test("Elapsed time cannot retire a binding while free capacity remains", () => {
-  assert.deepEqual(planTelegramWorkspaceSlotAllocation({
+  assert.deepEqual(planBaleWorkspaceSlotAllocation({
     bindings: fullProfile().slice(0, 25),
     reservedSlots: [],
     nowMs: Number.MAX_SAFE_INTEGER,
@@ -91,7 +91,7 @@ test("Protected, unknown, reserved, and unproven inactivity cannot be victims", 
   bindings[4].inactiveSinceMs = Infinity;
   bindings[5].inactiveSinceMs = -1;
   bindings[6].inactiveSinceMs = 1001;
-  const result = planTelegramWorkspaceSlotAllocation({
+  const result = planBaleWorkspaceSlotAllocation({
     bindings, reservedSlots: ["h"], nowMs: 1000,
   });
   assert.equal(result.kind, "reclaim");
@@ -104,9 +104,9 @@ test("All-protected capacity fails closed without extending the alphabet", () =>
   }));
   for (const input of [
     { bindings, reservedSlots: [] },
-    { bindings: [], reservedSlots: Array.from(TELEGRAM_WORKSPACE_SLOTS) },
+    { bindings: [], reservedSlots: Array.from(BALE_WORKSPACE_SLOTS) },
   ]) {
-    assert.deepEqual(planTelegramWorkspaceSlotAllocation({ ...input, nowMs: 1000 }), {
+    assert.deepEqual(planBaleWorkspaceSlotAllocation({ ...input, nowMs: 1000 }), {
       kind: "blocked", reason: "protected-capacity",
     });
   }
@@ -114,7 +114,7 @@ test("All-protected capacity fails closed without extending the alphabet", () =>
 
 test("Equal inactivity uses deterministic letter order independent of input order", () => {
   const bindings = fullProfile().map((binding) => ({ ...binding, inactiveSinceMs: 0 }));
-  assert.deepEqual(planTelegramWorkspaceSlotAllocation({
+  assert.deepEqual(planBaleWorkspaceSlotAllocation({
     bindings: bindings.toReversed(), reservedSlots: [], nowMs: 1000,
   }), { kind: "reclaim", candidate: bindings[0] });
 });
@@ -131,7 +131,7 @@ test("Duplicate legacy slots, duplicate binding keys, and invalid inputs block p
     { bindings: [], reservedSlots: [], nowMs: NaN },
     { bindings: [], reservedSlots: [], nowMs: -1 },
   ]) {
-    assert.deepEqual(planTelegramWorkspaceSlotAllocation(input), {
+    assert.deepEqual(planBaleWorkspaceSlotAllocation(input), {
       kind: "blocked", reason: "invalid-state",
     });
   }

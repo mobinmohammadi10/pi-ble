@@ -1,5 +1,5 @@
 /**
- * Regression tests for the Telegram turn-building domain
+ * Regression tests for the Bale turn-building domain
  * Covers queue-summary formatting, prompt construction, and prompt-turn assembly from messages and downloaded files
  */
 
@@ -10,30 +10,30 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
-  buildTelegramPromptTurn,
-  buildTelegramPromptTurnRuntime,
-  buildTelegramTurnPrompt,
-  createTelegramPromptTurnRuntimePreparer,
-  type TelegramPromptTurnRuntimeBuilderDeps,
-  type TelegramTurnMessage,
-  createTelegramQueuedPromptEditRuntime,
-  formatTelegramTurnStatusSummary,
-  TELEGRAM_GUEST_TURN_NOTE,
-  truncateTelegramQueueSummary,
-  updateQueuedTelegramPromptTurnText,
-  updateTelegramPromptTurnText,
+  buildBalePromptTurn,
+  buildBalePromptTurnRuntime,
+  buildBaleTurnPrompt,
+  createBalePromptTurnRuntimePreparer,
+  type BalePromptTurnRuntimeBuilderDeps,
+  type BaleTurnMessage,
+  createBaleQueuedPromptEditRuntime,
+  formatBaleTurnStatusSummary,
+  BALE_GUEST_TURN_NOTE,
+  truncateBaleQueueSummary,
+  updateQueuedBalePromptTurnText,
+  updateBalePromptTurnText,
 } from "../lib/turns.ts";
-import { getTelegramVoiceReplyMode } from "../lib/voice.ts";
-import { downloadTelegramMessageFiles, type TelegramMediaMessage } from "../lib/media.ts";
-import type { PendingTelegramTurn } from "../lib/queue.ts";
+import { getBaleVoiceReplyMode } from "../lib/voice.ts";
+import { downloadBaleMessageFiles, type BaleMediaMessage } from "../lib/media.ts";
+import type { PendingBaleTurn } from "../lib/queue.ts";
 
 // Formatting tests finalize immediately; queue integration tests own delayed finalization.
-function createTelegramPromptTurnRuntimeBuilder<
-  TMessage extends TelegramTurnMessage & TelegramMediaMessage,
+function createBalePromptTurnRuntimeBuilder<
+  TMessage extends BaleTurnMessage & BaleMediaMessage,
   TContext = unknown,
->(deps: TelegramPromptTurnRuntimeBuilderDeps<TContext>) {
-  const prepareTurn = createTelegramPromptTurnRuntimePreparer<TMessage, TContext>(deps);
-  return async (messages: TMessage[], historyTurns: PendingTelegramTurn[] = [], ctx?: TContext) => {
+>(deps: BalePromptTurnRuntimeBuilderDeps<TContext>) {
+  const prepareTurn = createBalePromptTurnRuntimePreparer<TMessage, TContext>(deps);
+  return async (messages: TMessage[], historyTurns: PendingBaleTurn[] = [], ctx?: TContext) => {
     const buildTurn = await prepareTurn(messages, ctx);
     return buildTurn(historyTurns);
   };
@@ -41,36 +41,36 @@ function createTelegramPromptTurnRuntimeBuilder<
 
 test("Turn helpers truncate queue summaries predictably", () => {
   assert.equal(
-    truncateTelegramQueueSummary("one two three four"),
+    truncateBaleQueueSummary("one two three four"),
     "one two three four",
   );
   assert.equal(
-    truncateTelegramQueueSummary("one two three four five six"),
+    truncateBaleQueueSummary("one two three four five six"),
     "one two three four five…",
   );
-  assert.equal(truncateTelegramQueueSummary("   "), "");
+  assert.equal(truncateBaleQueueSummary("   "), "");
 });
 
 test("Turn helpers build prompt text with history and attachments", () => {
-  const prompt = buildTelegramTurnPrompt({
-    telegramPrefix: "[telegram]",
+  const prompt = buildBaleTurnPrompt({
+    balePrefix: "[bale]",
     rawText: "current message",
     files: [{ path: "/tmp/demo.png", fileName: "demo.png", isImage: true }],
     historyTurns: [{ historyText: "older message" }],
   });
-  assert.match(prompt, /^\[telegram\]/);
+  assert.match(prompt, /^\[bale\]/);
   assert.match(
     prompt,
-    /Earlier Telegram messages arrived after an aborted turn/,
+    /Earlier Bale messages arrived after an aborted turn/,
   );
   assert.match(prompt, /1\. older message/);
-  assert.match(prompt, /Current Telegram message:\ncurrent message/);
+  assert.match(prompt, /Current Bale message:\ncurrent message/);
   assert.match(prompt, /\[attachments\] \/tmp\n- \/demo.png/);
 });
 
 test("Turn helpers keep attachment outputs with user content before reply context", () => {
-  const prompt = buildTelegramTurnPrompt({
-    telegramPrefix: "[telegram]",
+  const prompt = buildBaleTurnPrompt({
+    balePrefix: "[bale]",
     rawText: "",
     files: [
       {
@@ -84,22 +84,22 @@ test("Turn helpers keep attachment outputs with user content before reply contex
   });
   assert.equal(
     prompt,
-    "[telegram]\n\n[attachments] /tmp\n- /voice.ogg\n\n[outputs]\n- transcribed voice\n\n[reply|from:alice] Earlier message",
+    "[bale]\n\n[attachments] /tmp\n- /voice.ogg\n\n[outputs]\n- transcribed voice\n\n[reply|from:alice] Earlier message",
   );
 });
 
 test("Turn helpers omit [time] section by default", () => {
-  const prompt = buildTelegramTurnPrompt({
-    telegramPrefix: "[telegram]",
+  const prompt = buildBaleTurnPrompt({
+    balePrefix: "[bale]",
     rawText: "hello",
     files: [],
   });
-  assert.equal(prompt, "[telegram] hello");
+  assert.equal(prompt, "[bale] hello");
 });
 
 test("Turn helpers inject [time] as the final context section", () => {
-  const prompt = buildTelegramTurnPrompt({
-    telegramPrefix: "[telegram]",
+  const prompt = buildBaleTurnPrompt({
+    balePrefix: "[bale]",
     rawText: "current message",
     files: [{ path: "/tmp/demo.png", fileName: "demo.png", isImage: true }],
     handlerOutputs: ["transcript"],
@@ -108,61 +108,61 @@ test("Turn helpers inject [time] as the final context section", () => {
   });
   assert.match(
     prompt,
-    /^\[telegram\] current message\n\n\[attachments\] \/tmp\n- \/demo\.png\n\n\[outputs\]\n- transcript\n\n\[voice\] delivery: automatic voice\n\n\[time\] 2026-05-16 14:32:10 Europe\/Berlin$/,
+    /^\[bale\] current message\n\n\[attachments\] \/tmp\n- \/demo\.png\n\n\[outputs\]\n- transcript\n\n\[voice\] delivery: automatic voice\n\n\[time\] 2026-05-16 14:32:10 Europe\/Berlin$/,
   );
 });
 
 test("Turn helpers still inject [time] when raw text is empty", () => {
-  const prompt = buildTelegramTurnPrompt({
-    telegramPrefix: "[telegram]",
+  const prompt = buildBaleTurnPrompt({
+    balePrefix: "[bale]",
     rawText: "",
     files: [],
     timeLine: "2026-05-16 14:32:10 UTC",
   });
-  assert.equal(prompt, "[telegram]\n\n[time] 2026-05-16 14:32:10 UTC");
+  assert.equal(prompt, "[bale]\n\n[time] 2026-05-16 14:32:10 UTC");
 });
 
 test("Turn helpers append the Guest Mode note only for guest turns", () => {
-  const guestPrompt = buildTelegramTurnPrompt({
-    telegramPrefix: "[telegram|guest:Guest Room]",
+  const guestPrompt = buildBaleTurnPrompt({
+    balePrefix: "[bale|guest:Guest Room]",
     rawText: "guest question",
     files: [],
     guestTurn: true,
   });
   assert.equal(
     guestPrompt,
-    `[telegram|guest:Guest Room] guest question\n\n${TELEGRAM_GUEST_TURN_NOTE}`,
+    `[bale|guest:Guest Room] guest question\n\n${BALE_GUEST_TURN_NOTE}`,
   );
-  const ownerPrompt = buildTelegramTurnPrompt({
-    telegramPrefix: "[telegram]",
+  const ownerPrompt = buildBaleTurnPrompt({
+    balePrefix: "[bale]",
     rawText: "owner question",
     files: [],
   });
-  assert.equal(ownerPrompt, "[telegram] owner question");
+  assert.equal(ownerPrompt, "[bale] owner question");
 });
 
-test("Turn runtime builder folds agent source into Telegram thread metadata", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+test("Turn runtime builder folds agent source into Bale thread metadata", async () => {
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
-    getTelegramThreadLabel: () => "Atlas",
+    getBaleThreadLabel: () => "Atlas",
   });
   const turn = await buildTurn([
     {
       message_id: 42,
       message_thread_id: 99,
       chat: { id: 7 },
-      pi_telegram_agent_source_thread: "Boreal",
+      pi_bale_agent_source_thread: "Boreal",
       text: "Message",
     },
   ]);
   const text = turn.content.find((block) => block.type === "text")?.text;
-  assert.equal(text, "[telegram|thread:Atlas|from-thread:Boreal] Message");
+  assert.equal(text, "[bale|thread:Atlas|from-thread:Boreal] Message");
 });
 
 test("Turn runtime builder calls resolveTimeLine with chatId and embeds result", async () => {
   const seen: number[] = [];
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
     resolveTimeLine: (chatId) => {
@@ -180,28 +180,28 @@ test("Turn runtime builder calls resolveTimeLine with chatId and embeds result",
   );
 });
 
-test("Turn runtime builder adds explicit thread attribute to Telegram prefix", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+test("Turn runtime builder adds explicit thread attribute to Bale prefix", async () => {
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
-    getTelegramThreadLabel: () => "🧭 Axial|bad]name",
+    getBaleThreadLabel: () => "🧭 Axial|bad]name",
   });
   const turn = await buildTurn([
     { message_id: 42, message_thread_id: 7, chat: { id: 7 }, text: "hi" },
   ]);
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
-    "[telegram|thread:🧭 Axial bad name] hi",
+    "[bale|thread:🧭 Axial bad name] hi",
   );
 });
 
 test("Turn helpers summarize text and attachment-only turns", () => {
   assert.equal(
-    formatTelegramTurnStatusSummary("hello there from telegram", []),
-    "hello there from telegram",
+    formatBaleTurnStatusSummary("hello there from bale", []),
+    "hello there from bale",
   );
   assert.equal(
-    formatTelegramTurnStatusSummary("", [
+    formatBaleTurnStatusSummary("", [
       {
         path: "/tmp/report-final-version.txt",
         fileName: "report-final-version.txt",
@@ -211,7 +211,7 @@ test("Turn helpers summarize text and attachment-only turns", () => {
     "📎 report-final-version.txt",
   );
   assert.equal(
-    formatTelegramTurnStatusSummary("", [
+    formatBaleTurnStatusSummary("", [
       { path: "/tmp/a.txt", fileName: "a.txt", isImage: false },
       { path: "/tmp/b.txt", fileName: "b.txt", isImage: false },
     ]),
@@ -219,7 +219,7 @@ test("Turn helpers summarize text and attachment-only turns", () => {
   );
 });
 
-test("Turn helpers update queued prompt text for edited Telegram messages", () => {
+test("Turn helpers update queued prompt text for edited Bale messages", () => {
   const turn = {
     kind: "prompt" as const,
     chatId: 99,
@@ -229,19 +229,19 @@ test("Turn helpers update queued prompt text for edited Telegram messages", () =
     queueLane: "default" as const,
     laneOrder: 1,
     queuedAttachments: [],
-    content: [{ type: "text" as const, text: "[telegram] old" }],
+    content: [{ type: "text" as const, text: "[bale] old" }],
     historyText: "old",
     statusSummary: "old",
   };
-  const updated = updateTelegramPromptTurnText({
+  const updated = updateBalePromptTurnText({
     turn,
-    telegramPrefix: "[telegram]",
+    balePrefix: "[bale]",
     rawText: "new edited message",
   });
   assert.equal(updated.content[0]?.type, "text");
   assert.equal(
     (updated.content[0] as { type: "text"; text: string }).text,
-    "[telegram] new edited message",
+    "[bale] new edited message",
   );
   assert.equal(updated.historyText, "new edited message");
   assert.equal(updated.statusSummary, "new edited message");
@@ -251,7 +251,7 @@ test("Turn helpers update queued prompt text for edited Telegram messages", () =
 test("Turn runtime builder extracts text, downloads files, and allocates order", async () => {
   let nextOrder = 3;
   const downloaded: string[] = [];
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => nextOrder++,
     downloadFile: async (fileId, fileName) => {
       downloaded.push(`${fileId}:${fileName}`);
@@ -283,7 +283,7 @@ test("Turn runtime builder rechecks execution authority after file download", as
     chat: { id: 5 },
     document: { file_id: "doc-1", file_name: "report.txt" },
   };
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async () => {
       current = false;
@@ -305,7 +305,7 @@ test("Turn runtime builder rechecks execution authority after file download", as
 test("Turn runtime builder rechecks execution authority after inbound handlers", async () => {
   let current = true;
   let orderAllocations = 0;
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => {
       orderAllocations += 1;
       return 1;
@@ -327,8 +327,8 @@ test("Turn runtime builder rechecks execution authority after inbound handlers",
   assert.equal(orderAllocations, 0);
 });
 
-test("Turn runtime builder injects Telegram reply context into prompt turns", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+test("Turn runtime builder injects Bale reply context into prompt turns", async () => {
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
   });
@@ -347,12 +347,12 @@ test("Turn runtime builder injects Telegram reply context into prompt turns", as
   );
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
-    "[telegram] Not yet\n\n[reply] Have you seen the latest Claude update?",
+    "[bale] Not yet\n\n[reply] Have you seen the latest Claude update?",
   );
 });
 
 test("Turn runtime builder identifies forwarded messages from non-owner users", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
     getAllowedUserId: () => 100,
@@ -371,12 +371,12 @@ test("Turn runtime builder identifies forwarded messages from non-owner users", 
   ]);
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
-    "[telegram]\n\n[forward|from:alice] forwarded text",
+    "[bale]\n\n[forward|from:alice] forwarded text",
   );
 });
 
 test("Turn runtime builder keeps a same-turn comment before forwarded content", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
     getAllowedUserId: () => 100,
@@ -401,13 +401,13 @@ test("Turn runtime builder keeps a same-turn comment before forwarded content", 
   ]);
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
-    "[telegram] Мой комментарий\n\n[forward|from:alice] forwarded text",
+    "[bale] Мой комментарий\n\n[forward|from:alice] forwarded text",
   );
 });
 
 test("Turn runtime builder keeps forwarded Rich media in source attachment context", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-forward-rich-"));
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-forward-rich-"));
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => {
       const path = join(dir, fileName);
@@ -445,7 +445,7 @@ test("Turn runtime builder keeps forwarded Rich media in source attachment conte
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
     [
-      "[telegram] Мой комментарий",
+      "[bale] Мой комментарий",
       "",
       "[forward|from:alice] forwarded text",
       "",
@@ -457,8 +457,8 @@ test("Turn runtime builder keeps forwarded Rich media in source attachment conte
 });
 
 test("Turn runtime builder keeps a trailing comment before a forwarded photo source", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-forward-photo-"));
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-forward-photo-"));
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => {
       const path = join(dir, fileName);
@@ -488,7 +488,7 @@ test("Turn runtime builder keeps a trailing comment before a forwarded photo sou
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
     [
-      "[telegram] Мой комментарий",
+      "[bale] Мой комментарий",
       "",
       "[forward|from:alice]",
       "",
@@ -500,7 +500,7 @@ test("Turn runtime builder keeps a trailing comment before a forwarded photo sou
 });
 
 test("Turn runtime builder places replied-message attachments in source attachment context", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
   });
@@ -519,12 +519,12 @@ test("Turn runtime builder places replied-message attachments in source attachme
   ]);
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
-    "[telegram] look at this\n\n[reply|from:200] source image\n\n[attachments|from:200] /tmp\n- /photo-11.jpg",
+    "[bale] look at this\n\n[reply|from:200] source image\n\n[attachments|from:200] /tmp\n- /photo-11.jpg",
   );
 });
 
 test("Turn runtime builder keeps current attachments before source reply context", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
   });
@@ -544,7 +544,7 @@ test("Turn runtime builder keeps current attachments before source reply context
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
     [
-      "[telegram] current",
+      "[bale] current",
       "",
       "[attachments] /tmp",
       "- /mine.txt",
@@ -558,7 +558,7 @@ test("Turn runtime builder keeps current attachments before source reply context
 });
 
 test("Turn runtime builder includes reply block for attachment-only replied messages", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
   });
@@ -576,12 +576,12 @@ test("Turn runtime builder includes reply block for attachment-only replied mess
   ]);
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
-    "[telegram] what is this?\n\n[reply|from:alice]\n\n[attachments|from:alice] /tmp\n- /photo-11.jpg",
+    "[bale] what is this?\n\n[reply|from:alice]\n\n[attachments|from:alice] /tmp\n- /photo-11.jpg",
   );
 });
 
 test("Turn runtime builder keeps replied voice transcription inside reply context", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+  const buildTurn = createBalePromptTurnRuntimeBuilder({
     allocateQueueOrder: () => 1,
     downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
     processAttachments: async (files, rawText) => ({
@@ -608,7 +608,7 @@ test("Turn runtime builder keeps replied voice transcription inside reply contex
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
     [
-      "[telegram] respond to this",
+      "[bale] respond to this",
       "",
       "[reply|from:alice]",
       "",
@@ -622,7 +622,7 @@ test("Turn runtime builder keeps replied voice transcription inside reply contex
 });
 
 test("Turn runtime builder routes inbound handler output into prompt text", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder<
+  const buildTurn = createBalePromptTurnRuntimeBuilder<
     {
       message_id: number;
       chat: { id: number };
@@ -657,12 +657,12 @@ test("Turn runtime builder routes inbound handler output into prompt text", asyn
   );
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
-    "[telegram]\n\n[attachments] /tmp\n- /voice-12.ogg\n\n[outputs]\n- transcript from /work",
+    "[bale]\n\n[attachments] /tmp\n- /voice-12.ogg\n\n[outputs]\n- transcript from /work",
   );
 });
 
 test("Turn runtime omits voice context when reply mode is only the implicit default", async () => {
-  const buildTurn = createTelegramPromptTurnRuntimeBuilder<
+  const buildTurn = createBalePromptTurnRuntimeBuilder<
     {
       message_id: number;
       chat: { id: number };
@@ -688,12 +688,12 @@ test("Turn runtime omits voice context when reply mode is only the implicit defa
 });
 
 test("Turn builder keeps grouped and folded source update receipts distinct", async () => {
-  const historyTurn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const historyTurn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [
       {
         message_id: 10,
-        pi_telegram_source_update_id: 101,
+        pi_bale_source_update_id: 101,
         chat: { id: 5 },
       },
     ],
@@ -703,17 +703,17 @@ test("Turn builder keeps grouped and folded source update receipts distinct", as
     inferImageMimeType: () => undefined,
     admissionScope: "profile-a:bot-a",
   });
-  const currentTurn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const currentTurn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [
       {
         message_id: 11,
-        pi_telegram_source_update_id: 102,
+        pi_bale_source_update_id: 102,
         chat: { id: 5 },
       },
       {
         message_id: 12,
-        pi_telegram_source_update_id: 103,
+        pi_bale_source_update_id: 103,
         chat: { id: 5 },
       },
     ],
@@ -738,12 +738,12 @@ test("Turn builder keeps grouped and folded source update receipts distinct", as
 
 test("Turn builder fails closed when journaled source ids lack receipt scope", async () => {
   await assert.rejects(
-    buildTelegramPromptTurnRuntime({
-      telegramPrefix: "[telegram]",
+    buildBalePromptTurnRuntime({
+      balePrefix: "[bale]",
       messages: [
         {
           message_id: 10,
-          pi_telegram_source_update_id: 101,
+          pi_bale_source_update_id: 101,
           chat: { id: 5 },
         },
       ],
@@ -757,8 +757,8 @@ test("Turn builder fails closed when journaled source ids lack receipt scope", a
 });
 
 test("Turn builder preserves topic thread target", async () => {
-  const turn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [{ message_id: 14, message_thread_id: 42, chat: { id: -1007 } }],
     queueOrder: 1,
     rawText: "hello",
@@ -770,8 +770,8 @@ test("Turn builder preserves topic thread target", async () => {
 });
 
 test("Turn builder keeps private bot topic metadata out of prompt prefix", async () => {
-  const turn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [
       {
         message_id: 14,
@@ -787,13 +787,13 @@ test("Turn builder keeps private bot topic metadata out of prompt prefix", async
   });
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
-    "[telegram] hello",
+    "[bale] hello",
   );
 });
 
 test("Turn builder keeps group topic metadata out of prompt prefix", async () => {
-  const turn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [
       {
         message_id: 14,
@@ -809,13 +809,13 @@ test("Turn builder keeps group topic metadata out of prompt prefix", async () =>
   });
   assert.equal(
     (turn.content[0] as { type: "text"; text: string }).text,
-    "[telegram] hello",
+    "[bale] hello",
   );
 });
 
 test("Voice reply mode tags turn when voice file present and mode is mirror", async () => {
-  const turn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [{ message_id: 14, chat: { id: 5 } }],
     queueOrder: 1,
     rawText: "transcribed voice message",
@@ -824,7 +824,7 @@ test("Voice reply mode tags turn when voice file present and mode is mirror", as
         path: "/tmp/voice-14.ogg",
         fileName: "voice-14.ogg",
         mimeType: "audio/ogg",
-        kind: "voice" as import("../lib/media.ts").TelegramAttachmentKind,
+        kind: "voice" as import("../lib/media.ts").BaleAttachmentKind,
         isImage: false,
       },
     ],
@@ -841,8 +841,8 @@ test("Voice reply mode tags turn when voice file present and mode is mirror", as
 });
 
 test("Voice reply mode tags turn with voice-required when mode is always", async () => {
-  const turn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [{ message_id: 15, chat: { id: 5 } }],
     queueOrder: 1,
     rawText: "hello",
@@ -860,8 +860,8 @@ test("Voice reply mode tags turn with voice-required when mode is always", async
 });
 
 test("Voice reply mode mirror with no voice file stays on the manual text path", async () => {
-  const turn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [{ message_id: 17, chat: { id: 5 } }],
     queueOrder: 1,
     rawText: "hello",
@@ -879,8 +879,8 @@ test("Voice reply mode mirror with no voice file stays on the manual text path",
 });
 
 test("Voice reply mode always with voice file present sets voiceReplyRequired only", async () => {
-  const turn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [{ message_id: 18, chat: { id: 5 } }],
     queueOrder: 1,
     rawText: "transcribed voice",
@@ -890,7 +890,7 @@ test("Voice reply mode always with voice file present sets voiceReplyRequired on
         path: "/tmp/voice.ogg",
         fileName: "voice.ogg",
         mimeType: "audio/ogg",
-        kind: "voice" as import("../lib/media.ts").TelegramAttachmentKind,
+        kind: "voice" as import("../lib/media.ts").BaleAttachmentKind,
         isImage: false,
       },
     ],
@@ -906,8 +906,8 @@ test("Voice reply mode always with voice file present sets voiceReplyRequired on
 });
 
 test("Turn runtime keeps manual mode silent without voice flags", async () => {
-  const turn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [{ message_id: 16, chat: { id: 5 } }],
     queueOrder: 1,
     rawText: "hello",
@@ -917,7 +917,7 @@ test("Turn runtime keeps manual mode silent without voice flags", async () => {
         path: "/tmp/voice.ogg",
         fileName: "voice.ogg",
         mimeType: "audio/ogg",
-        kind: "voice" as import("../lib/media.ts").TelegramAttachmentKind,
+        kind: "voice" as import("../lib/media.ts").BaleAttachmentKind,
         isImage: false,
       },
     ],
@@ -933,11 +933,11 @@ test("Turn runtime keeps manual mode silent without voice flags", async () => {
 });
 
 test("Turn runtime helper reads image payloads from local files", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-turn-runtime-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-turn-runtime-"));
   const imagePath = join(tempDir, "image.png");
   await writeFile(imagePath, Buffer.from("demo-image"));
-  const turn = await buildTelegramPromptTurnRuntime({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurnRuntime({
+    balePrefix: "[bale]",
     messages: [{ message_id: 11, chat: { id: 5 } }],
     queueOrder: 1,
     rawText: "see image",
@@ -968,7 +968,7 @@ test("Turn helpers update matching queued prompt items only", () => {
     queueLane: "default" as const,
     laneOrder: 1,
     queuedAttachments: [],
-    content: [{ type: "text" as const, text: "[telegram] old" }],
+    content: [{ type: "text" as const, text: "[bale] old" }],
     historyText: "old",
     statusSummary: "old",
   };
@@ -983,22 +983,22 @@ test("Turn helpers update matching queued prompt items only", () => {
     statusSummary: "status",
     execute: async () => {},
   };
-  const result = updateQueuedTelegramPromptTurnText({
+  const result = updateQueuedBalePromptTurnText({
     items: [control, prompt],
     sourceMessageId: 10,
-    telegramPrefix: "[telegram]",
+    balePrefix: "[bale]",
     rawText: "edited",
   });
   assert.equal(result.changed, true);
   assert.equal(result.items[0], control);
   assert.equal(
     ((result.items[1] as typeof prompt).content[0] as { text: string }).text,
-    "[telegram] edited",
+    "[bale] edited",
   );
-  const unchanged = updateQueuedTelegramPromptTurnText({
+  const unchanged = updateQueuedBalePromptTurnText({
     items: [control, prompt],
     sourceMessageId: 12,
-    telegramPrefix: "[telegram]",
+    balePrefix: "[bale]",
     rawText: "ignored",
   });
   assert.equal(unchanged.changed, false);
@@ -1017,12 +1017,12 @@ test("Turn edit runtime binds queued prompt updates to status", () => {
       queueLane: "default" as const,
       laneOrder: 1,
       queuedAttachments: [],
-      content: [{ type: "text" as const, text: "[telegram] old" }],
+      content: [{ type: "text" as const, text: "[bale] old" }],
       historyText: "old",
       statusSummary: "old",
     },
   ];
-  const runtime = createTelegramQueuedPromptEditRuntime<
+  const runtime = createBaleQueuedPromptEditRuntime<
     { message_id: number; text?: string },
     string
   >({
@@ -1041,7 +1041,7 @@ test("Turn edit runtime binds queued prompt updates to status", () => {
   );
   assert.equal(
     (items[0]?.content[0] as { text: string }).text,
-    "[telegram] edited",
+    "[bale] edited",
   );
   assert.deepEqual(events, ["items:1", "status:ctx"]);
 });
@@ -1057,12 +1057,12 @@ test("Turn edit runtime keeps reply context prompt-only when queued messages cha
       queueLane: "default" as const,
       laneOrder: 1,
       queuedAttachments: [],
-      content: [{ type: "text" as const, text: "[telegram] old" }],
+      content: [{ type: "text" as const, text: "[bale] old" }],
       historyText: "old",
       statusSummary: "old",
     },
   ];
-  const runtime = createTelegramQueuedPromptEditRuntime<
+  const runtime = createBaleQueuedPromptEditRuntime<
     {
       message_id: number;
       text?: string;
@@ -1086,14 +1086,14 @@ test("Turn edit runtime keeps reply context prompt-only when queued messages cha
   );
   assert.equal(
     (items[0]?.content[0] as { text: string }).text,
-    "[telegram] edited\n\n[reply] quoted",
+    "[bale] edited\n\n[reply] quoted",
   );
   assert.equal(items[0]?.historyText, "edited\n\n[reply] quoted");
   assert.equal(items[0]?.statusSummary, "edited");
 });
 
 test("Turn helpers preserve queued prompt attachments when captions are edited", () => {
-  const attachmentDir = join(tmpdir(), "pi-telegram-turn-attachments");
+  const attachmentDir = join(tmpdir(), "pi-bale-turn-attachments");
   const attachmentBlock =
     `[attachments] ${attachmentDir}\n` +
     "- /demo.png\n" +
@@ -1110,21 +1110,21 @@ test("Turn helpers preserve queued prompt attachments when captions are edited",
     content: [
       {
         type: "text" as const,
-        text: `[telegram] old caption\n\n${attachmentBlock}`,
+        text: `[bale] old caption\n\n${attachmentBlock}`,
       },
       { type: "image" as const, data: "abc", mimeType: "image/png" },
     ],
     historyText: `old caption\n\n${attachmentBlock}`,
     statusSummary: "old caption",
   };
-  const updated = updateTelegramPromptTurnText({
+  const updated = updateBalePromptTurnText({
     turn,
-    telegramPrefix: "[telegram]",
+    balePrefix: "[bale]",
     rawText: "new caption",
   });
   assert.equal(
     (updated.content[0] as { type: "text"; text: string }).text,
-    `[telegram] new caption\n\n${attachmentBlock}`,
+    `[bale] new caption\n\n${attachmentBlock}`,
   );
   assert.deepEqual(updated.content[1], turn.content[1]);
   assert.equal(updated.historyText, `new caption\n\n${attachmentBlock}`);
@@ -1145,28 +1145,28 @@ test("Turn helpers preserve abort-history prompt context when queued turns are e
       {
         type: "text" as const,
         text:
-          "[telegram]\n\n" +
-          "Earlier Telegram messages arrived after an aborted turn. " +
+          "[bale]\n\n" +
+          "Earlier Bale messages arrived after an aborted turn. " +
           "Treat them as prior user messages, in order:\n\n" +
-          "1. older Current Telegram message: quote\n\n" +
-          "Current Telegram message:\nold current",
+          "1. older Current Bale message: quote\n\n" +
+          "Current Bale message:\nold current",
       },
     ],
     historyText: "old current",
     statusSummary: "old current",
   };
-  const updated = updateTelegramPromptTurnText({
+  const updated = updateBalePromptTurnText({
     turn,
-    telegramPrefix: "[telegram]",
+    balePrefix: "[bale]",
     rawText: "new current",
   });
   assert.equal(
     (updated.content[0] as { type: "text"; text: string }).text,
-    "[telegram]\n\n" +
-      "Earlier Telegram messages arrived after an aborted turn. " +
+    "[bale]\n\n" +
+      "Earlier Bale messages arrived after an aborted turn. " +
       "Treat them as prior user messages, in order:\n\n" +
-      "1. older Current Telegram message: quote\n\n" +
-      "Current Telegram message:\nnew current",
+      "1. older Current Bale message: quote\n\n" +
+      "Current Bale message:\nnew current",
   );
   assert.equal(updated.historyText, "new current");
   assert.equal(updated.statusSummary, "new current");
@@ -1188,9 +1188,9 @@ test("Turn edit preserves voice reply tags", () => {
     voiceReplyPreferred: true,
     voiceReplyRequired: false,
   };
-  const updated = updateTelegramPromptTurnText({
+  const updated = updateBalePromptTurnText({
     turn,
-    telegramPrefix: "[telegram]",
+    balePrefix: "[bale]",
     rawText: "edited",
   });
   assert.equal(updated.voiceReplyPreferred, true);
@@ -1201,9 +1201,9 @@ test("Video and animated stickers never enter image payloads", async () => {
   const messages = [{ message_id: 1, chat: { id: 7 }, message_thread_id: 42, sticker: { file_id: "static" } },
     { message_id: 2, chat: { id: 7 }, message_thread_id: 42, sticker: { file_id: "video", is_video: true } },
     { message_id: 3, chat: { id: 7 }, message_thread_id: 42, sticker: { file_id: "animated", is_animated: true } }];
-  const files = await downloadTelegramMessageFiles(messages, { downloadFile: async (_id, name) => `/tmp/${name}` });
+  const files = await downloadBaleMessageFiles(messages, { downloadFile: async (_id, name) => `/tmp/${name}` });
   const binaryReads: string[] = [];
-  const turn = await buildTelegramPromptTurn({ telegramPrefix: "[telegram]", messages, historyTurns: [], queueOrder: 1,
+  const turn = await buildBalePromptTurn({ balePrefix: "[bale]", messages, historyTurns: [], queueOrder: 1,
     rawText: "Stickers", files, inferImageMimeType: () => "image/webp", readBinaryFile: async path => {
       binaryReads.push(path);
       assert.equal(path, "/tmp/sticker-1.webp", "non-image bytes must not be read for an image part");
@@ -1217,8 +1217,8 @@ test("Video and animated stickers never enter image payloads", async () => {
 });
 
 test("Turn helpers assemble prompt turns with text, ids, history, and image payloads", async () => {
-  const turn = await buildTelegramPromptTurn({
-    telegramPrefix: "[telegram]",
+  const turn = await buildBalePromptTurn({
+    balePrefix: "[bale]",
     messages: [
       { message_id: 10, chat: { id: 99 } },
       { message_id: 11, chat: { id: 99 } },
@@ -1269,7 +1269,7 @@ test("Turn helpers assemble prompt turns with text, ids, history, and image payl
   assert.equal(turn.content[0]?.type, "text");
   assert.match(
     (turn.content[0] as { type: "text"; text: string }).text,
-    /Earlier Telegram messages arrived after an aborted turn/,
+    /Earlier Bale messages arrived after an aborted turn/,
   );
   assert.deepEqual(turn.content[1], {
     type: "image",
@@ -1278,47 +1278,47 @@ test("Turn helpers assemble prompt turns with text, ids, history, and image payl
   });
 });
 
-test("getTelegramVoiceReplyMode returns manual when no config provided", () => {
-  assert.equal(getTelegramVoiceReplyMode(), "manual");
-  assert.equal(getTelegramVoiceReplyMode(undefined), "manual");
+test("getBaleVoiceReplyMode returns manual when no config provided", () => {
+  assert.equal(getBaleVoiceReplyMode(), "manual");
+  assert.equal(getBaleVoiceReplyMode(undefined), "manual");
 });
 
-test("getTelegramVoiceReplyMode reads frozen config with valid replyMode", () => {
+test("getBaleVoiceReplyMode reads frozen config with valid replyMode", () => {
   const frozenConfig = Object.freeze({
     voice: { replyMode: "always" as const },
   });
-  assert.equal(getTelegramVoiceReplyMode(frozenConfig), "always");
+  assert.equal(getBaleVoiceReplyMode(frozenConfig), "always");
 });
 
-test("getTelegramVoiceReplyMode ignores frozen config with invalid replyMode", () => {
+test("getBaleVoiceReplyMode ignores frozen config with invalid replyMode", () => {
   const frozenConfig = Object.freeze({
     voice: { replyMode: "bad-mode" as any },
   });
-  assert.equal(getTelegramVoiceReplyMode(frozenConfig), "manual");
+  assert.equal(getBaleVoiceReplyMode(frozenConfig), "manual");
 });
 
-test("getTelegramVoiceReplyMode reads config voice.replyMode", () => {
+test("getBaleVoiceReplyMode reads config voice.replyMode", () => {
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "mirror" } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "mirror" } }),
     "mirror",
   );
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "always" } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "always" } }),
     "always",
   );
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "manual" } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "manual" } }),
     "manual",
   );
 });
 
-test("getTelegramVoiceReplyMode falls back to manual for invalid or missing config", () => {
+test("getBaleVoiceReplyMode falls back to manual for invalid or missing config", () => {
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "invalid" as any } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "invalid" as any } }),
     "manual",
   );
-  assert.equal(getTelegramVoiceReplyMode({ voice: {} }), "manual");
-  assert.equal(getTelegramVoiceReplyMode({}), "manual");
-  assert.equal(getTelegramVoiceReplyMode(null as any), "manual");
-  assert.equal(getTelegramVoiceReplyMode(undefined), "manual");
+  assert.equal(getBaleVoiceReplyMode({ voice: {} }), "manual");
+  assert.equal(getBaleVoiceReplyMode({}), "manual");
+  assert.equal(getBaleVoiceReplyMode(null as any), "manual");
+  assert.equal(getBaleVoiceReplyMode(undefined), "manual");
 });

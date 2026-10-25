@@ -1,15 +1,15 @@
 /**
- * Telegram model control domain helpers
- * Zones: pi agent model control, telegram controls, queue continuation
+ * Bale model control domain helpers
+ * Zones: pi agent model control, bale controls, queue continuation
  * Owns model identity, thinking levels, scoped resolution, current-model state, and in-flight model switching
  */
 
 import * as Machine from "./machine.ts";
 import {
-  truncateTelegramQueueSummary,
-  type PendingTelegramTurn,
+  truncateBaleQueueSummary,
+  type PendingBaleTurn,
 } from "./queue.ts";
-import { TELEGRAM_PREFIX } from "./turns.ts";
+import { BALE_PREFIX } from "./turns.ts";
 
 export interface MenuModel {
   provider: string;
@@ -21,7 +21,7 @@ export interface MenuModel {
 export type ThinkingLevel =
   "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
-export interface ScopedTelegramModel<TModel extends MenuModel = MenuModel> {
+export interface ScopedBaleModel<TModel extends MenuModel = MenuModel> {
   model: TModel;
   thinkingLevel?: ThinkingLevel;
 }
@@ -128,24 +128,24 @@ export function isThinkingLevel(value: string): value is ThinkingLevel {
   return THINKING_LEVELS.includes(value as ThinkingLevel);
 }
 
-export function parseTelegramScopedModelPatternList(value: string): string[] {
+export function parseBaleScopedModelPatternList(value: string): string[] {
   return value
     .split(",")
     .map((pattern) => pattern.trim())
     .filter(Boolean);
 }
 
-export function parseTelegramCliScopedModelPatterns(
+export function parseBaleCliScopedModelPatterns(
   args: string[],
 ): string[] | undefined {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--models") {
-      const patterns = parseTelegramScopedModelPatternList(args[i + 1] ?? "");
+      const patterns = parseBaleScopedModelPatternList(args[i + 1] ?? "");
       return patterns.length > 0 ? patterns : undefined;
     }
     if (arg.startsWith("--models=")) {
-      const patterns = parseTelegramScopedModelPatternList(
+      const patterns = parseBaleScopedModelPatternList(
         arg.slice("--models=".length),
       );
       return patterns.length > 0 ? patterns : undefined;
@@ -305,8 +305,8 @@ export function resolveScopedModelPatterns<
 >(
   patterns: string[],
   availableModels: TModel[],
-): ScopedTelegramModel<TModel>[] {
-  const resolved: ScopedTelegramModel<TModel>[] = [];
+): ScopedBaleModel<TModel>[] {
+  const resolved: ScopedBaleModel<TModel>[] = [];
   const seen = new Set<string>();
   for (const pattern of patterns) {
     if (
@@ -351,9 +351,9 @@ export function resolveScopedModelPatterns<
 }
 
 export function sortScopedModels<TModel extends MenuModel = MenuModel>(
-  models: ScopedTelegramModel<TModel>[],
+  models: ScopedBaleModel<TModel>[],
   currentModel: TModel | undefined,
-): ScopedTelegramModel<TModel>[] {
+): ScopedBaleModel<TModel>[] {
   const sorted = [...models];
   sorted.sort((a, b) => {
     const aIsCurrent = modelsMatch(a.model, currentModel);
@@ -369,18 +369,18 @@ export function sortScopedModels<TModel extends MenuModel = MenuModel>(
 
 // --- In-Flight Model Switching ---
 
-export interface TelegramInFlightModelSwitchState {
+export interface BaleInFlightModelSwitchState {
   isIdle: boolean;
   hasAbortHandler: boolean;
 }
 
-export function canRestartAgentRunForTelegramModelSwitch(
-  state: TelegramInFlightModelSwitchState,
+export function canRestartAgentRunForBaleModelSwitch(
+  state: BaleInFlightModelSwitchState,
 ): boolean {
   return !state.isIdle && state.hasAbortHandler;
 }
 
-export function shouldTriggerPendingTelegramModelSwitchAbort(state: {
+export function shouldTriggerPendingBaleModelSwitchAbort(state: {
   hasPendingModelSwitch: boolean;
   hasContinuationTurn: boolean;
   hasAbortHandler: boolean;
@@ -394,34 +394,34 @@ export function shouldTriggerPendingTelegramModelSwitchAbort(state: {
   );
 }
 
-export function buildTelegramModelSwitchContinuationText<
+export function buildBaleModelSwitchContinuationText<
   TModel extends MenuModel,
 >(
-  telegramPrefix: string,
+  balePrefix: string,
   model: TModel,
-  thinkingLevel?: ScopedTelegramModel<TModel>["thinkingLevel"],
+  thinkingLevel?: ScopedBaleModel<TModel>["thinkingLevel"],
 ): string {
   const modelLabel = `${model.provider}/${model.id}`;
   const thinkingSuffix = thinkingLevel ? `; thinking: ${thinkingLevel}` : "";
-  return `${telegramPrefix} Continue from the last unfinished step. Model: ${modelLabel}${thinkingSuffix}.`;
+  return `${balePrefix} Continue from the last unfinished step. Model: ${modelLabel}${thinkingSuffix}.`;
 }
 
-export type TelegramModelSwitchContinuationSource = Pick<
-  PendingTelegramTurn,
+export type BaleModelSwitchContinuationSource = Pick<
+  PendingBaleTurn,
   "chatId" | "replyToMessageId" | "target"
 >;
 
-export function buildTelegramModelSwitchContinuationTurn<
+export function buildBaleModelSwitchContinuationTurn<
   TModel extends MenuModel,
 >(options: {
-  turn: TelegramModelSwitchContinuationSource;
-  selection: ScopedTelegramModel<TModel>;
-  telegramPrefix?: string;
+  turn: BaleModelSwitchContinuationSource;
+  selection: ScopedBaleModel<TModel>;
+  balePrefix?: string;
   queueOrder: number;
   laneOrder: number;
-}): PendingTelegramTurn {
+}): PendingBaleTurn {
   const modelLabel = `${options.selection.model.provider}/${options.selection.model.id}`;
-  const statusLabel = truncateTelegramQueueSummary(
+  const statusLabel = truncateBaleQueueSummary(
     `continue on ${options.selection.model.id}`,
     4,
     32,
@@ -439,8 +439,8 @@ export function buildTelegramModelSwitchContinuationTurn<
     content: [
       {
         type: "text",
-        text: buildTelegramModelSwitchContinuationText(
-          options.telegramPrefix ?? TELEGRAM_PREFIX,
+        text: buildBaleModelSwitchContinuationText(
+          options.balePrefix ?? BALE_PREFIX,
           options.selection.model,
           options.selection.thinkingLevel,
         ),
@@ -451,36 +451,36 @@ export function buildTelegramModelSwitchContinuationTurn<
   };
 }
 
-export function createTelegramModelSwitchContinuationTurnBuilder<
+export function createBaleModelSwitchContinuationTurnBuilder<
   TModel extends MenuModel,
 >(deps: {
-  telegramPrefix?: string;
+  balePrefix?: string;
   allocateItemOrder: () => number;
   allocateControlOrder: () => number;
 }): (options: {
-  turn: TelegramModelSwitchContinuationSource;
-  selection: ScopedTelegramModel<TModel>;
-}) => PendingTelegramTurn {
+  turn: BaleModelSwitchContinuationSource;
+  selection: ScopedBaleModel<TModel>;
+}) => PendingBaleTurn {
   return (options) =>
-    buildTelegramModelSwitchContinuationTurn({
+    buildBaleModelSwitchContinuationTurn({
       ...options,
-      telegramPrefix: deps.telegramPrefix,
+      balePrefix: deps.balePrefix,
       queueOrder: deps.allocateItemOrder(),
       laneOrder: deps.allocateControlOrder(),
     });
 }
 
-export function createTelegramModelSwitchContinuationQueue<
+export function createBaleModelSwitchContinuationQueue<
   TContext,
-  TSelection extends ScopedTelegramModel,
+  TSelection extends ScopedBaleModel,
 >(deps: {
   createContinuationTurn: (options: {
-    turn: TelegramModelSwitchContinuationSource;
+    turn: BaleModelSwitchContinuationSource;
     selection: TSelection;
-  }) => PendingTelegramTurn;
-  appendQueuedItem: (item: PendingTelegramTurn, ctx: TContext) => void;
+  }) => PendingBaleTurn;
+  appendQueuedItem: (item: PendingBaleTurn, ctx: TContext) => void;
 }): (
-  turn: TelegramModelSwitchContinuationSource,
+  turn: BaleModelSwitchContinuationSource,
   selection: TSelection,
   ctx: TContext,
 ) => void {
@@ -492,22 +492,22 @@ export function createTelegramModelSwitchContinuationQueue<
   };
 }
 
-export function createTelegramModelSwitchContinuationQueueRuntime<
+export function createBaleModelSwitchContinuationQueueRuntime<
   TContext,
-  TSelection extends ScopedTelegramModel,
+  TSelection extends ScopedBaleModel,
 >(deps: {
-  telegramPrefix?: string;
+  balePrefix?: string;
   allocateItemOrder: () => number;
   allocateControlOrder: () => number;
-  appendQueuedItem: (item: PendingTelegramTurn, ctx: TContext) => void;
+  appendQueuedItem: (item: PendingBaleTurn, ctx: TContext) => void;
 }): (
-  turn: TelegramModelSwitchContinuationSource,
+  turn: BaleModelSwitchContinuationSource,
   selection: TSelection,
   ctx: TContext,
 ) => void {
-  return createTelegramModelSwitchContinuationQueue<TContext, TSelection>({
-    createContinuationTurn: createTelegramModelSwitchContinuationTurnBuilder({
-      telegramPrefix: deps.telegramPrefix,
+  return createBaleModelSwitchContinuationQueue<TContext, TSelection>({
+    createContinuationTurn: createBaleModelSwitchContinuationTurnBuilder({
+      balePrefix: deps.balePrefix,
       allocateItemOrder: deps.allocateItemOrder,
       allocateControlOrder: deps.allocateControlOrder,
     }),
@@ -515,32 +515,32 @@ export function createTelegramModelSwitchContinuationQueueRuntime<
   });
 }
 
-export interface TelegramModelSwitchControllerDeps<TContext, TSelection> {
+export interface BaleModelSwitchControllerDeps<TContext, TSelection> {
   isIdle: (ctx: TContext) => boolean;
-  getActiveTurn: () => PendingTelegramTurn | undefined;
+  getActiveTurn: () => PendingBaleTurn | undefined;
   getAbortHandler: () => (() => void) | undefined;
   hasAbortHandler: () => boolean;
   getActiveToolExecutions: () => number;
   queueContinuation: (
-    turn: TelegramModelSwitchContinuationSource,
+    turn: BaleModelSwitchContinuationSource,
     selection: TSelection,
     ctx: TContext,
   ) => void;
   updateStatus: (ctx: TContext) => void;
 }
 
-export interface TelegramModelSwitchController<TContext, TSelection> {
+export interface BaleModelSwitchController<TContext, TSelection> {
   canOfferInFlightSwitch: (ctx: TContext) => boolean;
   /** A staged switch waits for its abort; queue dispatch and live-work observation treat it as pending control. */
   hasPendingSwitch: () => boolean;
   stagePendingSwitch: (
     selection: TSelection,
     ctx: TContext,
-    continuationTurn?: TelegramModelSwitchContinuationSource,
+    continuationTurn?: BaleModelSwitchContinuationSource,
   ) => void;
   clearPendingSwitch: () => void;
   queueContinuation: (
-    turn: TelegramModelSwitchContinuationSource,
+    turn: BaleModelSwitchContinuationSource,
     selection: TSelection,
     ctx: TContext,
   ) => void;
@@ -548,37 +548,37 @@ export interface TelegramModelSwitchController<TContext, TSelection> {
   restartInterruptedTurn: (
     selection: TSelection,
     ctx: TContext,
-    continuationTurn?: TelegramModelSwitchContinuationSource,
+    continuationTurn?: BaleModelSwitchContinuationSource,
   ) => boolean;
 }
 
-export interface TelegramModelSwitchControllerRuntimeDeps<
+export interface BaleModelSwitchControllerRuntimeDeps<
   TContext,
-  TSelection extends ScopedTelegramModel,
+  TSelection extends ScopedBaleModel,
 > extends Omit<
-  TelegramModelSwitchControllerDeps<TContext, TSelection>,
+  BaleModelSwitchControllerDeps<TContext, TSelection>,
   "queueContinuation"
 > {
-  telegramPrefix?: string;
+  balePrefix?: string;
   allocateItemOrder: () => number;
   allocateControlOrder: () => number;
-  appendQueuedItem: (item: PendingTelegramTurn, ctx: TContext) => void;
+  appendQueuedItem: (item: PendingBaleTurn, ctx: TContext) => void;
 }
 
-export function createTelegramModelSwitchControllerRuntime<
+export function createBaleModelSwitchControllerRuntime<
   TContext,
-  TSelection extends ScopedTelegramModel,
+  TSelection extends ScopedBaleModel,
 >(
-  deps: TelegramModelSwitchControllerRuntimeDeps<TContext, TSelection>,
-): TelegramModelSwitchController<TContext, TSelection> {
-  return createTelegramModelSwitchController({
+  deps: BaleModelSwitchControllerRuntimeDeps<TContext, TSelection>,
+): BaleModelSwitchController<TContext, TSelection> {
+  return createBaleModelSwitchController({
     isIdle: deps.isIdle,
     getActiveTurn: deps.getActiveTurn,
     getAbortHandler: deps.getAbortHandler,
     hasAbortHandler: deps.hasAbortHandler,
     getActiveToolExecutions: deps.getActiveToolExecutions,
-    queueContinuation: createTelegramModelSwitchContinuationQueueRuntime({
-      telegramPrefix: deps.telegramPrefix,
+    queueContinuation: createBaleModelSwitchContinuationQueueRuntime({
+      balePrefix: deps.balePrefix,
       allocateItemOrder: deps.allocateItemOrder,
       allocateControlOrder: deps.allocateControlOrder,
       appendQueuedItem: deps.appendQueuedItem,
@@ -587,67 +587,67 @@ export function createTelegramModelSwitchControllerRuntime<
   });
 }
 
-/** The whole model-switch state; only `transitionTelegramModelSwitch` produces a new one. */
-export interface TelegramModelSwitchMachineState<TSelection> {
+/** The whole model-switch state; only `transitionBaleModelSwitch` produces a new one. */
+export interface BaleModelSwitchMachineState<TSelection> {
   /** One staged switch: the selection and the turn its continuation answers move and clear together. */
   readonly pending: {
     readonly selection: TSelection;
-    /** The active Telegram turn at staging, or the model menu's own target for a local run. */
-    readonly turn?: TelegramModelSwitchContinuationSource;
+    /** The active Bale turn at staging, or the model menu's own target for a local run. */
+    readonly turn?: BaleModelSwitchContinuationSource;
   } | null;
 }
 
 /** Facts owned by other domains, sampled by the shell when the event is dispatched. */
-interface TelegramModelSwitchRunFacts {
-  activeTurn?: TelegramModelSwitchContinuationSource;
+interface BaleModelSwitchRunFacts {
+  activeTurn?: BaleModelSwitchContinuationSource;
   hasAbortHandler: boolean;
   activeToolExecutions: number;
 }
 
-export type TelegramModelSwitchEvent<TSelection> =
+export type BaleModelSwitchEvent<TSelection> =
   | {
       type: "staged";
       selection: TSelection;
-      turn?: TelegramModelSwitchContinuationSource;
+      turn?: BaleModelSwitchContinuationSource;
     }
-  | ({ type: "abortRequested" } & TelegramModelSwitchRunFacts)
+  | ({ type: "abortRequested" } & BaleModelSwitchRunFacts)
   | {
       type: "restartRequested";
       selection: TSelection;
-      turn?: TelegramModelSwitchContinuationSource;
+      turn?: BaleModelSwitchContinuationSource;
       hasAbortHandler: boolean;
     }
   | { type: "cleared" };
 
-export type TelegramModelSwitchEffect<TSelection> =
+export type BaleModelSwitchEffect<TSelection> =
   | {
       type: "queueContinuation";
-      turn: TelegramModelSwitchContinuationSource;
+      turn: BaleModelSwitchContinuationSource;
       selection: TSelection;
     }
   | { type: "abort" };
 
-export interface TelegramModelSwitchStep<
+export interface BaleModelSwitchStep<
   TSelection,
-> extends Machine.TelegramMachineStep<
-  TelegramModelSwitchMachineState<TSelection>,
-  TelegramModelSwitchEffect<TSelection>
+> extends Machine.BaleMachineStep<
+  BaleModelSwitchMachineState<TSelection>,
+  BaleModelSwitchEffect<TSelection>
 > {
   /** `abortRequested` / `restartRequested`: the run was stopped for a continuation. */
   result: boolean;
 }
 
-export function createTelegramModelSwitchMachineState<
+export function createBaleModelSwitchMachineState<
   TSelection,
->(): TelegramModelSwitchMachineState<TSelection> {
+>(): BaleModelSwitchMachineState<TSelection> {
   return { pending: null };
 }
 
 /** The continuation is queued before the abort, so the stopped run always has its successor waiting. */
 const restartFor = <TSelection>(
-  turn: TelegramModelSwitchContinuationSource,
+  turn: BaleModelSwitchContinuationSource,
   selection: TSelection,
-): TelegramModelSwitchStep<TSelection> => ({
+): BaleModelSwitchStep<TSelection> => ({
   state: { pending: null },
   effects: [{ type: "queueContinuation", turn, selection }, { type: "abort" }],
   result: true,
@@ -657,10 +657,10 @@ const restartFor = <TSelection>(
  * Pure model-switch transition. A staged switch fires only once no tool runs and an abort handler exists; any restart
  * or clear consumes the staged switch too, so a stale selection can never abort the continuation run it started.
  */
-export function transitionTelegramModelSwitch<TSelection>(
-  state: TelegramModelSwitchMachineState<TSelection>,
-  event: TelegramModelSwitchEvent<TSelection>,
-): TelegramModelSwitchStep<TSelection> {
+export function transitionBaleModelSwitch<TSelection>(
+  state: BaleModelSwitchMachineState<TSelection>,
+  event: BaleModelSwitchEvent<TSelection>,
+): BaleModelSwitchStep<TSelection> {
   const unchanged = { state, effects: [], result: false };
   switch (event.type) {
     case "staged":
@@ -680,7 +680,7 @@ export function transitionTelegramModelSwitch<TSelection>(
       if (
         !pending ||
         !turn ||
-        !shouldTriggerPendingTelegramModelSwitchAbort({
+        !shouldTriggerPendingBaleModelSwitchAbort({
           hasPendingModelSwitch: true,
           hasContinuationTurn: true,
           hasAbortHandler: event.hasAbortHandler,
@@ -700,22 +700,22 @@ export function transitionTelegramModelSwitch<TSelection>(
 }
 
 /**
- * The shell around `transitionTelegramModelSwitch`: it samples the active turn, abort handler and tool count into
+ * The shell around `transitionBaleModelSwitch`: it samples the active turn, abort handler and tool count into
  * events, and runs the continuation and abort effects with the caller's context and the handler it sampled.
  */
-export function createTelegramModelSwitchController<TContext, TSelection>(
-  deps: TelegramModelSwitchControllerDeps<TContext, TSelection>,
-): TelegramModelSwitchController<TContext, TSelection> {
+export function createBaleModelSwitchController<TContext, TSelection>(
+  deps: BaleModelSwitchControllerDeps<TContext, TSelection>,
+): BaleModelSwitchController<TContext, TSelection> {
   // The context and abort handler of the call being dispatched; effects run synchronously inside that dispatch.
   let call: { ctx: TContext; abort?: () => void } | undefined;
-  const machine = Machine.createTelegramMachineRunner<
-    TelegramModelSwitchMachineState<TSelection>,
-    TelegramModelSwitchEvent<TSelection>,
-    TelegramModelSwitchEffect<TSelection>,
-    TelegramModelSwitchStep<TSelection>
+  const machine = Machine.createBaleMachineRunner<
+    BaleModelSwitchMachineState<TSelection>,
+    BaleModelSwitchEvent<TSelection>,
+    BaleModelSwitchEffect<TSelection>,
+    BaleModelSwitchStep<TSelection>
   >({
-    initial: createTelegramModelSwitchMachineState<TSelection>(),
-    transition: transitionTelegramModelSwitch,
+    initial: createBaleModelSwitchMachineState<TSelection>(),
+    transition: transitionBaleModelSwitch,
     run(effect) {
       if (!call) return;
       if (effect.type === "queueContinuation")
@@ -726,7 +726,7 @@ export function createTelegramModelSwitchController<TContext, TSelection>(
   const dispatchFor = (
     ctx: TContext,
     abort: (() => void) | undefined,
-    event: TelegramModelSwitchEvent<TSelection>,
+    event: BaleModelSwitchEvent<TSelection>,
   ): boolean => {
     const preceding = call;
     call = { ctx, abort };
@@ -747,7 +747,7 @@ export function createTelegramModelSwitchController<TContext, TSelection>(
   };
   return {
     canOfferInFlightSwitch: (ctx) =>
-      canRestartAgentRunForTelegramModelSwitch({
+      canRestartAgentRunForBaleModelSwitch({
         isIdle: deps.isIdle(ctx),
         hasAbortHandler: deps.hasAbortHandler(),
       }),

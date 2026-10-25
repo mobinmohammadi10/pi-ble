@@ -1,20 +1,20 @@
 /**
  * Cross-process update journal append worker
- * Zones: telegram inbound tests, filesystem concurrency
+ * Zones: bale inbound tests, filesystem concurrency
  * Invoked only by journal.test.ts to contend on one authority file.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { createTelegramConfigStore } from "../../lib/config.ts";
-import { createTelegramJournalSourceSerialization,
-  createTelegramInputJournalStore,
-  TelegramUpdateJournalError,
-  createTelegramUpdateJournalBotIdentity,
-  createTelegramUpdateJournalStore,
-  type TelegramInputJournalHandoffAcceptInput,
-  type TelegramInputJournalRecoveryInput,
-  type TelegramUpdateJournalQueueOwnerIdentity,
+import { createBaleConfigStore } from "../../lib/config.ts";
+import { createBaleJournalSourceSerialization,
+  createBaleInputJournalStore,
+  BaleUpdateJournalError,
+  createBaleUpdateJournalBotIdentity,
+  createBaleUpdateJournalStore,
+  type BaleInputJournalHandoffAcceptInput,
+  type BaleInputJournalRecoveryInput,
+  type BaleUpdateJournalQueueOwnerIdentity,
 } from "../../lib/journal.ts";
 
 const [path, workerText, countText, mode = "append"] = process.argv.slice(2);
@@ -27,19 +27,19 @@ if (!path || !Number.isSafeInteger(worker) || !Number.isSafeInteger(count)) {
 if (mode === "input-handoff-accept" || mode === "input-handoff-recover") {
   const dir = dirname(path);
   const request = JSON.parse(readFileSync(join(dir, "handoff-worker-request.json"), "utf8")) as {
-    acceptance: TelegramInputJournalHandoffAcceptInput;
-    recovery: TelegramInputJournalRecoveryInput;
+    acceptance: BaleInputJournalHandoffAcceptInput;
+    recovery: BaleInputJournalRecoveryInput;
     recipientBindingKey: string;
-    recipientOwner: TelegramUpdateJournalQueueOwnerIdentity;
-    recoveryOwner: TelegramUpdateJournalQueueOwnerIdentity;
+    recipientOwner: BaleUpdateJournalQueueOwnerIdentity;
+    recoveryOwner: BaleUpdateJournalQueueOwnerIdentity;
   };
-  const config = createTelegramConfigStore({ agentDir: dir, configPath: join(dir, "telegram.json") });
-  const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+  const config = createBaleConfigStore({ agentDir: dir, configPath: join(dir, "bale.json") });
+  const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
   await config.load(); config.activateProfile("work");
   const accepting = mode === "input-handoff-accept";
   const runtime = accepting ? request.recipientOwner : request.recoveryOwner;
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "123:synthetic-input-custody" });
-  const store = createTelegramInputJournalStore({ path, profileName: "work", botIdentity,
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "123:synthetic-input-custody" });
+  const store = createBaleInputJournalStore({ path, profileName: "work", botIdentity,
     queueRuntimeIdentity: runtime,
     sourceAccess: { directory: dir, limits: { maxFiles: 100, maxBytes: 1_000_000, maxEntries: 100, maxWork: 1000 } },
     withSourceSerialization: journalSerialization,
@@ -54,18 +54,18 @@ if (mode === "input-handoff-accept" || mode === "input-handoff-recover") {
       ? { kind: "accepted", ...store.acceptInputHandoff(request.acceptance) }
       : { kind: "recovered", ...store.recoverReadyInput(request.recovery) };
   } catch (error) {
-    if (!(error instanceof TelegramUpdateJournalError) || error.code !== "conflict") throw error;
+    if (!(error instanceof BaleUpdateJournalError) || error.code !== "conflict") throw error;
     result = { kind: "refused", code: error.code };
   }
   writeFileSync(join(dir, `handoff-worker-${worker}.json`), JSON.stringify(result));
 } else if (mode === "input-custody") {
   const dir = dirname(path);
-  const config = createTelegramConfigStore({ agentDir: dir, configPath: join(dir, "telegram.json") });
-  const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+  const config = createBaleConfigStore({ agentDir: dir, configPath: join(dir, "bale.json") });
+  const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
   await config.load(); config.activateProfile("work");
   const runtime = { instanceId: `worker-${worker}`, processId: process.pid, processBirthId: `${process.pid}:fixture` };
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "123:synthetic-input-custody" });
-  const store = createTelegramInputJournalStore({ path, profileName: "work", botIdentity,
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "123:synthetic-input-custody" });
+  const store = createBaleInputJournalStore({ path, profileName: "work", botIdentity,
     queueRuntimeIdentity: runtime,
     sourceAccess: { directory: dir, limits: { maxFiles: 100, maxBytes: 1_000_000, maxEntries: 100, maxWork: 1000 } },
     withSourceSerialization: journalSerialization,
@@ -77,16 +77,16 @@ if (mode === "input-handoff-accept" || mode === "input-handoff-recover") {
     const acquisition = store.acquireInput({ updateId: count, recipientBindingKey: "workspace:owner" });
     result = { ...acquisition, started: store.startInput(acquisition.receipt).started };
   } catch (error) {
-    if (!(error instanceof TelegramUpdateJournalError) || error.code !== "conflict") throw error;
+    if (!(error instanceof BaleUpdateJournalError) || error.code !== "conflict") throw error;
     result = { acquired: false, refused: error.code };
   }
   writeFileSync(`${path}.claim-${worker}.json`, JSON.stringify(result));
 } else {
   const rebind = mode === "rebind";
-  const store = createTelegramUpdateJournalStore({
+  const store = createBaleUpdateJournalStore({
     path,
     profileName: rebind ? "rebound" : "work",
-    botIdentity: createTelegramUpdateJournalBotIdentity({
+    botIdentity: createBaleUpdateJournalBotIdentity({
       botToken: rebind ? "123:journal-rebound" : "123:journal-worker",
       botId: rebind ? 88 : 77,
     }),

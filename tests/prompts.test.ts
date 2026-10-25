@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram prompt injection helpers
+ * Regression tests for Bale prompt injection helpers
  * Covers native request-head stability, turn context, and compatibility hook binding
  */
 
@@ -7,40 +7,40 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  buildTelegramBridgeSystemPrompt,
-  createTelegramBeforeAgentStartHook,
-  createTelegramModelContextAvailabilityBinding,
-  createTelegramModelContextAvailabilityRuntime,
-  createTelegramProactiveBeforeAgentStartHook,
-  TELEGRAM_ATTACH_PROMPT_GUIDELINES,
-  type TelegramSystemPrompt,
-  TELEGRAM_ATTACH_PROMPT_SNIPPET,
-  TELEGRAM_CONNECTED_CONTEXT_MESSAGE,
-  TELEGRAM_DISCONNECTED_CONTEXT_MESSAGE,
-  TELEGRAM_MESSAGE_PROMPT_GUIDELINES,
-  TELEGRAM_MESSAGE_PROMPT_SNIPPET,
+  buildBaleBridgeSystemPrompt,
+  createBaleBeforeAgentStartHook,
+  createBaleModelContextAvailabilityBinding,
+  createBaleModelContextAvailabilityRuntime,
+  createBaleProactiveBeforeAgentStartHook,
+  BALE_ATTACH_PROMPT_GUIDELINES,
+  type BaleSystemPrompt,
+  BALE_ATTACH_PROMPT_SNIPPET,
+  BALE_CONNECTED_CONTEXT_MESSAGE,
+  BALE_DISCONNECTED_CONTEXT_MESSAGE,
+  BALE_MESSAGE_PROMPT_GUIDELINES,
+  BALE_MESSAGE_PROMPT_SNIPPET,
 } from "../lib/prompts.ts";
 
 type BeforeAgentStartHookEvent = Parameters<
-  ReturnType<typeof createTelegramBeforeAgentStartHook>
+  ReturnType<typeof createBaleBeforeAgentStartHook>
 >[0];
 
 function createBeforeAgentStartEvent(
   prompt: string,
-  systemPrompt: TelegramSystemPrompt,
+  systemPrompt: BaleSystemPrompt,
 ): BeforeAgentStartHookEvent {
   return { prompt, systemPrompt } as BeforeAgentStartHookEvent;
 }
 
-test("Prompt hooks normalize missing and null system prompts without losing Telegram guidance", async () => {
+test("Prompt hooks normalize missing and null system prompts without losing Bale guidance", async () => {
   for (const systemPrompt of [undefined, null]) {
-    const event = { prompt: "[telegram] hello", systemPrompt } as BeforeAgentStartHookEvent;
-    const hook = createTelegramBeforeAgentStartHook({
-      localSystemPromptSuffix: "local", telegramTurnSystemPromptSuffix: "/telegram",
+    const event = { prompt: "[bale] hello", systemPrompt } as BeforeAgentStartHookEvent;
+    const hook = createBaleBeforeAgentStartHook({
+      localSystemPromptSuffix: "local", baleTurnSystemPromptSuffix: "/bale",
     });
-    assert.equal(hook(event).systemPrompt, "local/telegram\n- The current user message came from Telegram.");
+    assert.equal(hook(event).systemPrompt, "local/bale\n- The current user message came from Bale.");
     for (const available of [false, true]) {
-      const proactive = createTelegramProactiveBeforeAgentStartHook({
+      const proactive = createBaleProactiveBeforeAgentStartHook({
         baseHook: hook, isAvailable: () => available,
       });
       assert.deepEqual(
@@ -49,27 +49,27 @@ test("Prompt hooks normalize missing and null system prompts without losing Tele
       );
     }
   }
-  assert.deepEqual(buildTelegramBridgeSystemPrompt({
-    prompt: "local", localSystemPromptSuffix: "suffix", telegramTurnSystemPromptSuffix: "telegram",
+  assert.deepEqual(buildBaleBridgeSystemPrompt({
+    prompt: "local", localSystemPromptSuffix: "suffix", baleTurnSystemPromptSuffix: "bale",
   }), { systemPrompt: "suffix" });
 });
 
-test("Custom-message starts keep bridge guidance without claiming Telegram user input", async () => {
+test("Custom-message starts keep bridge guidance without claiming Bale user input", async () => {
   for (const systemPrompt of ["base", ["base", "context"], undefined, null]) {
-    for (const prompt of [undefined, "[telegram] stale user prompt"]) {
+    for (const prompt of [undefined, "[bale] stale user prompt"]) {
       const event = {
         type: "before_agent_start", messageType: "custom", systemPrompt,
         systemPromptOptions: {
           cwd: ".", selectedTools: [], hiddenTools: [], toolSnippets: {}, toolGuidelines: {}, promptGuidelines: [],
           appendSystemPrompt: "", sections: {}, contextFiles: [], skills: [],
         },
-        message: { role: "custom", customType: "completion", content: "[telegram] quoted text", display: true, timestamp: 0 },
+        message: { role: "custom", customType: "completion", content: "[bale] quoted text", display: true, timestamp: 0 },
         ...(prompt === undefined ? {} : { prompt }),
       } as BeforeAgentStartHookEvent;
       for (const available of [false, true]) {
         let reconciled = 0;
-        const hook = createTelegramProactiveBeforeAgentStartHook({
-          baseHook: createTelegramBeforeAgentStartHook({ localSystemPromptSuffix: "local", telegramTurnSystemPromptSuffix: "telegram" }),
+        const hook = createBaleProactiveBeforeAgentStartHook({
+          baseHook: createBaleBeforeAgentStartHook({ localSystemPromptSuffix: "local", baleTurnSystemPromptSuffix: "bale" }),
           reconcileAvailability: () => { reconciled++; },
           isAvailable: () => available,
         });
@@ -87,38 +87,38 @@ test("Custom-message starts keep bridge guidance without claiming Telegram user 
   }
 });
 
-test("User starts recognize Telegram on both legacy and discriminated Pi events", () => {
-  const hook = createTelegramBeforeAgentStartHook({ localSystemPromptSuffix: "local", telegramTurnSystemPromptSuffix: "telegram" });
+test("User starts recognize Bale on both legacy and discriminated Pi events", () => {
+  const hook = createBaleBeforeAgentStartHook({ localSystemPromptSuffix: "local", baleTurnSystemPromptSuffix: "bale" });
   for (const messageType of [undefined, "user"] as const) {
-    const event = { ...createBeforeAgentStartEvent(" [telegram|thread:Test] hello", "base"), ...(messageType ? { messageType } : {}) };
-    assert.deepEqual(hook(event), { systemPrompt: "baselocaltelegram\n- The current user message came from Telegram." });
+    const event = { ...createBeforeAgentStartEvent(" [bale|thread:Test] hello", "base"), ...(messageType ? { messageType } : {}) };
+    assert.deepEqual(hook(event), { systemPrompt: "baselocalbale\n- The current user message came from Bale." });
   }
-  assert.deepEqual(buildTelegramBridgeSystemPrompt({
-    systemPrompt: "base", localSystemPromptSuffix: "local", telegramTurnSystemPromptSuffix: "telegram",
+  assert.deepEqual(buildBaleBridgeSystemPrompt({
+    systemPrompt: "base", localSystemPromptSuffix: "local", baleTurnSystemPromptSuffix: "bale",
   }), { systemPrompt: "baselocal" });
 });
 
 test("Prompt helpers append context-aware system prompt suffixes", () => {
   assert.deepEqual(
-    buildTelegramBridgeSystemPrompt({
-      prompt: " [telegram] hello",
+    buildBaleBridgeSystemPrompt({
+      prompt: " [bale] hello",
       systemPrompt: "base",
-      telegramPrefix: "[telegram]",
+      balePrefix: "[bale]",
       localSystemPromptSuffix: "\nlocal bridge available",
-      telegramTurnSystemPromptSuffix: "\ntelegram turn contract",
+      baleTurnSystemPromptSuffix: "\nbale turn contract",
     }),
     {
       systemPrompt:
-        "base\nlocal bridge available\ntelegram turn contract\n- The current user message came from Telegram.",
+        "base\nlocal bridge available\nbale turn contract\n- The current user message came from Bale.",
     },
   );
   assert.deepEqual(
-    buildTelegramBridgeSystemPrompt({
+    buildBaleBridgeSystemPrompt({
       prompt: "local hello",
       systemPrompt: "base",
-      telegramPrefix: "[telegram]",
+      balePrefix: "[bale]",
       localSystemPromptSuffix: "\nlocal bridge available",
-      telegramTurnSystemPromptSuffix: "\ntelegram turn contract",
+      baleTurnSystemPromptSuffix: "\nbale turn contract",
     }),
     { systemPrompt: "base\nlocal bridge available" },
   );
@@ -126,12 +126,12 @@ test("Prompt helpers append context-aware system prompt suffixes", () => {
 
 test("Prompt helpers preserve ordered system prompt blocks", () => {
   assert.deepEqual(
-    buildTelegramBridgeSystemPrompt({
+    buildBaleBridgeSystemPrompt({
       prompt: "local hello",
       systemPrompt: ["base", "project context"],
-      telegramPrefix: "[telegram]",
+      balePrefix: "[bale]",
       localSystemPromptSuffix: "\nlocal bridge available",
-      telegramTurnSystemPromptSuffix: "\ntelegram turn contract",
+      baleTurnSystemPromptSuffix: "\nbale turn contract",
     }),
     {
       systemPrompt: [
@@ -144,18 +144,18 @@ test("Prompt helpers preserve ordered system prompt blocks", () => {
 });
 
 test("Prompt helpers keep local prompts on compact safety guidance only", () => {
-  const result = createTelegramBeforeAgentStartHook()(
+  const result = createBaleBeforeAgentStartHook()(
     createBeforeAgentStartEvent("local hello", "base"),
   ).systemPrompt;
   assert.ok(typeof result === "string");
-  assert.match(result, /Telegram session connected/);
+  assert.match(result, /Bale session connected/);
   assert.match(result, /connectivity alone is not user intent/);
-  assert.match(result, /`telegram-bridge`/);
+  assert.match(result, /`bale-bridge`/);
   assert.match(result, /`show-me`/);
   assert.match(result, /`generated-control-surface`/);
   assert.match(result, /`generative-apps`/);
   assert.match(result, /bundled Skills in routing order/);
-  assert.match(result, /`telegram-bridge` for the transport and turn protocol/);
+  assert.match(result, /`bale-bridge` for the transport and turn protocol/);
   assert.match(
     result,
     /`show-me` when a user needs a truthful visual explanation of work or behavior/,
@@ -172,65 +172,65 @@ test("Prompt helpers keep local prompts on compact safety guidance only", () => 
     result,
     /Load a Skill only if its instructions are not already present in the current context/,
   );
-  assert.doesNotMatch(result, /telegram_help/);
-  assert.doesNotMatch(result, /telegram_attach/);
-  assert.doesNotMatch(result, /telegram_message/);
+  assert.doesNotMatch(result, /bale_help/);
+  assert.doesNotMatch(result, /bale_attach/);
+  assert.doesNotMatch(result, /bale_message/);
   assert.doesNotMatch(result, /37 visible cells/);
-  assert.doesNotMatch(result, /telegram_voice text="Short summary"/);
-  assert.doesNotMatch(result, /The current user message came from Telegram/);
+  assert.doesNotMatch(result, /bale_voice text="Short summary"/);
+  assert.doesNotMatch(result, /The current user message came from Bale/);
 });
 
 test("Connection context messages are concise and explicit", () => {
   assert.equal(
-    TELEGRAM_CONNECTED_CONTEXT_MESSAGE,
-    "Telegram session connected. Use Telegram features for Telegram-originated turns or explicit Telegram requests; connectivity alone is not user intent.",
+    BALE_CONNECTED_CONTEXT_MESSAGE,
+    "Bale session connected. Use Bale features for Bale-originated turns or explicit Bale requests; connectivity alone is not user intent.",
   );
   assert.equal(
-    TELEGRAM_DISCONNECTED_CONTEXT_MESSAGE,
-    "Telegram session disconnected. Do not use Telegram delivery, actions, or Telegram-specific reply features unless the user reconnects it.",
+    BALE_DISCONNECTED_CONTEXT_MESSAGE,
+    "Bale session disconnected. Do not use Bale delivery, actions, or Bale-specific reply features unless the user reconnects it.",
   );
 });
 
-test("Prompt helpers add full Telegram-turn guidance for Telegram prompts", () => {
-  const hook = createTelegramBeforeAgentStartHook({
-    telegramPrefix: "[telegram]",
+test("Prompt helpers add full Bale-turn guidance for Bale prompts", () => {
+  const hook = createBaleBeforeAgentStartHook({
+    balePrefix: "[bale]",
     localSystemPromptSuffix: "\nlocal bridge available",
-    telegramTurnSystemPromptSuffix: "\ntelegram turn contract",
+    baleTurnSystemPromptSuffix: "\nbale turn contract",
   });
   assert.deepEqual(
-    hook(createBeforeAgentStartEvent(" [telegram] hello", "base")),
+    hook(createBeforeAgentStartEvent(" [bale] hello", "base")),
     {
       systemPrompt:
-        "base\nlocal bridge available\ntelegram turn contract\n- The current user message came from Telegram.",
+        "base\nlocal bridge available\nbale turn contract\n- The current user message came from Bale.",
     },
   );
   assert.deepEqual(
     hook(
       createBeforeAgentStartEvent(
-        " [telegram|chat:supergroup|thread:42] hello",
+        " [bale|chat:supergroup|thread:42] hello",
         "base",
       ),
     ),
     {
       systemPrompt:
-        "base\nlocal bridge available\ntelegram turn contract\n- The current user message came from Telegram.",
+        "base\nlocal bridge available\nbale turn contract\n- The current user message came from Bale.",
     },
   );
-  const defaultSystemPrompt = createTelegramBeforeAgentStartHook()(
-    createBeforeAgentStartEvent(" [telegram] hello", "base"),
+  const defaultSystemPrompt = createBaleBeforeAgentStartHook()(
+    createBeforeAgentStartEvent(" [bale] hello", "base"),
   ).systemPrompt;
   assert.ok(typeof defaultSystemPrompt === "string");
   assert.match(
     defaultSystemPrompt,
-    /The current user message came from Telegram/,
+    /The current user message came from Bale/,
   );
   assert.match(
     defaultSystemPrompt,
-    /Follow the applicable bundled Telegram Skills in routing order/,
+    /Follow the applicable bundled Bale Skills in routing order/,
   );
   assert.match(defaultSystemPrompt, /load only missing instructions/);
-  assert.doesNotMatch(defaultSystemPrompt, /telegram_help/);
-  assert.doesNotMatch(defaultSystemPrompt, /mobile Telegram/);
+  assert.doesNotMatch(defaultSystemPrompt, /bale_help/);
+  assert.doesNotMatch(defaultSystemPrompt, /mobile Bale/);
   assert.doesNotMatch(defaultSystemPrompt, /\$\.\.\.\$.*\$\$\.\.\.\$\$/);
   assert.doesNotMatch(defaultSystemPrompt, /37 visible cells/);
   assert.doesNotMatch(
@@ -243,10 +243,10 @@ test("Prompt helpers add full Telegram-turn guidance for Telegram prompts", () =
     defaultSystemPrompt,
     /`\[voice\]` gives reply-mode policy/,
   );
-  assert.doesNotMatch(defaultSystemPrompt, /telegram_attach/);
-  assert.doesNotMatch(defaultSystemPrompt, /telegram_message/);
-  assert.doesNotMatch(defaultSystemPrompt, /telegram_voice: Speak this/);
-  assert.doesNotMatch(defaultSystemPrompt, /\/telegram_voice/);
+  assert.doesNotMatch(defaultSystemPrompt, /bale_attach/);
+  assert.doesNotMatch(defaultSystemPrompt, /bale_message/);
+  assert.doesNotMatch(defaultSystemPrompt, /bale_voice: Speak this/);
+  assert.doesNotMatch(defaultSystemPrompt, /\/bale_voice/);
   assert.doesNotMatch(defaultSystemPrompt, /state\.json/);
   assert.doesNotMatch(defaultSystemPrompt, /logs\.jsonl/);
   assert.doesNotMatch(
@@ -257,26 +257,26 @@ test("Prompt helpers add full Telegram-turn guidance for Telegram prompts", () =
     defaultSystemPrompt,
     /Give yourself a unique thread name/,
   );
-  assert.doesNotMatch(defaultSystemPrompt, /telegram_rename_thread/);
+  assert.doesNotMatch(defaultSystemPrompt, /bale_rename_thread/);
 
-  const topicSystemPrompt = createTelegramBeforeAgentStartHook()(
-    createBeforeAgentStartEvent(" [telegram|thread:C] hello", "base"),
+  const topicSystemPrompt = createBaleBeforeAgentStartHook()(
+    createBeforeAgentStartEvent(" [bale|thread:C] hello", "base"),
   ).systemPrompt;
   assert.ok(typeof topicSystemPrompt === "string");
   assert.match(
     topicSystemPrompt,
-    /The current user message came from Telegram/,
+    /The current user message came from Bale/,
   );
   assert.doesNotMatch(topicSystemPrompt, /unnamed fresh topic/);
-  assert.doesNotMatch(topicSystemPrompt, /telegram_rename_thread/);
+  assert.doesNotMatch(topicSystemPrompt, /bale_rename_thread/);
 });
 
 test("Prompt helpers leave local prompts private for proactive result push", async () => {
-  const hook = createTelegramProactiveBeforeAgentStartHook({
-    baseHook: createTelegramBeforeAgentStartHook({
-      telegramPrefix: "[telegram]",
+  const hook = createBaleProactiveBeforeAgentStartHook({
+    baseHook: createBaleBeforeAgentStartHook({
+      balePrefix: "[bale]",
       localSystemPromptSuffix: "\nlocal bridge available",
-      telegramTurnSystemPromptSuffix: "\ntelegram turn contract",
+      baleTurnSystemPromptSuffix: "\nbale turn contract",
     }),
     isAvailable: () => true,
   });
@@ -287,38 +287,38 @@ test("Prompt helpers leave local prompts private for proactive result push", asy
   assert.deepEqual(result, { systemPrompt: "base\nlocal bridge available" });
 });
 
-test("Prompt helpers skip suffix injection when Telegram transport is unavailable", async () => {
-  const hook = createTelegramProactiveBeforeAgentStartHook({
-    baseHook: createTelegramBeforeAgentStartHook({
-      telegramPrefix: "[telegram]",
+test("Prompt helpers skip suffix injection when Bale transport is unavailable", async () => {
+  const hook = createBaleProactiveBeforeAgentStartHook({
+    baseHook: createBaleBeforeAgentStartHook({
+      balePrefix: "[bale]",
       localSystemPromptSuffix: "\nlocal bridge available",
-      telegramTurnSystemPromptSuffix: "\ntelegram turn contract",
+      baleTurnSystemPromptSuffix: "\nbale turn contract",
     }),
     isAvailable: () => false,
   });
   const stalePrompt = [
     "base",
-    `- telegram_attach: ${TELEGRAM_ATTACH_PROMPT_SNIPPET}`,
-    ...TELEGRAM_ATTACH_PROMPT_GUIDELINES.map((line) => `- ${line}`),
+    `- bale_attach: ${BALE_ATTACH_PROMPT_SNIPPET}`,
+    ...BALE_ATTACH_PROMPT_GUIDELINES.map((line) => `- ${line}`),
   ].join("\n");
   const result = await hook(
-    createBeforeAgentStartEvent("[telegram] hello", stalePrompt),
+    createBeforeAgentStartEvent("[bale] hello", stalePrompt),
     "ctx",
   );
   assert.deepEqual(result, { systemPrompt: "base" });
 });
 
-test("Prompt helpers strip unavailable Telegram tools from each ordered block", async () => {
-  const hook = createTelegramProactiveBeforeAgentStartHook({
+test("Prompt helpers strip unavailable Bale tools from each ordered block", async () => {
+  const hook = createBaleProactiveBeforeAgentStartHook({
     isAvailable: () => false,
   });
   const stalePrompt = [
-    `base\n- telegram_attach: ${TELEGRAM_ATTACH_PROMPT_SNIPPET}\ntail`,
+    `base\n- bale_attach: ${BALE_ATTACH_PROMPT_SNIPPET}\ntail`,
     "project context",
   ];
 
   const result = await hook(
-    createBeforeAgentStartEvent("[telegram] hello", stalePrompt),
+    createBeforeAgentStartEvent("[bale] hello", stalePrompt),
     "ctx",
   );
 
@@ -328,7 +328,7 @@ test("Prompt helpers strip unavailable Telegram tools from each ordered block", 
 });
 
 test("Prompt helpers return no override when unavailable transport has nothing to strip", async () => {
-  const hook = createTelegramProactiveBeforeAgentStartHook({
+  const hook = createBaleProactiveBeforeAgentStartHook({
     isAvailable: () => false,
   });
   for (const systemPrompt of ["base", ["base", "project context"]]) {
@@ -344,14 +344,14 @@ test("Prompt helpers return no override when unavailable transport has nothing t
   }
 });
 
-test("Prompt helpers still force a stripped prompt when unavailable transport has Telegram tool metadata", async () => {
-  const hook = createTelegramProactiveBeforeAgentStartHook({
+test("Prompt helpers still force a stripped prompt when unavailable transport has Bale tool metadata", async () => {
+  const hook = createBaleProactiveBeforeAgentStartHook({
     isAvailable: () => false,
   });
   const result = await hook(
     createBeforeAgentStartEvent(
       "local prompt",
-      `base\n- telegram_message: ${TELEGRAM_MESSAGE_PROMPT_SNIPPET}`,
+      `base\n- bale_message: ${BALE_MESSAGE_PROMPT_SNIPPET}`,
     ),
     "ctx",
   );
@@ -359,10 +359,10 @@ test("Prompt helpers still force a stripped prompt when unavailable transport ha
 });
 
 test("Prompt helpers return no override when the computed prompt equals the incoming prompt", async () => {
-  const hook = createTelegramProactiveBeforeAgentStartHook({
-    baseHook: createTelegramBeforeAgentStartHook({
+  const hook = createBaleProactiveBeforeAgentStartHook({
+    baseHook: createBaleBeforeAgentStartHook({
       localSystemPromptSuffix: "",
-      telegramTurnSystemPromptSuffix: "\ntelegram turn contract",
+      baleTurnSystemPromptSuffix: "\nbale turn contract",
     }),
     isAvailable: () => true,
   });
@@ -371,10 +371,10 @@ test("Prompt helpers return no override when the computed prompt equals the inco
     undefined,
   );
   assert.deepEqual(
-    await hook(createBeforeAgentStartEvent("[telegram] hello", "base"), "ctx"),
+    await hook(createBeforeAgentStartEvent("[bale] hello", "base"), "ctx"),
     {
       systemPrompt:
-        "base\ntelegram turn contract\n- The current user message came from Telegram.",
+        "base\nbale turn contract\n- The current user message came from Bale.",
     },
   );
 });
@@ -402,47 +402,47 @@ function getSections(event: BeforeAgentStartHookEvent): Record<string, string> {
 }
 
 test("Prompt sections carry the connected bridge guidance without forcing a system prompt", async () => {
-  const hook = createTelegramProactiveBeforeAgentStartHook({ isAvailable: () => true });
+  const hook = createBaleProactiveBeforeAgentStartHook({ isAvailable: () => true });
   const localEvent = createSectionsEvent("local prompt", { sections: { other: "keep" } });
   assert.equal(await hook(localEvent, "ctx"), undefined);
-  assert.deepEqual(Object.keys(getSections(localEvent)), ["other", "telegram"]);
+  assert.deepEqual(Object.keys(getSections(localEvent)), ["other", "bale"]);
   assert.equal(getSections(localEvent).other, "keep");
-  const localSection = getSections(localEvent).telegram;
-  assert.equal(localSection.startsWith(TELEGRAM_CONNECTED_CONTEXT_MESSAGE), true);
-  assert.equal(localSection.includes("Telegram turn note"), false);
+  const localSection = getSections(localEvent).bale;
+  assert.equal(localSection.startsWith(BALE_CONNECTED_CONTEXT_MESSAGE), true);
+  assert.equal(localSection.includes("Bale turn note"), false);
   assert.equal(localSection, localSection.trim());
 
-  const telegramEvent = createSectionsEvent("  [telegram] hello");
-  const telegramResult = await hook(telegramEvent, "ctx");
-  assert.deepEqual(telegramResult, { message: { customType: "telegram-turn", display: false,
-    content: "Telegram turn note: Follow the applicable bundled Telegram Skills in routing order; load only missing instructions.\n- The current user message came from Telegram." } });
-  assert.equal(getSections(telegramEvent).telegram, localSection);
+  const baleEvent = createSectionsEvent("  [bale] hello");
+  const baleResult = await hook(baleEvent, "ctx");
+  assert.deepEqual(baleResult, { message: { customType: "bale-turn", display: false,
+    content: "Bale turn note: Follow the applicable bundled Bale Skills in routing order; load only missing instructions.\n- The current user message came from Bale." } });
+  assert.equal(getSections(baleEvent).bale, localSection);
 
-  const customEvent = createSectionsEvent("[telegram] stale", {}, { messageType: "custom" });
+  const customEvent = createSectionsEvent("[bale] stale", {}, { messageType: "custom" });
   assert.equal(await hook(customEvent, "ctx"), undefined);
-  assert.equal(getSections(customEvent).telegram, localSection);
+  assert.equal(getSections(customEvent).bale, localSection);
 
   // Native placement changes, but legacy callers retain the same instruction text.
-  const forced = createTelegramBeforeAgentStartHook()(createBeforeAgentStartEvent("[telegram] hello", ""));
-  assert.equal(forced.systemPrompt, `\n\n${localSection}\n\n${telegramResult!.message!.content}`);
+  const forced = createBaleBeforeAgentStartHook()(createBeforeAgentStartEvent("[bale] hello", ""));
+  assert.equal(forced.systemPrompt, `\n\n${localSection}\n\n${baleResult!.message!.content}`);
 });
 
-test("Prompt sections drop stale Telegram guidance when the bridge is unavailable", async () => {
+test("Prompt sections drop stale Bale guidance when the bridge is unavailable", async () => {
   const reconciled: string[] = [];
-  const hook = createTelegramProactiveBeforeAgentStartHook({
+  const hook = createBaleProactiveBeforeAgentStartHook({
     reconcileAvailability: () => { reconciled.push("reconcile"); },
     isAvailable: () => false,
   });
-  const event = createSectionsEvent("[telegram] hello", {
-    sections: { telegram: "stale", other: "keep" },
+  const event = createSectionsEvent("[bale] hello", {
+    sections: { bale: "stale", other: "keep" },
     toolSnippets: {
-      telegram_attach: TELEGRAM_ATTACH_PROMPT_SNIPPET,
-      telegram_message: TELEGRAM_MESSAGE_PROMPT_SNIPPET,
+      bale_attach: BALE_ATTACH_PROMPT_SNIPPET,
+      bale_message: BALE_MESSAGE_PROMPT_SNIPPET,
       read: "Read files",
     },
     toolGuidelines: {
-      telegram_attach: [...TELEGRAM_ATTACH_PROMPT_GUIDELINES],
-      telegram_message: [...TELEGRAM_MESSAGE_PROMPT_GUIDELINES],
+      bale_attach: [...BALE_ATTACH_PROMPT_GUIDELINES],
+      bale_message: [...BALE_MESSAGE_PROMPT_GUIDELINES],
       read: ["Read carefully"],
     },
   });
@@ -456,24 +456,24 @@ test("Prompt sections drop stale Telegram guidance when the bridge is unavailabl
   assert.deepEqual(reconciled, ["reconcile"]);
 
   // Pi hands over normalized options, but tolerate partial ones too.
-  const partial = { prompt: "x", systemPrompt: "base", systemPromptOptions: { sections: { telegram: "stale" } } } as unknown as BeforeAgentStartHookEvent;
+  const partial = { prompt: "x", systemPrompt: "base", systemPromptOptions: { sections: { bale: "stale" } } } as unknown as BeforeAgentStartHookEvent;
   assert.equal(await hook(partial, "ctx"), undefined);
   assert.deepEqual(getSections(partial), {});
 });
 
 test("Prompt hooks keep the forced-prompt path when Pi exposes no sections or a custom base hook is supplied", async () => {
-  const stale = `base\n- telegram_attach: ${TELEGRAM_ATTACH_PROMPT_SNIPPET}`;
+  const stale = `base\n- bale_attach: ${BALE_ATTACH_PROMPT_SNIPPET}`;
   for (const systemPromptOptions of [undefined, null, {}, { sections: null }, { sections: "x" }]) {
-    const event = { prompt: "[telegram] hi", systemPrompt: stale, systemPromptOptions } as unknown as BeforeAgentStartHookEvent;
-    const unavailable = createTelegramProactiveBeforeAgentStartHook({ isAvailable: () => false });
+    const event = { prompt: "[bale] hi", systemPrompt: stale, systemPromptOptions } as unknown as BeforeAgentStartHookEvent;
+    const unavailable = createBaleProactiveBeforeAgentStartHook({ isAvailable: () => false });
     assert.deepEqual(await unavailable(event, "ctx"), { systemPrompt: "base" });
-    const available = createTelegramProactiveBeforeAgentStartHook({ isAvailable: () => true });
+    const available = createBaleProactiveBeforeAgentStartHook({ isAvailable: () => true });
     const result = await available({ ...event, systemPrompt: "base" } as BeforeAgentStartHookEvent, "ctx");
     assert.equal(typeof result?.systemPrompt, "string");
-    assert.equal((result?.systemPrompt as string).includes(TELEGRAM_CONNECTED_CONTEXT_MESSAGE), true);
+    assert.equal((result?.systemPrompt as string).includes(BALE_CONNECTED_CONTEXT_MESSAGE), true);
   }
-  const customBase = createTelegramProactiveBeforeAgentStartHook({
-    baseHook: createTelegramBeforeAgentStartHook({ localSystemPromptSuffix: "local", telegramTurnSystemPromptSuffix: "turn" }),
+  const customBase = createBaleProactiveBeforeAgentStartHook({
+    baseHook: createBaleBeforeAgentStartHook({ localSystemPromptSuffix: "local", baleTurnSystemPromptSuffix: "turn" }),
     isAvailable: () => true,
   });
   const event = createSectionsEvent("local prompt");
@@ -483,24 +483,24 @@ test("Prompt hooks keep the forced-prompt path when Pi exposes no sections or a 
 
 test("Model-context availability binding safely delegates after late composition", () => {
   const calls: string[] = [];
-  const binding = createTelegramModelContextAvailabilityBinding();
+  const binding = createBaleModelContextAvailabilityBinding();
   binding.reconcile();
   binding.bind({ reconcile: () => calls.push("reconcile") });
   binding.reconcile();
   assert.deepEqual(calls, ["reconcile"]);
 });
 
-test("Model-context availability removes only active Telegram tools and restores that subset", () => {
+test("Model-context availability removes only active Bale tools and restores that subset", () => {
   let available = false;
   let activeTools = [
     "read",
-    "telegram_attach",
-    "telegram_bind",
+    "bale_attach",
+    "bale_bind",
     "foreign_tool",
-    "telegram_message",
+    "bale_message",
   ];
   const memory = { suspended: false, toolNames: new Set<string>() };
-  const runtime = createTelegramModelContextAvailabilityRuntime({
+  const runtime = createBaleModelContextAvailabilityRuntime({
     getActiveTools: () => [...activeTools],
     setActiveTools: (names) => {
       activeTools = names;
@@ -512,9 +512,9 @@ test("Model-context availability removes only active Telegram tools and restores
   runtime.reconcile();
   assert.deepEqual(activeTools, ["read", "foreign_tool"]);
   assert.deepEqual([...memory.toolNames], [
-    "telegram_attach",
-    "telegram_bind",
-    "telegram_message",
+    "bale_attach",
+    "bale_bind",
+    "bale_message",
   ]);
 
   available = true;
@@ -522,18 +522,18 @@ test("Model-context availability removes only active Telegram tools and restores
   assert.deepEqual(activeTools, [
     "read",
     "foreign_tool",
-    "telegram_attach",
-    "telegram_bind",
-    "telegram_message",
+    "bale_attach",
+    "bale_bind",
+    "bale_message",
   ]);
   assert.equal(memory.toolNames.size, 0);
   assert.equal(memory.suspended, false);
 });
 
-test("Model-context availability does not enable a Telegram tool disabled by the operator", () => {
+test("Model-context availability does not enable a Bale tool disabled by the operator", () => {
   let available = false;
-  let activeTools = ["read", "telegram_message"];
-  const runtime = createTelegramModelContextAvailabilityRuntime({
+  let activeTools = ["read", "bale_message"];
+  const runtime = createBaleModelContextAvailabilityRuntime({
     getActiveTools: () => [...activeTools],
     setActiveTools: (names) => {
       activeTools = names;
@@ -546,14 +546,14 @@ test("Model-context availability does not enable a Telegram tool disabled by the
   available = true;
   runtime.reconcile();
 
-  assert.deepEqual(activeTools, ["read", "telegram_message"]);
-  assert.equal(activeTools.includes("telegram_attach"), false);
+  assert.deepEqual(activeTools, ["read", "bale_message"]);
+  assert.equal(activeTools.includes("bale_attach"), false);
 });
 
 test("Model-context availability defers active-tool mutation during an in-flight request", () => {
   let canReconcile = false;
-  let activeTools = ["read", "telegram_attach"];
-  const runtime = createTelegramModelContextAvailabilityRuntime({
+  let activeTools = ["read", "bale_attach"];
+  const runtime = createBaleModelContextAvailabilityRuntime({
     getActiveTools: () => [...activeTools],
     setActiveTools: (names) => {
       activeTools = names;
@@ -564,7 +564,7 @@ test("Model-context availability defers active-tool mutation during an in-flight
   });
 
   runtime.reconcile();
-  assert.deepEqual(activeTools, ["read", "telegram_attach"]);
+  assert.deepEqual(activeTools, ["read", "bale_attach"]);
 
   canReconcile = true;
   runtime.reconcile();
@@ -572,10 +572,10 @@ test("Model-context availability defers active-tool mutation during an in-flight
 });
 
 test("Model-context availability preserves operator subset across Pi reload defaults", () => {
-  let activeTools = ["read", "telegram_message"];
+  let activeTools = ["read", "bale_message"];
   const memory = { suspended: false, toolNames: new Set<string>() };
   const createRuntime = (isAvailable: () => boolean) =>
-    createTelegramModelContextAvailabilityRuntime({
+    createBaleModelContextAvailabilityRuntime({
       getActiveTools: () => [...activeTools],
       setActiveTools: (names) => {
         activeTools = names;
@@ -586,43 +586,43 @@ test("Model-context availability preserves operator subset across Pi reload defa
 
   createRuntime(() => false).reconcile();
   assert.deepEqual(activeTools, ["read"]);
-  assert.deepEqual([...memory.toolNames], ["telegram_message"]);
+  assert.deepEqual([...memory.toolNames], ["bale_message"]);
 
-  activeTools = ["read", "telegram_attach", "telegram_message"];
+  activeTools = ["read", "bale_attach", "bale_message"];
   createRuntime(() => false).reconcile();
   assert.deepEqual(activeTools, ["read"]);
-  assert.deepEqual([...memory.toolNames], ["telegram_message"]);
+  assert.deepEqual([...memory.toolNames], ["bale_message"]);
 
   createRuntime(() => true).reconcile();
-  assert.deepEqual(activeTools, ["read", "telegram_message"]);
+  assert.deepEqual(activeTools, ["read", "bale_message"]);
 });
 
 for (const available of [false, true]) test(`Prompt hooks preserve an existing forced prompt (${available ? "connected" : "unavailable"})`, async () => {
-  const opaque = `Other extension instructions\n- telegram_attach: ${TELEGRAM_ATTACH_PROMPT_SNIPPET}`;
+  const opaque = `Other extension instructions\n- bale_attach: ${BALE_ATTACH_PROMPT_SNIPPET}`;
   const event = createSectionsEvent("local prompt", { forceSystemPrompt: opaque }, { systemPrompt: opaque });
-  const result = await createTelegramProactiveBeforeAgentStartHook({ isAvailable: () => available })(event, "ctx");
+  const result = await createBaleProactiveBeforeAgentStartHook({ isAvailable: () => available })(event, "ctx");
   assert.equal(typeof result?.systemPrompt, "string");
   assert.match(result!.systemPrompt as string, /Other extension instructions/);
-  if (available) assert.match(result!.systemPrompt as string, /Telegram session connected/);
+  if (available) assert.match(result!.systemPrompt as string, /Bale session connected/);
   else assert.equal(result!.systemPrompt, "Other extension instructions");
   assert.deepEqual(getSections(event), {});
 });
 
-for (const initiallyAvailable of [false, true]) test(`Real Pi runtime keeps Telegram guidance cache-safe through tools, turns and resume (${initiallyAvailable ? "connected" : "unavailable"})`, async () => {
+for (const initiallyAvailable of [false, true]) test(`Real Pi runtime keeps Bale guidance cache-safe through tools, turns and resume (${initiallyAvailable ? "connected" : "unavailable"})`, async () => {
   const { mkdtemp, realpath, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } = await import("@earendil-works/pi-coding-agent");
   const { fauxProvider, fauxAssistantMessage, fauxToolCall, Type } = await import("@earendil-works/pi-ai");
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-native-prompts-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-native-prompts-")));
   const requests: import("@earendil-works/pi-ai").Message[][] = [], errors: string[] = [];
   let available = initiallyAvailable, forced: string | undefined, enabled = false, removeSearch = false;
   let session: import("@earendil-works/pi-coding-agent").AgentSession | undefined;
-  const hook = createTelegramProactiveBeforeAgentStartHook({ isAvailable: () => available });
+  const hook = createBaleProactiveBeforeAgentStartHook({ isAvailable: () => available });
   try {
     const modelRuntime = await ModelRuntime.create({ authPath: join(dir, "auth.json"), modelsPath: null,
       modelsStorePath: join(dir, "models-cache.json"), allowModelNetwork: false, refreshOnCreate: false });
-    const faux = fauxProvider({ provider: "telegram-prompt-fixture", api: "telegram-prompt-fixture", tokensPerSecond: Infinity });
+    const faux = fauxProvider({ provider: "bale-prompt-fixture", api: "bale-prompt-fixture", tokensPerSecond: Infinity });
     modelRuntime.registerNativeProvider(faux.provider);
     faux.setResponses(Array.from({ length: 20 }, () => (context: import("@earendil-works/pi-ai").TranscriptContext) => {
       requests.push(structuredClone(context.messages));
@@ -678,24 +678,24 @@ for (const initiallyAvailable of [false, true]) test(`Real Pi runtime keeps Tele
       "The next run must declare the enabled tool through a trailing system update");
     available = !available;
     await session.prompt("Observe the changed connection");
-    assert.ok(requests.at(-1)!.slice(1).some(message => message.role === "system" && Object.hasOwn(message.sections ?? {}, "telegram")),
+    assert.ok(requests.at(-1)!.slice(1).some(message => message.role === "system" && Object.hasOwn(message.sections ?? {}, "bale")),
       "A connection change must use a trailing section update");
     available = true;
-    await session.prompt("Local prompt before Telegram");
-    const telegramPatches = () => requests.at(-1)!.slice(1).filter(message => message.role === "system" && Object.hasOwn(message.sections ?? {}, "telegram")).length;
-    const beforeTelegram = telegramPatches();
-    await session.prompt("[telegram|thread:Fixture] Telegram prompt");
-    assert.equal(telegramPatches(), beforeTelegram, "Turn origin must not toggle the stable connection section");
-    const turnNotes = () => session!.messages.filter(message => message.role === "custom" && message.customType === "telegram-turn");
+    await session.prompt("Local prompt before Bale");
+    const balePatches = () => requests.at(-1)!.slice(1).filter(message => message.role === "system" && Object.hasOwn(message.sections ?? {}, "bale")).length;
+    const beforeBale = balePatches();
+    await session.prompt("[bale|thread:Fixture] Bale prompt");
+    assert.equal(balePatches(), beforeBale, "Turn origin must not toggle the stable connection section");
+    const turnNotes = () => session!.messages.filter(message => message.role === "custom" && message.customType === "bale-turn");
     assert.equal(turnNotes().length, 1);
     const note = turnNotes()[0];
     assert.ok(note && note.role === "custom");
     assert.equal(note.display, false);
-    await session.prompt("Local prompt after Telegram");
-    assert.equal(telegramPatches(), beforeTelegram);
+    await session.prompt("Local prompt after Bale");
+    assert.equal(balePatches(), beforeBale);
     assert.equal(turnNotes().length, 1);
-    await session.sendCustomMessage({ customType: "fixture-completion", content: "[telegram] quoted completion", display: false }, { triggerTurn: true });
-    assert.equal(turnNotes().length, 1, "A custom start cannot acquire Telegram user-turn instructions");
+    await session.sendCustomMessage({ customType: "fixture-completion", content: "[bale] quoted completion", display: false }, { triggerTurn: true });
+    assert.equal(turnNotes().length, 1, "A custom start cannot acquire Bale user-turn instructions");
     removeSearch = true;
     await session.prompt("Observe removal of the previously declared tool");
     assert.ok(requests.at(-1)!.slice(1).some(message => message.role === "system" && message.toolsRemoved?.some(tool => tool.name === "web_search")),
@@ -710,12 +710,12 @@ for (const initiallyAvailable of [false, true]) test(`Real Pi runtime keeps Tele
     forced = "Other extension opaque instructions";
     await session.prompt("Forced connected prompt");
     assert.match(JSON.stringify(requests.at(-1)![0]), /Other extension opaque instructions/);
-    assert.match(JSON.stringify(requests.at(-1)![0]), /Telegram session connected/);
+    assert.match(JSON.stringify(requests.at(-1)![0]), /Bale session connected/);
     available = false;
-    forced = `Other extension opaque instructions\n- telegram_attach: ${TELEGRAM_ATTACH_PROMPT_SNIPPET}`;
+    forced = `Other extension opaque instructions\n- bale_attach: ${BALE_ATTACH_PROMPT_SNIPPET}`;
     await session.prompt("Forced unavailable prompt");
     assert.match(JSON.stringify(requests.at(-1)![0]), /Other extension opaque instructions/);
-    assert.doesNotMatch(JSON.stringify(requests.at(-1)![0]), /telegram_attach/);
+    assert.doesNotMatch(JSON.stringify(requests.at(-1)![0]), /bale_attach/);
     assert.deepEqual(errors, []);
   } finally {
     session?.dispose();

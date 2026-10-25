@@ -1,30 +1,30 @@
 /**
- * Telegram delivery API domain regressions
- * Zones: telegram delivery, extension API, runtime binding
+ * Bale delivery API domain regressions
+ * Zones: bale delivery, extension API, runtime binding
  * Mirrors lib/delivery.ts and protects public operation delegation, generation fencing, and fail-soft availability
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  bindTelegramDeliveryRuntime,
-  clearTelegramDeliveryRuntime,
-  createTelegramBridgeDeliveryRuntime,
-  createTelegramDeliveryLifecycleHooks,
-  createTelegramDeliveryTargetPolicyRuntime,
-  createTelegramDeliveryRuntime as createConcreteDeliveryRuntime,
-  deleteTelegramView,
-  editTelegramView,
-  isTelegramDeliveryExplicitTargetAuthorized,
-  resolveTelegramDeliveryAggregateTarget,
-  resolveTelegramDeliveryInstanceTarget,
-  sendTelegramChatAction,
-  sendTelegramView,
-  type TelegramDeliveryHandle,
-  type TelegramDeliveryRuntime,
-  type TelegramDeliveryRuntimeDeps,
+  bindBaleDeliveryRuntime,
+  clearBaleDeliveryRuntime,
+  createBaleBridgeDeliveryRuntime,
+  createBaleDeliveryLifecycleHooks,
+  createBaleDeliveryTargetPolicyRuntime,
+  createBaleDeliveryRuntime as createConcreteDeliveryRuntime,
+  deleteBaleView,
+  editBaleView,
+  isBaleDeliveryExplicitTargetAuthorized,
+  resolveBaleDeliveryAggregateTarget,
+  resolveBaleDeliveryInstanceTarget,
+  sendBaleChatAction,
+  sendBaleView,
+  type BaleDeliveryHandle,
+  type BaleDeliveryRuntime,
+  type BaleDeliveryRuntimeDeps,
 } from "../lib/delivery.ts";
-import { TelegramApiCommitUnknownError } from "../lib/telegram-api.ts";
+import { BaleApiCommitUnknownError } from "../lib/bale-api.ts";
 
 const target = { chatId: 42, threadId: 7 };
 
@@ -62,7 +62,7 @@ test(`Delivery drain follows the last queued operation and keeps shutdown inert 
 function createRuntime(
   generation: string,
   calls: string[] = [],
-): TelegramDeliveryRuntime {
+): BaleDeliveryRuntime {
   return {
     generation,
     shutdown() {},
@@ -91,35 +91,35 @@ function createRuntime(
   };
 }
 
-function handle(generation: string): TelegramDeliveryHandle {
+function handle(generation: string): BaleDeliveryHandle {
   return { target, messageIds: [11], generation };
 }
 
-test.afterEach(() => clearTelegramDeliveryRuntime());
+test.afterEach(() => clearBaleDeliveryRuntime());
 
 test("Delivery API fails softly while no runtime is bound", async () => {
-  const result = await sendTelegramView(
+  const result = await sendBaleView(
     { text: "hello" },
     { scope: { kind: "instance" } },
   );
   assert.deepEqual(result, {
     ok: false,
     reason: "runtime-unavailable",
-    message: "Telegram delivery runtime is unavailable in this Pi session.",
+    message: "Bale delivery runtime is unavailable in this Pi session.",
   });
 });
 
 test("Delivery API delegates operations to the current runtime", async () => {
   const calls: string[] = [];
-  bindTelegramDeliveryRuntime(createRuntime("one", calls));
-  const sent = await sendTelegramView(
+  bindBaleDeliveryRuntime(createRuntime("one", calls));
+  const sent = await sendBaleView(
     { text: "hello", parseMode: "html" },
     { scope: { kind: "active-turn" }, replyToMessageId: 5 },
   );
   assert.equal(sent.ok, true);
-  await editTelegramView(handle("one"), { text: "updated" });
-  await deleteTelegramView(handle("one"));
-  await sendTelegramChatAction("typing", {
+  await editBaleView(handle("one"), { text: "updated" });
+  await deleteBaleView(handle("one"));
+  await sendBaleChatAction("typing", {
     scope: { kind: "aggregate" },
   });
   assert.deepEqual(calls, ["send", "edit", "delete", "action:typing"]);
@@ -127,8 +127,8 @@ test("Delivery API delegates operations to the current runtime", async () => {
 
 test("Delivery API rejects empty views before transport", async () => {
   const calls: string[] = [];
-  bindTelegramDeliveryRuntime(createRuntime("one", calls));
-  const result = await sendTelegramView(
+  bindBaleDeliveryRuntime(createRuntime("one", calls));
+  const result = await sendBaleView(
     { text: "  " },
     { scope: { kind: "instance" } },
   );
@@ -139,9 +139,9 @@ test("Delivery API rejects empty views before transport", async () => {
 
 test("Delivery API fences handles from older runtime generations", async () => {
   const calls: string[] = [];
-  bindTelegramDeliveryRuntime(createRuntime("new", calls));
-  const edited = await editTelegramView(handle("old"), { text: "updated" });
-  const deleted = await deleteTelegramView(handle("old"));
+  bindBaleDeliveryRuntime(createRuntime("new", calls));
+  const edited = await editBaleView(handle("old"), { text: "updated" });
+  const deleted = await deleteBaleView(handle("old"));
   assert.equal(edited.ok, false);
   assert.equal(deleted.ok, false);
   if (!edited.ok) assert.equal(edited.reason, "stale-handle");
@@ -152,12 +152,12 @@ test("Delivery API fences handles from older runtime generations", async () => {
 test("A stale runtime disposer cannot clear its replacement", async () => {
   const firstCalls: string[] = [];
   const secondCalls: string[] = [];
-  const disposeFirst = bindTelegramDeliveryRuntime(
+  const disposeFirst = bindBaleDeliveryRuntime(
     createRuntime("first", firstCalls),
   );
-  bindTelegramDeliveryRuntime(createRuntime("second", secondCalls));
+  bindBaleDeliveryRuntime(createRuntime("second", secondCalls));
   disposeFirst();
-  await sendTelegramView(
+  await sendBaleView(
     { text: "hello" },
     { scope: { kind: "instance" } },
   );
@@ -168,11 +168,11 @@ test("A stale runtime disposer cannot clear its replacement", async () => {
 test("Delivery lifecycle mints fresh generations and invalidates on shutdown", async () => {
   const calls: string[] = [];
   let sequence = 0;
-  const lifecycle = createTelegramDeliveryLifecycleHooks(() =>
+  const lifecycle = createBaleDeliveryLifecycleHooks(() =>
     createRuntime(`generation-${++sequence}`, calls),
   );
   await lifecycle.onSessionStart();
-  const active = await sendTelegramView(
+  const active = await sendBaleView(
     { text: "hello" },
     { scope: { kind: "instance" } },
   );
@@ -180,7 +180,7 @@ test("Delivery lifecycle mints fresh generations and invalidates on shutdown", a
   if (!active.ok) return;
 
   await lifecycle.onSessionShutdown();
-  const stopped = await sendTelegramView(
+  const stopped = await sendBaleView(
     { text: "hello" },
     { scope: { kind: "instance" } },
   );
@@ -188,7 +188,7 @@ test("Delivery lifecycle mints fresh generations and invalidates on shutdown", a
   if (!stopped.ok) assert.equal(stopped.reason, "runtime-unavailable");
 
   await lifecycle.onSessionStart();
-  const replacement = await sendTelegramView(
+  const replacement = await sendBaleView(
     { text: "replacement" },
     { scope: { kind: "instance" } },
   );
@@ -196,8 +196,8 @@ test("Delivery lifecycle mints fresh generations and invalidates on shutdown", a
   if (replacement.ok) {
     assert.notEqual(replacement.value.generation, active.value.generation);
   }
-  const staleEdit = await editTelegramView(active.value, { text: "stale" });
-  const staleDelete = await deleteTelegramView(active.value);
+  const staleEdit = await editBaleView(active.value, { text: "stale" });
+  const staleDelete = await deleteBaleView(active.value);
   assert.equal(staleEdit.ok, false);
   assert.equal(staleDelete.ok, false);
   if (!staleEdit.ok) assert.equal(staleEdit.reason, "stale-handle");
@@ -268,15 +268,15 @@ test("Delivery API converts unexpected runtime errors into transport failures", 
   runtime.sendView = async () => {
     throw new Error("secret transport detail");
   };
-  bindTelegramDeliveryRuntime(runtime);
-  const result = await sendTelegramView(
+  bindBaleDeliveryRuntime(runtime);
+  const result = await sendBaleView(
     { text: "hello" },
     { scope: { kind: "instance" } },
   );
   assert.deepEqual(result, {
     ok: false,
     reason: "transport-failed",
-    message: "Telegram delivery failed.",
+    message: "Bale delivery failed.",
   });
 });
 
@@ -284,7 +284,7 @@ test("Delivery target policy runtime projects live authority and excludes Guest 
   let ownsDirect = false;
   let followerRegistered = true;
   let guestQueryId: string | undefined;
-  const runtime = createTelegramDeliveryTargetPolicyRuntime({
+  const runtime = createBaleDeliveryTargetPolicyRuntime({
     ownsDirect: () => ownsDirect,
     isFollowerRegistered: () => followerRegistered,
     getAllowedChatId: () => 42,
@@ -324,10 +324,10 @@ test("Delivery target policy runtime projects live authority and excludes Guest 
 test("Threaded delivery refuses implicit and explicit All scopes, even without a bound tab", async () => {
   let threaded = true;
   const sent: unknown[] = [];
-  const policy = createTelegramDeliveryTargetPolicyRuntime({ ownsDirect: () => true, isThreadedMode: () => threaded,
+  const policy = createBaleDeliveryTargetPolicyRuntime({ ownsDirect: () => true, isThreadedMode: () => threaded,
     isFollowerRegistered: () => false, getAllowedChatId: () => 7, getFollowerTarget: () => undefined,
     getLeaderTarget: () => undefined, listThreadRecords: () => [], getActiveTurnTarget: () => ({ chatId: 7 }), getActiveGuestQueryId: () => undefined });
-  const runtime = createTelegramBridgeDeliveryRuntime({ generation: "All-policy", getTargetPolicyView: policy.getTargetPolicyView,
+  const runtime = createBaleBridgeDeliveryRuntime({ generation: "All-policy", getTargetPolicyView: policy.getTargetPolicyView,
     getActiveTurnTarget: policy.getActiveTurnTarget, api: { async sendMessage(body) { sent.push(body); return { message_id: 1 }; },
       async editMessageText(body) { sent.push(body); return "edited"; }, async deleteMessage() {}, async sendChatAction() { return true; } }, recordOwnership() {} });
   for (const scope of [{ kind: "instance" }, { kind: "aggregate" }, { kind: "active-turn" }, { kind: "target", target: { chatId: 7 } }] as const)
@@ -343,7 +343,7 @@ test("Threaded delivery refuses implicit and explicit All scopes, even without a
 
 test("Delivery target policy resolves classic, leader, and follower instance surfaces", () => {
   assert.deepEqual(
-    resolveTelegramDeliveryInstanceTarget({
+    resolveBaleDeliveryInstanceTarget({
       canDeliver: true,
       ownsDirect: true,
       allowedChatId: 42,
@@ -351,7 +351,7 @@ test("Delivery target policy resolves classic, leader, and follower instance sur
     { chatId: 42 },
   );
   assert.deepEqual(
-    resolveTelegramDeliveryInstanceTarget({
+    resolveBaleDeliveryInstanceTarget({
       canDeliver: true,
       ownsDirect: true,
       allowedChatId: 42,
@@ -360,7 +360,7 @@ test("Delivery target policy resolves classic, leader, and follower instance sur
     { chatId: 42, threadId: 3 },
   );
   assert.deepEqual(
-    resolveTelegramDeliveryInstanceTarget({
+    resolveBaleDeliveryInstanceTarget({
       canDeliver: true,
       ownsDirect: false,
       allowedChatId: 42,
@@ -369,7 +369,7 @@ test("Delivery target policy resolves classic, leader, and follower instance sur
     { chatId: 42, threadId: 7 },
   );
   assert.deepEqual(
-    resolveTelegramDeliveryAggregateTarget({
+    resolveBaleDeliveryAggregateTarget({
       canDeliver: true,
       ownsDirect: false,
       allowedChatId: 42,
@@ -386,14 +386,14 @@ test("Delivery target policy restricts follower and leader explicit targets", ()
     followerTarget: { chatId: 42, threadId: 7 },
   };
   assert.equal(
-    isTelegramDeliveryExplicitTargetAuthorized(
+    isBaleDeliveryExplicitTargetAuthorized(
       { chatId: 42, threadId: 7 },
       followerView,
     ),
     true,
   );
   assert.equal(
-    isTelegramDeliveryExplicitTargetAuthorized(
+    isBaleDeliveryExplicitTargetAuthorized(
       { chatId: 42, threadId: 8 },
       followerView,
     ),
@@ -407,24 +407,24 @@ test("Delivery target policy restricts follower and leader explicit targets", ()
     liveTargets: [{ chatId: 42, threadId: 8 }],
   };
   assert.equal(
-    isTelegramDeliveryExplicitTargetAuthorized(
+    isBaleDeliveryExplicitTargetAuthorized(
       { chatId: 42, threadId: 8 },
       leaderView,
     ),
     true,
   );
   assert.equal(
-    isTelegramDeliveryExplicitTargetAuthorized({ chatId: 99 }, leaderView),
+    isBaleDeliveryExplicitTargetAuthorized({ chatId: 99 }, leaderView),
     false,
   );
 });
 
 function createConcreteRuntimeHarness(
-  overrides: Partial<TelegramDeliveryRuntimeDeps> = {},
+  overrides: Partial<BaleDeliveryRuntimeDeps> = {},
 ) {
   let nextMessageId = 100;
   const events: Array<Record<string, unknown>> = [];
-  const deps: TelegramDeliveryRuntimeDeps = {
+  const deps: BaleDeliveryRuntimeDeps = {
     generation: "generation-one",
     getActiveTurnTarget: () => target,
     getInstanceTarget: () => target,
@@ -457,7 +457,7 @@ function createConcreteRuntimeHarness(
 test("Bridge delivery runtime owns rendering and bus-aware transport adaptation", async () => {
   const sentBodies: Array<Record<string, unknown>> = [];
   const ownership: Array<Record<string, unknown>> = [];
-  const runtime = createTelegramBridgeDeliveryRuntime({
+  const runtime = createBaleBridgeDeliveryRuntime({
     generation: "generation-one",
     getTargetPolicyView: () => ({
       canDeliver: true,
@@ -510,7 +510,7 @@ test("Bridge delivery runtime owns rendering and bus-aware transport adaptation"
 test("Bridge delivery runtime rejects work after transport generation replacement", async () => {
   let transportActive = true;
   let apiCalls = 0;
-  const runtime = createTelegramBridgeDeliveryRuntime({
+  const runtime = createBaleBridgeDeliveryRuntime({
     generation: "generation-one",
     isTransportActive: () => transportActive,
     getTargetPolicyView: () => ({
@@ -640,7 +640,7 @@ test("Concrete delivery runtime keeps handles opaque and deeply immutable", asyn
 test("Concrete delivery runtime exposes non-idempotent commit-unknown outcomes", async () => {
   const { runtime } = createConcreteRuntimeHarness({
     async sendChunk() {
-      throw new TelegramApiCommitUnknownError(
+      throw new BaleApiCommitUnknownError(
         "sendMessage",
         new TypeError("fetch failed"),
       );
@@ -653,7 +653,7 @@ test("Concrete delivery runtime exposes non-idempotent commit-unknown outcomes",
   assert.deepEqual(result, {
     ok: false,
     reason: "commit-unknown",
-    message: "Telegram delivery send may have committed before transport failed.",
+    message: "Bale delivery send may have committed before transport failed.",
   });
 });
 

@@ -86,9 +86,9 @@ async function scenario(sdk, core, timing, nativeKind, bridgeMode) {
   if (bridgeMode) {
     // Node --experimental-strip-types loads the retained implementation, not a copied policy.
     const Queue = await import("../../lib/queue.ts");
-    const { createTelegramQueueBindingRuntime } = await import("../../lib/bindings.ts");
-    const store = Queue.createTelegramQueueStore();
-    const deferredDispatch = Queue.createTelegramDeferredQueueDispatchRuntime();
+    const { createBaleQueueBindingRuntime } = await import("../../lib/bindings.ts");
+    const store = Queue.createBaleQueueStore();
+    const deferredDispatch = Queue.createBaleDeferredQueueDispatchRuntime();
     deferredDispatch.bind("probe");
     let settlementCalls = 0;
     const disposed = new Set();
@@ -96,10 +96,10 @@ async function scenario(sdk, core, timing, nativeKind, bridgeMode) {
       kind: "prompt", chatId: 7, target: { chatId: 7, threadId: 10 }, replyToMessageId: index + 1,
       queueOrder: index + 1, queueLane: "steer", laneOrder: index + 1, sourceMessageIds: [index + 1],
       content: [{ type: "text", text }], historyText: text, statusSummary: text, queuedAttachments: [],
-      admissionReceipts: [Queue.createTelegramQueueAdmissionReceipt({ queueKind: "prompt", scope: "probe", sourceUpdateIds: [index + 1] })],
+      admissionReceipts: [Queue.createBaleQueueAdmissionReceipt({ queueKind: "prompt", scope: "probe", sourceUpdateIds: [index + 1] })],
     }));
     store.setQueuedItems(items);
-    const runtime = createTelegramQueueBindingRuntime({ store, deferredDispatch,
+    const runtime = createBaleQueueBindingRuntime({ store, deferredDispatch,
       queue: { allocateItemOrder: () => 3 },
       lifecycle: { isCompactionInProgress: () => false, hasDispatchPending: () => false },
       activeTurn: { has: () => false }, transportStamp: { isActive: () => true },
@@ -147,7 +147,7 @@ async function scenario(sdk, core, timing, nativeKind, bridgeMode) {
       },
       async (event) => {
         if (event.entries.length > 0 && timing === "after-check") inject();
-        if (bridgeMode === "remove") return { entries: event.entries.filter(entry => entry.customType !== "telegram-steer"), continue: false };
+        if (bridgeMode === "remove") return { entries: event.entries.filter(entry => entry.customType !== "bale-steer"), continue: false };
       },
     ]]]),
   };

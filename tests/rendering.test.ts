@@ -1,6 +1,6 @@
 /**
- * Regression tests for Telegram UI/compat rendering helpers
- * Covers nested lists, code blocks, tables, links, quotes, chunking, and other Telegram-specific render edge cases
+ * Regression tests for Bale UI/compat rendering helpers
+ * Covers nested lists, code blocks, tables, links, quotes, chunking, and other Bale-specific render edge cases
  */
 
 import assert from "node:assert/strict";
@@ -11,8 +11,8 @@ import {
   escapeHtml,
   escapeHtmlAttribute,
   MAX_MESSAGE_LENGTH,
-  renderTelegramInlineMarkdownHtml,
-  renderTelegramMessage,
+  renderBaleInlineMarkdownHtml,
+  renderBaleMessage,
 } from "../lib/rendering.ts";
 
 function countMatches(text: string, pattern: RegExp): number {
@@ -29,7 +29,7 @@ test("HTML helpers escape text and attribute contexts", () => {
 
 test("Inline Markdown helper can render formatting without links", () => {
   assert.equal(
-    renderTelegramInlineMarkdownHtml(
+    renderBaleInlineMarkdownHtml(
       "**Reviewing** [docs](https://example.com) <https://example.com>",
       { allowLinks: false },
     ),
@@ -63,9 +63,9 @@ test("Malformed and boundary markdown renders safely", () => {
   ];
 
   for (const markdown of cases) {
-    let chunks: ReturnType<typeof renderTelegramMessage> = [];
+    let chunks: ReturnType<typeof renderBaleMessage> = [];
     assert.doesNotThrow(() => {
-      chunks = renderTelegramMessage(markdown, { mode: "markdown" });
+      chunks = renderBaleMessage(markdown, { mode: "markdown" });
     });
     for (const chunk of chunks) {
       assert.ok(chunk.text.length <= MAX_MESSAGE_LENGTH);
@@ -90,7 +90,7 @@ test("Malformed and boundary markdown renders safely", () => {
 });
 
 test("Nested lists stay out of code blocks", () => {
-  const chunks = renderTelegramMessage(
+  const chunks = renderBaleMessage(
     "- Level 1\n  - Level 2\n    - Level 3 with **bold** text",
     { mode: "markdown" },
   );
@@ -108,7 +108,7 @@ test("Nested lists stay out of code blocks", () => {
 });
 
 test("Fenced code blocks preserve literal markdown", () => {
-  const chunks = renderTelegramMessage('~~~ts\nconst value = "**raw**";\n~~~', {
+  const chunks = renderBaleMessage('~~~ts\nconst value = "**raw**";\n~~~', {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -117,7 +117,7 @@ test("Fenced code blocks preserve literal markdown", () => {
 });
 
 test("Underscores inside words do not become italic", () => {
-  const chunks = renderTelegramMessage("Path: foo_bar_baz.txt and **bold**", {
+  const chunks = renderBaleMessage("Path: foo_bar_baz.txt and **bold**", {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -125,23 +125,23 @@ test("Underscores inside words do not become italic", () => {
   assert.match(chunks[0]?.text ?? "", /<b>bold<\/b>/);
 });
 
-test("Spoiler markers render as Telegram HTML spoilers", () => {
-  const chunks = renderTelegramMessage("Secret: ||hidden|| and **bold**.", {
+test("Spoiler markers render as Bale HTML spoilers", () => {
+  const chunks = renderBaleMessage("Secret: ||hidden|| and **bold**.", {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
   assert.match(chunks[0]?.text ?? "", /<tg-spoiler>hidden<\/tg-spoiler>/);
   assert.match(chunks[0]?.text ?? "", /<b>bold<\/b>/);
 
-  const nested = renderTelegramMessage("||**hidden**||", { mode: "markdown" });
+  const nested = renderBaleMessage("||**hidden**||", { mode: "markdown" });
   assert.equal(nested[0]?.text, "<tg-spoiler><b>hidden</b></tg-spoiler>");
 
-  const literal = renderTelegramMessage("a || b", { mode: "markdown" });
+  const literal = renderBaleMessage("a || b", { mode: "markdown" });
   assert.equal(literal[0]?.text, "a || b");
 });
 
 test("Bold markdown can span soft line breaks", () => {
-  const chunks = renderTelegramMessage(
+  const chunks = renderBaleMessage(
     "Скорее: **архитектурно — да,\nпрактически — почти**.",
     { mode: "markdown" },
   );
@@ -153,7 +153,7 @@ test("Bold markdown can span soft line breaks", () => {
 });
 
 test("Quoted nested lists stay in blockquote rendering", () => {
-  const chunks = renderTelegramMessage(
+  const chunks = renderBaleMessage(
     "> Quoted intro\n> - nested item\n>   - deeper item",
     { mode: "markdown" },
   );
@@ -165,7 +165,7 @@ test("Quoted nested lists stay in blockquote rendering", () => {
 });
 
 test("Numbered lists use monospace numeric markers", () => {
-  const chunks = renderTelegramMessage("1. first\n  2. second", {
+  const chunks = renderBaleMessage("1. first\n  2. second", {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -175,7 +175,7 @@ test("Numbered lists use monospace numeric markers", () => {
 
 test("Ordered task lists preserve numeric markers in rendering", () => {
   const markdown = "1. [x] first\n2. [ ] second";
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -191,7 +191,7 @@ test("Ordered task lists preserve numeric markers in rendering", () => {
 
 test("Leading indentation on the first markdown line stays intact", () => {
   const markdown = "  - nested bullet\n    - nested child";
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -207,7 +207,7 @@ test("Leading indentation on the first markdown line stays intact", () => {
 
 test("UI/compat rendering preserves multiple blank lines between blocks", () => {
   const markdown = "# Title\n\n\nParagraph\n\n\n> Quote";
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -239,7 +239,7 @@ test("UI/compat rendering preserves original blank-line spacing across block tra
     },
   ];
   for (const testCase of cases) {
-    const finalChunks = renderTelegramMessage(testCase.markdown, {
+    const finalChunks = renderBaleMessage(testCase.markdown, {
       mode: "markdown",
     });
     assert.equal(finalChunks.length, 1);
@@ -249,7 +249,7 @@ test("UI/compat rendering preserves original blank-line spacing across block tra
 
 test("Headings keep visible spacing before following code blocks even without source blank lines", () => {
   const markdown = "### Title\n```ts\nconst x = 1\n```";
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -261,7 +261,7 @@ test("Headings keep visible spacing before following code blocks even without so
 
 test("Standalone checkbox-looking prose stays literal outside task lists", () => {
   const markdown = "Use [ ] as a placeholder and keep [x] literal";
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -271,8 +271,8 @@ test("Standalone checkbox-looking prose stays literal outside task lists", () =>
   assert.match(chunks[0]?.text ?? "", /keep \[x\] literal/);
 });
 
-test("Nested blockquotes flatten into one Telegram blockquote with indentation", () => {
-  const chunks = renderTelegramMessage("> outer\n>> inner\n>>> deepest", {
+test("Nested blockquotes flatten into one Bale blockquote with indentation", () => {
+  const chunks = renderBaleMessage("> outer\n>> inner\n>>> deepest", {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -284,7 +284,7 @@ test("Nested blockquotes flatten into one Telegram blockquote with indentation",
 });
 
 test("UI/compat Markdown tables render as literal monospace blocks without outer side borders", () => {
-  const chunks = renderTelegramMessage(
+  const chunks = renderBaleMessage(
     "| Name | Value |\n| --- | --- |\n| **x** | `y` |",
     { mode: "markdown" },
   );
@@ -298,7 +298,7 @@ test("UI/compat Markdown tables render as literal monospace blocks without outer
 });
 
 test("Markdown table padding uses emoji grapheme display width", () => {
-  const chunks = renderTelegramMessage(
+  const chunks = renderBaleMessage(
     "| Icon | Name |\n| --- | --- |\n| 👩‍💻 | dev |\n| ✅ | done |\n| 1️⃣ | key |",
     { mode: "markdown" },
   );
@@ -310,7 +310,7 @@ test("Markdown table padding uses emoji grapheme display width", () => {
 });
 
 test("Markdown table padding handles CJK and combining marks", () => {
-  const chunks = renderTelegramMessage(
+  const chunks = renderBaleMessage(
     "| Word | Note |\n| --- | --- |\n| é | acute |\n| 東京 | city |",
     { mode: "markdown" },
   );
@@ -321,7 +321,7 @@ test("Markdown table padding handles CJK and combining marks", () => {
 });
 
 test("Links, code spans, and underscore-heavy text coexist safely", () => {
-  const chunks = renderTelegramMessage(
+  const chunks = renderBaleMessage(
     "See [docs](https://example.com), run `foo_bar()` and keep foo_bar.txt literal",
     { mode: "markdown" },
   );
@@ -334,8 +334,8 @@ test("Links, code spans, and underscore-heavy text coexist safely", () => {
   assert.equal((chunks[0]?.text ?? "").includes("<i>bar</i>"), false);
 });
 
-test("HTML attributes are escaped or sanitized in generated Telegram markup", () => {
-  const linkChunks = renderTelegramMessage(
+test("HTML attributes are escaped or sanitized in generated Bale markup", () => {
+  const linkChunks = renderBaleMessage(
     '[quoted](<https://example.com/"quoted">)',
     { mode: "markdown" },
   );
@@ -343,7 +343,7 @@ test("HTML attributes are escaped or sanitized in generated Telegram markup", ()
     linkChunks[0]?.text ?? "",
     /<a href="https:\/\/example.com\/&quot;quoted&quot;">quoted<\/a>/,
   );
-  const codeChunks = renderTelegramMessage(
+  const codeChunks = renderBaleMessage(
     '```ts"onclick=bad\nconst value = 1;\n```',
     { mode: "markdown" },
   );
@@ -354,8 +354,8 @@ test("HTML attributes are escaped or sanitized in generated Telegram markup", ()
   assert.equal((codeChunks[0]?.text ?? "").includes('"onclick'), false);
 });
 
-test("HTML mode chunks long messages below Telegram limits", () => {
-  const chunks = renderTelegramMessage("x".repeat(5000), {
+test("HTML mode chunks long messages below Bale limits", () => {
+  const chunks = renderBaleMessage("x".repeat(5000), {
     mode: "html",
   });
   assert.ok(chunks.length > 1);
@@ -366,7 +366,7 @@ test("HTML mode chunks long messages below Telegram limits", () => {
 });
 
 test("HTML mode keeps tags balanced across long chunk boundaries", () => {
-  const chunks = renderTelegramMessage(
+  const chunks = renderBaleMessage(
     `<blockquote><b>${"x".repeat(5000)}</b></blockquote>`,
     { mode: "html" },
   );
@@ -399,7 +399,7 @@ test("Links degrade or normalize safely across supported and unsupported markdow
     "",
     "[^1]: Footnote body",
   ].join("\n");
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.equal(chunks.length, 1);
@@ -434,7 +434,7 @@ test("Long quoted blocks stay chunked with balanced blockquote tags", () => {
     { length: 500 },
     (_, index) => `> quoted **${index}** line`,
   ).join("\n");
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.ok(chunks.length > 1);
@@ -447,12 +447,12 @@ test("Long quoted blocks stay chunked with balanced blockquote tags", () => {
   }
 });
 
-test("Long UI/compat Markdown messages stay chunked below Telegram limits", () => {
+test("Long UI/compat Markdown messages stay chunked below Bale limits", () => {
   const markdown = Array.from(
     { length: 600 },
     (_, index) => `- item **${index}**`,
   ).join("\n");
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.ok(chunks.length > 1);
@@ -471,7 +471,7 @@ test("Long mixed links and code spans stay chunked with balanced inline tags", (
     (_, index) =>
       `Paragraph ${index}: see [docs ${index}](https://example.com/${index}), run \`code_${index}()\`, and keep foo_bar_${index}.txt literal`,
   ).join("\n\n");
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.ok(chunks.length > 1);
@@ -500,7 +500,7 @@ test("Long multi-block markdown keeps quotes and code fences structurally balanc
       "```",
     ].join("\n");
   }).join("\n\n");
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.ok(chunks.length > 1);
@@ -526,7 +526,7 @@ test("Chunked mixed block transitions keep quote and list structure balanced", (
       `plain paragraph ${index} with [link](https://example.com/${index})`,
     ].join("\n");
   }).join("\n\n");
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.ok(chunks.length > 1);
@@ -552,7 +552,7 @@ test("Chunked code fence transitions keep code blocks closed before following pr
       `After code **${index}** and \`inline_${index}()\``,
     ].join("\n");
   }).join("\n\n");
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.ok(chunks.length > 1);
@@ -573,7 +573,7 @@ test("Long inline formatting paragraphs stay balanced across chunk boundaries", 
   const markdown = Array.from({ length: 500 }, (_, index) => {
     return `Segment ${index} keeps **bold_${index}** with \`code_${index}()\`, [link_${index}](https://example.com/${index}), and foo_bar_${index}.txt literal.`;
   }).join(" ");
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.ok(chunks.length > 1);
@@ -633,7 +633,7 @@ test("Realistic Markdown fixtures render safely for UI/compat surfaces", () => {
     ].join("\n"),
   ];
   for (const markdown of fixtures) {
-    const chunks = renderTelegramMessage(markdown, {
+    const chunks = renderBaleMessage(markdown, {
       mode: "markdown",
     });
     assert.ok(chunks.length > 0);
@@ -668,7 +668,7 @@ test("Chunked list, code, quote, and prose cycles stay balanced across transitio
       `Plain paragraph ${index} with \`inline_${index}()\``,
     ].join("\n");
   }).join("\n\n");
-  const chunks = renderTelegramMessage(markdown, {
+  const chunks = renderBaleMessage(markdown, {
     mode: "markdown",
   });
   assert.ok(chunks.length > 1);

@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram outbound voice delivery helpers
+ * Regression tests for Bale outbound voice delivery helpers
  * Exercises direct voice-sender ownership after extraction from outbound.ts
  */
 
@@ -10,21 +10,21 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { execCommandTemplate } from "../lib/command-templates.ts";
-import type { TelegramOutboundHandlerConfig } from "../lib/config.ts";
+import type { BaleOutboundHandlerConfig } from "../lib/config.ts";
 import {
-  findTelegramOutboundHandlers,
-  generateTelegramVoiceReplyFile,
+  findBaleOutboundHandlers,
+  generateBaleVoiceReplyFile,
 } from "../lib/outbound.ts";
-import { createTelegramVoiceReplySender } from "../lib/outbound-voice.ts";
-import { resetTransportReplyDedup, sendTelegramNativeMarkdownReply } from "../lib/replies.ts";
-import { createTelegramThreadTarget } from "../lib/target.ts";
+import { createBaleVoiceReplySender } from "../lib/outbound-voice.ts";
+import { resetTransportReplyDedup, sendBaleNativeMarkdownReply } from "../lib/replies.ts";
+import { createBaleThreadTarget } from "../lib/target.ts";
 import {
-  clearTelegramVoiceSynthesisProviders,
-  registerTelegramVoiceSynthesisProvider,
+  clearBaleVoiceSynthesisProviders,
+  registerBaleVoiceSynthesisProvider,
 } from "../lib/voice.ts";
 
 test.beforeEach(() => {
-  clearTelegramVoiceSynthesisProviders();
+  clearBaleVoiceSynthesisProviders();
   resetTransportReplyDedup();
 });
 
@@ -32,7 +32,7 @@ test(
   "Outbound voice sender executes a Windows cmd handler and uploads its ogg artifact",
   { skip: process.platform !== "win32" },
   async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-outbound-voice-cmd-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-outbound-voice-cmd-"));
     const scriptPath = join(tempDir, "voice-writer.cmd");
     await writeFile(
       scriptPath,
@@ -46,7 +46,7 @@ test(
     }];
     const uploads: Array<{ filePath: string; content: string }> = [];
     const diagnostics: string[] = [];
-    const sendVoice = createTelegramVoiceReplySender(
+    const sendVoice = createBaleVoiceReplySender(
       {
         execCommand: execCommandTemplate,
         getHandlers: () => handlers,
@@ -65,12 +65,12 @@ test(
       },
       {
         findVoiceHandlers: (configured) =>
-          findTelegramOutboundHandlers(
-            configured as TelegramOutboundHandlerConfig[] | undefined,
+          findBaleOutboundHandlers(
+            configured as BaleOutboundHandlerConfig[] | undefined,
             "voice",
           ),
         generateVoiceFile: (text, options) =>
-          generateTelegramVoiceReplyFile(text, options),
+          generateBaleVoiceReplyFile(text, options),
       },
     );
     try {
@@ -92,13 +92,13 @@ test(
 );
 
 test("Outbound voice sender uploads provider opus result with reply markup", async () => {
-  registerTelegramVoiceSynthesisProvider(
+  registerBaleVoiceSynthesisProvider(
     async () => "/tmp/direct.opus",
     { id: "direct-test" },
   );
   const uploads: unknown[] = [];
   const actions: unknown[] = [];
-  const sendVoice = createTelegramVoiceReplySender({
+  const sendVoice = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -138,11 +138,11 @@ test("Outbound voice sender uploads provider opus result with reply markup", asy
 });
 
 test("Outbound voice sender uploads voice into thread target", async () => {
-  registerTelegramVoiceSynthesisProvider(async () => "/tmp/direct.ogg", {
+  registerBaleVoiceSynthesisProvider(async () => "/tmp/direct.ogg", {
     id: "thread-test",
   });
   const uploads: unknown[] = [];
-  const sendVoice = createTelegramVoiceReplySender({
+  const sendVoice = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -158,7 +158,7 @@ test("Outbound voice sender uploads voice into thread target", async () => {
     {
       chatId: -1007,
       replyToMessageId: 2,
-      target: createTelegramThreadTarget(-1007, 42),
+      target: createBaleThreadTarget(-1007, 42),
     },
     "hello",
   );
@@ -176,9 +176,9 @@ test("Outbound voice sender uploads voice into thread target", async () => {
 });
 
 test("Rejected voice upload preserves the fallback text's first reply anchor", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pi-telegram-voice-anchor-"));
-  registerTelegramVoiceSynthesisProvider(async () => join(directory, "voice.ogg"), { id: "anchor-test" });
-  const sendVoice = createTelegramVoiceReplySender({
+  const directory = await mkdtemp(join(tmpdir(), "pi-bale-voice-anchor-"));
+  registerBaleVoiceSynthesisProvider(async () => join(directory, "voice.ogg"), { id: "anchor-test" });
+  const sendVoice = createBaleVoiceReplySender({
     execCommand: async () => ({ stdout: "", stderr: "", code: 0, killed: false }),
     sendMultipart: async (_method, fields) => {
       assert.equal(JSON.parse(fields.reply_parameters!).message_id, 2);
@@ -189,7 +189,7 @@ test("Rejected voice upload preserves the fallback text's first reply anchor", a
     await assert.rejects(sendVoice({ chatId: 1, replyToMessageId: 2 }, "Voice"), /every voice synthesis provider/);
     const anchors: Array<number | undefined> = [];
     for (const text of ["Fallback text", "Following answer"]) {
-      await sendTelegramNativeMarkdownReply(1, 2, text, {
+      await sendBaleNativeMarkdownReply(1, 2, text, {
         sendRichMessage: async (body) => { anchors.push(body.reply_parameters?.message_id); return { message_id: 100 }; },
       });
     }
@@ -200,7 +200,7 @@ test("Rejected voice upload preserves the fallback text's first reply anchor", a
 test("Outbound voice sender records and throws when every source fails", async () => {
   const events: Array<{ category: string; message: string; phase?: unknown }> =
     [];
-  const sendVoice = createTelegramVoiceReplySender({
+  const sendVoice = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",

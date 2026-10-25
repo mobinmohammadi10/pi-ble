@@ -1,15 +1,15 @@
 /**
- * Telegram inbound handler pipeline
- * Zones: telegram inbound, command templates, prompt preparation
+ * Bale inbound handler pipeline
+ * Zones: bale inbound, command templates, prompt preparation
  * Owns MIME/type matching, command-template execution, fallback handling, and prompt injection before prompt enqueueing
  */
 import { type CommandTemplateConfig, type CommandTemplateObjectConfig } from "./command-templates.ts";
-type TelegramInboundCommandTemplateConfig = string | CommandTemplateObjectConfig;
-export interface TelegramInboundHandlerConfig {
+type BaleInboundCommandTemplateConfig = string | CommandTemplateObjectConfig;
+export interface BaleInboundHandlerConfig {
     match?: string | string[];
     mime?: string | string[];
     type?: string | string[];
-    template?: string | TelegramInboundCommandTemplateConfig[];
+    template?: string | BaleInboundCommandTemplateConfig[];
     /** Falsy skips this handler so selection continues with the next match. */
     when?: CommandTemplateObjectConfig["when"];
     args?: string[];
@@ -18,25 +18,25 @@ export interface TelegramInboundHandlerConfig {
     retry?: CommandTemplateObjectConfig["retry"];
     recover?: CommandTemplateObjectConfig["recover"];
 }
-export interface TelegramInboundHandlerFile {
+export interface BaleInboundHandlerFile {
     path: string;
     fileName?: string;
     mimeType?: string;
     kind?: string;
     isImage?: boolean;
 }
-export interface TelegramInboundHandlerOutput {
-    file: TelegramInboundHandlerFile;
+export interface BaleInboundHandlerOutput {
+    file: BaleInboundHandlerFile;
     output: string;
-    handler: TelegramInboundHandlerConfig;
+    handler: BaleInboundHandlerConfig;
 }
-export interface TelegramInboundHandlerProcessResult<TFile extends TelegramInboundHandlerFile = TelegramInboundHandlerFile> {
+export interface BaleInboundHandlerProcessResult<TFile extends BaleInboundHandlerFile = BaleInboundHandlerFile> {
     rawText: string;
     promptFiles: TFile[];
     handlerOutputs: string[];
-    handledFiles: TelegramInboundHandlerOutput[];
+    handledFiles: BaleInboundHandlerOutput[];
 }
-export interface TelegramInboundHandlerExecOptions {
+export interface BaleInboundHandlerExecOptions {
     cwd?: string;
     timeout?: number;
     signal?: AbortSignal;
@@ -44,51 +44,51 @@ export interface TelegramInboundHandlerExecOptions {
     retry?: number;
     recover?: () => Promise<void>;
 }
-export interface TelegramInboundHandlerExecResult {
+export interface BaleInboundHandlerExecResult {
     stdout: string;
     stderr: string;
     code: number;
     killed: boolean;
 }
-export interface TelegramInboundHandlerRuntimeDeps<TContext> {
-    getHandlers: () => TelegramInboundHandlerConfig[] | undefined;
-    execCommand: (command: string, args: string[], options?: TelegramInboundHandlerExecOptions) => Promise<TelegramInboundHandlerExecResult>;
+export interface BaleInboundHandlerRuntimeDeps<TContext> {
+    getHandlers: () => BaleInboundHandlerConfig[] | undefined;
+    execCommand: (command: string, args: string[], options?: BaleInboundHandlerExecOptions) => Promise<BaleInboundHandlerExecResult>;
     getCwd: (ctx: TContext) => string;
     recordRuntimeEvent?: (category: string, error: unknown, details?: Record<string, unknown>) => void;
 }
-export interface TelegramInboundHandlerRuntime<TContext> {
-    process: <TFile extends TelegramInboundHandlerFile>(files: TFile[], rawText: string, ctx: TContext) => Promise<TelegramInboundHandlerProcessResult<TFile>>;
+export interface BaleInboundHandlerRuntime<TContext> {
+    process: <TFile extends BaleInboundHandlerFile>(files: TFile[], rawText: string, ctx: TContext) => Promise<BaleInboundHandlerProcessResult<TFile>>;
 }
-export type TelegramInboundProgrammaticHandlerResult = string | {
+export type BaleInboundProgrammaticHandlerResult = string | {
     text: string;
 } | undefined;
-export interface TelegramInboundProgrammaticHandlerInput {
+export interface BaleInboundProgrammaticHandlerInput {
     kind: string;
     text?: string;
-    file?: TelegramInboundHandlerFile;
+    file?: BaleInboundHandlerFile;
     mimeType?: string;
 }
-export type TelegramInboundProgrammaticHandler = (input: TelegramInboundProgrammaticHandlerInput, options?: {
+export type BaleInboundProgrammaticHandler = (input: BaleInboundProgrammaticHandlerInput, options?: {
     cwd?: string;
-}) => Promise<TelegramInboundProgrammaticHandlerResult>;
-export interface TelegramInboundHandlerRegistry {
-    handlers: Map<string, TelegramInboundProgrammaticHandler[]>;
+}) => Promise<BaleInboundProgrammaticHandlerResult>;
+export interface BaleInboundHandlerRegistry {
+    handlers: Map<string, BaleInboundProgrammaticHandler[]>;
 }
 interface InboundHandlerInvocation {
     command: string;
     args: string[];
 }
-export declare function registerTelegramInboundHandler(kind: string, handler: TelegramInboundProgrammaticHandler): () => void;
-export declare function clearTelegramInboundHandlers(): void;
-export declare function telegramInboundHandlerMatchesFile(handler: TelegramInboundHandlerConfig, file: TelegramInboundHandlerFile): boolean;
-export declare function buildTelegramInboundHandlerInvocation(handler: CommandTemplateConfig, file: TelegramInboundHandlerFile, cwd: string, appendFileIfMissing?: boolean): InboundHandlerInvocation;
-export declare function processTelegramInboundHandlers<TFile extends TelegramInboundHandlerFile>(options: {
+export declare function registerBaleInboundHandler(kind: string, handler: BaleInboundProgrammaticHandler): () => void;
+export declare function clearBaleInboundHandlers(): void;
+export declare function baleInboundHandlerMatchesFile(handler: BaleInboundHandlerConfig, file: BaleInboundHandlerFile): boolean;
+export declare function buildBaleInboundHandlerInvocation(handler: CommandTemplateConfig, file: BaleInboundHandlerFile, cwd: string, appendFileIfMissing?: boolean): InboundHandlerInvocation;
+export declare function processBaleInboundHandlers<TFile extends BaleInboundHandlerFile>(options: {
     files: TFile[];
     rawText: string;
-    handlers?: TelegramInboundHandlerConfig[];
+    handlers?: BaleInboundHandlerConfig[];
     cwd: string;
-    execCommand: TelegramInboundHandlerRuntimeDeps<unknown>["execCommand"];
-    recordRuntimeEvent?: TelegramInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
-}): Promise<TelegramInboundHandlerProcessResult<TFile>>;
-export declare function createTelegramInboundHandlerRuntime<TContext>(deps: TelegramInboundHandlerRuntimeDeps<TContext>): TelegramInboundHandlerRuntime<TContext>;
+    execCommand: BaleInboundHandlerRuntimeDeps<unknown>["execCommand"];
+    recordRuntimeEvent?: BaleInboundHandlerRuntimeDeps<unknown>["recordRuntimeEvent"];
+}): Promise<BaleInboundHandlerProcessResult<TFile>>;
+export declare function createBaleInboundHandlerRuntime<TContext>(deps: BaleInboundHandlerRuntimeDeps<TContext>): BaleInboundHandlerRuntime<TContext>;
 export {};

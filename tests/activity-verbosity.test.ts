@@ -1,41 +1,41 @@
 /**
- * Telegram activity verbosity projection regressions
+ * Bale activity verbosity projection regressions
  * Covers four activity modes, persistent reasoning, bounded tool disclosures, ordering, redaction, and authority fencing
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  createTelegramActivityVerbosityRuntime,
-  renderTelegramThinkingActivityHtml,
-  renderTelegramToolActivityHtml,
-  renderTelegramToolActivityRichMessage,
-  TELEGRAM_ACTIVITY_MESSAGE_MAX_TOOLS,
-  TELEGRAM_REASONING_BUFFER_MAX_CHARS,
-  TELEGRAM_TOOL_UPDATE_MAX_ENTRIES,
+  createBaleActivityVerbosityRuntime,
+  renderBaleThinkingActivityHtml,
+  renderBaleToolActivityHtml,
+  renderBaleToolActivityRichMessage,
+  BALE_ACTIVITY_MESSAGE_MAX_TOOLS,
+  BALE_REASONING_BUFFER_MAX_CHARS,
+  BALE_TOOL_UPDATE_MAX_ENTRIES,
 } from "../lib/activity-verbosity.ts";
 import type {
-  TelegramActivityEvent,
-  TelegramActivityPayload,
+  BaleActivityEvent,
+  BaleActivityPayload,
 } from "../lib/activity.ts";
 import type {
-  TelegramEditMessageTextBody,
-  TelegramSendMessageBody,
-  TelegramSendRichMessageBody,
-} from "../lib/telegram-api.ts";
+  BaleEditMessageTextBody,
+  BaleSendMessageBody,
+  BaleSendRichMessageBody,
+} from "../lib/bale-api.ts";
 
 function event(
   sequence: number,
-  payload: TelegramActivityPayload,
-): TelegramActivityEvent {
+  payload: BaleActivityPayload,
+): BaleActivityEvent {
   return {
     ...payload,
     activityId: "session:1",
     sequence,
-    source: "telegram",
+    source: "bale",
     target: { chatId: 42, threadId: 7 },
     timestamp: sequence,
-  } as TelegramActivityEvent;
+  } as BaleActivityEvent;
 }
 
 type ActivityMode = "quiet" | "thinking" | "tools" | "verbose";
@@ -52,11 +52,11 @@ function createHarness(
   let mode = options.mode ?? "verbose";
   let authority = 1;
   let nowMs = 0;
-  const sends: TelegramSendMessageBody[] = [];
-  const richSends: TelegramSendRichMessageBody[] = [];
-  const edits: TelegramEditMessageTextBody[] = [];
+  const sends: BaleSendMessageBody[] = [];
+  const richSends: BaleSendRichMessageBody[] = [];
+  const edits: BaleEditMessageTextBody[] = [];
   const reasoningTimers: Array<() => void> = [];
-  const runtime = createTelegramActivityVerbosityRuntime({
+  const runtime = createBaleActivityVerbosityRuntime({
     getActivityMode: () => mode,
     refreshActivityMode: async () => {
       if (options.refreshError) throw options.refreshError;
@@ -138,7 +138,7 @@ for (const outcome of ["resolve", "reject"] as const) {
     let nextId = 0;
     let edits = 0;
     const effects: Array<Record<string, unknown>> = [];
-    const runtime = createTelegramActivityVerbosityRuntime({
+    const runtime = createBaleActivityVerbosityRuntime({
       getActivityMode: () => "verbose",
       getNowMs: () => 0,
       refreshActivityMode: async () => { if (++refreshes === 1 && stage === "refresh") await pause(); },
@@ -165,7 +165,7 @@ for (const outcome of ["resolve", "reject"] as const) {
       recordFailure: () => {},
     });
     let sequence = 0;
-    const accept = (id: string, payload: TelegramActivityPayload) => runtime.accept({
+    const accept = (id: string, payload: BaleActivityPayload) => runtime.accept({
       ...event(++sequence, payload), activityId: id,
       target: { chatId: id === "old" ? 7 : 8, threadId: id === "old" ? 42 : 43 },
     });
@@ -237,7 +237,7 @@ for (const operation of ["send", "edit"] as const) {
       throw new Error("HTTP 400: Bad Request: fixture rejection");
     };
     let fallbacks = 0;
-    const runtime = createTelegramActivityVerbosityRuntime({
+    const runtime = createBaleActivityVerbosityRuntime({
       getActivityMode: () => "tools",
       resolveTarget: (input) => input.target,
       captureAuthority: () => authority,
@@ -288,7 +288,7 @@ test("quiet activity emits no reasoning or tool messages", async () => {
 });
 
 test("tool Rich activity separates arguments, updates, and result details", () => {
-  const rich = renderTelegramToolActivityRichMessage([
+  const rich = renderBaleToolActivityRichMessage([
     {
       id: "tool-1",
       name: "bash",
@@ -345,8 +345,8 @@ test("tool Rich activity separates arguments, updates, and result details", () =
 });
 
 test("tool root labels humanize snake case and preserve repeated prefixes", () => {
-  const rich = renderTelegramToolActivityRichMessage(
-    ["ffgrep", "fffind", "bash", "telegram_attach", "ff_find_items"].map((name, index) => ({
+  const rich = renderBaleToolActivityRichMessage(
+    ["ffgrep", "fffind", "bash", "bale_attach", "ff_find_items"].map((name, index) => ({
       id: `tool-${index}`,
       name,
       args: "{}",
@@ -367,14 +367,14 @@ test("tool root labels humanize snake case and preserve repeated prefixes", () =
       { type: "bold", text: "FFgrep:" },
       { type: "bold", text: "FFFind:" },
       { type: "bold", text: "Bash:" },
-      { type: "bold", text: "Telegram Attach:" },
+      { type: "bold", text: "Bale Attach:" },
       { type: "bold", text: "FF Find Items:" },
     ],
   );
 });
 
 test("tool evidence renders as ordinary expandable HTML fallback", () => {
-  const html = renderTelegramToolActivityHtml([
+  const html = renderBaleToolActivityHtml([
     {
       id: "tool-1",
       name: "exec<script>",
@@ -399,7 +399,7 @@ test("tool evidence renders as ordinary expandable HTML fallback", () => {
   assert.match(html, /"result": \{\n  "content": \[\]/);
   assert.doesNotMatch(html, /rich_message|<pre>/);
 
-  const statuses = renderTelegramToolActivityHtml([
+  const statuses = renderBaleToolActivityHtml([
     {
       id: "running",
       name: "read",
@@ -427,7 +427,7 @@ test("known-safe Rich rejection falls back to the HTML tool message", async () =
   const harness = createHarness({
     mode: "tools",
     richSendError: new Error(
-      "Telegram API sendRichMessage failed: HTTP 400: Bad Request: unsupported rich block",
+      "Bale API sendRichMessage failed: HTTP 400: Bad Request: unsupported rich block",
     ),
   });
   harness.runtime.accept(event(1, { type: "agent-start" }));
@@ -580,7 +580,7 @@ test("thinking and tools modes isolate their activity classes", async () => {
 });
 
 test("reasoning evidence renders inline HTML inside an expandable quote", () => {
-  const html = renderTelegramThinkingActivityHtml(
+  const html = renderBaleThinkingActivityHtml(
     "**Reviewing data models**\na < b\n<https://example.com>",
   );
   assert.match(html, /^<blockquote expandable>/);
@@ -688,7 +688,7 @@ test("assistant boundaries, capacity, and authority replacement fence batches", 
   const harness = createHarness();
   harness.runtime.accept(event(1, { type: "agent-start" }));
   let sequence = 2;
-  for (let index = 0; index < TELEGRAM_ACTIVITY_MESSAGE_MAX_TOOLS + 1; index++) {
+  for (let index = 0; index < BALE_ACTIVITY_MESSAGE_MAX_TOOLS + 1; index++) {
     harness.runtime.accept(
       event(sequence++, {
         type: "tool-end",
@@ -785,7 +785,7 @@ test("reasoning and tool updates retain bounded latest evidence", async () => {
     event(2, {
       type: "reasoning-delta",
       contentIndex: 0,
-      delta: `old-marker-${"x".repeat(TELEGRAM_REASONING_BUFFER_MAX_CHARS)}latest-marker`,
+      delta: `old-marker-${"x".repeat(BALE_REASONING_BUFFER_MAX_CHARS)}latest-marker`,
     }),
   );
   await harness.runtime.waitForIdle();
@@ -798,7 +798,7 @@ test("reasoning and tool updates retain bounded latest evidence", async () => {
       args: {},
     }),
   );
-  for (let index = 0; index < TELEGRAM_TOOL_UPDATE_MAX_ENTRIES + 3; index++) {
+  for (let index = 0; index < BALE_TOOL_UPDATE_MAX_ENTRIES + 3; index++) {
     harness.runtime.accept(
       event(4 + index, {
         type: "tool-update",
@@ -896,9 +896,9 @@ test("reset drops accepted events that have not started processing", async () =>
   const reasoningBlocked = new Promise<void>((resolve) => {
     releaseReasoning = resolve;
   });
-  const sends: TelegramSendMessageBody[] = [];
-  const richSends: TelegramSendRichMessageBody[] = [];
-  const runtime = createTelegramActivityVerbosityRuntime({
+  const sends: BaleSendMessageBody[] = [];
+  const richSends: BaleSendRichMessageBody[] = [];
+  const runtime = createBaleActivityVerbosityRuntime({
     getActivityMode: () => "verbose",
     resolveTarget: (activity) => activity.target,
     captureAuthority: () => 1,

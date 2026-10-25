@@ -1,15 +1,15 @@
 /**
- * Telegram outbound voice delivery helpers
- * Zones: telegram outbound, voice delivery
- * Owns native Telegram voice upload orchestration across configured voice handlers, programmatic outbound voice handlers, and registered synthesis providers
+ * Bale outbound voice delivery helpers
+ * Zones: bale outbound, voice delivery
+ * Owns native Bale voice upload orchestration across configured voice handlers, programmatic outbound voice handlers, and registered synthesis providers
  */
-import { type TelegramTarget } from "./target.ts";
-export interface TelegramVoiceReplyTurnView {
+import { type BaleTarget } from "./target.ts";
+export interface BaleVoiceReplyTurnView {
     chatId: number;
     replyToMessageId: number;
-    target?: TelegramTarget;
+    target?: BaleTarget;
 }
-export interface TelegramVoiceReplySenderDeps {
+export interface BaleVoiceReplySenderDeps {
     execCommand: (command: string, args: string[], options?: {
         cwd?: string;
         timeout?: number;
@@ -31,11 +31,11 @@ export interface TelegramVoiceReplySenderDeps {
     tempDir?: string;
     recordRuntimeEvent?: (category: string, error: unknown, details?: Record<string, unknown>) => void;
 }
-export type TelegramOutboundProgrammaticVoiceHandler = (text: string, options?: {
+export type BaleOutboundProgrammaticVoiceHandler = (text: string, options?: {
     lang?: string;
     rate?: string;
 }) => Promise<string>;
-export interface TelegramVoiceReplySenderPorts<THandler = unknown> {
+export interface BaleVoiceReplySenderPorts<THandler = unknown> {
     findVoiceHandlers?: (handlers: unknown[] | undefined) => THandler[];
     generateVoiceFile?: (text: string, options: {
         lang?: string;
@@ -43,11 +43,11 @@ export interface TelegramVoiceReplySenderPorts<THandler = unknown> {
         handler: THandler;
         tempDir?: string;
         cwd?: string;
-        execCommand: TelegramVoiceReplySenderDeps["execCommand"];
+        execCommand: BaleVoiceReplySenderDeps["execCommand"];
     }) => Promise<string | undefined>;
-    getProgrammaticVoiceHandlers?: () => TelegramOutboundProgrammaticVoiceHandler[];
+    getProgrammaticVoiceHandlers?: () => BaleOutboundProgrammaticVoiceHandler[];
 }
-export declare function createTelegramVoiceReplySender<THandler = unknown>(deps: TelegramVoiceReplySenderDeps, ports?: TelegramVoiceReplySenderPorts<THandler>): (turn: TelegramVoiceReplyTurnView, text: string, options?: {
+export declare function createBaleVoiceReplySender<THandler = unknown>(deps: BaleVoiceReplySenderDeps, ports?: BaleVoiceReplySenderPorts<THandler>): (turn: BaleVoiceReplyTurnView, text: string, options?: {
     lang?: string;
     rate?: string;
     replyToPrompt?: boolean;

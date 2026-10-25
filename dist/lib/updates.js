@@ -1,51 +1,51 @@
 /**
- * Telegram updates domain helpers
- * Zones: telegram inbound, authorization, routing plans
+ * Bale updates domain helpers
+ * Zones: bale inbound, authorization, routing plans
  * Owns update extraction, authorization, execution planning, generation-fenced journal draining, and the public update-handler registry
  */
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { withoutTelegramTurnReplyAnchor } from "./turns.js";
-import { createTelegramUserPairingRuntime, getTelegramAuthorizationState, } from "./config.js";
-import { TELEGRAM_UPDATE_JOURNAL_CUSTODY_VERSION, TELEGRAM_UPDATE_JOURNAL_EXCLUSION_VERSION, TELEGRAM_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH, TELEGRAM_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH, TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH, TELEGRAM_UPDATE_JOURNAL_VERSION, areTelegramUpdateJournalQueueOwnersEqual, createTelegramUpdateJournalEntryDigest, doesTelegramJournalUpdateNameThread, isTelegramJournalLoneCallbackUpdate, getTelegramUpdateJournalBindingPath, isTelegramUpdateJournalLegacyFamilyVersion, isTelegramUpdateJournalQueueOwnerProcess, parseTelegramUpdateJournalQueueOwner, } from "./journal.js";
+import { withoutBaleTurnReplyAnchor } from "./turns.js";
+import { createBaleUserPairingRuntime, getBaleAuthorizationState, } from "./config.js";
+import { BALE_UPDATE_JOURNAL_CUSTODY_VERSION, BALE_UPDATE_JOURNAL_EXCLUSION_VERSION, BALE_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH, BALE_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH, BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH, BALE_UPDATE_JOURNAL_VERSION, areBaleUpdateJournalQueueOwnersEqual, createBaleUpdateJournalEntryDigest, doesBaleJournalUpdateNameThread, isBaleJournalLoneCallbackUpdate, getBaleUpdateJournalBindingPath, isBaleUpdateJournalLegacyFamilyVersion, isBaleUpdateJournalQueueOwnerProcess, parseBaleUpdateJournalQueueOwner, } from "./journal.js";
 import { isPiStaleContextError } from "./pi.js";
-import { areTelegramQueueAdmissionReceiptsEqual, createTelegramQueueHandoff, removeTelegramQueueItemByReceipt, } from "./queue.js";
-import { createTelegramPrivateTarget, createTelegramThreadTarget, } from "./target.js";
-import { isWireRecord as isTelegramUpdateAdmissionRecord, isNonEmptyWireString as isTelegramUpdateAdmissionString, } from "./wire.js";
-export const TELEGRAM_PRIORITY_REACTIONS = [
+import { areBaleQueueAdmissionReceiptsEqual, createBaleQueueHandoff, removeBaleQueueItemByReceipt, } from "./queue.js";
+import { createBalePrivateTarget, createBaleThreadTarget, } from "./target.js";
+import { isWireRecord as isBaleUpdateAdmissionRecord, isNonEmptyWireString as isBaleUpdateAdmissionString, } from "./wire.js";
+export const BALE_PRIORITY_REACTIONS = [
     { id: 10, name: "like", emoji: "👍" },
 ];
-export const TELEGRAM_STEER_REACTIONS = [{ id: 14, name: "fire", emoji: "🔥" }];
-export const TELEGRAM_REMOVAL_REACTIONS = [
+export const BALE_STEER_REACTIONS = [{ id: 14, name: "fire", emoji: "🔥" }];
+export const BALE_REMOVAL_REACTIONS = [
     { id: 20, name: "dislike", emoji: "👎" },
 ];
-export const TELEGRAM_PRIORITY_REACTION_EMOJIS = TELEGRAM_PRIORITY_REACTIONS.map((reaction) => reaction.emoji);
-export const TELEGRAM_REMOVAL_REACTION_EMOJIS = TELEGRAM_REMOVAL_REACTIONS.map((reaction) => reaction.emoji);
-export function normalizeTelegramReactionEmoji(emoji) {
+export const BALE_PRIORITY_REACTION_EMOJIS = BALE_PRIORITY_REACTIONS.map((reaction) => reaction.emoji);
+export const BALE_REMOVAL_REACTION_EMOJIS = BALE_REMOVAL_REACTIONS.map((reaction) => reaction.emoji);
+export function normalizeBaleReactionEmoji(emoji) {
     return emoji.replace(/\uFE0F/g, "");
 }
-export function collectTelegramReactionEmojis(reactions) {
+export function collectBaleReactionEmojis(reactions) {
     const emojis = new Set();
     for (const reaction of reactions) {
         if (reaction.type === "emoji") {
             const emojiReaction = reaction;
-            emojis.add(normalizeTelegramReactionEmoji(emojiReaction.emoji));
+            emojis.add(normalizeBaleReactionEmoji(emojiReaction.emoji));
         }
     }
     return emojis;
 }
-function getTelegramReactionEmoji(emojis, candidates) {
+function getBaleReactionEmoji(emojis, candidates) {
     return candidates.find((emoji) => emojis.has(emoji));
 }
-function getTelegramQueueReactionTransition(oldReactions, newReactions) {
-    const oldEmojis = collectTelegramReactionEmojis(oldReactions);
-    const newEmojis = collectTelegramReactionEmojis(newReactions);
+function getBaleQueueReactionTransition(oldReactions, newReactions) {
+    const oldEmojis = collectBaleReactionEmojis(oldReactions);
+    const newEmojis = collectBaleReactionEmojis(newReactions);
     // Fire selects Steer; thumbs-up beneath it does not reorder the lane. Other emoji carry no queue intent.
-    const steerEmoji = TELEGRAM_STEER_REACTIONS[0].emoji;
-    const oldPriorityEmoji = oldEmojis.has(steerEmoji) ? steerEmoji : getTelegramReactionEmoji(oldEmojis, TELEGRAM_PRIORITY_REACTION_EMOJIS);
-    const newPriorityEmoji = newEmojis.has(steerEmoji) ? steerEmoji : getTelegramReactionEmoji(newEmojis, TELEGRAM_PRIORITY_REACTION_EMOJIS);
-    const oldSuppressionEmoji = getTelegramReactionEmoji(oldEmojis, TELEGRAM_REMOVAL_REACTION_EMOJIS);
-    const newSuppressionEmoji = getTelegramReactionEmoji(newEmojis, TELEGRAM_REMOVAL_REACTION_EMOJIS);
+    const steerEmoji = BALE_STEER_REACTIONS[0].emoji;
+    const oldPriorityEmoji = oldEmojis.has(steerEmoji) ? steerEmoji : getBaleReactionEmoji(oldEmojis, BALE_PRIORITY_REACTION_EMOJIS);
+    const newPriorityEmoji = newEmojis.has(steerEmoji) ? steerEmoji : getBaleReactionEmoji(newEmojis, BALE_PRIORITY_REACTION_EMOJIS);
+    const oldSuppressionEmoji = getBaleReactionEmoji(oldEmojis, BALE_REMOVAL_REACTION_EMOJIS);
+    const newSuppressionEmoji = getBaleReactionEmoji(newEmojis, BALE_REMOVAL_REACTION_EMOJIS);
     if (oldPriorityEmoji === newPriorityEmoji &&
         oldSuppressionEmoji === newSuppressionEmoji) {
         return undefined;
@@ -61,14 +61,14 @@ function getTelegramQueueReactionTransition(oldReactions, newReactions) {
     }
     return transition;
 }
-export function getTelegramTopicLifecycleUpdate(message) {
+export function getBaleTopicLifecycleUpdate(message) {
     if (!message ||
         typeof message.chat.id !== "number" ||
         typeof message.message_thread_id !== "number") {
         return undefined;
     }
     const target = {
-        ...createTelegramThreadTarget(message.chat.id, message.message_thread_id),
+        ...createBaleThreadTarget(message.chat.id, message.message_thread_id),
         threadId: message.message_thread_id,
     };
     if (message.forum_topic_created !== undefined) {
@@ -82,14 +82,14 @@ export function getTelegramTopicLifecycleUpdate(message) {
     }
     return undefined;
 }
-export function getTelegramMessageTarget(message) {
+export function getBaleMessageTarget(message) {
     if (typeof message.chat.id !== "number")
         return undefined;
     return typeof message.message_thread_id === "number"
-        ? createTelegramThreadTarget(message.chat.id, message.message_thread_id)
-        : createTelegramPrivateTarget(message.chat.id);
+        ? createBaleThreadTarget(message.chat.id, message.message_thread_id)
+        : createBalePrivateTarget(message.chat.id);
 }
-export function getAuthorizedTelegramCallbackQuery(update, allowedUserId) {
+export function getAuthorizedBaleCallbackQuery(update, allowedUserId) {
     const query = update.callback_query;
     if (!query || query.from.is_bot)
         return undefined;
@@ -100,66 +100,66 @@ export function getAuthorizedTelegramCallbackQuery(update, allowedUserId) {
         return query;
     return query.from.id === allowedUserId ? query : undefined;
 }
-function authorizeTelegramHumanMessage(message, allowedUserId) {
+function authorizeBaleHumanMessage(message, allowedUserId) {
     if (!message || !message.from || message.from.is_bot)
         return undefined;
     if (message.chat.type === "private")
         return message;
     return message.from.id === allowedUserId ? message : undefined;
 }
-export function getAuthorizedTelegramMessage(update, allowedUserId) {
-    return authorizeTelegramHumanMessage(update.message, allowedUserId);
+export function getAuthorizedBaleMessage(update, allowedUserId) {
+    return authorizeBaleHumanMessage(update.message, allowedUserId);
 }
-export function getAuthorizedTelegramEditedMessage(update, allowedUserId) {
-    return authorizeTelegramHumanMessage(update.edited_message, allowedUserId);
+export function getAuthorizedBaleEditedMessage(update, allowedUserId) {
+    return authorizeBaleHumanMessage(update.edited_message, allowedUserId);
 }
-export function getAuthorizedTelegramGuestMessage(update) {
+export function getAuthorizedBaleGuestMessage(update) {
     const guestMessage = update.guest_message;
     if (!guestMessage || !guestMessage.from || guestMessage.from.is_bot) {
         return undefined;
     }
     return guestMessage;
 }
-class TelegramForeignUpdateSettlementError extends Error {
+class BaleForeignUpdateSettlementError extends Error {
     settlement;
     constructor(operation, settlement) {
-        super(`Telegram ${operation} forwarding did not settle: ${settlement.failureClass}.`);
-        this.name = "TelegramForeignUpdateSettlementError";
+        super(`Bale ${operation} forwarding did not settle: ${settlement.failureClass}.`);
+        this.name = "BaleForeignUpdateSettlementError";
         this.settlement = settlement;
     }
 }
-function rejectTelegramForeignUpdateSettlement(settlement, operation, source) {
+function rejectBaleForeignUpdateSettlement(settlement, operation, source) {
     const sourceUpdateId = source && typeof source === "object"
-        ? Reflect.get(source, "pi_telegram_source_update_id")
+        ? Reflect.get(source, "pi_bale_source_update_id")
         : undefined;
     const failure = settlement && settlement.status !== "accepted"
         ? settlement
         : {
             status: "terminal-rejected",
             failureClass: "forwarder-unavailable",
-            message: `Telegram ${operation} forwarding is unavailable.`,
+            message: `Bale ${operation} forwarding is unavailable.`,
             ...(Number.isSafeInteger(sourceUpdateId) && sourceUpdateId >= 0
                 ? { sourceUpdateId }
                 : {}),
         };
-    throw new TelegramForeignUpdateSettlementError(operation, failure);
+    throw new BaleForeignUpdateSettlementError(operation, failure);
 }
-export const TELEGRAM_INTERNAL_AGENT_MESSAGE = Symbol("telegram.internalAgentMessage");
-const TELEGRAM_UPDATE_ADMISSION_BINDING = Symbol("telegram.update-admission.binding");
-const TELEGRAM_HELD_SOURCE_INSPECTION_LIMIT = 20;
-function bindTelegramUpdateAdmissionCarrier(value, binding) {
+export const BALE_INTERNAL_AGENT_MESSAGE = Symbol("bale.internalAgentMessage");
+const BALE_UPDATE_ADMISSION_BINDING = Symbol("bale.update-admission.binding");
+const BALE_HELD_SOURCE_INSPECTION_LIMIT = 20;
+function bindBaleUpdateAdmissionCarrier(value, binding) {
     if (!value || typeof value !== "object")
         return value;
     return {
         ...value,
-        pi_telegram_source_update_id: binding.sourceUpdateId,
-        [TELEGRAM_UPDATE_ADMISSION_BINDING]: binding,
+        pi_bale_source_update_id: binding.sourceUpdateId,
+        [BALE_UPDATE_ADMISSION_BINDING]: binding,
     };
 }
-function getTelegramUpdateAdmissionBinding(value) {
+function getBaleUpdateAdmissionBinding(value) {
     if (!value || typeof value !== "object")
         return undefined;
-    const binding = Reflect.get(value, TELEGRAM_UPDATE_ADMISSION_BINDING);
+    const binding = Reflect.get(value, BALE_UPDATE_ADMISSION_BINDING);
     return binding &&
         Number.isSafeInteger(binding.sourceUpdateId) &&
         binding.sourceUpdateId >= 0 &&
@@ -167,9 +167,9 @@ function getTelegramUpdateAdmissionBinding(value) {
         ? binding
         : undefined;
 }
-export function bindTelegramUpdateAdmissionSource(update, report, controls) {
+export function bindBaleUpdateAdmissionSource(update, report, controls) {
     if (!Number.isSafeInteger(update.update_id) || update.update_id < 0) {
-        throw new TelegramUpdateAdmissionOutcomeError("Telegram update admission requires a safe update_id.");
+        throw new BaleUpdateAdmissionOutcomeError("Bale update admission requires a safe update_id.");
     }
     const binding = {
         sourceUpdateId: update.update_id,
@@ -177,108 +177,108 @@ export function bindTelegramUpdateAdmissionSource(update, report, controls) {
         ...controls,
     };
     const callbackQuery = update.callback_query
-        ? bindTelegramUpdateAdmissionCarrier({
+        ? bindBaleUpdateAdmissionCarrier({
             ...update.callback_query,
-            message: bindTelegramUpdateAdmissionCarrier(update.callback_query.message, binding),
+            message: bindBaleUpdateAdmissionCarrier(update.callback_query.message, binding),
         }, binding)
         : undefined;
     return {
         ...update,
         ...(update.message
-            ? { message: bindTelegramUpdateAdmissionCarrier(update.message, binding) }
+            ? { message: bindBaleUpdateAdmissionCarrier(update.message, binding) }
             : {}),
         ...(update.edited_message
             ? {
-                edited_message: bindTelegramUpdateAdmissionCarrier(update.edited_message, binding),
+                edited_message: bindBaleUpdateAdmissionCarrier(update.edited_message, binding),
             }
             : {}),
         ...(callbackQuery ? { callback_query: callbackQuery } : {}),
         ...(update.guest_message
             ? {
-                guest_message: bindTelegramUpdateAdmissionCarrier(update.guest_message, binding),
+                guest_message: bindBaleUpdateAdmissionCarrier(update.guest_message, binding),
             }
             : {}),
         ...(update.message_reaction
             ? {
-                message_reaction: bindTelegramUpdateAdmissionCarrier(update.message_reaction, binding),
+                message_reaction: bindBaleUpdateAdmissionCarrier(update.message_reaction, binding),
             }
             : {}),
     };
 }
 /**
- * Conservative read-only census: any retained entry naming this Thread, in any nested Telegram object or state,
+ * Conservative read-only census: any retained entry naming this Thread, in any nested Bale object or state,
  * is unresolved custody, except a lone button tap, which carries no input (the in-flight Cancel itself).
  * It cannot see updates still in transit before journal append.
  */
-export function collectTelegramJournalThreadUpdateIds(entries, target) {
+export function collectBaleJournalThreadUpdateIds(entries, target) {
     return entries
-        .filter((entry) => doesTelegramJournalUpdateNameThread(entry.update, target) &&
-        !isTelegramJournalLoneCallbackUpdate(entry.update))
+        .filter((entry) => doesBaleJournalUpdateNameThread(entry.update, target) &&
+        !isBaleJournalLoneCallbackUpdate(entry.update))
         .map((entry) => entry.updateId)
         .sort((left, right) => left - right);
 }
-export function collectTelegramAdmissionSourceUpdateIds(values) {
+export function collectBaleAdmissionSourceUpdateIds(values) {
     const sourceUpdateIds = new Set();
     for (const value of values) {
-        const binding = getTelegramUpdateAdmissionBinding(value);
+        const binding = getBaleUpdateAdmissionBinding(value);
         if (binding)
             sourceUpdateIds.add(binding.sourceUpdateId);
     }
     return [...sourceUpdateIds].sort((left, right) => left - right);
 }
 /** Observe the original journal entry, never the mutable routed carrier, through current worker authority. */
-export function inspectTelegramDeferredSource(value) {
-    const execution = getTelegramUpdateExecutionFence(value);
+export function inspectBaleDeferredSource(value) {
+    const execution = getBaleUpdateExecutionFence(value);
     if (execution?.isCurrent() !== true)
         return undefined;
-    return getTelegramUpdateAdmissionBinding(value)?.inspectSource?.();
+    return getBaleUpdateAdmissionBinding(value)?.inspectSource?.();
 }
 /** Read an exact current original for peer preparation without another payload authority. */
-export function inspectTelegramDeferredSourceSnapshot(value) {
-    const execution = getTelegramUpdateExecutionFence(value);
+export function inspectBaleDeferredSourceSnapshot(value) {
+    const execution = getBaleUpdateExecutionFence(value);
     if (execution?.isCurrent() !== true)
         return undefined;
-    const snapshot = getTelegramUpdateAdmissionBinding(value)?.inspectSourceSnapshot?.();
+    const snapshot = getBaleUpdateAdmissionBinding(value)?.inspectSourceSnapshot?.();
     return execution.isCurrent() ? snapshot : undefined;
 }
 /** Exact warm removal ACK only; reporting, source absence and a replaced worker cannot supply it. */
-export function inspectTelegramDeferredSourceCompletion(value) {
-    const execution = getTelegramUpdateExecutionFence(value);
+export function inspectBaleDeferredSourceCompletion(value) {
+    const execution = getBaleUpdateExecutionFence(value);
     if (execution?.isCurrent() !== true)
         return undefined;
-    const source = getTelegramUpdateAdmissionBinding(value)?.inspectCompletion?.();
+    const source = getBaleUpdateAdmissionBinding(value)?.inspectCompletion?.();
     return execution.isCurrent() && source ? { ...source } : undefined;
 }
 /** Warm ACK notification only; subscribers must independently recheck exact completion and recipient authority. */
-export function subscribeTelegramDeferredSourceCompletion(value, notify) {
-    const execution = getTelegramUpdateExecutionFence(value);
+export function subscribeBaleDeferredSourceCompletion(value, notify) {
+    const execution = getBaleUpdateExecutionFence(value);
     if (execution?.isCurrent() !== true)
         return undefined;
-    return getTelegramUpdateAdmissionBinding(value)?.subscribeCompletion?.(() => {
+    return getBaleUpdateAdmissionBinding(value)?.subscribeCompletion?.(() => {
         if (execution.isCurrent())
             notify();
     });
 }
 /** Reuse only live bound deferred originals; raw IDs or cold/adopted input cannot mint this carrier. */
-export function prepareTelegramLiveDeferredInput(values, isCurrent) {
-    const carriers = [...values], first = carriers[0], execution = getTelegramUpdateExecutionFence(first);
-    const ids = collectTelegramAdmissionSourceUpdateIds(carriers);
+export function prepareBaleLiveDeferredInput(values, isCurrent) {
+    const carriers = [...values], first = carriers[0], execution = getBaleUpdateExecutionFence(first);
+    const ids = collectBaleAdmissionSourceUpdateIds(carriers);
     if (!execution ||
         ids.length !== carriers.length ||
         !ids.length ||
         !isCurrent() ||
-        carriers.some((value) => getTelegramUpdateExecutionFence(value)?.signal !== execution.signal ||
-            getTelegramUpdateExecutionFence(value)?.isCurrent() !== true))
+        carriers.some((value) => getBaleUpdateExecutionFence(value)?.signal !== execution.signal ||
+            getBaleUpdateExecutionFence(value)?.isCurrent() !== true))
         return undefined;
-    const bindings = carriers.map(getTelegramUpdateAdmissionBinding);
+    const bindings = carriers.map(getBaleUpdateAdmissionBinding);
     const acknowledgers = bindings.map(binding => binding?.acknowledgeTransferred);
-    const bindingsCurrent = () => carriers.every((value, index) => getTelegramUpdateAdmissionBinding(value) === bindings[index] && bindings[index]?.acknowledgeTransferred === acknowledgers[index]);
+    const bindingsCurrent = () => carriers.every((value, index) => getBaleUpdateAdmissionBinding(value) === bindings[index] && bindings[index]?.acknowledgeTransferred === acknowledgers[index]);
     const unsettled = () => bindingsCurrent() && bindings.every(binding => binding?.isSourceUnsettled?.() === true);
     if (!unsettled())
         return undefined;
     let transferred = false;
-    const prepared = getTelegramUpdateAdmissionBinding(first)?.prepareLiveInput?.(ids, () => bindingsCurrent() && isCurrent() &&
-        carriers.every((value) => getTelegramUpdateExecutionFence(value)?.isCurrent() === true), () => {
+    const prepared = getBaleUpdateAdmissionBinding(first)?.prepareLiveInput?.(ids, () => bindingsCurrent() && isCurrent() &&
+        carriers.every((value) => getBaleUpdateExecutionFence(value)?.isCurrent() === true), () => {
         transferred = true;
         for (let index = 0; index < bindings.length; index++)
             acknowledgers[index]?.call(bindings[index]);
@@ -295,11 +295,11 @@ export function prepareTelegramLiveDeferredInput(values, isCurrent) {
     });
 }
 /** A route-owned pre-disposition acceptance publisher; wraps only this carrier, never the shared worker binding. */
-export function bindTelegramUpdateCompletionAcceptance(value, publish) {
-    const binding = getTelegramUpdateAdmissionBinding(value);
+export function bindBaleUpdateCompletionAcceptance(value, publish) {
+    const binding = getBaleUpdateAdmissionBinding(value);
     if (!binding ||
-        getTelegramUpdateExecutionFence(value)?.isCurrent() !== true) {
-        throw new TelegramUpdateAdmissionOutcomeError("Telegram completion acceptance requires a live source carrier.");
+        getBaleUpdateExecutionFence(value)?.isCurrent() !== true) {
+        throw new BaleUpdateAdmissionOutcomeError("Bale completion acceptance requires a live source carrier.");
     }
     let retained;
     let queued = false;
@@ -312,22 +312,22 @@ export function bindTelegramUpdateCompletionAcceptance(value, publish) {
                 binding.report(outcome);
                 return;
             }
-            assertTelegramUpdateExecutionCurrent(value);
+            assertBaleUpdateExecutionCurrent(value);
             // A command's trailing implicit completion cannot dispose receipt-owned or uncertain queued work.
             if (queued) {
                 if (outcome.expectedSource)
-                    throw new TelegramUpdateAdmissionOutcomeError("Telegram completion acceptance cannot dispose a queued source.");
+                    throw new BaleUpdateAdmissionOutcomeError("Bale completion acceptance cannot dispose a queued source.");
                 return;
             }
             if (!retained) {
-                const published = validateTelegramUpdateAdmissionOutcome({ kind: "complete", expectedSource: publish() }, binding.sourceUpdateId, new Set([binding.sourceUpdateId]));
+                const published = validateBaleUpdateAdmissionOutcome({ kind: "complete", expectedSource: publish() }, binding.sourceUpdateId, new Set([binding.sourceUpdateId]));
                 if (published.kind !== "complete" ||
                     !published.expectedSource?.completionSha256) {
-                    throw new TelegramUpdateAdmissionOutcomeError("Telegram completion acceptance lacks its scoped journal proof.");
+                    throw new BaleUpdateAdmissionOutcomeError("Bale completion acceptance lacks its scoped journal proof.");
                 }
                 retained = published.expectedSource;
             }
-            assertTelegramUpdateExecutionCurrent(value);
+            assertBaleUpdateExecutionCurrent(value);
             if (outcome.expectedSource &&
                 (outcome.expectedSource.updateId !== retained.updateId ||
                     outcome.expectedSource.journalBindingKey !==
@@ -336,92 +336,92 @@ export function bindTelegramUpdateCompletionAcceptance(value, publish) {
                     (outcome.expectedSource.completionSha256 !== undefined &&
                         outcome.expectedSource.completionSha256 !==
                             retained.completionSha256))) {
-                throw new TelegramUpdateAdmissionOutcomeError("Telegram completion acceptance conflicts with its reported source.");
+                throw new BaleUpdateAdmissionOutcomeError("Bale completion acceptance conflicts with its reported source.");
             }
             binding.report({ kind: "complete", expectedSource: { ...retained } });
         },
     };
-    return carryTelegramUpdateExecutionFence(value, bindTelegramUpdateAdmissionCarrier(value, scoped));
+    return carryBaleUpdateExecutionFence(value, bindBaleUpdateAdmissionCarrier(value, scoped));
 }
 /** Report source completion; true means reported, not a durable settlement acknowledgement. */
-export function reportTelegramUpdateCompleted(value, expectedSource) {
-    const binding = getTelegramUpdateAdmissionBinding(value);
+export function reportBaleUpdateCompleted(value, expectedSource) {
+    const binding = getBaleUpdateAdmissionBinding(value);
     if (!binding)
         return false;
-    const execution = getTelegramUpdateExecutionFence(value);
+    const execution = getBaleUpdateExecutionFence(value);
     if (execution && !execution.isCurrent())
         return false;
-    binding.report(validateTelegramUpdateAdmissionOutcome({
+    binding.report(validateBaleUpdateAdmissionOutcome({
         kind: "complete",
         ...(expectedSource !== undefined ? { expectedSource } : {}),
     }, binding.sourceUpdateId, new Set([binding.sourceUpdateId])));
     return true;
 }
-export function reportTelegramUpdateDeferred(value) {
-    const binding = getTelegramUpdateAdmissionBinding(value);
+export function reportBaleUpdateDeferred(value) {
+    const binding = getBaleUpdateAdmissionBinding(value);
     if (!binding)
         return false;
-    const execution = getTelegramUpdateExecutionFence(value);
+    const execution = getBaleUpdateExecutionFence(value);
     if (execution && !execution.isCurrent())
         return false;
     binding.report({ kind: "deferred" });
     return true;
 }
 /** Exact source-bound cancellation; undefined means no eligible attempt was made. */
-export function abandonTelegramDeferredUpdate(value, authority) {
-    return getTelegramUpdateAdmissionBinding(value)?.abandon?.(authority);
+export function abandonBaleDeferredUpdate(value, authority) {
+    return getBaleUpdateAdmissionBinding(value)?.abandon?.(authority);
 }
 /** Capability for chooser publication; the eventual action still requires exact deferred authority. */
-export function supportsTelegramDeferredAbandonment(value, journalBindingKey) {
-    return (getTelegramUpdateAdmissionBinding(value)?.supportsAbandonment?.(journalBindingKey) === true);
+export function supportsBaleDeferredAbandonment(value, journalBindingKey) {
+    return (getBaleUpdateAdmissionBinding(value)?.supportsAbandonment?.(journalBindingKey) === true);
 }
 /** Observe protected attempts through a current carrier; the UI still owns human authorization. */
-export function inspectTelegramAbandoningUpdates(value, request) {
-    return getTelegramUpdateAdmissionBinding(value)?.inspectAbandoning?.(request);
+export function inspectBaleAbandoningUpdates(value, request) {
+    return getBaleUpdateAdmissionBinding(value)?.inspectAbandoning?.(request);
 }
 /** Historical inspection is not human confirmation or permission to stop delivery. */
-export function inspectTelegramHistoricalInputs(value, request) {
-    return getTelegramUpdateAdmissionBinding(value)?.inspectHistorical?.(request);
+export function inspectBaleHistoricalInputs(value, request) {
+    return getBaleUpdateAdmissionBinding(value)?.inspectHistorical?.(request);
 }
-export function isTelegramHistoricalInput(value, matchesOriginal) {
-    return (getTelegramUpdateAdmissionBinding(value)?.isHistorical?.(matchesOriginal) === true);
+export function isBaleHistoricalInput(value, matchesOriginal) {
+    return (getBaleUpdateAdmissionBinding(value)?.isHistorical?.(matchesOriginal) === true);
 }
 /** Routing's last-boundary hold when ownership changed after early classification. */
-export function reportTelegramHistoricalRoutingReview(value) {
-    if (!isTelegramHistoricalInput(value) ||
-        getTelegramUpdateExecutionFence(value)?.isCurrent() !== true)
+export function reportBaleHistoricalRoutingReview(value) {
+    if (!isBaleHistoricalInput(value) ||
+        getBaleUpdateExecutionFence(value)?.isCurrent() !== true)
         return false;
-    getTelegramUpdateAdmissionBinding(value).report({
+    getBaleUpdateAdmissionBinding(value).report({
         kind: "deferred",
         routingReview: true,
     });
     return true;
 }
 /** Arm only a positively published chooser; the journal owns the immutable hour deadline. */
-export function armTelegramRoutingInputs(values, operatorUserId, chooser) {
-    const first = values[0], execution = getTelegramUpdateExecutionFence(first);
+export function armBaleRoutingInputs(values, operatorUserId, chooser) {
+    const first = values[0], execution = getBaleUpdateExecutionFence(first);
     if (!execution ||
-        values.some((value) => getTelegramUpdateExecutionFence(value)?.signal !== execution.signal))
+        values.some((value) => getBaleUpdateExecutionFence(value)?.signal !== execution.signal))
         return undefined;
     for (const value of values)
-        assertTelegramUpdateExecutionCurrent(value);
-    const ids = collectTelegramAdmissionSourceUpdateIds(values);
+        assertBaleUpdateExecutionCurrent(value);
+    const ids = collectBaleAdmissionSourceUpdateIds(values);
     if (!ids.length)
         return undefined;
-    return getTelegramUpdateAdmissionBinding(first)?.armRoutingInput?.(operatorUserId, ids, chooser);
+    return getBaleUpdateAdmissionBinding(first)?.armRoutingInput?.(operatorUserId, ids, chooser);
 }
 /** A routed carrier's saved routing clock; a revived chooser reuses its recorded message. */
-export function getTelegramUpdateRoutingInput(value) {
-    return getTelegramUpdateAdmissionBinding(value)?.getRoutingInput?.();
+export function getBaleUpdateRoutingInput(value) {
+    return getBaleUpdateAdmissionBinding(value)?.getRoutingInput?.();
 }
 /** Reserve source execution; an actual choice must also freeze its durable TTL before any effect. */
-export function acquireTelegramUpdateRouting(value, select = false, sourceUpdateIds) {
-    assertTelegramUpdateExecutionCurrent(value);
-    return (getTelegramUpdateAdmissionBinding(value)?.acquireRouting?.(select, sourceUpdateIds) ?? (() => { }));
+export function acquireBaleUpdateRouting(value, select = false, sourceUpdateIds) {
+    assertBaleUpdateExecutionCurrent(value);
+    return (getBaleUpdateAdmissionBinding(value)?.acquireRouting?.(select, sourceUpdateIds) ?? (() => { }));
 }
 /** Capture existing warm completion authority; only explicit reporting may dispose this exact original. */
-export function prepareTelegramDeferredSourceCompletion(value) {
-    const execution = getTelegramUpdateExecutionFence(value), binding = getTelegramUpdateAdmissionBinding(value);
+export function prepareBaleDeferredSourceCompletion(value) {
+    const execution = getBaleUpdateExecutionFence(value), binding = getBaleUpdateAdmissionBinding(value);
     if (!execution ||
         execution.isCurrent() !== true ||
         !binding?.prepareSourceCompletion ||
@@ -433,8 +433,8 @@ export function prepareTelegramDeferredSourceCompletion(value) {
     const current = () => !!available &&
         available.isCurrent() &&
         execution.isCurrent() &&
-        getTelegramUpdateExecutionFence(value) === execution &&
-        getTelegramUpdateAdmissionBinding(value) === binding &&
+        getBaleUpdateExecutionFence(value) === execution &&
+        getBaleUpdateAdmissionBinding(value) === binding &&
         binding.prepareSourceCompletion === prepare &&
         binding.inspectCompletion === inspect &&
         binding.inspectSource === readSource &&
@@ -458,7 +458,7 @@ export function prepareTelegramDeferredSourceCompletion(value) {
                 return false;
             reported = true;
             // Acceptance remains separate from the asynchronously issued worker removal ACK, including after a lost report.
-            return reportTelegramUpdateCompleted(value, { ...source });
+            return reportBaleUpdateCompleted(value, { ...source });
         },
         inspectCompletion() {
             if (!reported || !current())
@@ -471,23 +471,23 @@ export function prepareTelegramDeferredSourceCompletion(value) {
     };
 }
 /** Read-only warm owner availability; no source freeze, admission, report or receipt reconstruction. */
-export function prepareTelegramDeferredQueueAdmission(value) {
-    if (getTelegramUpdateExecutionFence(value)?.isCurrent() !== true)
+export function prepareBaleDeferredQueueAdmission(value) {
+    if (getBaleUpdateExecutionFence(value)?.isCurrent() !== true)
         return undefined;
-    return getTelegramUpdateAdmissionBinding(value)?.prepareQueueAdmission?.();
+    return getBaleUpdateAdmissionBinding(value)?.prepareQueueAdmission?.();
 }
-export function reportTelegramQueueAdmission(values, receipts) {
+export function reportBaleQueueAdmission(values, receipts) {
     const bindings = new Map();
     for (const value of values) {
-        const execution = getTelegramUpdateExecutionFence(value);
+        const execution = getBaleUpdateExecutionFence(value);
         if (execution && !execution.isCurrent())
             return false;
-        const binding = getTelegramUpdateAdmissionBinding(value);
+        const binding = getBaleUpdateAdmissionBinding(value);
         if (!binding)
             continue;
         const existing = bindings.get(binding.sourceUpdateId);
         if (existing && existing !== binding) {
-            throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${binding.sourceUpdateId} has conflicting admission bindings.`);
+            throw new BaleUpdateAdmissionOutcomeError(`Bale update ${binding.sourceUpdateId} has conflicting admission bindings.`);
         }
         bindings.set(binding.sourceUpdateId, binding);
     }
@@ -506,7 +506,7 @@ export function reportTelegramQueueAdmission(values, receipts) {
     const reports = [...bindings].map(([sourceUpdateId, binding]) => {
         const match = receiptsByUpdateId.get(sourceUpdateId);
         if (!match || match.count !== 1) {
-            throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${sourceUpdateId} requires one exact queue receipt.`);
+            throw new BaleUpdateAdmissionOutcomeError(`Bale update ${sourceUpdateId} requires one exact queue receipt.`);
         }
         return {
             binding,
@@ -522,7 +522,7 @@ export function reportTelegramQueueAdmission(values, receipts) {
         report.binding.report(report.outcome);
     return true;
 }
-export function buildTelegramUpdateFlowAction(update, allowedUserId) {
+export function buildBaleUpdateFlowAction(update, allowedUserId) {
     // Business chats are independent from bot chats even when chat/message IDs coincide.
     // Raw handlers may own that namespace; the default DM runtime has no deletion authority.
     if (update.deleted_business_messages !== undefined)
@@ -530,45 +530,45 @@ export function buildTelegramUpdateFlowAction(update, allowedUserId) {
     if (update.message_reaction) {
         return { kind: "reaction", reactionUpdate: update.message_reaction };
     }
-    const topicLifecycle = getTelegramTopicLifecycleUpdate(update.message);
+    const topicLifecycle = getBaleTopicLifecycleUpdate(update.message);
     if (topicLifecycle) {
         return { kind: "topic-lifecycle", lifecycle: topicLifecycle };
     }
-    const query = getAuthorizedTelegramCallbackQuery(update, allowedUserId);
+    const query = getAuthorizedBaleCallbackQuery(update, allowedUserId);
     if (query) {
         return {
             kind: "callback",
             query: query,
-            authorization: getTelegramAuthorizationState(query.from.id, allowedUserId),
+            authorization: getBaleAuthorizationState(query.from.id, allowedUserId),
         };
     }
-    const message = getAuthorizedTelegramMessage(update, allowedUserId);
+    const message = getAuthorizedBaleMessage(update, allowedUserId);
     if (message?.from) {
         return {
             kind: "message",
             message: message,
-            authorization: getTelegramAuthorizationState(message.from.id, allowedUserId),
+            authorization: getBaleAuthorizationState(message.from.id, allowedUserId),
         };
     }
-    const editedMessage = getAuthorizedTelegramEditedMessage(update, allowedUserId);
+    const editedMessage = getAuthorizedBaleEditedMessage(update, allowedUserId);
     if (editedMessage?.from) {
         return {
             kind: "edited-message",
             message: editedMessage,
-            authorization: getTelegramAuthorizationState(editedMessage.from.id, allowedUserId),
+            authorization: getBaleAuthorizationState(editedMessage.from.id, allowedUserId),
         };
     }
-    const guestMessage = getAuthorizedTelegramGuestMessage(update);
+    const guestMessage = getAuthorizedBaleGuestMessage(update);
     if (guestMessage?.from) {
         return {
             kind: "guest",
             guestMessage: guestMessage,
-            authorization: getTelegramAuthorizationState(guestMessage.from.id, allowedUserId),
+            authorization: getBaleAuthorizationState(guestMessage.from.id, allowedUserId),
         };
     }
     return { kind: "ignore" };
 }
-export function buildTelegramUpdateExecutionPlan(action) {
+export function buildBaleUpdateExecutionPlan(action) {
     switch (action.kind) {
         case "ignore":
             return { kind: "ignore" };
@@ -609,16 +609,16 @@ export function buildTelegramUpdateExecutionPlan(action) {
             };
     }
 }
-export function buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId) {
-    return buildTelegramUpdateExecutionPlan(buildTelegramUpdateFlowAction(update, allowedUserId));
+export function buildBaleUpdateExecutionPlanFromUpdate(update, allowedUserId) {
+    return buildBaleUpdateExecutionPlan(buildBaleUpdateFlowAction(update, allowedUserId));
 }
 /** The fleeting toast and the in-chat notice are separate copy, each written in its own form. */
-const TELEGRAM_UNAUTHORIZED_DENIAL_TOAST = "Access denied";
-const TELEGRAM_UNAUTHORIZED_DENIAL_NOTICE = "<b>🚫 Access denied.</b>";
-function getTelegramCallbackQueryId(query) {
+const BALE_UNAUTHORIZED_DENIAL_TOAST = "Access denied";
+const BALE_UNAUTHORIZED_DENIAL_NOTICE = "<b>🚫 Access denied.</b>";
+function getBaleCallbackQueryId(query) {
     return typeof query.id === "string" ? query.id : undefined;
 }
-function getTelegramMessageReplyTarget(message) {
+function getBaleMessageReplyTarget(message) {
     if (typeof message.chat.id !== "number" ||
         typeof message.message_id !== "number") {
         return undefined;
@@ -631,7 +631,7 @@ function getTelegramMessageReplyTarget(message) {
             : {}),
     };
 }
-function getForeignTelegramMessageOwnership(target, deps) {
+function getForeignBaleMessageOwnership(target, deps) {
     if (!target || !deps.getMessageOwnership || !deps.getCurrentInstanceId) {
         return undefined;
     }
@@ -643,16 +643,16 @@ function getForeignTelegramMessageOwnership(target, deps) {
         ? ownership
         : undefined;
 }
-function getForeignTelegramCallbackOwnership(query, deps) {
-    const messageTarget = getTelegramCallbackMessageTarget(query);
+function getForeignBaleCallbackOwnership(query, deps) {
+    const messageTarget = getBaleCallbackMessageTarget(query);
     const currentInstanceId = deps.getCurrentInstanceId?.();
     const knownOwner = messageTarget &&
         deps.getMessageOwnership?.(messageTarget.chatId, messageTarget.messageId);
     // A locally published chooser stays local when Restore moves its Thread to a follower.
     if (currentInstanceId && knownOwner?.instanceId === currentInstanceId)
         return undefined;
-    const messageOwnership = getForeignTelegramMessageOwnership(messageTarget, deps);
-    const targetOwnership = getForeignTelegramTargetOwnership(query.message ? getTelegramMessageTarget(query.message) : undefined, deps);
+    const messageOwnership = getForeignBaleMessageOwnership(messageTarget, deps);
+    const targetOwnership = getForeignBaleTargetOwnership(query.message ? getBaleMessageTarget(query.message) : undefined, deps);
     if (!messageOwnership)
         return targetOwnership;
     if (targetOwnership &&
@@ -662,17 +662,17 @@ function getForeignTelegramCallbackOwnership(query, deps) {
     }
     return messageOwnership;
 }
-function getTelegramCallbackMessageTarget(query) {
+function getBaleCallbackMessageTarget(query) {
     return query.message
-        ? getTelegramMessageReplyTarget(query.message)
+        ? getBaleMessageReplyTarget(query.message)
         : undefined;
 }
-function getTelegramReactionMessageTarget(reactionUpdate) {
+function getBaleReactionMessageTarget(reactionUpdate) {
     return typeof reactionUpdate.chat.id === "number"
         ? { chatId: reactionUpdate.chat.id, messageId: reactionUpdate.message_id }
         : undefined;
 }
-function getForeignTelegramTargetOwnership(target, deps) {
+function getForeignBaleTargetOwnership(target, deps) {
     if (!target || !deps.getTargetOwnership || !deps.getCurrentInstanceId) {
         return undefined;
     }
@@ -684,44 +684,44 @@ function getForeignTelegramTargetOwnership(target, deps) {
         ? ownership
         : undefined;
 }
-export async function executeTelegramUpdate(update, allowedUserId, deps) {
-    const runtimeDeps = update[TELEGRAM_INTERNAL_AGENT_MESSAGE]
+export async function executeBaleUpdate(update, allowedUserId, deps) {
+    const runtimeDeps = update[BALE_INTERNAL_AGENT_MESSAGE]
         ? { ...deps, getMessageOwnership: undefined }
         : deps;
-    await executeTelegramUpdatePlan(buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId), runtimeDeps);
+    await executeBaleUpdatePlan(buildBaleUpdateExecutionPlanFromUpdate(update, allowedUserId), runtimeDeps);
 }
-export function createTelegramPairedUpdateRuntime(deps) {
-    return createTelegramUpdateRuntime({
+export function createBalePairedUpdateRuntime(deps) {
+    return createBaleUpdateRuntime({
         getAllowedUserId: deps.getAllowedUserId,
         getCurrentInstanceId: deps.getCurrentInstanceId,
         getMessageOwnership: deps.getMessageOwnership,
         getTargetOwnership: deps.getTargetOwnership,
         recordMessageOwnership: deps.recordMessageOwnership,
-        handleTelegramTopicLifecycleUpdate: deps.handleTelegramTopicLifecycleUpdate,
+        handleBaleTopicLifecycleUpdate: deps.handleBaleTopicLifecycleUpdate,
         foreignOwnedUpdateForwarder: deps.foreignOwnedUpdateForwarder,
         removePendingMediaGroupMessages: deps.removePendingMediaGroupMessages,
         flushPendingMediaGroupMessage: deps.flushPendingMediaGroupMessage,
         flushPendingTextGroupMessage: deps.flushPendingTextGroupMessage,
-        removeQueuedTelegramTurnsByMessageIds: deps.removeQueuedTelegramTurnsByMessageIds,
-        applyQueuedTelegramTurnReactionByMessageId: deps.applyQueuedTelegramTurnReactionByMessageId,
-        pairTelegramUserIfNeeded: (userId, ctx, assertExecutionCurrent) => createTelegramUserPairingRuntime({
+        removeQueuedBaleTurnsByMessageIds: deps.removeQueuedBaleTurnsByMessageIds,
+        applyQueuedBaleTurnReactionByMessageId: deps.applyQueuedBaleTurnReactionByMessageId,
+        pairBaleUserIfNeeded: (userId, ctx, assertExecutionCurrent) => createBaleUserPairingRuntime({
             getAllowedUserId: deps.getAllowedUserId,
             persistAllowedUserId: deps.persistAllowedUserId,
             updateStatus: deps.updateStatus,
         }).pairIfNeeded(userId, ctx, assertExecutionCurrent),
         answerCallbackQuery: deps.answerCallbackQuery,
         answerGuestQuery: deps.answerGuestQuery,
-        handleAuthorizedTelegramCallbackQuery: deps.handleAuthorizedTelegramCallbackQuery,
+        handleAuthorizedBaleCallbackQuery: deps.handleAuthorizedBaleCallbackQuery,
         sendTextReply: deps.sendTextReply,
-        handleAuthorizedTelegramMessage: deps.handleAuthorizedTelegramMessage,
-        handleAuthorizedTelegramEditedMessage: deps.handleAuthorizedTelegramEditedMessage,
-        handleAuthorizedTelegramGuestMessage: deps.handleAuthorizedTelegramGuestMessage,
-        handleUnboundTelegramTopicMessage: deps.handleUnboundTelegramTopicMessage,
+        handleAuthorizedBaleMessage: deps.handleAuthorizedBaleMessage,
+        handleAuthorizedBaleEditedMessage: deps.handleAuthorizedBaleEditedMessage,
+        handleAuthorizedBaleGuestMessage: deps.handleAuthorizedBaleGuestMessage,
+        handleUnboundBaleTopicMessage: deps.handleUnboundBaleTopicMessage,
     });
 }
-export function createTelegramUpdateRuntime(deps) {
+export function createBaleUpdateRuntime(deps) {
     const handleAuthorizedReactionUpdate = async (reactionUpdate, ctx) => {
-        await handleAuthorizedTelegramReactionUpdate(reactionUpdate, {
+        await handleAuthorizedBaleReactionUpdate(reactionUpdate, {
             allowedUserId: deps.getAllowedUserId(),
             ctx,
             flushPendingMediaGroupMessage: deps.flushPendingMediaGroupMessage,
@@ -729,13 +729,13 @@ export function createTelegramUpdateRuntime(deps) {
             getCurrentInstanceId: deps.getCurrentInstanceId,
             getMessageOwnership: deps.getMessageOwnership,
             foreignOwnedUpdateForwarder: deps.foreignOwnedUpdateForwarder,
-            assertExecutionCurrent: createTelegramUpdateExecutionFenceGuard(reactionUpdate),
-            applyQueuedTelegramTurnReactionByMessageId: deps.applyQueuedTelegramTurnReactionByMessageId,
+            assertExecutionCurrent: createBaleUpdateExecutionFenceGuard(reactionUpdate),
+            applyQueuedBaleTurnReactionByMessageId: deps.applyQueuedBaleTurnReactionByMessageId,
         });
     };
     return {
         handleAuthorizedReactionUpdate,
-        handleUpdate: (update, ctx, execution) => executeTelegramUpdate(update, deps.getAllowedUserId(), {
+        handleUpdate: (update, ctx, execution) => executeBaleUpdate(update, deps.getAllowedUserId(), {
             ctx,
             execution,
             getCurrentInstanceId: deps.getCurrentInstanceId,
@@ -744,22 +744,22 @@ export function createTelegramUpdateRuntime(deps) {
             recordMessageOwnership: deps.recordMessageOwnership,
             foreignOwnedUpdateForwarder: deps.foreignOwnedUpdateForwarder,
             removePendingMediaGroupMessages: deps.removePendingMediaGroupMessages,
-            removeQueuedTelegramTurnsByMessageIds: deps.removeQueuedTelegramTurnsByMessageIds,
-            handleAuthorizedTelegramReactionUpdate: handleAuthorizedReactionUpdate,
-            handleTelegramTopicLifecycleUpdate: deps.handleTelegramTopicLifecycleUpdate,
-            pairTelegramUserIfNeeded: deps.pairTelegramUserIfNeeded,
+            removeQueuedBaleTurnsByMessageIds: deps.removeQueuedBaleTurnsByMessageIds,
+            handleAuthorizedBaleReactionUpdate: handleAuthorizedReactionUpdate,
+            handleBaleTopicLifecycleUpdate: deps.handleBaleTopicLifecycleUpdate,
+            pairBaleUserIfNeeded: deps.pairBaleUserIfNeeded,
             answerCallbackQuery: deps.answerCallbackQuery,
             answerGuestQuery: deps.answerGuestQuery,
-            handleAuthorizedTelegramCallbackQuery: deps.handleAuthorizedTelegramCallbackQuery,
+            handleAuthorizedBaleCallbackQuery: deps.handleAuthorizedBaleCallbackQuery,
             sendTextReply: deps.sendTextReply,
-            handleAuthorizedTelegramMessage: deps.handleAuthorizedTelegramMessage,
-            handleAuthorizedTelegramEditedMessage: deps.handleAuthorizedTelegramEditedMessage,
-            handleAuthorizedTelegramGuestMessage: deps.handleAuthorizedTelegramGuestMessage,
-            handleUnboundTelegramTopicMessage: deps.handleUnboundTelegramTopicMessage,
+            handleAuthorizedBaleMessage: deps.handleAuthorizedBaleMessage,
+            handleAuthorizedBaleEditedMessage: deps.handleAuthorizedBaleEditedMessage,
+            handleAuthorizedBaleGuestMessage: deps.handleAuthorizedBaleGuestMessage,
+            handleUnboundBaleTopicMessage: deps.handleUnboundBaleTopicMessage,
         }),
     };
 }
-export async function handleAuthorizedTelegramReactionUpdate(reactionUpdate, deps) {
+export async function handleAuthorizedBaleReactionUpdate(reactionUpdate, deps) {
     const reactionUser = reactionUpdate.user;
     const allowedUserId = deps.allowedUserId;
     if (allowedUserId === undefined ||
@@ -770,7 +770,7 @@ export async function handleAuthorizedTelegramReactionUpdate(reactionUpdate, dep
         reactionUser.id !== allowedUserId ||
         reactionUpdate.actor_chat !== undefined)
         return;
-    const foreignOwnership = getForeignTelegramMessageOwnership(getTelegramReactionMessageTarget(reactionUpdate), deps);
+    const foreignOwnership = getForeignBaleMessageOwnership(getBaleReactionMessageTarget(reactionUpdate), deps);
     if (foreignOwnership) {
         deps.assertExecutionCurrent?.();
         const settlement = await deps.foreignOwnedUpdateForwarder?.forwardReaction?.({
@@ -780,14 +780,14 @@ export async function handleAuthorizedTelegramReactionUpdate(reactionUpdate, dep
         });
         deps.assertExecutionCurrent?.();
         if (settlement?.status !== "accepted") {
-            rejectTelegramForeignUpdateSettlement(settlement, "reaction", reactionUpdate);
+            rejectBaleForeignUpdateSettlement(settlement, "reaction", reactionUpdate);
         }
         return;
     }
     const reactionScope = typeof reactionUpdate.chat.id === "number"
         ? { chatId: reactionUpdate.chat.id }
         : undefined;
-    const reactionTransition = getTelegramQueueReactionTransition(reactionUpdate.old_reaction, reactionUpdate.new_reaction);
+    const reactionTransition = getBaleQueueReactionTransition(reactionUpdate.old_reaction, reactionUpdate.new_reaction);
     if (!reactionTransition)
         return;
     deps.assertExecutionCurrent?.();
@@ -795,9 +795,9 @@ export async function handleAuthorizedTelegramReactionUpdate(reactionUpdate, dep
     deps.assertExecutionCurrent?.();
     await deps.flushPendingTextGroupMessage?.(reactionUpdate.message_id);
     deps.assertExecutionCurrent?.();
-    deps.applyQueuedTelegramTurnReactionByMessageId(reactionUpdate.message_id, reactionTransition, deps.ctx, reactionScope);
+    deps.applyQueuedBaleTurnReactionByMessageId(reactionUpdate.message_id, reactionTransition, deps.ctx, reactionScope);
 }
-export async function executeTelegramUpdatePlan(plan, deps) {
+export async function executeBaleUpdatePlan(plan, deps) {
     try {
         const assertExecutionCurrent = () => deps.execution?.assertCurrent();
         if (plan.kind === "ignore")
@@ -805,35 +805,35 @@ export async function executeTelegramUpdatePlan(plan, deps) {
         if (plan.kind === "deleted") {
             assertExecutionCurrent();
             deps.removePendingMediaGroupMessages(plan.messageIds);
-            deps.removeQueuedTelegramTurnsByMessageIds(plan.messageIds, deps.ctx);
+            deps.removeQueuedBaleTurnsByMessageIds(plan.messageIds, deps.ctx);
             return;
         }
         if (plan.kind === "reaction") {
             assertExecutionCurrent();
-            await deps.handleAuthorizedTelegramReactionUpdate(plan.reactionUpdate, deps.ctx);
+            await deps.handleAuthorizedBaleReactionUpdate(plan.reactionUpdate, deps.ctx);
             assertExecutionCurrent();
             return;
         }
         if (plan.kind === "topic-lifecycle") {
             assertExecutionCurrent();
-            await deps.handleTelegramTopicLifecycleUpdate?.(plan.lifecycle, deps.ctx);
+            await deps.handleBaleTopicLifecycleUpdate?.(plan.lifecycle, deps.ctx);
             return;
         }
         if (plan.kind === "callback") {
             let pairingAllowed = true;
             if (plan.shouldPair) {
                 assertExecutionCurrent();
-                pairingAllowed = await deps.pairTelegramUserIfNeeded(plan.query.from.id, deps.ctx, assertExecutionCurrent);
+                pairingAllowed = await deps.pairBaleUserIfNeeded(plan.query.from.id, deps.ctx, assertExecutionCurrent);
             }
             if (plan.shouldDeny || !pairingAllowed) {
-                const callbackQueryId = getTelegramCallbackQueryId(plan.query);
+                const callbackQueryId = getBaleCallbackQueryId(plan.query);
                 if (callbackQueryId) {
                     assertExecutionCurrent();
-                    await deps.answerCallbackQuery(callbackQueryId, TELEGRAM_UNAUTHORIZED_DENIAL_TOAST);
+                    await deps.answerCallbackQuery(callbackQueryId, BALE_UNAUTHORIZED_DENIAL_TOAST);
                 }
                 return;
             }
-            const foreignOwnership = getForeignTelegramCallbackOwnership(plan.query, deps);
+            const foreignOwnership = getForeignBaleCallbackOwnership(plan.query, deps);
             if (foreignOwnership) {
                 assertExecutionCurrent();
                 const settlement = await deps.foreignOwnedUpdateForwarder?.forwardCallback?.({
@@ -842,34 +842,34 @@ export async function executeTelegramUpdatePlan(plan, deps) {
                     ctx: deps.ctx,
                 });
                 if (settlement?.status !== "accepted") {
-                    const callbackQueryId = getTelegramCallbackQueryId(plan.query);
+                    const callbackQueryId = getBaleCallbackQueryId(plan.query);
                     try {
                         if (callbackQueryId) {
                             assertExecutionCurrent();
-                            await deps.answerCallbackQuery(callbackQueryId, "This Telegram message belongs to another Pi instance");
+                            await deps.answerCallbackQuery(callbackQueryId, "This Bale message belongs to another Pi instance");
                         }
                     }
                     finally {
-                        rejectTelegramForeignUpdateSettlement(settlement, "callback", plan.query);
+                        rejectBaleForeignUpdateSettlement(settlement, "callback", plan.query);
                     }
                 }
                 assertExecutionCurrent();
                 return;
             }
             assertExecutionCurrent();
-            await deps.handleAuthorizedTelegramCallbackQuery(plan.query, deps.ctx);
+            await deps.handleAuthorizedBaleCallbackQuery(plan.query, deps.ctx);
             assertExecutionCurrent();
             return;
         }
         if (plan.kind === "guest") {
             if (plan.shouldDeny) {
                 assertExecutionCurrent();
-                await deps.answerGuestQuery(plan.guestMessage.guest_query_id, TELEGRAM_UNAUTHORIZED_DENIAL_NOTICE, { parseMode: "HTML" });
+                await deps.answerGuestQuery(plan.guestMessage.guest_query_id, BALE_UNAUTHORIZED_DENIAL_NOTICE, { parseMode: "HTML" });
                 return;
             }
-            if (deps.handleAuthorizedTelegramGuestMessage) {
+            if (deps.handleAuthorizedBaleGuestMessage) {
                 assertExecutionCurrent();
-                await deps.handleAuthorizedTelegramGuestMessage(plan.guestMessage, deps.ctx);
+                await deps.handleAuthorizedBaleGuestMessage(plan.guestMessage, deps.ctx);
                 assertExecutionCurrent();
             }
             return;
@@ -877,13 +877,13 @@ export async function executeTelegramUpdatePlan(plan, deps) {
         if (plan.shouldPair)
             assertExecutionCurrent();
         const pairedNow = plan.shouldPair
-            ? await deps.pairTelegramUserIfNeeded(plan.message.from.id, deps.ctx, assertExecutionCurrent)
+            ? await deps.pairBaleUserIfNeeded(plan.message.from.id, deps.ctx, assertExecutionCurrent)
             : false;
-        const replyTarget = getTelegramMessageReplyTarget(plan.message);
+        const replyTarget = getBaleMessageReplyTarget(plan.message);
         if (plan.shouldDeny || (plan.shouldPair && !pairedNow)) {
             if (replyTarget) {
                 assertExecutionCurrent();
-                await deps.sendTextReply(replyTarget.chatId, replyTarget.messageId, TELEGRAM_UNAUTHORIZED_DENIAL_NOTICE, { parseMode: "HTML", target: replyTarget });
+                await deps.sendTextReply(replyTarget.chatId, replyTarget.messageId, BALE_UNAUTHORIZED_DENIAL_NOTICE, { parseMode: "HTML", target: replyTarget });
             }
             return;
         }
@@ -892,10 +892,10 @@ export async function executeTelegramUpdatePlan(plan, deps) {
             plan.shouldNotifyPaired &&
             replyTarget) {
             assertExecutionCurrent();
-            await deps.sendTextReply(replyTarget.chatId, replyTarget.messageId, "Telegram bridge paired with this account.", { target: replyTarget });
+            await deps.sendTextReply(replyTarget.chatId, replyTarget.messageId, "Bale bridge paired with this account.", { target: replyTarget });
             assertExecutionCurrent();
         }
-        const foreignMessageOwnership = getForeignTelegramMessageOwnership(replyTarget, deps);
+        const foreignMessageOwnership = getForeignBaleMessageOwnership(replyTarget, deps);
         if (foreignMessageOwnership) {
             assertExecutionCurrent();
             const settlement = plan.kind === "edited-message"
@@ -910,13 +910,13 @@ export async function executeTelegramUpdatePlan(plan, deps) {
                     ctx: deps.ctx,
                 });
             if (settlement?.status !== "accepted") {
-                rejectTelegramForeignUpdateSettlement(settlement, plan.kind, plan.message);
+                rejectBaleForeignUpdateSettlement(settlement, plan.kind, plan.message);
             }
             assertExecutionCurrent();
             return;
         }
-        const messageTarget = getTelegramMessageTarget(plan.message);
-        const foreignTargetOwnership = getForeignTelegramTargetOwnership(messageTarget, deps);
+        const messageTarget = getBaleMessageTarget(plan.message);
+        const foreignTargetOwnership = getForeignBaleTargetOwnership(messageTarget, deps);
         if (foreignTargetOwnership) {
             if (typeof plan.message.message_id === "number") {
                 assertExecutionCurrent();
@@ -940,31 +940,31 @@ export async function executeTelegramUpdatePlan(plan, deps) {
                     ctx: deps.ctx,
                 });
             if (settlement?.status !== "accepted") {
-                rejectTelegramForeignUpdateSettlement(settlement, plan.kind, plan.message);
+                rejectBaleForeignUpdateSettlement(settlement, plan.kind, plan.message);
             }
             assertExecutionCurrent();
             return;
         }
         if (plan.kind === "message" &&
             messageTarget?.threadId != null &&
-            deps.handleUnboundTelegramTopicMessage) {
+            deps.handleUnboundBaleTopicMessage) {
             assertExecutionCurrent();
-            await deps.handleUnboundTelegramTopicMessage(plan.message, deps.ctx);
+            await deps.handleUnboundBaleTopicMessage(plan.message, deps.ctx);
             // A terminal historical hold intentionally suspends this exact carrier.
             // Do not turn its acknowledged deferral into a retryable execution failure.
-            if (getTelegramUpdateExecutionFence(plan.message) !== deps.execution ||
-                getTelegramUpdateAdmissionBinding(plan.message)?.isHistoricalReviewHeld?.() !== true)
+            if (getBaleUpdateExecutionFence(plan.message) !== deps.execution ||
+                getBaleUpdateAdmissionBinding(plan.message)?.isHistoricalReviewHeld?.() !== true)
                 assertExecutionCurrent();
             return;
         }
         if (plan.kind === "edited-message") {
             assertExecutionCurrent();
-            await deps.handleAuthorizedTelegramEditedMessage(plan.message, deps.ctx);
+            await deps.handleAuthorizedBaleEditedMessage(plan.message, deps.ctx);
             assertExecutionCurrent();
             return;
         }
         assertExecutionCurrent();
-        await deps.handleAuthorizedTelegramMessage(plan.message, deps.ctx);
+        await deps.handleAuthorizedBaleMessage(plan.message, deps.ctx);
         assertExecutionCurrent();
     }
     catch (error) {
@@ -973,30 +973,30 @@ export async function executeTelegramUpdatePlan(plan, deps) {
     }
 }
 // --- Durable update worker ---
-const TELEGRAM_UPDATE_RETRY_BASE_DELAY_MS = 1_000;
-const TELEGRAM_UPDATE_RETRY_MAX_DELAY_MS = 60_000;
-const TELEGRAM_UPDATE_WORKER_BATCH_SIZE = 64;
-function normalizeTelegramQueueSourceCompletions(value, sourceUpdateIds, journalBindingKey, full = true) {
+const BALE_UPDATE_RETRY_BASE_DELAY_MS = 1_000;
+const BALE_UPDATE_RETRY_MAX_DELAY_MS = 60_000;
+const BALE_UPDATE_WORKER_BATCH_SIZE = 64;
+function normalizeBaleQueueSourceCompletions(value, sourceUpdateIds, journalBindingKey, full = true) {
     if (!Array.isArray(value) ||
         (full
             ? value.length !== sourceUpdateIds.size
             : value.length > sourceUpdateIds.size) ||
         value.length === 0)
-        throw new Error("Telegram scoped queue completion requires full source coverage.");
+        throw new Error("Bale scoped queue completion requires full source coverage.");
     const seen = new Set(), scopes = new Set();
     return value
         .map((source) => {
         if (!Number.isSafeInteger(source?.updateId) ||
             !sourceUpdateIds.has(source.updateId) ||
             seen.has(source.updateId)) {
-            throw new Error("Telegram scoped queue completion has invalid source membership.");
+            throw new Error("Bale scoped queue completion has invalid source membership.");
         }
-        const normalized = validateTelegramUpdateAdmissionOutcome({ kind: "complete", expectedSource: source }, source.updateId, sourceUpdateIds);
+        const normalized = validateBaleUpdateAdmissionOutcome({ kind: "complete", expectedSource: source }, source.updateId, sourceUpdateIds);
         if (normalized.kind !== "complete" ||
             !normalized.expectedSource?.completionSha256 ||
             normalized.expectedSource.journalBindingKey !== journalBindingKey ||
             scopes.has(normalized.expectedSource.completionSha256)) {
-            throw new Error("Telegram scoped queue completion has invalid source scope.");
+            throw new Error("Bale scoped queue completion has invalid source scope.");
         }
         seen.add(source.updateId);
         scopes.add(normalized.expectedSource.completionSha256);
@@ -1007,16 +1007,16 @@ function normalizeTelegramQueueSourceCompletions(value, sourceUpdateIds, journal
     })
         .sort((a, b) => a.updateId - b.updateId);
 }
-class TelegramUpdateAdmissionOutcomeError extends Error {
+class BaleUpdateAdmissionOutcomeError extends Error {
     constructor(message) {
         super(message);
-        this.name = "TelegramUpdateAdmissionOutcomeError";
+        this.name = "BaleUpdateAdmissionOutcomeError";
     }
 }
-const TELEGRAM_UPDATE_WORKER_EXECUTION_ABORTED = Symbol("telegram.update-worker.execution-aborted");
+const BALE_UPDATE_WORKER_EXECUTION_ABORTED = Symbol("bale.update-worker.execution-aborted");
 /** The receipt's only journal entry when it is exactly this prompt update, queued unchanged under this owner. */
 function findExactQueuedPromptEntry(snapshot, receiptId, updateId, queueOwner, update) {
-    if (!isTelegramUpdateJournalLegacyFamilyVersion(snapshot.version))
+    if (!isBaleUpdateJournalLegacyFamilyVersion(snapshot.version))
         return undefined;
     const entries = snapshot.entries.filter((entry) => entry.queueReceiptId === receiptId);
     const entry = entries[0];
@@ -1031,25 +1031,25 @@ function findExactQueuedPromptEntry(snapshot, receiptId, updateId, queueOwner, u
         : undefined;
 }
 /** A saved chooser clock that proves an untouched, unexpired choice whose chooser message can be revived. */
-export function isRevivableTelegramRoutingInput(entry, nowMs) {
+export function isRevivableBaleRoutingInput(entry, nowMs) {
     const lifetime = entry.routingInput;
     return (entry.state === "pending" &&
         lifetime?.phase === "waiting" &&
         lifetime.chooser !== undefined &&
         nowMs < lifetime.expiresAtMs);
 }
-function getTelegramUpdateWorkerStateSnapshot(state) {
+function getBaleUpdateWorkerStateSnapshot(state) {
     return { ...state };
 }
-function validateTelegramUpdateAdmissionOutcome(value, currentUpdateId, claimableUpdateIds) {
-    if (!isTelegramUpdateAdmissionRecord(value)) {
-        throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${currentUpdateId} returned no admission outcome.`);
+function validateBaleUpdateAdmissionOutcome(value, currentUpdateId, claimableUpdateIds) {
+    if (!isBaleUpdateAdmissionRecord(value)) {
+        throw new BaleUpdateAdmissionOutcomeError(`Bale update ${currentUpdateId} returned no admission outcome.`);
     }
     if (value.kind === "complete") {
         if (value.expectedSource === undefined)
             return { kind: "complete" };
         const source = value.expectedSource;
-        if (!isTelegramUpdateAdmissionRecord(source) ||
+        if (!isBaleUpdateAdmissionRecord(source) ||
             Object.keys(source).some((key) => ![
                 "journalBindingKey",
                 "updateId",
@@ -1057,13 +1057,13 @@ function validateTelegramUpdateAdmissionOutcome(value, currentUpdateId, claimabl
                 "completionSha256",
             ].includes(key)) ||
             source.updateId !== currentUpdateId ||
-            !isTelegramUpdateAdmissionString(source.journalBindingKey) ||
+            !isBaleUpdateAdmissionString(source.journalBindingKey) ||
             typeof source.sourceSha256 !== "string" ||
             !/^[a-f0-9]{64}$/u.test(source.sourceSha256) ||
             (source.completionSha256 !== undefined &&
                 (typeof source.completionSha256 !== "string" ||
                     !/^[a-f0-9]{64}$/u.test(source.completionSha256)))) {
-            throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${currentUpdateId} returned an invalid completion source.`);
+            throw new BaleUpdateAdmissionOutcomeError(`Bale update ${currentUpdateId} returned an invalid completion source.`);
         }
         return {
             kind: "complete",
@@ -1079,7 +1079,7 @@ function validateTelegramUpdateAdmissionOutcome(value, currentUpdateId, claimabl
     }
     if (value.kind === "deferred") {
         if (value.routingReview !== undefined && value.routingReview !== true)
-            throw new TelegramUpdateAdmissionOutcomeError("Invalid historical review outcome.");
+            throw new BaleUpdateAdmissionOutcomeError("Invalid historical review outcome.");
         return {
             kind: "deferred",
             ...(value.routingReview === true ? { routingReview: true } : {}),
@@ -1087,18 +1087,18 @@ function validateTelegramUpdateAdmissionOutcome(value, currentUpdateId, claimabl
     }
     if (value.kind === "queued") {
         if ((value.queueKind !== "prompt" && value.queueKind !== "control") ||
-            !isTelegramUpdateAdmissionString(value.receiptId) ||
+            !isBaleUpdateAdmissionString(value.receiptId) ||
             !Array.isArray(value.sourceUpdateIds) ||
             value.sourceUpdateIds.length === 0 ||
             !value.sourceUpdateIds.every((updateId) => Number.isSafeInteger(updateId) &&
                 updateId >= 0 &&
                 claimableUpdateIds.has(updateId))) {
-            throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${currentUpdateId} returned an invalid queue receipt.`);
+            throw new BaleUpdateAdmissionOutcomeError(`Bale update ${currentUpdateId} returned an invalid queue receipt.`);
         }
         const sourceUpdateIds = [...new Set(value.sourceUpdateIds)];
         if (sourceUpdateIds.length !== value.sourceUpdateIds.length ||
             !sourceUpdateIds.includes(currentUpdateId)) {
-            throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${currentUpdateId} returned a mismatched queue receipt.`);
+            throw new BaleUpdateAdmissionOutcomeError(`Bale update ${currentUpdateId} returned a mismatched queue receipt.`);
         }
         return {
             kind: "queued",
@@ -1107,78 +1107,78 @@ function validateTelegramUpdateAdmissionOutcome(value, currentUpdateId, claimabl
             sourceUpdateIds,
         };
     }
-    throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${currentUpdateId} returned an unknown admission outcome.`);
+    throw new BaleUpdateAdmissionOutcomeError(`Bale update ${currentUpdateId} returned an unknown admission outcome.`);
 }
-function normalizeTelegramUpdateRetryPolicy(input) {
+function normalizeBaleUpdateRetryPolicy(input) {
     const policy = {
-        baseDelayMs: input?.baseDelayMs ?? TELEGRAM_UPDATE_RETRY_BASE_DELAY_MS,
-        maxDelayMs: input?.maxDelayMs ?? TELEGRAM_UPDATE_RETRY_MAX_DELAY_MS,
+        baseDelayMs: input?.baseDelayMs ?? BALE_UPDATE_RETRY_BASE_DELAY_MS,
+        maxDelayMs: input?.maxDelayMs ?? BALE_UPDATE_RETRY_MAX_DELAY_MS,
     };
     if (!Number.isSafeInteger(policy.baseDelayMs) ||
         policy.baseDelayMs <= 0 ||
         !Number.isSafeInteger(policy.maxDelayMs) ||
         policy.maxDelayMs < policy.baseDelayMs) {
-        throw new Error("Telegram update retry policy is invalid.");
+        throw new Error("Bale update retry policy is invalid.");
     }
     return policy;
 }
-function normalizeTelegramUpdateFailureClass(value) {
+function normalizeBaleUpdateFailureClass(value) {
     const normalized = value
         .trim()
         .replace(/[^A-Za-z0-9._:-]+/gu, "-")
         .replace(/^-+|-+$/gu, "")
-        .slice(0, TELEGRAM_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH);
+        .slice(0, BALE_UPDATE_JOURNAL_FAILURE_CLASS_MAX_LENGTH);
     return normalized || "execution-error";
 }
-function normalizeTelegramUpdateFailureSummary(value) {
+function normalizeBaleUpdateFailureSummary(value) {
     const normalized = value
         .trim()
-        .slice(0, TELEGRAM_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH);
-    return normalized || "Telegram update execution failed.";
+        .slice(0, BALE_UPDATE_JOURNAL_FAILURE_SUMMARY_MAX_LENGTH);
+    return normalized || "Bale update execution failed.";
 }
-function classifyTelegramUpdateExecutionFailure(error) {
-    if (error instanceof TelegramForeignUpdateSettlementError) {
+function classifyBaleUpdateExecutionFailure(error) {
+    if (error instanceof BaleForeignUpdateSettlementError) {
         return {
             disposition: error.settlement.status === "retryable" ? "retryable" : "terminal",
-            failureClass: normalizeTelegramUpdateFailureClass(error.settlement.failureClass),
-            summary: normalizeTelegramUpdateFailureSummary(error.settlement.message),
+            failureClass: normalizeBaleUpdateFailureClass(error.settlement.failureClass),
+            summary: normalizeBaleUpdateFailureSummary(error.settlement.message),
         };
     }
     const errorName = error instanceof Error && error.name ? error.name : "UnknownError";
     return {
         disposition: "retryable",
-        failureClass: normalizeTelegramUpdateFailureClass(`execution-${errorName}`),
-        summary: normalizeTelegramUpdateFailureSummary(`${errorName}: Telegram update execution failed.`),
+        failureClass: normalizeBaleUpdateFailureClass(`execution-${errorName}`),
+        summary: normalizeBaleUpdateFailureSummary(`${errorName}: Bale update execution failed.`),
     };
 }
-function getTelegramUpdateRetryDelayMs(attemptCount, policy) {
+function getBaleUpdateRetryDelayMs(attemptCount, policy) {
     const multiplier = 2 ** Math.max(0, attemptCount - 1);
     return Math.min(policy.maxDelayMs, policy.baseDelayMs * multiplier);
 }
-function scheduleTelegramUpdateRetry(callback, delayMs) {
+function scheduleBaleUpdateRetry(callback, delayMs) {
     const handle = setTimeout(callback, delayMs);
     handle.unref?.();
     return handle;
 }
-function normalizeTelegramUpdateQueueOwnerIdentity(value) {
+function normalizeBaleUpdateQueueOwnerIdentity(value) {
     if (typeof value.instanceId !== "string" ||
         value.instanceId.length === 0 ||
         value.instanceId.length >
-            TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH ||
+            BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH ||
         !Number.isSafeInteger(value.processId) ||
         value.processId <= 0 ||
         typeof value.processBirthId !== "string" ||
         value.processBirthId.length === 0 ||
         value.processBirthId.length >
-            TELEGRAM_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH ||
+            BALE_UPDATE_JOURNAL_QUEUE_OWNER_ID_MAX_LENGTH ||
         !Number.isSafeInteger(value.sessionGeneration) ||
         value.sessionGeneration <= 0) {
-        throw new Error("Telegram update queue owner identity is invalid.");
+        throw new Error("Bale update queue owner identity is invalid.");
     }
     return { ...value };
 }
 /** Clear claim, retry and failure projections after the worker forgets its local claims. */
-function clearTelegramUpdateWorkerClaimState(state, unsettledExecutionCount) {
+function clearBaleUpdateWorkerClaimState(state, unsettledExecutionCount) {
     state.deferredClaimCount = 0;
     delete state.abandoningClaimCount;
     delete state.historicalClaimCount;
@@ -1199,9 +1199,9 @@ function clearTelegramUpdateWorkerClaimState(state, unsettledExecutionCount) {
     state.terminalFailureAtMs = undefined;
     state.unsettledExecutionCount = unsettledExecutionCount;
 }
-export function createTelegramUpdateWorkerRuntime(deps) {
+export function createBaleUpdateWorkerRuntime(deps) {
     if ((deps.scheduleRetry === undefined) !== (deps.cancelRetry === undefined)) {
-        throw new Error("Telegram update retry scheduling requires matching schedule and cancel ports.");
+        throw new Error("Bale update retry scheduling requires matching schedule and cancel ports.");
     }
     const getNowMs = deps.getNowMs ?? Date.now;
     const onHeldSourcesPrepared = deps.onHeldSourcesPrepared;
@@ -1211,9 +1211,9 @@ export function createTelegramUpdateWorkerRuntime(deps) {
     const selectRouting = routingJournal?.select.bind(routingJournal);
     const expireRouting = routingJournal?.expire.bind(routingJournal);
     const expireRoutingObserver = deps.expireRoutingInput;
-    const batchSize = deps.batchSize ?? TELEGRAM_UPDATE_WORKER_BATCH_SIZE;
+    const batchSize = deps.batchSize ?? BALE_UPDATE_WORKER_BATCH_SIZE;
     if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
-        throw new Error("Telegram update worker batch size must be positive.");
+        throw new Error("Bale update worker batch size must be positive.");
     }
     const yieldToEventLoop = deps.yieldToEventLoop ??
         (() => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -1226,11 +1226,11 @@ export function createTelegramUpdateWorkerRuntime(deps) {
     const fallbackQueueOwnerInstanceId = `worker-${randomUUID()}`;
     const fallbackQueueOwnerProcessId = process.pid > 0 ? process.pid : 1;
     const createAbortController = deps.createAbortController ?? (() => new AbortController());
-    const retryPolicy = normalizeTelegramUpdateRetryPolicy(deps.retryPolicy);
-    const scheduleRetry = deps.scheduleRetry ?? scheduleTelegramUpdateRetry;
+    const retryPolicy = normalizeBaleUpdateRetryPolicy(deps.retryPolicy);
+    const scheduleRetry = deps.scheduleRetry ?? scheduleBaleUpdateRetry;
     const cancelRetry = deps.cancelRetry ??
         ((handle) => clearTimeout(handle));
-    const resolveQueueOwnerIdentity = (ctx, generation) => normalizeTelegramUpdateQueueOwnerIdentity(deps.getQueueOwnerIdentity?.(ctx) ?? {
+    const resolveQueueOwnerIdentity = (ctx, generation) => normalizeBaleUpdateQueueOwnerIdentity(deps.getQueueOwnerIdentity?.(ctx) ?? {
         instanceId: fallbackQueueOwnerInstanceId,
         processId: fallbackQueueOwnerProcessId,
         processBirthId: `${fallbackQueueOwnerProcessId}:${fallbackQueueOwnerInstanceId}`,
@@ -1287,7 +1287,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
     };
     const notifyStateChange = () => {
         try {
-            deps.onStateChange?.(getTelegramUpdateWorkerStateSnapshot(state));
+            deps.onStateChange?.(getBaleUpdateWorkerStateSnapshot(state));
         }
         catch (error) {
             recordRuntimeEvent(error, { phase: "state-observer" });
@@ -1394,9 +1394,9 @@ export function createTelegramUpdateWorkerRuntime(deps) {
         const normalized = bindQueueReceiptToJournal(receipt);
         const existing = committedQueueReceipts.get(receipt.receiptId);
         if (existing) {
-            if (!areTelegramQueueAdmissionReceiptsEqual(existing.receipt, normalized) ||
-                !areTelegramUpdateJournalQueueOwnersEqual(existing.queueOwner, queueOwner)) {
-                throw new TelegramUpdateAdmissionOutcomeError(`Telegram queue receipt ${receipt.receiptId} has conflicting committed authority.`);
+            if (!areBaleQueueAdmissionReceiptsEqual(existing.receipt, normalized) ||
+                !areBaleUpdateJournalQueueOwnersEqual(existing.queueOwner, queueOwner)) {
+                throw new BaleUpdateAdmissionOutcomeError(`Bale queue receipt ${receipt.receiptId} has conflicting committed authority.`);
             }
             return false;
         }
@@ -1404,9 +1404,9 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             const pending = pendingQueuePublications.get(normalized.receiptId);
             if (pending) {
                 if (pending.owner !== expectedOwner ||
-                    !areTelegramQueueAdmissionReceiptsEqual(pending.receipt, normalized) ||
-                    !areTelegramUpdateJournalQueueOwnersEqual(pending.queueOwner, queueOwner)) {
-                    throw new TelegramUpdateAdmissionOutcomeError("Telegram queue publication has conflicting in-flight authority.");
+                    !areBaleQueueAdmissionReceiptsEqual(pending.receipt, normalized) ||
+                    !areBaleUpdateJournalQueueOwnersEqual(pending.queueOwner, queueOwner)) {
+                    throw new BaleUpdateAdmissionOutcomeError("Bale queue publication has conflicting in-flight authority.");
                 }
                 await pending.task;
                 return false;
@@ -1425,20 +1425,20 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     ...queueOwner,
                 }) !== true ||
                 !current()) {
-                throw new TelegramUpdateAdmissionOutcomeError("Telegram queue publication requires exact current receipt inspection.");
+                throw new BaleUpdateAdmissionOutcomeError("Bale queue publication requires exact current receipt inspection.");
             }
             const task = Promise.resolve()
                 .then(async () => {
                 if (!current())
-                    throw new TelegramUpdateAdmissionOutcomeError("Telegram queue publication authority ended before acceptance.");
+                    throw new BaleUpdateAdmissionOutcomeError("Bale queue publication authority ended before acceptance.");
                 const prepared = await prepareQueueReceipt(normalizeQueueReceipt(normalized), { ...queueOwner }, ctx, current);
                 if (prepared !== undefined) {
-                    sourceCompletions = normalizeTelegramQueueSourceCompletions(prepared, new Set(normalized.sourceUpdateIds), journalBindingKey, false);
+                    sourceCompletions = normalizeBaleQueueSourceCompletions(prepared, new Set(normalized.sourceUpdateIds), journalBindingKey, false);
                     if (!completeQueuedExact || !inspectCompletion)
-                        throw new Error("Telegram scoped queue terminal capabilities are unavailable.");
+                        throw new Error("Bale scoped queue terminal capabilities are unavailable.");
                     if (sourceCompletions.length !== normalized.sourceUpdateIds.length) {
                         if (!current() || !inspectQueuedSources)
-                            throw new Error("Telegram partial queue scopes require strict current whole-receipt origin inspection.");
+                            throw new Error("Bale partial queue scopes require strict current whole-receipt origin inspection.");
                         const expected = {
                             queueKind: normalized.queueKind,
                             receiptId: normalized.receiptId,
@@ -1455,14 +1455,14 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                                 typeof source.sourceSha256 !== "string" ||
                                 !/^[a-f0-9]{64}$/u.test(source.sourceSha256)) ||
                             sourceCompletions.some((scope) => proof.sources.find((source) => source.updateId === scope.updateId)?.sourceSha256 !== scope.sourceSha256)) {
-                            throw new Error("Telegram partial queue scope origin was not confirmed under whole-receipt authority.");
+                            throw new Error("Bale partial queue scope origin was not confirmed under whole-receipt authority.");
                         }
                     }
                     for (const { journalBindingKey: _binding, ...completion } of sourceCompletions) {
                         if (!current() ||
                             inspectCompletion({ ...completion }) !== undefined ||
                             !current()) {
-                            throw new Error("Telegram queued source completion authority is contradictory.");
+                            throw new Error("Bale queued source completion authority is contradictory.");
                         }
                     }
                 }
@@ -1471,7 +1471,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         ...queueOwner,
                     }) !== true ||
                     !current()) {
-                    throw new TelegramUpdateAdmissionOutcomeError("Telegram queue publication authority changed after acceptance.");
+                    throw new BaleUpdateAdmissionOutcomeError("Bale queue publication authority changed after acceptance.");
                 }
                 publishReady();
             })
@@ -1520,7 +1520,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             return undefined;
         const committed = committedQueueReceipts.get(receipt.receiptId);
         if (!committed ||
-            !areTelegramQueueAdmissionReceiptsEqual(committed.receipt, normalizeQueueReceipt(receipt)))
+            !areBaleQueueAdmissionReceiptsEqual(committed.receipt, normalizeQueueReceipt(receipt)))
             return undefined;
         try {
             if (inspectQueueReceipt &&
@@ -1571,16 +1571,16 @@ export function createTelegramUpdateWorkerRuntime(deps) {
     };
     const refreshJournalState = async (snapshot, expectedOwner) => {
         // Validate the whole snapshot before reconstructing any queue authority.
-        if ((snapshot.version !== TELEGRAM_UPDATE_JOURNAL_VERSION &&
-            snapshot.version !== TELEGRAM_UPDATE_JOURNAL_EXCLUSION_VERSION &&
-            snapshot.version !== TELEGRAM_UPDATE_JOURNAL_CUSTODY_VERSION) ||
-            (snapshot.version === TELEGRAM_UPDATE_JOURNAL_CUSTODY_VERSION &&
+        if ((snapshot.version !== BALE_UPDATE_JOURNAL_VERSION &&
+            snapshot.version !== BALE_UPDATE_JOURNAL_EXCLUSION_VERSION &&
+            snapshot.version !== BALE_UPDATE_JOURNAL_CUSTODY_VERSION) ||
+            (snapshot.version === BALE_UPDATE_JOURNAL_CUSTODY_VERSION &&
                 !deps.executeCustodiedUpdate) ||
-            snapshot.entries.some((entry) => ((snapshot.version === TELEGRAM_UPDATE_JOURNAL_EXCLUSION_VERSION ||
+            snapshot.entries.some((entry) => ((snapshot.version === BALE_UPDATE_JOURNAL_EXCLUSION_VERSION ||
                 entry.preApprovalExcluded !== undefined) &&
                 typeof entry.preApprovalExcluded !== "boolean") ||
                 (entry.preApprovalExcluded === true && entry.state === "queued"))) {
-            throw new TelegramUpdateAdmissionOutcomeError("Telegram journal snapshot has invalid pairing exclusion evidence.");
+            throw new BaleUpdateAdmissionOutcomeError("Bale journal snapshot has invalid pairing exclusion evidence.");
         }
         const availableUpdateIds = new Set();
         const queuedReceiptEntries = new Map();
@@ -1634,11 +1634,11 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             if (entry.state !== "queued")
                 continue;
             if (!entry.queueKind || !entry.queueReceiptId) {
-                throw new TelegramUpdateAdmissionOutcomeError(`Telegram queued update ${entry.updateId} has no receipt metadata.`);
+                throw new BaleUpdateAdmissionOutcomeError(`Bale queued update ${entry.updateId} has no receipt metadata.`);
             }
             if (entry.queueHandoff ||
                 !entry.queueOwner ||
-                !isTelegramUpdateJournalQueueOwnerProcess(entry.queueOwner, expectedOwner.queueOwnerIdentity)) {
+                !isBaleUpdateJournalQueueOwnerProcess(entry.queueOwner, expectedOwner.queueOwnerIdentity)) {
                 foreignQueuedCount += 1;
                 foreignQueuedOwner ??= entry.queueOwner;
                 continue;
@@ -1648,8 +1648,8 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             const receipt = queuedReceiptEntries.get(entry.queueReceiptId);
             if (receipt &&
                 (receipt.queueKind !== entry.queueKind ||
-                    !areTelegramUpdateJournalQueueOwnersEqual(receipt.queueOwner, entry.queueOwner))) {
-                throw new TelegramUpdateAdmissionOutcomeError(`Telegram queue receipt ${entry.queueReceiptId} has conflicting authority.`);
+                    !areBaleUpdateJournalQueueOwnersEqual(receipt.queueOwner, entry.queueOwner))) {
+                throw new BaleUpdateAdmissionOutcomeError(`Bale queue receipt ${entry.queueReceiptId} has conflicting authority.`);
             }
             if (receipt)
                 receipt.sourceUpdateIds.push(entry.updateId);
@@ -1731,7 +1731,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
     };
     const executeWithinOwner = async (expectedOwner, update, preparedExecute, target) => {
         if (expectedOwner.controller.signal.aborted) {
-            return TELEGRAM_UPDATE_WORKER_EXECUTION_ABORTED;
+            return BALE_UPDATE_WORKER_EXECUTION_ABORTED;
         }
         const custodied = deps.executeCustodiedUpdate !== undefined;
         const execution = Promise.resolve().then(async () => preparedExecute
@@ -1762,7 +1762,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             state.unsettledExecutionCount = unsettledExecutions.size;
             if (owner !== expectedOwner || expectedOwner.controller.signal.aborted) {
                 recordRuntimeEvent(result.ok
-                    ? "Superseded Telegram update execution settled successfully."
+                    ? "Superseded Bale update execution settled successfully."
                     : result.error, {
                     phase: result.ok ? "late-execution-success" : "late-execution",
                     generation: expectedOwner.generation,
@@ -1773,7 +1773,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
         });
         let removeAbortListener = () => { };
         const aborted = new Promise((resolve) => {
-            const onAbort = () => resolve(TELEGRAM_UPDATE_WORKER_EXECUTION_ABORTED);
+            const onAbort = () => resolve(BALE_UPDATE_WORKER_EXECUTION_ABORTED);
             removeAbortListener = () => expectedOwner.controller.signal.removeEventListener("abort", onAbort);
             expectedOwner.controller.signal.addEventListener("abort", onAbort, {
                 once: true,
@@ -1792,9 +1792,9 @@ export function createTelegramUpdateWorkerRuntime(deps) {
         const normalized = normalizeQueueReceipt(outcome);
         const existing = committedQueueReceipts.get(normalized.receiptId);
         if (existing) {
-            if (!areTelegramQueueAdmissionReceiptsEqual(existing.receipt, normalized) ||
-                !isTelegramUpdateJournalQueueOwnerProcess(existing.queueOwner, expectedOwner.queueOwnerIdentity)) {
-                return blockWithFailure("invalid-outcome", "queue-receipt-conflict", new TelegramUpdateAdmissionOutcomeError(`Telegram queue receipt ${normalized.receiptId} conflicts with committed authority.`), currentUpdateId, {
+            if (!areBaleQueueAdmissionReceiptsEqual(existing.receipt, normalized) ||
+                !isBaleUpdateJournalQueueOwnerProcess(existing.queueOwner, expectedOwner.queueOwnerIdentity)) {
+                return blockWithFailure("invalid-outcome", "queue-receipt-conflict", new BaleUpdateAdmissionOutcomeError(`Bale queue receipt ${normalized.receiptId} conflicts with committed authority.`), currentUpdateId, {
                     receiptId: normalized.receiptId,
                     sourceUpdateIds: normalized.sourceUpdateIds,
                 });
@@ -1815,11 +1815,11 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 ...committed.duplicateUpdateIds,
             ]);
             if (normalized.sourceUpdateIds.some((updateId) => !committedUpdateIds.has(updateId))) {
-                throw new Error(`Telegram queue receipt ${normalized.receiptId} did not commit every source update.`);
+                throw new Error(`Bale queue receipt ${normalized.receiptId} did not commit every source update.`);
             }
             if (!committed.queueOwner ||
-                !isTelegramUpdateJournalQueueOwnerProcess(committed.queueOwner, expectedOwner.queueOwnerIdentity)) {
-                throw new Error(`Telegram queue receipt ${normalized.receiptId} belongs to another live process.`);
+                !isBaleUpdateJournalQueueOwnerProcess(committed.queueOwner, expectedOwner.queueOwnerIdentity)) {
+                throw new Error(`Bale queue receipt ${normalized.receiptId} belongs to another live process.`);
             }
             queueOwner = committed.queueOwner;
         }
@@ -1839,24 +1839,24 @@ export function createTelegramUpdateWorkerRuntime(deps) {
         try {
             rawClassification = deps.classifyExecutionFailure
                 ? deps.classifyExecutionFailure(error)
-                : classifyTelegramUpdateExecutionFailure(error);
+                : classifyBaleUpdateExecutionFailure(error);
             if ((rawClassification.disposition !== "retryable" &&
                 rawClassification.disposition !== "terminal") ||
                 typeof rawClassification.failureClass !== "string" ||
                 typeof rawClassification.summary !== "string") {
-                throw new Error("Telegram update failure classifier returned invalid data.");
+                throw new Error("Bale update failure classifier returned invalid data.");
             }
         }
         catch (classificationError) {
             return blockWithFailure("execution", "failure-classification", classificationError, entry.updateId);
         }
-        const failureClass = normalizeTelegramUpdateFailureClass(rawClassification.failureClass);
-        const summary = normalizeTelegramUpdateFailureSummary(rawClassification.summary);
+        const failureClass = normalizeBaleUpdateFailureClass(rawClassification.failureClass);
+        const summary = normalizeBaleUpdateFailureSummary(rawClassification.summary);
         const expectedAttemptCount = entry.failure?.attemptCount ?? 0;
         const attemptCount = expectedAttemptCount + 1;
         const failedAtMs = getNowMs();
         const disposition = "retry-wait";
-        const nextRetryAtMs = failedAtMs + getTelegramUpdateRetryDelayMs(attemptCount, retryPolicy);
+        const nextRetryAtMs = failedAtMs + getBaleUpdateRetryDelayMs(attemptCount, retryPolicy);
         try {
             const result = deps.journal.markExecutionFailure({
                 updateId: entry.updateId,
@@ -1868,7 +1868,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 nextRetryAtMs,
             });
             if (result.entry.state !== disposition) {
-                throw new Error(`Telegram update ${entry.updateId} failure disposition did not persist.`);
+                throw new Error(`Bale update ${entry.updateId} failure disposition did not persist.`);
             }
         }
         catch (journalError) {
@@ -1898,13 +1898,13 @@ export function createTelegramUpdateWorkerRuntime(deps) {
         const journalBindingKey = deps.getJournalBindingKey?.();
         try {
             if (isCurrent?.() === false)
-                throw new Error("Telegram exact completion authority changed.");
+                throw new Error("Bale exact completion authority changed.");
             const expectedSources = completions.flatMap((value) => value.expectedSource ? [value.expectedSource] : []);
             if (expectedSources.some((value) => value.journalBindingKey !== journalBindingKey) ||
                 (expectedSources.length > 0 &&
                     (deps.isContextCurrent?.(expectedOwner.ctx) === false ||
                         !isQueueOwnerIdentityCurrent(expectedOwner)))) {
-                throw new Error("Telegram guarded completion source authority changed.");
+                throw new Error("Bale guarded completion source authority changed.");
             }
             const scoped = expectedSources
                 .flatMap(({ updateId, sourceSha256, completionSha256 }) => completionSha256 !== undefined
@@ -1912,11 +1912,11 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 : [])
                 .sort((a, b) => a.updateId - b.updateId);
             if (scoped.length > 0 && !inspectCompletion)
-                throw new Error("Telegram source completion inspection is unavailable.");
+                throw new Error("Bale source completion inspection is unavailable.");
             let removed;
             if (expectedSources.length > 0) {
                 if (!completeExact)
-                    throw new Error("Telegram exact source completion is unavailable.");
+                    throw new Error("Bale exact source completion is unavailable.");
                 removed = completeExact(updateIds, expectedSources.map(({ updateId, sourceSha256 }) => ({
                     updateId,
                     sourceSha256,
@@ -1927,7 +1927,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             else
                 removed = deps.journal.removeCompleted(updateIds);
             if (isCurrent?.() === false)
-                throw new Error("Telegram exact completion ACK authority changed.");
+                throw new Error("Bale exact completion ACK authority changed.");
             if (scoped.length > 0) {
                 const afterCommit = checkAuthority(expectedOwner, updateIds.at(-1));
                 if (afterCommit)
@@ -1935,24 +1935,24 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 if (deps.isContextCurrent?.(expectedOwner.ctx) === false ||
                     !isQueueOwnerIdentityCurrent(expectedOwner) ||
                     deps.getJournalBindingKey?.() !== journalBindingKey)
-                    throw new Error("Telegram source completion ACK authority changed.");
+                    throw new Error("Bale source completion ACK authority changed.");
                 if (!isDeepStrictEqual(removed.sourceCompletions, scoped))
-                    throw new Error("Telegram source completion ACK was not confirmed.");
+                    throw new Error("Bale source completion ACK was not confirmed.");
                 for (const completion of scoped) {
                     if (!isDeepStrictEqual(inspectCompletion({ ...completion }), completion))
-                        throw new Error("Telegram source completion ACK was not retained.");
+                        throw new Error("Bale source completion ACK was not retained.");
                     const afterRead = checkAuthority(expectedOwner, completion.updateId);
                     if (afterRead)
                         return afterRead;
                     if (deps.isContextCurrent?.(expectedOwner.ctx) === false ||
                         !isQueueOwnerIdentityCurrent(expectedOwner) ||
                         deps.getJournalBindingKey?.() !== journalBindingKey)
-                        throw new Error("Telegram source completion ACK authority changed.");
+                        throw new Error("Bale source completion ACK authority changed.");
                 }
             }
             const removedIds = new Set(removed.removedUpdateIds);
             if (updateIds.some((updateId) => !removedIds.has(updateId))) {
-                throw new Error("Telegram update batch changed before completion commit.");
+                throw new Error("Bale update batch changed before completion commit.");
             }
         }
         catch (error) {
@@ -1987,7 +1987,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
     };
     const reconcileRoutingInputs = async (snapshot, expectedOwner) => {
         clearRoutingTimer();
-        if (!isTelegramUpdateJournalLegacyFamilyVersion(snapshot.version) ||
+        if (!isBaleUpdateJournalLegacyFamilyVersion(snapshot.version) ||
             !expireRouting ||
             !expireRoutingObserver)
             return false;
@@ -2150,12 +2150,12 @@ export function createTelegramUpdateWorkerRuntime(deps) {
         if (result.entries.length !== ids.length ||
             result.entries.some((entry, index) => entry.updateId !== ids[index] || !entry.routingInput) ||
             !current()) {
-            throw new Error("Telegram routing input lifetime ACK was not confirmed.");
+            throw new Error("Bale routing input lifetime ACK was not confirmed.");
         }
         const retained = deps.journal.read().entries;
         if (result.entries.some((entry) => !isDeepStrictEqual(retained.find((value) => value.updateId === entry.updateId), entry)) ||
             !current()) {
-            throw new Error("Telegram routing input lifetime ACK was not retained.");
+            throw new Error("Bale routing input lifetime ACK was not retained.");
         }
         // Retain the decoder's exact source representation, not the mutation result's property ordering.
         result.entries.forEach((entry, index) => {
@@ -2201,7 +2201,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 if (livePreparation?.ids.has(candidate.updateId) &&
                     (!livePreparation.released || livePreparation.status?.issued))
                     continue;
-                if (snapshot.version === TELEGRAM_UPDATE_JOURNAL_CUSTODY_VERSION &&
+                if (snapshot.version === BALE_UPDATE_JOURNAL_CUSTODY_VERSION &&
                     (candidate.state === "retry-wait" || candidate.state === "failed")) {
                     hasUnavailableInputCustody = true;
                     blockedInputCustody ??= {
@@ -2210,7 +2210,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     };
                     continue;
                 }
-                if (snapshot.version === TELEGRAM_UPDATE_JOURNAL_CUSTODY_VERSION &&
+                if (snapshot.version === BALE_UPDATE_JOURNAL_CUSTODY_VERSION &&
                     candidate.inputClaim) {
                     if (candidate.inputClaim.phase === "running") {
                         hasOutcomeUnknownInput = true;
@@ -2223,7 +2223,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         continue;
                     }
                     if (candidate.inputClaim.handoff ||
-                        !isTelegramUpdateJournalQueueOwnerProcess(candidate.inputClaim.owner, expectedOwner.queueOwnerIdentity)) {
+                        !isBaleUpdateJournalQueueOwnerProcess(candidate.inputClaim.owner, expectedOwner.queueOwnerIdentity)) {
                         hasUnavailableInputCustody = true;
                         blockedInputCustody ??= {
                             updateId: candidate.updateId,
@@ -2281,7 +2281,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     completedUpdateIds.push({ updateId: entry.updateId });
                     continue;
                 }
-                if (isTelegramUpdateJournalLegacyFamilyVersion(snapshot.version) &&
+                if (isBaleUpdateJournalLegacyFamilyVersion(snapshot.version) &&
                     entry.state === "pending" &&
                     deps.journal.inspectPendingRetention) {
                     const authorityResult = checkAuthority(expectedOwner, entry.updateId);
@@ -2310,7 +2310,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         continue;
                     }
                 }
-                if (isTelegramUpdateJournalLegacyFamilyVersion(snapshot.version) &&
+                if (isBaleUpdateJournalLegacyFamilyVersion(snapshot.version) &&
                     (entry.state === "pending" || entry.state === "retry-wait")) {
                     const historical = expectedOwner.startupUpdateIds.has(entry.updateId);
                     let revived = false;
@@ -2358,8 +2358,8 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                                 entry.state === "pending" &&
                                 (review === "retain" ||
                                     (review === "revive" &&
-                                        isRevivableTelegramRoutingInput(entry, getNowMs())))))
-                            return blockWithFailure("execution", "historical-review-classification", new TelegramUpdateAdmissionOutcomeError("Historical classification must return a boolean or retain verdict."), entry.updateId);
+                                        isRevivableBaleRoutingInput(entry, getNowMs())))))
+                            return blockWithFailure("execution", "historical-review-classification", new BaleUpdateAdmissionOutcomeError("Historical classification must return a boolean or retain verdict."), entry.updateId);
                         // Classification may await a domain read; accepted/changed source evidence wins.
                         try {
                             const current = deps.journal.read();
@@ -2450,7 +2450,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         return admitted.outcome;
                     }
                     : undefined, prepared?.target);
-                if (execution === TELEGRAM_UPDATE_WORKER_EXECUTION_ABORTED) {
+                if (execution === BALE_UPDATE_WORKER_EXECUTION_ABORTED) {
                     return "aborted";
                 }
                 if (!execution.ok) {
@@ -2489,8 +2489,8 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     }
                     if (outcome.status === "queued") {
                         const receipt = normalizeQueueReceipt(outcome.queueReceipt);
-                        if (!isTelegramUpdateJournalQueueOwnerProcess(outcome.queueReceipt.queueOwner, expectedOwner.queueOwnerIdentity)) {
-                            return blockWithFailure("invalid-outcome", "custody-queue-owner", new Error("Telegram custodied queue receipt belongs to another process."), entry.updateId);
+                        if (!isBaleUpdateJournalQueueOwnerProcess(outcome.queueReceipt.queueOwner, expectedOwner.queueOwnerIdentity)) {
+                            return blockWithFailure("invalid-outcome", "custody-queue-owner", new Error("Bale custodied queue receipt belongs to another process."), entry.updateId);
                         }
                         for (const sourceUpdateId of receipt.sourceUpdateIds)
                             claims.set(sourceUpdateId, "queued");
@@ -2525,7 +2525,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 ]);
                 let outcome;
                 try {
-                    outcome = validateTelegramUpdateAdmissionOutcome(execution.outcome, entry.updateId, claimableUpdateIds);
+                    outcome = validateBaleUpdateAdmissionOutcome(execution.outcome, entry.updateId, claimableUpdateIds);
                 }
                 catch (error) {
                     return blockWithFailure("invalid-outcome", "invalid-outcome", error, entry.updateId);
@@ -2533,7 +2533,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 if (outcome.kind === "deferred") {
                     if (outcome.routingReview &&
                         !deferredSources.get(entry.updateId)?.historical) {
-                        return blockWithFailure("invalid-outcome", "historical-review-source", new TelegramUpdateAdmissionOutcomeError("Historical review needs an exact startup source."), entry.updateId);
+                        return blockWithFailure("invalid-outcome", "historical-review-source", new BaleUpdateAdmissionOutcomeError("Historical review needs an exact startup source."), entry.updateId);
                     }
                     claims.set(entry.updateId, outcome.routingReview ? "historical" : "deferred");
                     transition("deferred", entry.updateId);
@@ -2766,7 +2766,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             (afterUpdateId === undefined || id > afterUpdateId))
             .sort(([a], [b]) => a - b);
         const sources = matches
-            .slice(0, TELEGRAM_HELD_SOURCE_INSPECTION_LIMIT)
+            .slice(0, BALE_HELD_SOURCE_INSPECTION_LIMIT)
             .map(([updateId, source]) => {
             let committed;
             return {
@@ -2791,9 +2791,9 @@ export function createTelegramUpdateWorkerRuntime(deps) {
         return isCurrent()
             ? {
                 sources,
-                ...(matches.length > TELEGRAM_HELD_SOURCE_INSPECTION_LIMIT
+                ...(matches.length > BALE_HELD_SOURCE_INSPECTION_LIMIT
                     ? {
-                        nextAfterUpdateId: matches[TELEGRAM_HELD_SOURCE_INSPECTION_LIMIT - 1][0],
+                        nextAfterUpdateId: matches[BALE_HELD_SOURCE_INSPECTION_LIMIT - 1][0],
                     }
                     : {}),
             }
@@ -2820,7 +2820,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             return undefined;
         const snapshot = deps.journal.read();
         const entry = snapshot.entries.find((value) => value.updateId === input.updateId);
-        if (!isTelegramUpdateJournalLegacyFamilyVersion(snapshot.version) ||
+        if (!isBaleUpdateJournalLegacyFamilyVersion(snapshot.version) ||
             !entry ||
             JSON.stringify(entry) !== JSON.stringify(source.entry) ||
             !current())
@@ -2828,7 +2828,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
         return {
             source: {
                 journalBindingKey: source.journalBindingKey,
-                ...createTelegramUpdateJournalEntryDigest(entry),
+                ...createBaleUpdateJournalEntryDigest(entry),
             },
             entry,
         };
@@ -2868,7 +2868,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             state.journalEntryCount = 0;
             state.journalSerializedBytes = 0;
             state.oldestAdmittedAtMs = undefined;
-            clearTelegramUpdateWorkerClaimState(state, unsettledExecutions.size);
+            clearBaleUpdateWorkerClaimState(state, unsettledExecutions.size);
             state.lastCompletedUpdateId = undefined;
             state.lastCompletedAtMs = undefined;
             state.lastFailureAtMs = undefined;
@@ -2909,7 +2909,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     return false;
                 try {
                     const snapshot = deps.journal.read();
-                    return (isTelegramUpdateJournalLegacyFamilyVersion(snapshot.version) &&
+                    return (isBaleUpdateJournalLegacyFamilyVersion(snapshot.version) &&
                         sourcesCurrent() &&
                         sources.every((source, index) => snapshot.entries.filter((entry) => entry.updateId === ids[index]).length === 1 &&
                             source?.entry.state === "pending" &&
@@ -2963,7 +2963,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         return "unknown";
                     if (!confirm() || !canSettle() || !available())
                         return "protected";
-                    const expected = sources.map((source) => createTelegramUpdateJournalEntryDigest(source.entry));
+                    const expected = sources.map((source) => createBaleUpdateJournalEntryDigest(source.entry));
                     held.discardIssued = true;
                     try {
                         const result = completeExact(ids, expected, undefined, () => current() && canSettle());
@@ -3045,7 +3045,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 return undefined;
             }
             if (!currentOwner() ||
-                !isTelegramUpdateJournalLegacyFamilyVersion(before.version) ||
+                !isBaleUpdateJournalLegacyFamilyVersion(before.version) ||
                 before.entries.some((entry) => ids.includes(entry.updateId)))
                 return undefined;
             const held = {
@@ -3129,7 +3129,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     const snapshot = {
                         source: {
                             journalBindingKey: binding,
-                            ...createTelegramUpdateJournalEntryDigest(entry),
+                            ...createBaleUpdateJournalEntryDigest(entry),
                         },
                         update: structuredClone(entry.update),
                     };
@@ -3147,7 +3147,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         bindCarrier(value) {
                             if (!released ||
                                 !ownerCurrent() ||
-                                getTelegramUpdateExecutionFence(value)?.signal !==
+                                getBaleUpdateExecutionFence(value)?.signal !==
                                     expectedOwner.controller.signal)
                                 return undefined;
                             if (retained)
@@ -3155,7 +3155,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                                     retained.completion.isCurrent()
                                     ? retained.completion
                                     : undefined;
-                            const completion = prepareTelegramDeferredSourceCompletion(value);
+                            const completion = prepareBaleDeferredSourceCompletion(value);
                             if (!completion ||
                                 !isDeepStrictEqual(completion.source, snapshot.source) ||
                                 !ownerCurrent() ||
@@ -3263,7 +3263,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         return "discarded";
                     }
                     const updateIds = entries.map((entry) => entry.updateId);
-                    const expected = entries.map((entry) => createTelegramUpdateJournalEntryDigest(entry));
+                    const expected = entries.map((entry) => createBaleUpdateJournalEntryDigest(entry));
                     held.discardIssued = true;
                     try {
                         const result = completeExact(updateIds, expected, undefined, () => current() && canDiscard());
@@ -3417,7 +3417,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         const committed = getCurrentQueueReceipt(receipt);
                         if (!committed ||
                             !current() ||
-                            !isTelegramUpdateJournalQueueOwnerProcess(committed.queueOwner, expectedOwner.queueOwnerIdentity))
+                            !isBaleUpdateJournalQueueOwnerProcess(committed.queueOwner, expectedOwner.queueOwnerIdentity))
                             return undefined;
                         const entry = findExactQueuedPromptEntry(read.call(queueAdmissionJournal), receipt.receiptId, input.updateId, committed.queueOwner, update);
                         if (!entry ||
@@ -3427,7 +3427,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                             return undefined;
                         const scope = committed.sourceCompletions?.find((scope) => scope.updateId === input.updateId);
                         if (scope?.sourceSha256 ===
-                            createTelegramUpdateJournalEntryDigest(entry).sourceSha256) {
+                            createBaleUpdateJournalEntryDigest(entry).sourceSha256) {
                             inspectedReceipts.set(receipt, {
                                 receipt: normalizeQueueReceipt(committed.receipt),
                                 completion: {
@@ -3463,7 +3463,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         receipt.journalBindingKey !== binding ||
                         receipt.queueKind !== "prompt" ||
                         !isDeepStrictEqual(receipt.sourceUpdateIds, [input.updateId]) ||
-                        !isTelegramUpdateJournalQueueOwnerProcess(queueOwner, expectedOwner.queueOwnerIdentity))
+                        !isBaleUpdateJournalQueueOwnerProcess(queueOwner, expectedOwner.queueOwnerIdentity))
                         return undefined;
                     try {
                         if (!current())
@@ -3474,7 +3474,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                             !completionCurrent())
                             return undefined;
                         const completion = {
-                            ...createTelegramUpdateJournalEntryDigest(entry),
+                            ...createBaleUpdateJournalEntryDigest(entry),
                             completionSha256,
                         };
                         inspectedReceipts.set(receipt, {
@@ -3497,7 +3497,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     if (!completionCurrent() ||
                         !readCompletion ||
                         !inspected ||
-                        !areTelegramQueueAdmissionReceiptsEqual(inspected.receipt, receipt) ||
+                        !areBaleQueueAdmissionReceiptsEqual(inspected.receipt, receipt) ||
                         !isQueueReceiptCompletionAcknowledged(receipt) ||
                         !completionCurrent())
                         return undefined;
@@ -3607,7 +3607,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     return;
                 let completion;
                 try {
-                    completion = validateTelegramUpdateAdmissionOutcome(input.outcome, input.updateId, new Set([input.updateId]));
+                    completion = validateBaleUpdateAdmissionOutcome(input.outcome, input.updateId, new Set([input.updateId]));
                 }
                 catch (error) {
                     blockWithFailure("invalid-outcome", "late-invalid-completion", error, input.updateId);
@@ -3642,7 +3642,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 if (claim === "queued")
                     return;
                 if (claim !== "deferred") {
-                    blockWithFailure("invalid-outcome", "late-outcome-unclaimed", new TelegramUpdateAdmissionOutcomeError(`Telegram update ${input.updateId} reported a late deferred outcome without a live claim.`), input.updateId);
+                    blockWithFailure("invalid-outcome", "late-outcome-unclaimed", new BaleUpdateAdmissionOutcomeError(`Bale update ${input.updateId} reported a late deferred outcome without a live claim.`), input.updateId);
                     return;
                 }
                 transition("deferred", input.updateId);
@@ -3650,7 +3650,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             }
             let outcome;
             try {
-                outcome = validateTelegramUpdateAdmissionOutcome(input.outcome, input.updateId, new Set([
+                outcome = validateBaleUpdateAdmissionOutcome(input.outcome, input.updateId, new Set([
                     input.updateId,
                     ...[...claims]
                         .filter(([, claim]) => claim !== "abandoning" &&
@@ -3665,11 +3665,11 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 return;
             }
             if (outcome.kind !== "queued") {
-                blockWithFailure("invalid-outcome", "late-invalid-outcome", new TelegramUpdateAdmissionOutcomeError(`Telegram update ${input.updateId} reported a non-queue late outcome.`), input.updateId);
+                blockWithFailure("invalid-outcome", "late-invalid-outcome", new BaleUpdateAdmissionOutcomeError(`Bale update ${input.updateId} reported a non-queue late outcome.`), input.updateId);
                 return;
             }
             if (claim !== "deferred" && claim !== "queued") {
-                blockWithFailure("invalid-outcome", "late-outcome-unclaimed", new TelegramUpdateAdmissionOutcomeError(`Telegram update ${input.updateId} reported a late queue outcome without a live claim.`), input.updateId);
+                blockWithFailure("invalid-outcome", "late-outcome-unclaimed", new BaleUpdateAdmissionOutcomeError(`Bale update ${input.updateId} reported a late queue outcome without a live claim.`), input.updateId);
                 releaseDeferredClaims(outcome.sourceUpdateIds);
                 return;
             }
@@ -3712,20 +3712,20 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             const receipt = normalizeQueueReceipt(input.result.queueReceipt);
             const existing = committedQueueReceipts.get(receipt.receiptId);
             if (existing &&
-                areTelegramQueueAdmissionReceiptsEqual(existing.receipt, receipt) &&
-                areTelegramUpdateJournalQueueOwnersEqual(existing.queueOwner, input.result.queueReceipt.queueOwner))
+                areBaleQueueAdmissionReceiptsEqual(existing.receipt, receipt) &&
+                areBaleUpdateJournalQueueOwnersEqual(existing.queueOwner, input.result.queueReceipt.queueOwner))
                 return;
             if (existing) {
-                blockWithFailure("invalid-outcome", "queue-receipt-conflict", new TelegramUpdateAdmissionOutcomeError(`Telegram queue receipt ${receipt.receiptId} conflicts with custodied authority.`), input.updateId);
+                blockWithFailure("invalid-outcome", "queue-receipt-conflict", new BaleUpdateAdmissionOutcomeError(`Bale queue receipt ${receipt.receiptId} conflicts with custodied authority.`), input.updateId);
                 return;
             }
             if (!receipt.sourceUpdateIds.includes(input.updateId) ||
                 receipt.sourceUpdateIds.some((updateId) => claims.get(updateId) !== "deferred")) {
-                blockWithFailure("invalid-outcome", "late-custody-unclaimed", new TelegramUpdateAdmissionOutcomeError(`Telegram update ${input.updateId} reported custodied queue without exact deferred claims.`), input.updateId);
+                blockWithFailure("invalid-outcome", "late-custody-unclaimed", new BaleUpdateAdmissionOutcomeError(`Bale update ${input.updateId} reported custodied queue without exact deferred claims.`), input.updateId);
                 return;
             }
-            if (!isTelegramUpdateJournalQueueOwnerProcess(input.result.queueReceipt.queueOwner, expectedOwner.queueOwnerIdentity)) {
-                blockWithFailure("invalid-outcome", "custody-queue-owner", new Error("Telegram custodied queue receipt belongs to another process."), input.updateId);
+            if (!isBaleUpdateJournalQueueOwnerProcess(input.result.queueReceipt.queueOwner, expectedOwner.queueOwnerIdentity)) {
+                blockWithFailure("invalid-outcome", "custody-queue-owner", new Error("Bale custodied queue receipt belongs to another process."), input.updateId);
                 return;
             }
             for (const sourceUpdateId of receipt.sourceUpdateIds)
@@ -3751,11 +3751,11 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 !(deps.isContextCurrent?.(ctx) ?? expectedOwner.ctx === ctx) ||
                 !isQueueOwnerIdentityCurrent(expectedOwner) ||
                 !committed ||
-                !areTelegramQueueAdmissionReceiptsEqual(committed.receipt, normalizeQueueReceipt(receipt)) ||
+                !areBaleQueueAdmissionReceiptsEqual(committed.receipt, normalizeQueueReceipt(receipt)) ||
                 (deps.getJournalBindingKey &&
                     committed.receipt.journalBindingKey !==
                         deps.getJournalBindingKey()) ||
-                !isTelegramUpdateJournalQueueOwnerProcess(committed.queueOwner, expectedOwner.queueOwnerIdentity))
+                !isBaleUpdateJournalQueueOwnerProcess(committed.queueOwner, expectedOwner.queueOwnerIdentity))
                 return undefined;
             const attempt = scopedQueueCompletionAttempts.get(receipt.receiptId);
             if (attempt
@@ -3788,10 +3788,10 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 if (!committed)
                     return false;
                 if (receiptIds.has(receipt.receiptId) ||
-                    !areTelegramQueueAdmissionReceiptsEqual(committed.receipt, receipt) ||
-                    !isTelegramUpdateJournalQueueOwnerProcess(committed.queueOwner, expectedOwner.queueOwnerIdentity) ||
+                    !areBaleQueueAdmissionReceiptsEqual(committed.receipt, receipt) ||
+                    !isBaleUpdateJournalQueueOwnerProcess(committed.queueOwner, expectedOwner.queueOwnerIdentity) ||
                     receipt.sourceUpdateIds.some((updateId) => sourceUpdateIds.has(updateId))) {
-                    blockWithFailure("invalid-outcome", "queue-receipt-completion-invalid", new TelegramUpdateAdmissionOutcomeError(`Telegram ${input.reason} requested invalid queue receipt ${receipt.receiptId}.`));
+                    blockWithFailure("invalid-outcome", "queue-receipt-completion-invalid", new BaleUpdateAdmissionOutcomeError(`Bale ${input.reason} requested invalid queue receipt ${receipt.receiptId}.`));
                     return false;
                 }
                 receiptIds.add(receipt.receiptId);
@@ -3825,7 +3825,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     : input.sourceCompletions;
                 if (input.sourceCompletions !== undefined &&
                     prepared.some((expected) => !input.sourceCompletions.some((value) => isDeepStrictEqual(value, expected)))) {
-                    throw new Error("Telegram queued completion conflicts with its prepared source scopes.");
+                    throw new Error("Bale queued completion conflicts with its prepared source scopes.");
                 }
                 if (input.sourceCompletions === undefined &&
                     prepared.length &&
@@ -3833,7 +3833,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                     const scoped = receipts.filter((receipt) => requiredScopedQueueReceipts.has(receipt.receiptId));
                     const ordinary = receipts.filter((receipt) => !requiredScopedQueueReceipts.has(receipt.receiptId));
                     if (!scoped.length || !ordinary.length)
-                        throw new Error("Telegram mixed queue completion has incomplete scoped authority.");
+                        throw new Error("Bale mixed queue completion has incomplete scoped authority.");
                     const binding = deps.getJournalBindingKey?.();
                     const current = () => owner === expectedOwner &&
                         !expectedOwner.controller.signal.aborted &&
@@ -3859,7 +3859,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                 }
                 if (sourceCompletions === undefined) {
                     if (queuedCompletions.some((receipt) => requiredScopedQueueReceipts.has(receipt.receiptId))) {
-                        throw new Error("Telegram scoped queue completion cannot downgrade required source scopes.");
+                        throw new Error("Bale scoped queue completion cannot downgrade required source scopes.");
                     }
                     removedUpdateIds =
                         deps.journal.completeQueued(queuedCompletions).removedUpdateIds;
@@ -3882,12 +3882,12 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         !Array.isArray(sourceCompletions) ||
                         (input.sourceCompletions !== undefined &&
                             sourceCompletions.length !== sourceUpdateIds.size)) {
-                        throw new Error("Telegram scoped queue completion requires full current source authority.");
+                        throw new Error("Bale scoped queue completion requires full current source authority.");
                     }
                     scopedCompletionCurrent = current;
-                    const completions = normalizeTelegramQueueSourceCompletions(sourceCompletions, sourceUpdateIds, journalBindingKey, input.sourceCompletions !== undefined).map(({ journalBindingKey: _binding, ...completion }) => completion);
+                    const completions = normalizeBaleQueueSourceCompletions(sourceCompletions, sourceUpdateIds, journalBindingKey, input.sourceCompletions !== undefined).map(({ journalBindingKey: _binding, ...completion }) => completion);
                     if (queuedCompletions.some((receipt) => !completions.some((scope) => receipt.sourceUpdateIds.includes(scope.updateId)))) {
-                        throw new Error("Telegram scoped queue completion requires a proven origin for every whole receipt.");
+                        throw new Error("Bale scoped queue completion requires a proven origin for every whole receipt.");
                     }
                     const previous = queuedCompletions.map((receipt) => scopedQueueCompletionAttempts.get(receipt.receiptId));
                     const retained = previous.find((attempt) => attempt !== undefined);
@@ -3898,7 +3898,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                             retained.reason !== input.reason ||
                             !isDeepStrictEqual(retained.receipts, queuedCompletions) ||
                             !isDeepStrictEqual(retained.completions, completions))) {
-                        throw new Error("Telegram scoped queue completion has conflicting issued authority.");
+                        throw new Error("Bale scoped queue completion has conflicting issued authority.");
                     }
                     if (!retained) {
                         const attempt = {
@@ -3913,7 +3913,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                             completions: completions.map((completion) => ({ ...completion })),
                         };
                         if (!current())
-                            throw new Error("Telegram scoped queue completion authority changed before disposal.");
+                            throw new Error("Bale scoped queue completion authority changed before disposal.");
                         // Mark before issuance: an exception may follow a committed rename, and cannot license another disposal.
                         for (const receipt of queuedCompletions)
                             scopedQueueCompletionAttempts.set(receipt.receiptId, attempt);
@@ -3924,19 +3924,19 @@ export function createTelegramUpdateWorkerRuntime(deps) {
                         })), completions.map((completion) => ({ ...completion })));
                         if (!current() ||
                             !isDeepStrictEqual(result.sourceCompletions, completions)) {
-                            throw new Error("Telegram scoped queue completion ACK was not confirmed.");
+                            throw new Error("Bale scoped queue completion ACK was not confirmed.");
                         }
                         const removed = new Set(result.removedUpdateIds);
                         if (removed.size !== sourceUpdateIds.size ||
                             [...sourceUpdateIds].some((id) => !removed.has(id))) {
-                            throw new Error("Telegram scoped queue completion did not remove every source.");
+                            throw new Error("Bale scoped queue completion did not remove every source.");
                         }
                     }
                     for (const completion of completions) {
                         if (!current() ||
                             !isDeepStrictEqual(inspectCompletion({ ...completion }), completion) ||
                             !current()) {
-                            throw new Error("Telegram scoped queue completion ACK was not retained under current authority.");
+                            throw new Error("Bale scoped queue completion ACK was not retained under current authority.");
                         }
                     }
                     // Every immutable whole receipt has a scoped queued-origin witness; native queued ACK continuity proves its complete removal.
@@ -3951,7 +3951,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             const removed = new Set(removedUpdateIds);
             if (removed.size !== sourceUpdateIds.size ||
                 [...sourceUpdateIds].some((updateId) => !removed.has(updateId))) {
-                blockWithFailure("journal-write", "queue-receipt-completion", new Error(`Telegram ${input.reason} did not complete every receipt source.`));
+                blockWithFailure("journal-write", "queue-receipt-completion", new Error(`Bale ${input.reason} did not complete every receipt source.`));
                 return false;
             }
             receipts.forEach((receipt, index) => {
@@ -4028,7 +4028,7 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             state.phaseStartedAtMs = getNowMs();
             state.currentUpdateId = undefined;
             state.blockedReason = undefined;
-            clearTelegramUpdateWorkerClaimState(state, unsettledExecutions.size);
+            clearBaleUpdateWorkerClaimState(state, unsettledExecutions.size);
             notifyStateChange();
         },
         async waitForDrain() {
@@ -4036,50 +4036,50 @@ export function createTelegramUpdateWorkerRuntime(deps) {
             await Promise.allSettled([...pendingQueuePublications.values()].map((value) => value.task));
         },
         getState() {
-            return getTelegramUpdateWorkerStateSnapshot(state);
+            return getBaleUpdateWorkerStateSnapshot(state);
         },
     };
 }
-const TELEGRAM_UPDATE_EXECUTION_FENCE = Symbol("pi-telegram.update-execution-fence");
-export function getTelegramUpdateExecutionFence(update) {
+const BALE_UPDATE_EXECUTION_FENCE = Symbol("pi-bale.update-execution-fence");
+export function getBaleUpdateExecutionFence(update) {
     if (!update || typeof update !== "object")
         return undefined;
-    return update[TELEGRAM_UPDATE_EXECUTION_FENCE];
+    return update[BALE_UPDATE_EXECUTION_FENCE];
 }
-function bindTelegramUpdateExecutionFenceCarrier(value, execution) {
+function bindBaleUpdateExecutionFenceCarrier(value, execution) {
     if (!value || typeof value !== "object")
         return value;
-    Object.defineProperty(value, TELEGRAM_UPDATE_EXECUTION_FENCE, {
+    Object.defineProperty(value, BALE_UPDATE_EXECUTION_FENCE, {
         configurable: true,
         enumerable: false,
         value: execution,
     });
     return value;
 }
-function bindTelegramUpdateExecutionFence(update, execution) {
-    bindTelegramUpdateExecutionFenceCarrier(update, execution);
-    bindTelegramUpdateExecutionFenceCarrier(update.message, execution);
-    bindTelegramUpdateExecutionFenceCarrier(update.edited_message, execution);
-    bindTelegramUpdateExecutionFenceCarrier(update.callback_query, execution);
-    bindTelegramUpdateExecutionFenceCarrier(update.callback_query?.message, execution);
-    bindTelegramUpdateExecutionFenceCarrier(update.guest_message, execution);
-    bindTelegramUpdateExecutionFenceCarrier(update.message_reaction, execution);
+function bindBaleUpdateExecutionFence(update, execution) {
+    bindBaleUpdateExecutionFenceCarrier(update, execution);
+    bindBaleUpdateExecutionFenceCarrier(update.message, execution);
+    bindBaleUpdateExecutionFenceCarrier(update.edited_message, execution);
+    bindBaleUpdateExecutionFenceCarrier(update.callback_query, execution);
+    bindBaleUpdateExecutionFenceCarrier(update.callback_query?.message, execution);
+    bindBaleUpdateExecutionFenceCarrier(update.guest_message, execution);
+    bindBaleUpdateExecutionFenceCarrier(update.message_reaction, execution);
     return update;
 }
-export function assertTelegramUpdateExecutionCurrent(update) {
-    getTelegramUpdateExecutionFence(update)?.assertCurrent();
+export function assertBaleUpdateExecutionCurrent(update) {
+    getBaleUpdateExecutionFence(update)?.assertCurrent();
 }
-export function createTelegramUpdateExecutionFenceGuard(update) {
-    const execution = getTelegramUpdateExecutionFence(update);
+export function createBaleUpdateExecutionFenceGuard(update) {
+    const execution = getBaleUpdateExecutionFence(update);
     return () => execution?.assertCurrent();
 }
-export function carryTelegramUpdateExecutionFence(source, target) {
-    const execution = getTelegramUpdateExecutionFence(source);
+export function carryBaleUpdateExecutionFence(source, target) {
+    const execution = getBaleUpdateExecutionFence(source);
     return execution
-        ? bindTelegramUpdateExecutionFenceCarrier(target, execution)
+        ? bindBaleUpdateExecutionFenceCarrier(target, execution)
         : target;
 }
-const UPDATE_HANDLER_REGISTRY_KEY = "__piTelegramUpdateHandlerRegistry__";
+const UPDATE_HANDLER_REGISTRY_KEY = "__piBaleUpdateHandlerRegistry__";
 function isValidV1UpdateHandlerRegistry(candidate) {
     if (!candidate || typeof candidate !== "object")
         return false;
@@ -4119,14 +4119,14 @@ function getOrCreateUpdateHandlerRegistry() {
     return registry;
 }
 /**
- * Called by pi-telegram's own runtime to obtain the registry it dispatches
+ * Called by pi-bale's own runtime to obtain the registry it dispatches
  * through. Extension consumers should not call this; use
- * {@link registerTelegramUpdateHandler} instead.
+ * {@link registerBaleUpdateHandler} instead.
  */
-export function getTelegramUpdateHandlerRegistry() {
+export function getBaleUpdateHandlerRegistry() {
     return getOrCreateUpdateHandlerRegistry();
 }
-function mergeTelegramReportedAdmissionOutcome(current, next, updateId) {
+function mergeBaleReportedAdmissionOutcome(current, next, updateId) {
     if (!current || current.kind === "deferred")
         return next;
     if (next.kind === "deferred")
@@ -4147,17 +4147,17 @@ function mergeTelegramReportedAdmissionOutcome(current, next, updateId) {
                     next.expectedSource.completionSha256)
                 return current;
         }
-        throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${updateId} reported conflicting completion sources.`);
+        throw new BaleUpdateAdmissionOutcomeError(`Bale update ${updateId} reported conflicting completion sources.`);
     }
     if (current.kind === "queued" &&
         next.kind === "queued" &&
-        areTelegramQueueAdmissionReceiptsEqual(current, next))
+        areBaleQueueAdmissionReceiptsEqual(current, next))
         return current;
-    throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${updateId} reported conflicting queue outcomes.`);
+    throw new BaleUpdateAdmissionOutcomeError(`Bale update ${updateId} reported conflicting queue outcomes.`);
 }
-export function createTelegramInputCustodyWorkerJournalPort(store) {
+export function createBaleInputCustodyWorkerJournalPort(store) {
     const legacyMutation = () => {
-        throw new TelegramUpdateAdmissionOutcomeError("Telegram v3 custody forbids legacy raw worker settlement.");
+        throw new BaleUpdateAdmissionOutcomeError("Bale v3 custody forbids legacy raw worker settlement.");
     };
     return {
         read: () => store.read(),
@@ -4172,7 +4172,7 @@ export function createTelegramInputCustodyWorkerJournalPort(store) {
                     entry.queueKind === receipt.queueKind &&
                     !entry.queueHandoff &&
                     entry.queueOwner !== undefined &&
-                    areTelegramUpdateJournalQueueOwnersEqual(entry.queueOwner, owner)));
+                    areBaleUpdateJournalQueueOwnersEqual(entry.queueOwner, owner)));
         },
         markQueued: legacyMutation,
         markExecutionFailure: legacyMutation,
@@ -4187,13 +4187,13 @@ export function createTelegramInputCustodyWorkerJournalPort(store) {
         },
     };
 }
-export function createTelegramInputCustodyLegacyDispositionRuntime(deps) {
+export function createBaleInputCustodyLegacyDispositionRuntime(deps) {
     const withBinding = (recoveryKey, operation) => {
         if (!recoveryKey)
-            throw new TelegramUpdateAdmissionOutcomeError("Telegram legacy custody disposition binding is unavailable.");
+            throw new BaleUpdateAdmissionOutcomeError("Bale legacy custody disposition binding is unavailable.");
         return deps.withBindingReference(recoveryKey, (binding) => {
             if (binding.recoveryKey !== recoveryKey)
-                throw new TelegramUpdateAdmissionOutcomeError("Telegram legacy custody disposition binding is unavailable.");
+                throw new BaleUpdateAdmissionOutcomeError("Bale legacy custody disposition binding is unavailable.");
             return operation(binding.journal);
         });
     };
@@ -4206,7 +4206,7 @@ export function createTelegramInputCustodyLegacyDispositionRuntime(deps) {
         },
     };
 }
-export function createTelegramInputCustodyHandoffClient(deps) {
+export function createBaleInputCustodyHandoffClient(deps) {
     return {
         async transfer(input) {
             const reconciled = deps.resolveAcceptedReference?.({
@@ -4239,7 +4239,7 @@ export function createTelegramInputCustodyHandoffClient(deps) {
                 !response.result ||
                 typeof response.result !== "object" ||
                 Array.isArray(response.result))
-                throw new Error("Telegram input custody handoff acknowledgement is missing or rejected.");
+                throw new Error("Bale input custody handoff acknowledgement is missing or rejected.");
             const result = response.result;
             const source = result.source;
             if (result.sourceRecoveryKey !== offered.source.journalBindingKey ||
@@ -4255,7 +4255,7 @@ export function createTelegramInputCustodyHandoffClient(deps) {
                 source.owner
                     .handoffId !== offered.handoff.handoffId ||
                 typeof result.duplicate !== "boolean")
-                throw new Error("Telegram input custody handoff acknowledgement returned mismatched authority.");
+                throw new Error("Bale input custody handoff acknowledgement returned mismatched authority.");
             return {
                 sourceRecoveryKey: result.sourceRecoveryKey,
                 source: {
@@ -4270,7 +4270,7 @@ export function createTelegramInputCustodyHandoffClient(deps) {
         },
     };
 }
-export function createTelegramInputCustodyHandoffAcceptanceRuntime(deps) {
+export function createBaleInputCustodyHandoffAcceptanceRuntime(deps) {
     return {
         accept(input, ctx) {
             const binding = deps.resolveBinding(input.sourceRecoveryKey);
@@ -4278,7 +4278,7 @@ export function createTelegramInputCustodyHandoffAcceptanceRuntime(deps) {
                 binding.recoveryKey !== input.sourceRecoveryKey ||
                 binding.recipientBindingKey !== input.recipientBindingKey ||
                 input.source.journalBindingKey !== input.sourceRecoveryKey)
-                throw new Error("Telegram input custody handoff binding is unavailable or changed.");
+                throw new Error("Bale input custody handoff binding is unavailable or changed.");
             const accepted = binding.journal.acceptInputHandoff({
                 source: input.source,
                 recipientOwner: binding.recipientOwner,
@@ -4286,7 +4286,7 @@ export function createTelegramInputCustodyHandoffAcceptanceRuntime(deps) {
             });
             const acceptedHandoffId = accepted.receipt.owner.handoffId;
             if (!acceptedHandoffId || acceptedHandoffId !== input.handoffId)
-                throw new Error("Telegram input custody handoff acceptance returned mismatched authority.");
+                throw new Error("Bale input custody handoff acceptance returned mismatched authority.");
             binding.signalWorker(ctx);
             return {
                 sourceRecoveryKey: binding.recoveryKey,
@@ -4302,7 +4302,7 @@ export function createTelegramInputCustodyHandoffAcceptanceRuntime(deps) {
         },
     };
 }
-export function createTelegramInputCustodyForwardReferenceResolver(deps) {
+export function createBaleInputCustodyForwardReferenceResolver(deps) {
     return (input) => {
         if (input.recipientBindingKey !== deps.recipientBindingKey)
             return undefined;
@@ -4319,7 +4319,7 @@ export function createTelegramInputCustodyForwardReferenceResolver(deps) {
             claim.recipientBindingKey !== deps.recipientBindingKey ||
             !claim.owner.handoffId ||
             claim.owner.sessionGeneration !== deps.recipientOwner.sessionGeneration ||
-            !isTelegramUpdateJournalQueueOwnerProcess(claim.owner, deps.recipientOwner))
+            !isBaleUpdateJournalQueueOwnerProcess(claim.owner, deps.recipientOwner))
             return undefined;
         return {
             sourceRecoveryKey: deps.recoveryKey,
@@ -4333,14 +4333,14 @@ export function createTelegramInputCustodyForwardReferenceResolver(deps) {
         };
     };
 }
-export function createTelegramInputCustodySourceReferenceWakeRuntime(deps) {
+export function createBaleInputCustodySourceReferenceWakeRuntime(deps) {
     return {
         wakeSource(input, ctx) {
             const binding = deps.resolveBinding(input.sourceRecoveryKey);
             if (!binding ||
                 binding.recoveryKey !== input.sourceRecoveryKey ||
                 binding.recipientBindingKey !== input.recipientBindingKey)
-                throw new Error("Telegram follower source-reference binding is unavailable or changed.");
+                throw new Error("Bale follower source-reference binding is unavailable or changed.");
             const entry = binding.journal
                 .read()
                 .entries.find((candidate) => candidate.updateId === input.sourceUpdateId);
@@ -4356,17 +4356,17 @@ export function createTelegramInputCustodySourceReferenceWakeRuntime(deps) {
                 claim.owner.handoffId !== input.sourceClaim.handoffId ||
                 claim.owner.sessionGeneration !==
                     binding.recipientOwner.sessionGeneration ||
-                !isTelegramUpdateJournalQueueOwnerProcess(claim.owner, binding.recipientOwner))
-                throw new Error("Telegram follower source-reference claim is unavailable or changed.");
+                !isBaleUpdateJournalQueueOwnerProcess(claim.owner, binding.recipientOwner))
+                throw new Error("Bale follower source-reference claim is unavailable or changed.");
             binding.signalWorker(ctx);
         },
     };
 }
-export function createTelegramInputCustodyBusBindingRuntime(deps) {
-    const acceptance = createTelegramInputCustodyHandoffAcceptanceRuntime({
+export function createBaleInputCustodyBusBindingRuntime(deps) {
+    const acceptance = createBaleInputCustodyHandoffAcceptanceRuntime({
         resolveBinding: deps.resolveBinding,
     });
-    const wake = createTelegramInputCustodySourceReferenceWakeRuntime({
+    const wake = createBaleInputCustodySourceReferenceWakeRuntime({
         resolveBinding: deps.resolveBinding,
     });
     return {
@@ -4379,7 +4379,7 @@ export function createTelegramInputCustodyBusBindingRuntime(deps) {
             const binding = deps.resolveBinding(recoveryKey);
             if (!binding || binding.recoveryKey !== recoveryKey)
                 return undefined;
-            return createTelegramInputCustodyForwardReferenceResolver({
+            return createBaleInputCustodyForwardReferenceResolver({
                 recoveryKey: binding.recoveryKey,
                 recipientBindingKey: binding.recipientBindingKey,
                 recipientOwner: binding.recipientOwner,
@@ -4388,7 +4388,7 @@ export function createTelegramInputCustodyBusBindingRuntime(deps) {
         },
     };
 }
-export function evaluateTelegramInputCustodyActivationReadiness(input) {
+export function evaluateBaleInputCustodyActivationReadiness(input) {
     if (!input.requested)
         return { enabled: false, blocker: "disabled" };
     if (!input.legacyWritersExcluded)
@@ -4401,21 +4401,21 @@ export function evaluateTelegramInputCustodyActivationReadiness(input) {
         return { enabled: false, blocker: "peer-capability-mismatch" };
     return { enabled: true };
 }
-export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
+export function createBaleInputCustodyReadinessEvidenceStore(deps) {
     const decode = (serialized) => {
         if (serialized === undefined)
             return { version: 1, revision: 0 };
         if (serialized.length > 16_384)
-            throw new Error("Telegram custody readiness evidence exceeds capacity.");
+            throw new Error("Bale custody readiness evidence exceeds capacity.");
         let value;
         try {
             value = JSON.parse(serialized);
         }
         catch {
-            throw new Error("Telegram custody readiness evidence is malformed.");
+            throw new Error("Bale custody readiness evidence is malformed.");
         }
         if (!value || typeof value !== "object" || Array.isArray(value))
-            throw new Error("Telegram custody readiness evidence is malformed.");
+            throw new Error("Bale custody readiness evidence is malformed.");
         const snapshot = value;
         if (snapshot.version !== 1 ||
             !Number.isSafeInteger(snapshot.revision) ||
@@ -4428,12 +4428,12 @@ export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
                 "startupExclusion",
                 "migrationCompletion",
             ].includes(key)))
-            throw new Error("Telegram custody readiness evidence is malformed.");
+            throw new Error("Bale custody readiness evidence is malformed.");
         const validate = (evidence, kind) => {
             if (evidence === undefined)
                 return undefined;
             if (!evidence || typeof evidence !== "object" || Array.isArray(evidence))
-                throw new Error("Telegram custody readiness evidence is malformed.");
+                throw new Error("Bale custody readiness evidence is malformed.");
             const record = evidence;
             const statuses = kind === "writer"
                 ? ["excluded", "present", "unknown"]
@@ -4482,7 +4482,7 @@ export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
                 (suppliedLinkedKeys.length !== 0 &&
                     suppliedLinkedKeys.length !== linkedKeys.length) ||
                 linkedMalformed)
-                throw new Error("Telegram custody readiness evidence is malformed.");
+                throw new Error("Bale custody readiness evidence is malformed.");
             return {
                 version: 1,
                 profileKey: record.profileKey,
@@ -4513,13 +4513,13 @@ export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
             if (!candidate ||
                 typeof candidate.profileKey !== "string" ||
                 typeof candidate.recoveryKey !== "string")
-                throw new Error("Telegram custody readiness evidence is malformed.");
-            startupExclusion = normalizeTelegramInputCustodyStartupExclusionAuthority(candidate, {
+                throw new Error("Bale custody readiness evidence is malformed.");
+            startupExclusion = normalizeBaleInputCustodyStartupExclusionAuthority(candidate, {
                 profileKey: candidate.profileKey,
                 recoveryKey: candidate.recoveryKey,
             });
             if (!startupExclusion)
-                throw new Error("Telegram custody readiness evidence is malformed.");
+                throw new Error("Bale custody readiness evidence is malformed.");
         }
         let migrationCompletion;
         if (snapshot.migrationCompletion !== undefined) {
@@ -4527,14 +4527,14 @@ export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
             if (!candidate ||
                 typeof candidate.profileKey !== "string" ||
                 typeof candidate.recoveryKey !== "string")
-                throw new Error("Telegram custody readiness evidence is malformed.");
+                throw new Error("Bale custody readiness evidence is malformed.");
             migrationCompletion =
-                normalizeTelegramInputCustodyMigrationCompletionAuthority(candidate, {
+                normalizeBaleInputCustodyMigrationCompletionAuthority(candidate, {
                     profileKey: candidate.profileKey,
                     recoveryKey: candidate.recoveryKey,
                 });
             if (!migrationCompletion)
-                throw new Error("Telegram custody readiness evidence is malformed.");
+                throw new Error("Bale custody readiness evidence is malformed.");
         }
         const identities = [];
         if (writerExclusion)
@@ -4547,7 +4547,7 @@ export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
             identities.push(migrationCompletion);
         if (identities.some((evidence) => evidence.profileKey !== identities[0]?.profileKey ||
             evidence.recoveryKey !== identities[0]?.recoveryKey))
-            throw new Error("Telegram custody readiness evidence has conflicting identities.");
+            throw new Error("Bale custody readiness evidence has conflicting identities.");
         if (writerExclusion?.startupAuthorityId &&
             startupExclusion &&
             (writerExclusion.startupAuthorityId !== startupExclusion.authorityId ||
@@ -4555,7 +4555,7 @@ export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
                     startupExclusion.closureOperationId ||
                 writerExclusion.writerInventorySha256 !==
                     startupExclusion.writerInventorySha256))
-            throw new Error("Telegram custody readiness evidence has conflicting authorities.");
+            throw new Error("Bale custody readiness evidence has conflicting authorities.");
         if (migration?.migrationAuthorityId &&
             migrationCompletion &&
             (migration.migrationAuthorityId !== migrationCompletion.authorityId ||
@@ -4567,14 +4567,14 @@ export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
                     migrationCompletion.migrationInventorySha256 ||
                 migration.resultingSourceFamily !==
                     migrationCompletion.resultingSourceFamily))
-            throw new Error("Telegram custody readiness evidence has conflicting migration authorities.");
+            throw new Error("Bale custody readiness evidence has conflicting migration authorities.");
         if (migrationCompletion &&
             startupExclusion &&
             (migrationCompletion.startupAuthorityId !==
                 startupExclusion.authorityId ||
                 migrationCompletion.closureOperationId !==
                     startupExclusion.closureOperationId))
-            throw new Error("Telegram custody readiness evidence has conflicting cutover authorities.");
+            throw new Error("Bale custody readiness evidence has conflicting cutover authorities.");
         return {
             version: 1,
             revision: snapshot.revision,
@@ -4588,7 +4588,7 @@ export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
     const publish = (input) => deps.withSerialization(() => {
         const current = read();
         if (current.revision !== input.expectedRevision)
-            throw new Error("Telegram custody readiness evidence revision changed.");
+            throw new Error("Bale custody readiness evidence revision changed.");
         const next = {
             ...current,
             revision: current.revision + 1,
@@ -4611,13 +4611,13 @@ export function createTelegramInputCustodyReadinessEvidenceStore(deps) {
                     : validated.migrationCompletion;
         if (!normalizedEvidence ||
             !deps.authorizePublication(input.kind, normalizedEvidence))
-            throw new Error("Telegram custody readiness evidence publication is unauthorized.");
+            throw new Error("Bale custody readiness evidence publication is unauthorized.");
         deps.publishRetained(serialized);
         return validated;
     });
     return { read, publish };
 }
-export function normalizeTelegramInputCustodyStartupExclusionAuthority(value, expected) {
+export function normalizeBaleInputCustodyStartupExclusionAuthority(value, expected) {
     if (!value || typeof value !== "object" || Array.isArray(value))
         return undefined;
     const record = value;
@@ -4661,7 +4661,7 @@ export function normalizeTelegramInputCustodyStartupExclusionAuthority(value, ex
         authorizedAtMs: record.authorizedAtMs,
     };
 }
-export function evaluateTelegramInputCustodyWriterExclusionEvidence(input) {
+export function evaluateBaleInputCustodyWriterExclusionEvidence(input) {
     const identity = { ...input.expected };
     const authority = input.startupAuthority;
     if (!input.inventory.complete ||
@@ -4705,7 +4705,7 @@ export function evaluateTelegramInputCustodyWriterExclusionEvidence(input) {
         ...authorityBinding,
     };
 }
-export function normalizeTelegramInputCustodyMigrationCompletionAuthority(value, expected) {
+export function normalizeBaleInputCustodyMigrationCompletionAuthority(value, expected) {
     if (!value || typeof value !== "object" || Array.isArray(value))
         return undefined;
     const record = value;
@@ -4755,7 +4755,7 @@ export function normalizeTelegramInputCustodyMigrationCompletionAuthority(value,
         authorizedAtMs: record.authorizedAtMs,
     };
 }
-export function executeTelegramInputCustodyWriterCutover(input) {
+export function executeBaleInputCustodyWriterCutover(input) {
     const matchesAuthority = (candidate) => Boolean(candidate &&
         candidate.status === "enforced" &&
         candidate.version === 1 &&
@@ -4771,7 +4771,7 @@ export function executeTelegramInputCustodyWriterCutover(input) {
         input.closure.recoveryKey !== input.expected.recoveryKey ||
         !matchesAuthority(input.evidenceStore.read().startupExclusion))
         return { kind: "blocked", blocker: "startup-authority" };
-    const evidence = evaluateTelegramInputCustodyWriterExclusionEvidence({
+    const evidence = evaluateBaleInputCustodyWriterExclusionEvidence({
         expected: input.expected,
         inventory: input.inventory,
         startupAuthority: input.startupAuthority,
@@ -4789,7 +4789,7 @@ export function executeTelegramInputCustodyWriterCutover(input) {
         installed.mode.startupAuthorityId !== evidence.startupAuthorityId ||
         installed.mode.closureOperationId !== evidence.closureOperationId ||
         installed.mode.writerInventorySha256 !== evidence.writerInventorySha256)
-        throw new Error("Telegram custody writer protocol installation returned mismatched authority.");
+        throw new Error("Bale custody writer protocol installation returned mismatched authority.");
     const current = input.evidenceStore.read();
     if (!matchesAuthority(current.startupExclusion))
         return { kind: "blocked", blocker: "startup-authority", evidence };
@@ -4813,12 +4813,12 @@ export function executeTelegramInputCustodyWriterCutover(input) {
     });
     return { kind: "completed", mode: installed.mode, evidence, resumed: false };
 }
-function matchesTelegramInputCustodyActivationEvidence(evidence, expected) {
+function matchesBaleInputCustodyActivationEvidence(evidence, expected) {
     return Boolean(evidence &&
         evidence.profileKey === expected.profileKey &&
         evidence.recoveryKey === expected.recoveryKey);
 }
-export function executeTelegramInputCustodyMigrationCompletion(input) {
+export function executeBaleInputCustodyMigrationCompletion(input) {
     const matchesAuthority = (candidate) => Boolean(candidate &&
         candidate.version === 1 &&
         candidate.status === "authorized" &&
@@ -4873,8 +4873,8 @@ export function executeTelegramInputCustodyMigrationCompletion(input) {
     });
     return { kind: "completed", evidence, resumed: false };
 }
-export function createTelegramInputCustodyProvenReadinessResolver(deps) {
-    return createTelegramInputCustodyActivationReadinessResolver({
+export function createBaleInputCustodyProvenReadinessResolver(deps) {
+    return createBaleInputCustodyActivationReadinessResolver({
         isRequested: deps.isRequested,
         inspectSource() {
             let source;
@@ -4886,7 +4886,7 @@ export function createTelegramInputCustodyProvenReadinessResolver(deps) {
             }
             const expected = deps.expectedIdentity();
             const authority = deps.readMigrationCompletionAuthority();
-            return matchesTelegramInputCustodyActivationEvidence(authority, expected) &&
+            return matchesBaleInputCustodyActivationEvidence(authority, expected) &&
                 authority?.status === "authorized" &&
                 authority.resultingSourceFamily === source
                 ? source
@@ -4897,9 +4897,9 @@ export function createTelegramInputCustodyProvenReadinessResolver(deps) {
             const evidence = deps.readWriterExclusionEvidence();
             const authority = deps.readStartupExclusionAuthority();
             const mode = deps.readWriterProtocolMode();
-            return (matchesTelegramInputCustodyActivationEvidence(evidence, expected) &&
-                matchesTelegramInputCustodyActivationEvidence(authority, expected) &&
-                matchesTelegramInputCustodyActivationEvidence(mode, expected) &&
+            return (matchesBaleInputCustodyActivationEvidence(evidence, expected) &&
+                matchesBaleInputCustodyActivationEvidence(authority, expected) &&
+                matchesBaleInputCustodyActivationEvidence(mode, expected) &&
                 evidence?.version === 1 &&
                 evidence.status === "excluded" &&
                 authority?.version === 1 &&
@@ -4925,8 +4925,8 @@ export function createTelegramInputCustodyProvenReadinessResolver(deps) {
             catch {
                 source = "ambiguous";
             }
-            return (matchesTelegramInputCustodyActivationEvidence(evidence, expected) &&
-                matchesTelegramInputCustodyActivationEvidence(authority, expected) &&
+            return (matchesBaleInputCustodyActivationEvidence(evidence, expected) &&
+                matchesBaleInputCustodyActivationEvidence(authority, expected) &&
                 evidence?.version === 1 &&
                 evidence.status === "complete" &&
                 authority?.version === 1 &&
@@ -4945,7 +4945,7 @@ export function createTelegramInputCustodyProvenReadinessResolver(deps) {
         listPeerReadiness: deps.listPeerReadiness,
     });
 }
-export function createTelegramInputCustodyActivationReadinessResolver(deps) {
+export function createBaleInputCustodyActivationReadinessResolver(deps) {
     return () => {
         const requested = deps.isRequested();
         if (!requested)
@@ -4984,7 +4984,7 @@ export function createTelegramInputCustodyActivationReadinessResolver(deps) {
         catch {
             peerReadiness = ["unknown"];
         }
-        return evaluateTelegramInputCustodyActivationReadiness({
+        return evaluateBaleInputCustodyActivationReadiness({
             requested,
             sourceStatus,
             legacyWritersExcluded,
@@ -4993,7 +4993,7 @@ export function createTelegramInputCustodyActivationReadinessResolver(deps) {
         });
     };
 }
-export function createTelegramInputCustodyLifecycleBindingResolver(deps) {
+export function createBaleInputCustodyLifecycleBindingResolver(deps) {
     // Stable per store, not per descriptor: a renewed source has new captured worker ports.
     const ports = new WeakMap();
     return () => {
@@ -5008,7 +5008,7 @@ export function createTelegramInputCustodyLifecycleBindingResolver(deps) {
             return undefined;
         let port = ports.get(source.journal);
         if (!port) {
-            port = createTelegramInputCustodyWorkerJournalPort(source.journal);
+            port = createBaleInputCustodyWorkerJournalPort(source.journal);
             ports.set(source.journal, port);
         }
         return {
@@ -5030,7 +5030,7 @@ export function createTelegramInputCustodyLifecycleBindingResolver(deps) {
         };
     };
 }
-export function createTelegramCustodiedExecutionSession(input) {
+export function createBaleCustodiedExecutionSession(input) {
     const receipts = new Map();
     const settledQueues = new Map();
     const settle = async (updateId, outcome) => {
@@ -5047,16 +5047,16 @@ export function createTelegramCustodiedExecutionSession(input) {
                 settledQueues.delete(updateId);
                 return duplicate;
             }
-            throw new TelegramUpdateAdmissionOutcomeError(`Telegram deferred custody ${updateId} has no exact running receipt.`);
+            throw new BaleUpdateAdmissionOutcomeError(`Bale deferred custody ${updateId} has no exact running receipt.`);
         }
         if (outcome.kind === "deferred")
             return { status: "deferred", receipt };
         if (outcome.kind === "queued") {
             if (!outcome.sourceUpdateIds.includes(updateId))
-                throw new TelegramUpdateAdmissionOutcomeError("Telegram grouped queue custody omitted the settling input.");
+                throw new BaleUpdateAdmissionOutcomeError("Bale grouped queue custody omitted the settling input.");
             const grouped = outcome.sourceUpdateIds.map((sourceUpdateId) => receipts.get(sourceUpdateId));
             if (grouped.some((candidate) => !candidate))
-                throw new TelegramUpdateAdmissionOutcomeError("Telegram grouped queue custody omitted an exact running source receipt.");
+                throw new BaleUpdateAdmissionOutcomeError("Bale grouped queue custody omitted an exact running source receipt.");
             const queued = input.journal.queueInputs({
                 queueKind: outcome.queueKind,
                 receiptId: outcome.receiptId,
@@ -5101,21 +5101,21 @@ export function createTelegramCustodiedExecutionSession(input) {
         },
     };
 }
-export async function executeTelegramCustodiedInput(input) {
-    return createTelegramCustodiedExecutionSession(input).execute(input.update, input.execute);
+export async function executeBaleCustodiedInput(input) {
+    return createBaleCustodiedExecutionSession(input).execute(input.update, input.execute);
 }
 /**
  * Compose the stable public handler registry with source-bound semantic
  * admission. Production polling switches to this only with the journal worker.
  */
-export function createTelegramUpdateAdmissionHandle(deps) {
+export function createBaleUpdateAdmissionHandle(deps) {
     if (deps.onLateOutcome && !deps.onLateOutcomeError) {
-        throw new Error("Telegram late admission outcomes require a diagnostic error sink.");
+        throw new Error("Bale late admission outcomes require a diagnostic error sink.");
     }
-    return createTelegramUpdateSourceAdmissionHandle(deps);
+    return createBaleUpdateSourceAdmissionHandle(deps);
 }
 /** Same native source/fence/late-ACK owner, with an internal binding-only callback instead of registry/ordinary dispatch. */
-function createTelegramUpdateSourceAdmissionHandle(deps, capture) {
+function createBaleUpdateSourceAdmissionHandle(deps, capture) {
     const registry = deps.registry ?? getOrCreateUpdateHandlerRegistry();
     let nextExecutionGeneration = 0;
     return async (update, ctx, signal) => {
@@ -5160,7 +5160,7 @@ function createTelegramUpdateSourceAdmissionHandle(deps, capture) {
         let completionAttempted = false;
         let completedSource;
         const completionObservers = new Set();
-        const boundUpdate = bindTelegramUpdateExecutionFence(bindTelegramUpdateAdmissionSource(update, (next) => {
+        const boundUpdate = bindBaleUpdateExecutionFence(bindBaleUpdateAdmissionSource(update, (next) => {
             if (!execution.isCurrent())
                 return;
             if (next.kind === "deferred" && next.routingReview) {
@@ -5168,18 +5168,18 @@ function createTelegramUpdateSourceAdmissionHandle(deps, capture) {
                     settlementReported ||
                     routingClaims > 0 ||
                     !deps.isHistoricalSource?.({ updateId: update.update_id, signal })) {
-                    throw new TelegramUpdateAdmissionOutcomeError("Historical review cannot override accepted or selected work.");
+                    throw new BaleUpdateAdmissionOutcomeError("Historical review cannot override accepted or selected work.");
                 }
                 suspended = true;
             }
             if (next.kind !== "deferred")
                 settlementReported = true;
             if (immediate) {
-                outcome = mergeTelegramReportedAdmissionOutcome(outcome, next, update.update_id);
+                outcome = mergeBaleReportedAdmissionOutcome(outcome, next, update.update_id);
                 return;
             }
             if (!deps.onLateOutcome) {
-                throw new TelegramUpdateAdmissionOutcomeError(`Telegram update ${update.update_id} reported a late outcome without an owner.`);
+                throw new BaleUpdateAdmissionOutcomeError(`Bale update ${update.update_id} reported a late outcome without an owner.`);
             }
             const expectedSource = next.kind === "complete" &&
                 next.expectedSource &&
@@ -5334,10 +5334,10 @@ function createTelegramUpdateSourceAdmissionHandle(deps, capture) {
                 if (settlementReported || routingClaims || suspended)
                     return undefined;
                 if (routingClockUnknown)
-                    throw new TelegramUpdateAdmissionOutcomeError("Telegram routing input clock publication is unconfirmed.");
+                    throw new BaleUpdateAdmissionOutcomeError("Bale routing input clock publication is unconfirmed.");
                 const ids = [...sourceUpdateIds];
                 if (routingSourceIds && !isDeepStrictEqual(ids, routingSourceIds))
-                    throw new TelegramUpdateAdmissionOutcomeError("Telegram routing input source membership changed.");
+                    throw new BaleUpdateAdmissionOutcomeError("Bale routing input source membership changed.");
                 try {
                     routingLifetime = deps.armRoutingInput?.({
                         updateId: update.update_id,
@@ -5358,12 +5358,12 @@ function createTelegramUpdateSourceAdmissionHandle(deps, capture) {
             acquireRouting: (select = false, sourceUpdateIds) => {
                 execution.assertCurrent();
                 if (select && routingClockUnknown)
-                    throw new TelegramUpdateAdmissionOutcomeError("Telegram routing input clock publication is unconfirmed; selection is protected.");
+                    throw new BaleUpdateAdmissionOutcomeError("Bale routing input clock publication is unconfirmed; selection is protected.");
                 if (select && routingLifetime && !routingSelectionConfirmed) {
                     if (routingSelectionAttempted)
-                        throw new TelegramUpdateAdmissionOutcomeError("Telegram routing selection is unconfirmed; no replay is permitted.");
+                        throw new BaleUpdateAdmissionOutcomeError("Bale routing selection is unconfirmed; no replay is permitted.");
                     if (!isDeepStrictEqual(sourceUpdateIds ?? [update.update_id], routingSourceIds))
-                        throw new TelegramUpdateAdmissionOutcomeError("Telegram routing input selection changed its source membership.");
+                        throw new BaleUpdateAdmissionOutcomeError("Bale routing input selection changed its source membership.");
                     routingSelectionAttempted = true;
                     routingSelectionConfirmed =
                         deps.selectRoutingInput?.({
@@ -5373,7 +5373,7 @@ function createTelegramUpdateSourceAdmissionHandle(deps, capture) {
                             sourceUpdateIds: routingSourceIds,
                         }) === true;
                     if (!routingSelectionConfirmed)
-                        throw new TelegramUpdateAdmissionOutcomeError("Telegram routing input choice is expired or unavailable.");
+                        throw new BaleUpdateAdmissionOutcomeError("Bale routing input choice is expired or unavailable.");
                 }
                 routingClaims += 1;
                 let released = false;
@@ -5389,7 +5389,7 @@ function createTelegramUpdateSourceAdmissionHandle(deps, capture) {
             execution.assertCurrent();
             if (capture) {
                 capture(boundUpdate);
-                reportTelegramUpdateDeferred(boundUpdate.message);
+                reportBaleUpdateDeferred(boundUpdate.message);
             }
             else
                 await deps.defaultHandle(boundUpdate, ctx, execution);
@@ -5404,12 +5404,12 @@ function createTelegramUpdateSourceAdmissionHandle(deps, capture) {
         return outcome ?? { kind: "complete" };
     };
 }
-export function createTelegramCustodiedUpdateAdmissionHandle(deps) {
-    const session = createTelegramCustodiedExecutionSession({
+export function createBaleCustodiedUpdateAdmissionHandle(deps) {
+    const session = createBaleCustodiedExecutionSession({
         journal: deps.journal,
         recipientBindingKey: deps.recipientBindingKey,
     });
-    const admission = createTelegramUpdateAdmissionHandle({
+    const admission = createBaleUpdateAdmissionHandle({
         defaultHandle: deps.defaultHandle,
         registry: deps.registry,
         async onLateOutcome(outcome, details) {
@@ -5429,9 +5429,9 @@ const acknowledgedQueueReceiptCompletions = new WeakMap();
 const isQueueReceiptCompletionAcknowledged = (receipt) => {
     const acknowledged = acknowledgedQueueReceiptCompletions.get(receipt);
     return (acknowledged !== undefined &&
-        areTelegramQueueAdmissionReceiptsEqual(acknowledged, receipt));
+        areBaleQueueAdmissionReceiptsEqual(acknowledged, receipt));
 };
-export function createTelegramQueueAdmissionSettlementMuxRuntime(runtimes) {
+export function createBaleQueueAdmissionSettlementMuxRuntime(runtimes) {
     // Plan the whole request before mutation; unready is not an acknowledgement of completion.
     const complete = (items, ctx, kind) => {
         const plan = new Map();
@@ -5460,7 +5460,7 @@ export function createTelegramQueueAdmissionSettlementMuxRuntime(runtimes) {
                     candidates.some((runtime) => {
                         const candidate = settlementOwner(runtime, receipt);
                         return (!candidate ||
-                            !areTelegramUpdateJournalQueueOwnersEqual(owner, candidate));
+                            !areBaleUpdateJournalQueueOwnersEqual(owner, candidate));
                     }))
                     return false;
             }
@@ -5489,8 +5489,8 @@ export function createTelegramQueueAdmissionSettlementMuxRuntime(runtimes) {
                 if (!candidate)
                     continue;
                 if (owner &&
-                    !areTelegramUpdateJournalQueueOwnersEqual(owner, candidate)) {
-                    throw new TelegramUpdateAdmissionOutcomeError(`Telegram queue receipt ${receipt.receiptId} has multiple live owners.`);
+                    !areBaleUpdateJournalQueueOwnersEqual(owner, candidate)) {
+                    throw new BaleUpdateAdmissionOutcomeError(`Bale queue receipt ${receipt.receiptId} has multiple live owners.`);
                 }
                 owner = candidate;
             }
@@ -5501,7 +5501,7 @@ export function createTelegramQueueAdmissionSettlementMuxRuntime(runtimes) {
         onItemsDiscarded: (items, ctx) => complete(items, ctx, "discard"),
     };
 }
-export function createTelegramQueueAdmissionSettlementRuntime(worker) {
+export function createBaleQueueAdmissionSettlementRuntime(worker) {
     const complete = (items, ctx, reason) => {
         const receipts = [];
         for (const item of items) {
@@ -5526,7 +5526,7 @@ export function createTelegramQueueAdmissionSettlementRuntime(worker) {
         onItemsDiscarded: (items, ctx) => complete(items, ctx, "discard"),
     };
 }
-export function createTelegramQueueHandoffControlExecutionFactory(deps) {
+export function createBaleQueueHandoffControlExecutionFactory(deps) {
     return (payload) => async (ctx) => {
         if (!deps.isContextCurrent(ctx))
             return;
@@ -5537,23 +5537,23 @@ export function createTelegramQueueHandoffControlExecutionFactory(deps) {
         await deps.openModelMenu(payload.chatId, payload.replyToMessageId, ctx, payload.target?.threadId);
     };
 }
-function assertTelegramQueueHandoffStageMatches(stage, receipt) {
+function assertBaleQueueHandoffStageMatches(stage, receipt) {
     if (stage.status !== "staged" ||
         stage.receiptId !== receipt.receiptId ||
         stage.sourceUpdateIds.length !== receipt.sourceUpdateIds.length ||
         stage.sourceUpdateIds.some((updateId, index) => updateId !== receipt.sourceUpdateIds[index])) {
-        throw new Error("Telegram queue handoff staging returned a mismatched receipt.");
+        throw new Error("Bale queue handoff staging returned a mismatched receipt.");
     }
 }
-export async function coordinateTelegramQueueHandoff(input) {
-    const handoff = createTelegramQueueHandoff({
+export async function coordinateBaleQueueHandoff(input) {
+    const handoff = createBaleQueueHandoff({
         handoffToken: input.handoffToken,
         item: input.item,
         steerSupported: input.steerSupported,
     });
     const receipt = handoff.payload.admissionReceipts[0];
     if (!receipt || handoff.payload.admissionReceipts.length !== 1) {
-        throw new Error("Telegram queue handoff requires exactly one complete receipt.");
+        throw new Error("Bale queue handoff requires exactly one complete receipt.");
     }
     const handoffInput = {
         queueKind: receipt.queueKind,
@@ -5572,7 +5572,7 @@ export async function coordinateTelegramQueueHandoff(input) {
             recipientOwner: input.recipientOwner,
             payload: handoff.payload,
         });
-        assertTelegramQueueHandoffStageMatches(stage, receipt);
+        assertBaleQueueHandoffStageMatches(stage, receipt);
     }
     catch (error) {
         let cancelled = false;
@@ -5600,10 +5600,10 @@ export async function coordinateTelegramQueueHandoff(input) {
         donorRemoved = input.removeDonorItem(receipt);
     }
     catch (error) {
-        throw new Error(`Telegram queue handoff donor removal failed after acceptance: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Bale queue handoff donor removal failed after acceptance: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (!donorRemoved) {
-        throw new Error(`Telegram queue handoff donor item ${receipt.receiptId} disappeared after acceptance.`);
+        throw new Error(`Bale queue handoff donor item ${receipt.receiptId} disappeared after acceptance.`);
     }
     return {
         status: "transferred",
@@ -5611,7 +5611,7 @@ export async function coordinateTelegramQueueHandoff(input) {
         queueOwner: { ...stage.queueOwner },
     };
 }
-export function createTelegramQueueHandoffReconciliationBinding(recordFailure) {
+export function createBaleQueueHandoffReconciliationBinding(recordFailure) {
     let reconcile;
     return {
         request(ctx) {
@@ -5622,7 +5622,7 @@ export function createTelegramQueueHandoffReconciliationBinding(recordFailure) {
         },
     };
 }
-export function createTelegramQueueHandoffRecipientRuntime(deps) {
+export function createBaleQueueHandoffRecipientRuntime(deps) {
     return async (envelope, ctx) => {
         const stage = deps.staging.stage(envelope.payload);
         const receipt = envelope.payload.admissionReceipts[0];
@@ -5632,22 +5632,22 @@ export function createTelegramQueueHandoffRecipientRuntime(deps) {
                 receiptId: stage.receiptId,
                 sourceUpdateIds: stage.sourceUpdateIds,
             });
-            throw new Error("Telegram queue handoff requires exactly one complete receipt.");
+            throw new Error("Bale queue handoff requires exactly one complete receipt.");
         }
         const journalBindingKey = receipt.journalBindingKey;
         if (!journalBindingKey) {
             deps.staging.cancel(receipt);
-            throw new Error("Telegram queue handoff receipt omitted its journal binding.");
+            throw new Error("Bale queue handoff receipt omitted its journal binding.");
         }
         if (deps.isTransportStampActive &&
             !deps.isTransportStampActive(envelope.payload.transportStamp)) {
             deps.staging.cancel(receipt);
-            throw new Error("Telegram queue handoff payload belongs to an inactive transport generation.");
+            throw new Error("Bale queue handoff payload belongs to an inactive transport generation.");
         }
         const lifecycle = deps.getLifecycleForBinding(journalBindingKey);
         if (!lifecycle) {
             deps.staging.cancel(receipt);
-            throw new Error("Telegram queue handoff journal binding is not active.");
+            throw new Error("Bale queue handoff journal binding is not active.");
         }
         const donorOwner = {
             instanceId: envelope.donorInstanceId,
@@ -5673,7 +5673,7 @@ export function createTelegramQueueHandoffRecipientRuntime(deps) {
                 ctx,
             });
             if (!deps.staging.accept(receipt)) {
-                throw new Error("Telegram queue handoff payload disappeared before readiness publication.");
+                throw new Error("Bale queue handoff payload disappeared before readiness publication.");
             }
         }
         catch (error) {
@@ -5685,8 +5685,8 @@ export function createTelegramQueueHandoffRecipientRuntime(deps) {
     };
 }
 /** Own queue-handoff projections over journals, admission, IPC, and live queue state. */
-export function createTelegramQueueHandoffReconciliationRuntimeAssembly(deps) {
-    return createTelegramQueueHandoffReconciler({
+export function createBaleQueueHandoffReconciliationRuntimeAssembly(deps) {
+    return createBaleQueueHandoffReconciler({
         canHandoffSteerWithRecipient: deps.canHandoffSteerWithRecipient,
         hasPendingDispatch: deps.hasPendingDispatch,
         ownsDirect: deps.ownsDirect,
@@ -5716,7 +5716,7 @@ export function createTelegramQueueHandoffReconciliationRuntimeAssembly(deps) {
         stageThroughFollower(input) {
             const registrationGeneration = input.recipient.registrationGeneration;
             if (!registrationGeneration) {
-                throw new Error("Telegram queue handoff recipient registration generation is unavailable.");
+                throw new Error("Bale queue handoff recipient registration generation is unavailable.");
             }
             return deps.stageThroughFollower({
                 recipientInstanceId: input.recipient.instanceId,
@@ -5732,7 +5732,7 @@ export function createTelegramQueueHandoffReconciliationRuntimeAssembly(deps) {
         },
         routeThroughLeader: deps.routeThroughLeader,
         removeDonorItem(receipt) {
-            return removeTelegramQueueItemByReceipt({
+            return removeBaleQueueItemByReceipt({
                 receipt,
                 store: deps.queueStore,
             });
@@ -5742,7 +5742,7 @@ export function createTelegramQueueHandoffReconciliationRuntimeAssembly(deps) {
         },
     });
 }
-export function createTelegramQueueHandoffReconciler(deps) {
+export function createBaleQueueHandoffReconciler(deps) {
     let operation;
     const reconcile = async (ctx) => {
         const followerRegistered = deps.isFollowerRegistered();
@@ -5774,7 +5774,7 @@ export function createTelegramQueueHandoffReconciler(deps) {
             if (!receipt || item.admissionReceipts?.length !== 1)
                 continue;
             if (!receipt.journalBindingKey ||
-                !getTelegramUpdateJournalBindingPath(receipt.journalBindingKey)) {
+                !getBaleUpdateJournalBindingPath(receipt.journalBindingKey)) {
                 continue;
             }
             const recipientJournalBindingKey = deps.createRecipientJournalBindingKey(recipient);
@@ -5791,7 +5791,7 @@ export function createTelegramQueueHandoffReconciler(deps) {
                 continue;
             }
             const handoffToken = deps.createHandoffToken();
-            const result = await coordinateTelegramQueueHandoff({
+            const result = await coordinateBaleQueueHandoff({
                 item,
                 steerSupported,
                 expectedOwner,
@@ -5842,7 +5842,7 @@ export function createTelegramQueueHandoffReconciler(deps) {
                     const queueOwner = response.kind === "bus.ack" &&
                         response.result &&
                         typeof response.result === "object"
-                        ? parseTelegramUpdateJournalQueueOwner(response.result.queueOwner)
+                        ? parseBaleUpdateJournalQueueOwner(response.result.queueOwner)
                         : undefined;
                     if (response.kind !== "bus.ack" ||
                         !response.ok ||
@@ -5850,8 +5850,8 @@ export function createTelegramQueueHandoffReconciler(deps) {
                         typeof response.result !== "object" ||
                         !queueOwner) {
                         throw new Error(response.kind === "bus.ack"
-                            ? (response.message ?? "Telegram queue handoff was rejected.")
-                            : "Telegram queue handoff returned no acknowledgement.");
+                            ? (response.message ?? "Bale queue handoff was rejected.")
+                            : "Bale queue handoff returned no acknowledgement.");
                     }
                     return {
                         ...response.result,
@@ -5881,7 +5881,7 @@ export function createTelegramQueueHandoffReconciler(deps) {
         return current;
     };
 }
-export function createTelegramUpdateWorkerOwnerRuntime(deps) {
+export function createBaleUpdateWorkerOwnerRuntime(deps) {
     return {
         getQueueOwnerIdentity() {
             return {
@@ -5906,7 +5906,7 @@ export function createTelegramUpdateWorkerOwnerRuntime(deps) {
         },
     };
 }
-export function createTelegramUpdateAdmissionRuntimeBinding(deps) {
+export function createBaleUpdateAdmissionRuntimeBinding(deps) {
     let leader;
     let follower;
     let settlement;
@@ -5916,7 +5916,7 @@ export function createTelegramUpdateAdmissionRuntimeBinding(deps) {
         bind(input) {
             leader = input.leader;
             follower = input.follower;
-            settlement = createTelegramQueueAdmissionSettlementMuxRuntime([
+            settlement = createBaleQueueAdmissionSettlementMuxRuntime([
                 leader,
                 follower,
             ]);
@@ -5944,12 +5944,12 @@ export function createTelegramUpdateAdmissionRuntimeBinding(deps) {
         },
     };
 }
-function isTelegramReactionDependencyForQueueItem(update, item) {
+function isBaleReactionDependencyForQueueItem(update, item) {
     const reaction = update.message_reaction;
-    if (!isTelegramUpdateAdmissionRecord(reaction))
+    if (!isBaleUpdateAdmissionRecord(reaction))
         return false;
     const chat = reaction.chat;
-    if (!isTelegramUpdateAdmissionRecord(chat) ||
+    if (!isBaleUpdateAdmissionRecord(chat) ||
         !Number.isSafeInteger(chat.id) ||
         !Number.isSafeInteger(reaction.message_id)) {
         return false;
@@ -5962,7 +5962,7 @@ function isTelegramReactionDependencyForQueueItem(update, item) {
         itemMessageIds.has(reaction.message_id));
 }
 /** Own one worker per active transport identity without assuming queued-owner death. */
-export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
+export function createBaleUpdateAdmissionLifecycleRuntime(deps) {
     let activeRuntimeKey;
     let journal;
     let worker;
@@ -5976,7 +5976,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
     let activeContext;
     const withRetainedSourceReference = (operation) => {
         if (!journal || !worker)
-            throw new Error("Telegram update admission worker is not active.");
+            throw new Error("Bale update admission worker is not active.");
         // Synchronous retained-source access needs a reference, not renewed execution authority.
         const release = !releaseSourceReference && sourceReferenceBinding
             ? deps.acquireSourceReference?.(sourceReferenceBinding)
@@ -6029,7 +6029,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
             if (!binding ||
                 binding.runtimeKey !== runtimeKey ||
                 binding.recoveryKey !== recoveryKey) {
-                throw new Error("Telegram update source binding changed during startup.");
+                throw new Error("Bale update source binding changed during startup.");
             }
             deps.prepareBinding?.(binding);
             const release = deps.acquireSourceReference?.(binding);
@@ -6038,7 +6038,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
                 journal = binding.journal;
                 worker = deps.createWorker(binding.journal, binding);
                 workerInputCustody = inputCustody;
-                settlement = createTelegramQueueAdmissionSettlementRuntime(worker);
+                settlement = createBaleQueueAdmissionSettlementRuntime(worker);
                 sourceReferenceBinding = { ...binding, journal };
                 releaseSourceReference = release;
             }
@@ -6083,7 +6083,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
                     !entry.queueReceiptId ||
                     !entry.queueOwner ||
                     entry.queueHandoff ||
-                    isTelegramUpdateJournalQueueOwnerProcess(entry.queueOwner, recoveryOwner)) {
+                    isBaleUpdateJournalQueueOwnerProcess(entry.queueOwner, recoveryOwner)) {
                     continue;
                 }
                 const receipt = foreignReceipts.get(entry.queueReceiptId);
@@ -6144,13 +6144,13 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
         }),
         appendBatch(updates, acceptedThroughUpdateId) {
             if (!journal || !worker) {
-                throw new Error("Telegram update admission worker is not active.");
+                throw new Error("Bale update admission worker is not active.");
             }
             return journal.appendBatch(updates, acceptedThroughUpdateId);
         },
         discardQueueReceipt(input) {
             if (!journal || !worker || !journal.discardQueued) {
-                throw new Error("Telegram update journal queue discard is not available.");
+                throw new Error("Bale update journal queue discard is not available.");
             }
             const result = journal.discardQueued(input);
             worker.signal();
@@ -6158,7 +6158,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
         },
         recoverDeadQueueReceipt(input) {
             if (!journal || !worker || !journal.recoverDeadQueueOwner) {
-                throw new Error("Telegram update journal dead-owner recovery is not available.");
+                throw new Error("Bale update journal dead-owner recovery is not available.");
             }
             const result = journal.recoverDeadQueueOwner(input);
             worker.signal();
@@ -6166,7 +6166,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
         },
         offerQueueReceiptHandoff(input) {
             if (!journal || !worker || !journal.offerQueuedHandoff) {
-                throw new Error("Telegram update journal queue handoff offer is not available.");
+                throw new Error("Bale update journal queue handoff offer is not available.");
             }
             const result = journal.offerQueuedHandoff(input);
             worker.signal();
@@ -6174,7 +6174,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
         },
         acceptQueueReceiptHandoff(input) {
             if (!journal || !worker || !journal.acceptQueuedHandoff) {
-                throw new Error("Telegram update journal queue handoff acceptance is not available.");
+                throw new Error("Bale update journal queue handoff acceptance is not available.");
             }
             const result = journal.acceptQueuedHandoff(input);
             worker.signal();
@@ -6182,7 +6182,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
         },
         cancelQueueReceiptHandoff(input) {
             if (!journal || !worker || !journal.cancelQueuedHandoff) {
-                throw new Error("Telegram update journal queue handoff cancellation is not available.");
+                throw new Error("Bale update journal queue handoff cancellation is not available.");
             }
             const result = withRetainedSourceReference((source) => source.cancelQueuedHandoff(input));
             worker.signal();
@@ -6190,7 +6190,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
         },
         async publishAcceptedQueueReceipt(input) {
             if (!worker || !journal) {
-                throw new Error("Telegram update admission worker is not active.");
+                throw new Error("Bale update admission worker is not active.");
             }
             const entry = journal
                 .read()
@@ -6199,14 +6199,14 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
                 candidate.queueOwner?.acquisitionId ===
                     input.queueOwner.acquisitionId);
             if (!entry) {
-                throw new Error(`Telegram queue handoff receipt ${input.receipt.receiptId} is not owned by this journal.`);
+                throw new Error(`Bale queue handoff receipt ${input.receipt.receiptId} is not owned by this journal.`);
             }
             worker.signal();
             await worker.waitForDrain();
             const currentOwner = worker.getQueueReceiptOwner(input.receipt);
             if (!currentOwner ||
-                !areTelegramUpdateJournalQueueOwnersEqual(currentOwner, input.queueOwner)) {
-                throw new Error(`Telegram queue handoff receipt ${input.receipt.receiptId} is not owned by this runtime.`);
+                !areBaleUpdateJournalQueueOwnersEqual(currentOwner, input.queueOwner)) {
+                throw new Error(`Bale queue handoff receipt ${input.receipt.receiptId} is not owned by this runtime.`);
             }
         },
         getQueueReceiptOwner(receipt) {
@@ -6218,7 +6218,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
         },
         getJournalBindingKey: () => journalBindingKey,
         getJournalPath: () => journalBindingKey
-            ? getTelegramUpdateJournalBindingPath(journalBindingKey)
+            ? getBaleUpdateJournalBindingPath(journalBindingKey)
             : undefined,
         ownsJournalBinding: (candidate) => journalBindingKey !== undefined && journalBindingKey === candidate,
         getForeignQueueOwnerLiveness: () => foreignQueueOwnerLiveness,
@@ -6228,7 +6228,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
                 worker &&
                 readObservedJournal().entries.some((entry) => entry.state !== "queued" &&
                     entry.preApprovalExcluded !== true &&
-                    isTelegramReactionDependencyForQueueItem(entry.update, item)));
+                    isBaleReactionDependencyForQueueItem(entry.update, item)));
         },
         signal: () => worker?.signal(),
         prepareLiveInput(ctx, sourceUpdateIds, isCurrent) {
@@ -6275,7 +6275,7 @@ export function createTelegramUpdateAdmissionLifecycleRuntime(deps) {
     };
 }
 /** Compose source-bound routing and late grouped settlement under one worker. */
-export function createTelegramUpdateAdmissionWorkerRuntime(deps) {
+export function createBaleUpdateAdmissionWorkerRuntime(deps) {
     let worker;
     const admissionDeps = {
         defaultHandle: deps.defaultHandle,
@@ -6308,10 +6308,10 @@ export function createTelegramUpdateAdmissionWorkerRuntime(deps) {
             });
         },
     };
-    const executeUpdate = createTelegramUpdateAdmissionHandle(admissionDeps);
+    const executeUpdate = createBaleUpdateAdmissionHandle(admissionDeps);
     const admitPreparedLiveInput = async (update, ctx, signal) => {
         let carrier;
-        const admit = createTelegramUpdateSourceAdmissionHandle(admissionDeps, (value) => {
+        const admit = createBaleUpdateSourceAdmissionHandle(admissionDeps, (value) => {
             if (!value.message || typeof value.message !== "object")
                 throw new Error("Prepared live input needs one native message carrier.");
             carrier = value.message;
@@ -6324,9 +6324,9 @@ export function createTelegramUpdateAdmissionWorkerRuntime(deps) {
         ? deps.getRecipientBindingKey?.()
         : undefined;
     if (deps.inputCustody && !custodyBindingKey)
-        throw new Error("Telegram custodied admission worker requires one recipient binding key.");
+        throw new Error("Bale custodied admission worker requires one recipient binding key.");
     const executeCustodiedUpdate = deps.inputCustody && custodyBindingKey
-        ? createTelegramCustodiedUpdateAdmissionHandle({
+        ? createBaleCustodiedUpdateAdmissionHandle({
             journal: deps.inputCustody,
             recipientBindingKey: custodyBindingKey,
             defaultHandle: deps.defaultHandle,
@@ -6346,7 +6346,7 @@ export function createTelegramUpdateAdmissionWorkerRuntime(deps) {
             },
         })
         : undefined;
-    worker = createTelegramUpdateWorkerRuntime({
+    worker = createBaleUpdateWorkerRuntime({
         ...deps,
         admitPreparedLiveInput,
         ...(executeCustodiedUpdate
@@ -6361,9 +6361,9 @@ export function createTelegramUpdateAdmissionWorkerRuntime(deps) {
             // Journal/source evidence remains the original; only the warm released handler projection changes destination.
             const projectTo = (destination) => ({ ...prepared,
                 ...(prepared.message ? { message: prepared.message.message_thread_id === destination.threadId ? { ...prepared.message }
-                        : withoutTelegramTurnReplyAnchor({ ...prepared.message, message_thread_id: destination.threadId, reply_to_message: undefined }) } : {}),
+                        : withoutBaleTurnReplyAnchor({ ...prepared.message, message_thread_id: destination.threadId, reply_to_message: undefined }) } : {}),
                 ...(prepared.edited_message ? { edited_message: prepared.edited_message.message_thread_id === destination.threadId ? { ...prepared.edited_message }
-                        : withoutTelegramTurnReplyAnchor({ ...prepared.edited_message, message_thread_id: destination.threadId, reply_to_message: undefined }) } : {}),
+                        : withoutBaleTurnReplyAnchor({ ...prepared.edited_message, message_thread_id: destination.threadId, reply_to_message: undefined }) } : {}),
             });
             const routed = target ? projectTo(target) : prepared;
             try {
@@ -6382,8 +6382,8 @@ export function createTelegramUpdateAdmissionWorkerRuntime(deps) {
     return worker;
 }
 /** Own leader/follower journal lifecycle construction and generation fencing. */
-export function createTelegramUpdateAdmissionLifecycleAssembly(deps) {
-    const leader = createTelegramUpdateAdmissionLifecycleRuntime({
+export function createBaleUpdateAdmissionLifecycleAssembly(deps) {
+    const leader = createBaleUpdateAdmissionLifecycleRuntime({
         resolveBinding: deps.leader.resolveBinding,
         ...(deps.acquireSourceReference
             ? {
@@ -6392,7 +6392,7 @@ export function createTelegramUpdateAdmissionLifecycleAssembly(deps) {
             : {}),
         getQueueOwnerIdentity: deps.worker.getQueueOwnerIdentity,
         createWorker(journal, binding) {
-            return createTelegramUpdateAdmissionWorkerRuntime({
+            return createBaleUpdateAdmissionWorkerRuntime({
                 ...deps.worker,
                 journal,
                 ...(binding.journal.inputCustody
@@ -6405,7 +6405,7 @@ export function createTelegramUpdateAdmissionLifecycleAssembly(deps) {
         },
         recordRuntimeEvent: deps.recordRuntimeEvent,
     });
-    const follower = createTelegramUpdateAdmissionLifecycleRuntime({
+    const follower = createBaleUpdateAdmissionLifecycleRuntime({
         getQueueOwnerIdentity: deps.worker.getQueueOwnerIdentity,
         ...(deps.acquireSourceReference
             ? {
@@ -6432,7 +6432,7 @@ export function createTelegramUpdateAdmissionLifecycleAssembly(deps) {
             };
         },
         createWorker(journal, binding) {
-            return createTelegramUpdateAdmissionWorkerRuntime({
+            return createBaleUpdateAdmissionWorkerRuntime({
                 ...deps.worker,
                 journal,
                 ...(binding.journal.inputCustody
@@ -6459,9 +6459,9 @@ export function createTelegramUpdateAdmissionLifecycleAssembly(deps) {
     return { leader, follower };
 }
 /** Own queue-owner projection and shared leader/follower worker composition. */
-export function createTelegramUpdateAdmissionRuntimeAssembly(deps) {
-    const owner = createTelegramUpdateWorkerOwnerRuntime(deps.owner);
-    const lifecycle = createTelegramUpdateAdmissionLifecycleAssembly({
+export function createBaleUpdateAdmissionRuntimeAssembly(deps) {
+    const owner = createBaleUpdateWorkerOwnerRuntime(deps.owner);
+    const lifecycle = createBaleUpdateAdmissionLifecycleAssembly({
         runtimeBinding: deps.runtimeBinding,
         worker: {
             ...deps.worker,
@@ -6476,12 +6476,12 @@ export function createTelegramUpdateAdmissionRuntimeAssembly(deps) {
     return { owner, ...lifecycle };
 }
 /**
- * Register a handler that runs before pi-telegram routes a Telegram update
+ * Register a handler that runs before pi-bale routes a Bale update
  * through its built-in handlers.
  *
  * This is the low-level public surface for extensions that share the same bot
- * and Pi process with pi-telegram.
+ * and Pi process with pi-bale.
  */
-export function registerTelegramUpdateHandler(handler) {
+export function registerBaleUpdateHandler(handler) {
     return getOrCreateUpdateHandlerRegistry().add(handler);
 }

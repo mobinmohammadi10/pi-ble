@@ -1,25 +1,25 @@
 /**
- * Telegram outbound surface helpers
- * Zones: telegram outbound, command templates, voice delivery
+ * Bale outbound surface helpers
+ * Zones: bale outbound, command templates, voice delivery
  * Owns configured outbound handler execution, text transforms, public assistant-output reply composition and mutation fencing, voice-file generation/delivery, runtime-event bridge, and compatibility re-exports; assistant markup parsing lives in outbound-markup and button callback actions live in outbound-buttons
  */
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { planTelegramButtonReply, } from "./outbound-buttons.js";
-import { planTelegramVoiceReply, stripTelegramCommentMarkupForDelivery, } from "./outbound-markup.js";
-import { createTelegramVoiceReplySender as createTelegramVoiceReplySenderWithPorts } from "./outbound-voice.js";
-import { resolveTelegramAttachmentsDir } from "./paths.js";
+import { planBaleButtonReply, } from "./outbound-buttons.js";
+import { planBaleVoiceReply, stripBaleCommentMarkupForDelivery, } from "./outbound-markup.js";
+import { createBaleVoiceReplySender as createBaleVoiceReplySenderWithPorts } from "./outbound-voice.js";
+import { resolveBaleAttachmentsDir } from "./paths.js";
 import * as Replies from "./replies.js";
-import { assertTelegramApiCallAuthority, isTelegramApiCommitUnknownError, } from "./telegram-api.js";
-const OUTBOUND_HANDLER_REGISTRY_KEY = "__piTelegramOutboundHandlers__";
-const VOICE_EVENT_RECORDER_KEY = "__piTelegramVoiceEventRecorder__";
+import { assertBaleApiCallAuthority, isBaleApiCommitUnknownError, } from "./bale-api.js";
+const OUTBOUND_HANDLER_REGISTRY_KEY = "__piBaleOutboundHandlers__";
+const VOICE_EVENT_RECORDER_KEY = "__piBaleVoiceEventRecorder__";
 import { buildCommandTemplateInvocation, createCommandTemplateRecovery, getCommandTemplateCompositionSteps, shouldRunCommandTemplateConfig, getCommandTemplateConfiguredTimeout, getCommandTemplateStepTimeout, resolveCommandTemplateNumericField, } from "./command-templates.js";
 const DEFAULT_VOICE_TIMEOUT_MS = 120_000;
-export function bindTelegramRuntimeEventRecorder(recorder) {
+export function bindBaleRuntimeEventRecorder(recorder) {
     globalThis[VOICE_EVENT_RECORDER_KEY] = recorder;
 }
-export function recordTelegramRuntimeEvent(category, error, details) {
+export function recordBaleRuntimeEvent(category, error, details) {
     const recorder = globalThis[VOICE_EVENT_RECORDER_KEY];
     if (typeof recorder === "function") {
         recorder(category, error, details);
@@ -42,7 +42,7 @@ function getOrCreateOutboundHandlerRegistry() {
         registry;
     return registry;
 }
-export function registerTelegramOutboundHandler(kind, handler) {
+export function registerBaleOutboundHandler(kind, handler) {
     const registry = getOrCreateOutboundHandlerRegistry();
     const list = registry.handlers.get(kind) ?? [];
     list.push(handler);
@@ -56,7 +56,7 @@ export function registerTelegramOutboundHandler(kind, handler) {
         }
     };
 }
-function getTelegramOutboundProgrammaticHandlers(kind) {
+function getBaleOutboundProgrammaticHandlers(kind) {
     const registry = getOrCreateOutboundHandlerRegistry();
     return [...(registry.handlers.get(kind) ?? [])];
 }
@@ -123,7 +123,7 @@ function outboundHandlerMatchesType(handler, type) {
         return false;
     return selectors.includes(type);
 }
-export function findTelegramOutboundHandlers(handlers, type) {
+export function findBaleOutboundHandlers(handlers, type) {
     if (!Array.isArray(handlers))
         return [];
     return handlers.filter((handler) => !!handler &&
@@ -156,10 +156,10 @@ function getVoiceReplyTemplateValues(text, options) {
         ...(options.rate ? { rate: options.rate } : {}),
     };
 }
-function getDefaultTelegramVoiceTempDir() {
-    return resolveTelegramAttachmentsDir();
+function getDefaultBaleVoiceTempDir() {
+    return resolveBaleAttachmentsDir();
 }
-async function generateTelegramVoiceReplyFileWithHandler(text, options) {
+async function generateBaleVoiceReplyFileWithHandler(text, options) {
     await mkdir(options.tempDir, { recursive: true });
     const artifactId = randomUUID();
     const values = getVoiceReplyTemplateValues(text, {
@@ -202,15 +202,15 @@ async function generateTelegramVoiceReplyFileWithHandler(text, options) {
     });
     return getVoiceReplyOutputPath(options.handler, values, result.stdout);
 }
-export async function generateTelegramVoiceReplyFile(text, options) {
+export async function generateBaleVoiceReplyFile(text, options) {
     const handler = options.handler;
     if (!handler?.template)
         return undefined;
-    return generateTelegramVoiceReplyFileWithHandler(text, {
+    return generateBaleVoiceReplyFileWithHandler(text, {
         lang: options.lang,
         rate: options.rate,
         handler,
-        tempDir: options.tempDir ?? getDefaultTelegramVoiceTempDir(),
+        tempDir: options.tempDir ?? getDefaultBaleVoiceTempDir(),
         cwd: options.cwd ?? process.cwd(),
         timeout: getVoiceReplyTimeout(handler),
         execCommand: options.execCommand,
@@ -219,7 +219,7 @@ export async function generateTelegramVoiceReplyFile(text, options) {
 function getOutboundTextTemplateValues(text) {
     return { text, type: "text" };
 }
-async function transformTelegramOutboundTextWithHandler(text, options) {
+async function transformBaleOutboundTextWithHandler(text, options) {
     const values = getOutboundTextTemplateValues(text);
     if (!shouldRunCommandTemplateConfig(options.handler, values))
         return text;
@@ -257,11 +257,11 @@ async function transformTelegramOutboundTextWithHandler(text, options) {
     });
     return result.stdout.trim() || text;
 }
-async function transformTelegramOutboundText(text, options) {
+async function transformBaleOutboundText(text, options) {
     let transformed = text;
-    for (const handler of findTelegramOutboundHandlers(options.handlers, "text")) {
+    for (const handler of findBaleOutboundHandlers(options.handlers, "text")) {
         try {
-            transformed = await transformTelegramOutboundTextWithHandler(transformed, {
+            transformed = await transformBaleOutboundTextWithHandler(transformed, {
                 handler,
                 cwd: options.cwd ?? process.cwd(),
                 execCommand: options.execCommand,
@@ -277,39 +277,39 @@ async function transformTelegramOutboundText(text, options) {
     }
     return transformed;
 }
-function isTelegramInlineKeyboardLike(replyMarkup) {
+function isBaleInlineKeyboardLike(replyMarkup) {
     if (!replyMarkup || typeof replyMarkup !== "object")
         return false;
     const keyboard = replyMarkup
         .inline_keyboard;
     return Array.isArray(keyboard);
 }
-async function transformTelegramOutboundReplyMarkup(replyMarkup, options) {
-    if (!isTelegramInlineKeyboardLike(replyMarkup))
+async function transformBaleOutboundReplyMarkup(replyMarkup, options) {
+    if (!isBaleInlineKeyboardLike(replyMarkup))
         return replyMarkup;
     const translatedRows = [];
     for (const row of replyMarkup.inline_keyboard) {
         const translatedRow = [];
         for (const button of row) {
-            const text = await transformTelegramOutboundText(button.text, options);
+            const text = await transformBaleOutboundText(button.text, options);
             translatedRow.push({ ...button, text });
         }
         translatedRows.push(translatedRow);
     }
     return { ...replyMarkup, inline_keyboard: translatedRows };
 }
-async function transformTelegramOutboundTextReply(text, options) {
+async function transformBaleOutboundTextReply(text, options) {
     const transformOptions = {
         handlers: options.handlers,
         cwd: options.cwd,
         execCommand: options.execCommand,
         recordRuntimeEvent: options.recordRuntimeEvent,
     };
-    const transformedText = await transformTelegramOutboundText(text, transformOptions);
-    const replyMarkup = await transformTelegramOutboundReplyMarkup(options.replyMarkup, transformOptions);
+    const transformedText = await transformBaleOutboundText(text, transformOptions);
+    const replyMarkup = await transformBaleOutboundReplyMarkup(options.replyMarkup, transformOptions);
     return { text: transformedText, ...(replyMarkup ? { replyMarkup } : {}) };
 }
-export function createTelegramOutboundTextReplyRuntime(deps) {
+export function createBaleOutboundTextReplyRuntime(deps) {
     const sendTextReply = deps.sendTextReply, sendMarkdownReply = deps.sendMarkdownReply;
     return {
         sendTextReply: async (chatId, replyToMessageId, text, options) => {
@@ -318,16 +318,16 @@ export function createTelegramOutboundTextReplyRuntime(deps) {
                 ...(options.target ? { target: { ...options.target } } : {}),
             };
             const assertAuthority = capturedOptions?.assertAuthority;
-            assertTelegramApiCallAuthority(assertAuthority, false);
-            const transformed = await transformTelegramOutboundText(text, {
+            assertBaleApiCallAuthority(assertAuthority, false);
+            const transformed = await transformBaleOutboundText(text, {
                 handlers: deps.getHandlers?.(),
                 cwd: deps.cwd,
                 execCommand: deps.execCommand,
                 recordRuntimeEvent: deps.recordRuntimeEvent,
             });
-            assertTelegramApiCallAuthority(assertAuthority, false);
+            assertBaleApiCallAuthority(assertAuthority, false);
             const messageId = await sendTextReply(chatId, replyToMessageId, transformed, capturedOptions);
-            assertTelegramApiCallAuthority(assertAuthority, true);
+            assertBaleApiCallAuthority(assertAuthority, true);
             return messageId;
         },
         sendMarkdownReply: async (chatId, replyToMessageId, markdown, options) => {
@@ -336,32 +336,32 @@ export function createTelegramOutboundTextReplyRuntime(deps) {
                 ...(options.target ? { target: { ...options.target } } : {}),
             };
             const assertAuthority = capturedOptions?.assertAuthority;
-            assertTelegramApiCallAuthority(assertAuthority, false);
-            const deliveryMarkdown = stripTelegramCommentMarkupForDelivery(markdown);
+            assertBaleApiCallAuthority(assertAuthority, false);
+            const deliveryMarkdown = stripBaleCommentMarkupForDelivery(markdown);
             if (!deliveryMarkdown)
                 return undefined;
-            const transformed = await transformTelegramOutboundTextReply(deliveryMarkdown, {
+            const transformed = await transformBaleOutboundTextReply(deliveryMarkdown, {
                 handlers: deps.getHandlers?.(),
                 cwd: deps.cwd,
                 execCommand: deps.execCommand,
                 recordRuntimeEvent: deps.recordRuntimeEvent,
                 replyMarkup: capturedOptions?.replyMarkup,
             });
-            assertTelegramApiCallAuthority(assertAuthority, false);
+            assertBaleApiCallAuthority(assertAuthority, false);
             const messageId = await sendMarkdownReply(chatId, replyToMessageId, transformed.text, {
                 ...capturedOptions,
                 ...(transformed.replyMarkup
                     ? { replyMarkup: transformed.replyMarkup }
                     : {}),
             });
-            assertTelegramApiCallAuthority(assertAuthority, true);
+            assertBaleApiCallAuthority(assertAuthority, true);
             return messageId;
         },
     };
 }
-export function createTelegramOutboundTextPreviewRuntime(deps) {
+export function createBaleOutboundTextPreviewRuntime(deps) {
     const wrap = (finalize) => async (chatId, markdown, replyToMessageId, options) => {
-        const transformed = await transformTelegramOutboundTextReply(markdown, {
+        const transformed = await transformBaleOutboundTextReply(markdown, {
             handlers: deps.getHandlers?.(),
             cwd: deps.cwd,
             execCommand: deps.execCommand,
@@ -389,11 +389,11 @@ export function createTelegramOutboundTextPreviewRuntime(deps) {
     };
 }
 // --- Voice Policy Re-Exports ---
-export { clearTelegramVoiceSynthesisProviders, clearTelegramVoiceTranscriptionProviders, computeVoicePromptContribution, computeVoiceTurnFlags, getTelegramVoiceReplyMode, getTelegramVoiceSynthesisProviders, getTelegramVoiceTranscriptionProviders, hasTelegramVoiceSynthesisProvider, hasTelegramVoiceTranscriptionProvider, isVoiceTurn, registerTelegramVoiceSynthesisProvider, registerTelegramVoiceTranscriptionProvider, shouldSuppressPreviewForVoice, } from "./voice.js";
-export function createTelegramVoiceReplySender(deps) {
-    return createTelegramVoiceReplySenderWithPorts(deps, {
-        findVoiceHandlers: (handlers) => findTelegramOutboundHandlers(handlers, "voice"),
-        generateVoiceFile: (text, options) => generateTelegramVoiceReplyFile(text, {
+export { clearBaleVoiceSynthesisProviders, clearBaleVoiceTranscriptionProviders, computeVoicePromptContribution, computeVoiceTurnFlags, getBaleVoiceReplyMode, getBaleVoiceSynthesisProviders, getBaleVoiceTranscriptionProviders, hasBaleVoiceSynthesisProvider, hasBaleVoiceTranscriptionProvider, isVoiceTurn, registerBaleVoiceSynthesisProvider, registerBaleVoiceTranscriptionProvider, shouldSuppressPreviewForVoice, } from "./voice.js";
+export function createBaleVoiceReplySender(deps) {
+    return createBaleVoiceReplySenderWithPorts(deps, {
+        findVoiceHandlers: (handlers) => findBaleOutboundHandlers(handlers, "voice"),
+        generateVoiceFile: (text, options) => generateBaleVoiceReplyFile(text, {
             lang: options.lang,
             rate: options.rate,
             handler: options.handler,
@@ -401,19 +401,19 @@ export function createTelegramVoiceReplySender(deps) {
             cwd: options.cwd,
             execCommand: options.execCommand,
         }),
-        getProgrammaticVoiceHandlers: () => getTelegramOutboundProgrammaticHandlers("voice"),
+        getProgrammaticVoiceHandlers: () => getBaleOutboundProgrammaticHandlers("voice"),
     });
 }
-export { createTelegramButtonActionStore, createTelegramButtonPromptTurn, createTelegramButtonReplyPlanner, handleTelegramButtonCallbackQuery, markTelegramButtonSelected, planTelegramButtonReply, } from "./outbound-buttons.js";
-export function createTelegramOutboundReplyPlanner(store, getRenderingMode = () => "rich") {
+export { createBaleButtonActionStore, createBaleButtonPromptTurn, createBaleButtonReplyPlanner, handleBaleButtonCallbackQuery, markBaleButtonSelected, planBaleButtonReply, } from "./outbound-buttons.js";
+export function createBaleOutboundReplyPlanner(store, getRenderingMode = () => "rich") {
     return (markdown, options) => {
-        const buttonReply = planTelegramButtonReply(markdown, {
+        const buttonReply = planBaleButtonReply(markdown, {
             registerAction: store.register,
             rendering: getRenderingMode(),
             ...(options?.binding ? { binding: options.binding } : {}),
         });
-        // Button replies can also contain <!-- telegram_voice --> markup
-        const voiceReply = planTelegramVoiceReply(buttonReply.markdown);
+        // Button replies can also contain <!-- bale_voice --> markup
+        const voiceReply = planBaleVoiceReply(buttonReply.markdown);
         return {
             markdown: voiceReply.markdown,
             ...(buttonReply.replyMarkup
@@ -431,15 +431,15 @@ export function createTelegramOutboundReplyPlanner(store, getRenderingMode = () 
 /**
  * Create an artifact sender that delivers planned voice replies for a turn.
  * Iterates over `voiceReplies` (or a single `voiceText`) and sends each as
- * a Telegram voice message via the voice reply sender. Throws if no voice
+ * a Bale voice message via the voice reply sender. Throws if no voice
  * reply could be delivered.
  */
 // --- Outbound Reply Artifacts ---
-export function createTelegramOutboundReplyArtifactSender(deps) {
+export function createBaleOutboundReplyArtifactSender(deps) {
     return async (turn, plan, options) => {
         const isDeliveryActive = () => deps.isDeliveryActive?.() !== false &&
             options?.isDeliveryActive?.() !== false;
-        const sendVoiceReply = createTelegramVoiceReplySender({
+        const sendVoiceReply = createBaleVoiceReplySender({
             ...deps,
             isDeliveryActive,
         });
@@ -468,7 +468,7 @@ export function createTelegramOutboundReplyArtifactSender(deps) {
                 anyDelivered = true;
             }
             catch (error) {
-                if (isTelegramApiCommitUnknownError(error))
+                if (isBaleApiCommitUnknownError(error))
                     throw error;
                 // sendVoiceReply already recorded the error; continue to next reply
             }
@@ -480,7 +480,7 @@ export function createTelegramOutboundReplyArtifactSender(deps) {
         }
     };
 }
-export function createTelegramAssistantOutputMutationFence(isAuthorityActive) {
+export function createBaleAssistantOutputMutationFence(isAuthorityActive) {
     return {
         run(mutation, ...args) {
             if (!isAuthorityActive()) {
@@ -490,14 +490,14 @@ export function createTelegramAssistantOutputMutationFence(isAuthorityActive) {
         },
     };
 }
-export function createTelegramAssistantOutputSender(deps) {
+export function createBaleAssistantOutputSender(deps) {
     return async function sendAssistantOutput(event, authority, isAuthorityActive) {
         const target = authority.target;
         if (!target) {
-            throw new Error("Assistant output has no authorized Telegram target.");
+            throw new Error("Assistant output has no authorized Bale target.");
         }
-        const mutationFence = createTelegramAssistantOutputMutationFence(isAuthorityActive);
-        const replyRuntime = Replies.createTelegramRenderedMessageDeliveryRuntime({
+        const mutationFence = createBaleAssistantOutputMutationFence(isAuthorityActive);
+        const replyRuntime = Replies.createBaleRenderedMessageDeliveryRuntime({
             recordOwnership: deps.recordOwnership,
             sendMessage(body) {
                 return mutationFence.run(deps.sendMessage, body);
@@ -510,7 +510,7 @@ export function createTelegramAssistantOutputSender(deps) {
                 return mutationFence.run(deps.editMessage, body);
             },
         });
-        const outboundRuntime = createTelegramOutboundTextReplyRuntime({
+        const outboundRuntime = createBaleOutboundTextReplyRuntime({
             sendTextReply: replyRuntime.sendTextReply,
             sendMarkdownReply: replyRuntime.sendMarkdownReply,
             execCommand: deps.execCommand,
@@ -520,7 +520,7 @@ export function createTelegramAssistantOutputSender(deps) {
         const buttonReply = deps.planButtonReply?.(event.text) ?? {
             markdown: event.text,
         };
-        await outboundRuntime.sendMarkdownReply(target.chatId, event.source === "telegram" ? event.replyToMessageId : undefined, buttonReply.markdown, {
+        await outboundRuntime.sendMarkdownReply(target.chatId, event.source === "bale" ? event.replyToMessageId : undefined, buttonReply.markdown, {
             target,
             ...(buttonReply.replyMarkup
                 ? { replyMarkup: buttonReply.replyMarkup }

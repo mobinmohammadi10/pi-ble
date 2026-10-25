@@ -55,7 +55,7 @@ test("Pi context mode helpers feature-detect passive run modes", () => {
   assert.equal(canStartPollingInExtensionContext({}), true);
   assert.equal(
     formatPollingStartBlockedByRunMode({ mode: "json" }),
-    "Telegram polling is unavailable in Pi json mode. Use /telegram-connect from a long-lived Pi session.",
+    "Bale polling is unavailable in Pi json mode. Use /bale-connect from a long-lived Pi session.",
   );
 });
 
@@ -129,9 +129,9 @@ test("Pi API runtime ports bind methods without losing receiver context", async 
   assert.equal(runtime.getThinkingLevel(), "high");
   runtime.setThinkingLevel("low");
   assert.deepEqual(runtime.getActiveTools(), ["read"]);
-  runtime.setActiveTools(["read", "telegram_attach"]);
+  runtime.setActiveTools(["read", "bale_attach"]);
   assert.equal(await runtime.setModel(createHarnessModel("gpt-5")), true);
-  runtime.registerCommand("telegram-connect", {
+  runtime.registerCommand("bale-connect", {
     description: "internal",
     handler: async () => {},
   });
@@ -142,9 +142,9 @@ test("Pi API runtime ports bind methods without losing receiver context", async 
     "get-thinking",
     "thinking:low",
     "get-tools",
-    "set-tools:read,telegram_attach",
+    "set-tools:read,bale_attach",
     "model:gpt-5",
-    "command:telegram-connect",
+    "command:bale-connect",
   ]);
 });
 

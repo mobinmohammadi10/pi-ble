@@ -1,14 +1,14 @@
 /**
- * Generative application kernel and Telegram installation adapter
+ * Generative application kernel and Bale installation adapter
  * Zones: generative application state, isolated methods, pi agent tools
- * Owns Generative App identity, installation, invocation, state history, and telegram_bind
+ * Owns Generative App identity, installation, invocation, state history, and bale_bind
  */
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, copyFile, lstat, mkdir, readFile, rename, rm, stat, writeFile, } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import { Type } from "@sinclair/typebox";
-import { renameTelegramPathWithRetry } from "./locks.js";
+import { renameBalePathWithRetry } from "./locks.js";
 import { isProcessAlive } from "./process-identity.js";
 const GENERATIVE_APP_NAME = /^[a-z][a-z0-9-]{0,31}$/u;
 const GENERATIVE_APP_METHOD = /^[a-z][a-z0-9_]{0,31}$/u;
@@ -22,7 +22,7 @@ const GENERATIVE_APP_RUN_MAX_ARGS = 64;
 const GENERATIVE_APP_RUN_MAX_STREAM_BYTES = 64 * 1024;
 export const GENERATIVE_APP_MIN_REFRESH_AFTER_MS = 2_000;
 export const GENERATIVE_APP_MAX_REFRESH_AFTER_MS = 24 * 60 * 60 * 1_000;
-export function getTelegramBindLiveSurfaceKey(app, profile, target) {
+export function getBaleBindLiveSurfaceKey(app, profile, target) {
     return `${app}/${profile}/${target.chatId}/${target.threadId ?? 0}`;
 }
 function byteLength(value) {
@@ -103,7 +103,7 @@ async function writeFileAtomic(path, content) {
     const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
     await writeFile(temporary, content, { encoding: "utf8", mode: 0o600 });
     // Windows may briefly deny replacing a file another reader or scanner holds; share the bounded retry.
-    if (!renameTelegramPathWithRetry(temporary, path))
+    if (!renameBalePathWithRetry(temporary, path))
         throw new Error("Generative App staging file disappeared before publication.");
 }
 async function acquireGenerativeAppTransitionLock(appDir, waitMs = GENERATIVE_APP_LOCK_WAIT_MS) {
@@ -624,10 +624,10 @@ export async function bindGenerativeApp(options) {
     const hasScript = typeof options.script === "string";
     const hasMethod = typeof options.method === "string";
     if (hasScript === hasMethod) {
-        throw new Error("telegram_bind requires exactly one of script or method.");
+        throw new Error("bale_bind requires exactly one of script or method.");
     }
     if (!hasScript && options.replace !== undefined) {
-        throw new Error("telegram_bind replace is valid only with script.");
+        throw new Error("bale_bind replace is valid only with script.");
     }
     return hasScript
         ? await installGenerativeApp({
@@ -803,7 +803,7 @@ export function formatGenerativeAppToolOutput(output) {
     return `\n${normalized || "(Generative App returned no output)"}`;
 }
 export function formatDisplayedGenerativeAppToolOutput() {
-    return "\nGenerative App output was delivered directly to the active Telegram turn. Do not repeat, reformat, summarize, or quote it in the assistant reply.";
+    return "\nGenerative App output was delivered directly to the active Bale turn. Do not repeat, reformat, summarize, or quote it in the assistant reply.";
 }
 export function formatGenerativeAppToolError(error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -812,19 +812,19 @@ export function formatGenerativeAppToolError(error) {
 // Provider tool APIs reject recursive $ref schemas (OpenAI) and raw TypeBox
 // optional markers on non-builder objects (Gemini), while llama-server rejects
 // unconstrained subschemas; one bounded builder-made JSON-value union satisfies all.
-const TELEGRAM_BIND_JSON_ARGUMENT_MAX_DEPTH = 4;
-function createTelegramBindJsonArgumentSchema(depth) {
+const BALE_BIND_JSON_ARGUMENT_MAX_DEPTH = 4;
+function createBaleBindJsonArgumentSchema(depth) {
     const scalars = [Type.Null(), Type.Boolean(), Type.Number(), Type.String()];
     if (depth <= 0)
         return Type.Union(scalars);
-    const nested = createTelegramBindJsonArgumentSchema(depth - 1);
+    const nested = createBaleBindJsonArgumentSchema(depth - 1);
     return Type.Union([
         ...scalars,
         Type.Array(nested),
         Type.Object({}, { additionalProperties: nested }),
     ]);
 }
-export function registerTelegramBindTool(pi, deps) {
+export function registerBaleBindTool(pi, deps) {
     const planFrame = (result, handle) => {
         const planned = deps.planOutput(result.output, {
             binding: {
@@ -891,18 +891,18 @@ export function registerTelegramBindTool(pi, deps) {
         })
         : undefined;
     deps.setLiveSurfaceRuntime?.(liveSurfaces);
-    const surfaceKey = (app, handle) => getTelegramBindLiveSurfaceKey(app, deps.getActiveProfileName?.() ?? "default", handle.target);
+    const surfaceKey = (app, handle) => getBaleBindLiveSurfaceKey(app, deps.getActiveProfileName?.() ?? "default", handle.target);
     pi.registerTool({
-        name: "telegram_bind",
-        label: "Telegram Bind",
-        description: "Install, explicitly replace, or invoke one named method on a managed Generative App; successful output displays directly in the active Telegram turn unless display is false.",
+        name: "bale_bind",
+        label: "Bale Bind",
+        description: "Install, explicitly replace, or invoke one named method on a managed Generative App; successful output displays directly in the active Bale turn unless display is false.",
         parameters: Type.Object({
             app: Type.String(),
             script: Type.Optional(Type.String()),
             method: Type.Optional(Type.String()),
             replace: Type.Optional(Type.Boolean()),
             display: Type.Optional(Type.Boolean()),
-            argument: Type.Optional(createTelegramBindJsonArgumentSchema(TELEGRAM_BIND_JSON_ARGUMENT_MAX_DEPTH)),
+            argument: Type.Optional(createBaleBindJsonArgumentSchema(BALE_BIND_JSON_ARGUMENT_MAX_DEPTH)),
         }, { additionalProperties: false }),
         async execute(_toolCallId, params) {
             try {

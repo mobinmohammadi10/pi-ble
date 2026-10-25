@@ -1,7 +1,7 @@
 /**
- * Generative application kernel and Telegram installation adapter
+ * Generative application kernel and Bale installation adapter
  * Zones: generative application state, isolated methods, pi agent tools
- * Owns Generative App identity, installation, invocation, state history, and telegram_bind
+ * Owns Generative App identity, installation, invocation, state history, and bale_bind
  */
 import type { ExtensionAPI } from "./pi.ts";
 export declare const GENERATIVE_APP_MIN_REFRESH_AFTER_MS = 2000;
@@ -75,7 +75,7 @@ export interface GenerativeAppLiveSurfaceRuntimeDeps<THandle> {
     setTimer?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
     clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
 }
-export interface TelegramBindDeliveryHandle {
+export interface BaleBindDeliveryHandle {
     readonly target: {
         chatId: number;
         threadId?: number;
@@ -83,31 +83,31 @@ export interface TelegramBindDeliveryHandle {
     readonly messageIds: readonly number[];
     readonly generation: string;
 }
-export interface TelegramBindLiveHandle {
-    delivery: TelegramBindDeliveryHandle;
+export interface BaleBindLiveHandle {
+    delivery: BaleBindDeliveryHandle;
     view?: {
         text: string;
         parseMode: "markdown";
         replyMarkup?: unknown;
     };
 }
-export declare function getTelegramBindLiveSurfaceKey(app: string, profile: string, target: {
+export declare function getBaleBindLiveSurfaceKey(app: string, profile: string, target: {
     chatId: number;
     threadId?: number;
 }): string;
-export interface TelegramBindToolRegistrationDeps extends GenerativeAppRuntimeOptions {
+export interface BaleBindToolRegistrationDeps extends GenerativeAppRuntimeOptions {
     getActiveProfileName?: () => string | undefined;
     liveSurfaceSetTimer?: GenerativeAppLiveSurfaceRuntimeDeps<unknown>["setTimer"];
     liveSurfaceClearTimer?: GenerativeAppLiveSurfaceRuntimeDeps<unknown>["clearTimer"];
-    setLiveSurfaceRuntime?: (runtime: GenerativeAppLiveSurfaceRuntime<TelegramBindLiveHandle> | undefined) => void;
-    isDeliveryHandleCurrent?: (handle: TelegramBindDeliveryHandle) => boolean;
-    editView?: (handle: TelegramBindDeliveryHandle, view: {
+    setLiveSurfaceRuntime?: (runtime: GenerativeAppLiveSurfaceRuntime<BaleBindLiveHandle> | undefined) => void;
+    isDeliveryHandleCurrent?: (handle: BaleBindDeliveryHandle) => boolean;
+    editView?: (handle: BaleBindDeliveryHandle, view: {
         text: string;
         parseMode: "markdown";
         replyMarkup?: unknown;
     }) => Promise<{
         ok: true;
-        value: TelegramBindDeliveryHandle;
+        value: BaleBindDeliveryHandle;
     } | {
         ok: false;
         reason: string;
@@ -150,7 +150,7 @@ export interface TelegramBindToolRegistrationDeps extends GenerativeAppRuntimeOp
         replyToMessageId: number;
     }) => Promise<{
         ok: true;
-        value: TelegramBindDeliveryHandle;
+        value: BaleBindDeliveryHandle;
     } | {
         ok: false;
         reason?: string;
@@ -186,4 +186,4 @@ export declare function createGenerativeAppLiveSurfaceRuntime<THandle>(deps: Gen
 export declare function formatGenerativeAppToolOutput(output: string): string;
 export declare function formatDisplayedGenerativeAppToolOutput(): string;
 export declare function formatGenerativeAppToolError(error: unknown): Error;
-export declare function registerTelegramBindTool(pi: ExtensionAPI, deps: TelegramBindToolRegistrationDeps): void;
+export declare function registerBaleBindTool(pi: ExtensionAPI, deps: BaleBindToolRegistrationDeps): void;

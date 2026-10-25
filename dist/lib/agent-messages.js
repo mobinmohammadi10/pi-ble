@@ -1,10 +1,10 @@
 /**
- * Cross-instance Telegram agent message resolution and turn injection
+ * Cross-instance Bale agent message resolution and turn injection
  * Zones: multi-instance bus, inbound routing, operational delivery
  * Owns live target resolution, source attribution, same-target fencing, and synthetic turn construction; excludes Bot API delivery and bus transport.
  */
-import { TELEGRAM_INTERNAL_AGENT_MESSAGE } from "./updates.js";
-export function createTelegramAgentMessageRuntime(deps) {
+import { BALE_INTERNAL_AGENT_MESSAGE } from "./updates.js";
+export function createBaleAgentMessageRuntime(deps) {
     const getNowMs = deps.getNowMs ?? Date.now;
     const sameTarget = (left, right) => left?.chatId === right?.chatId && left?.threadId === right?.threadId;
     const listLiveTargets = () => {
@@ -62,11 +62,11 @@ export function createTelegramAgentMessageRuntime(deps) {
                 threadId: input.message.target.threadId,
             }, input.sourceTarget);
             if (!target)
-                throw new Error("Telegram agent target is no longer live.");
+                throw new Error("Bale agent target is no longer live.");
             const allowedChatId = deps.getAllowedChatId();
             const ctx = deps.getContext();
             if (allowedChatId === undefined || !ctx) {
-                throw new Error("Telegram agent turn routing is unavailable.");
+                throw new Error("Bale agent turn routing is unavailable.");
             }
             const sourceTitle = (input.sourceTarget
                 ? deps.getDisplayTitle?.(input.sourceTarget)
@@ -81,10 +81,10 @@ export function createTelegramAgentMessageRuntime(deps) {
                 chat: { id: target.chatId, type: "private" },
                 from: { id: allowedChatId, is_bot: false, first_name: "Pi Agent" },
                 message_thread_id: target.threadId,
-                pi_telegram_agent_source_thread: sourceLabel,
+                pi_bale_agent_source_thread: sourceLabel,
                 text: input.message.text,
             };
-            await deps.handleUpdate({ message, [TELEGRAM_INTERNAL_AGENT_MESSAGE]: true }, ctx);
+            await deps.handleUpdate({ message, [BALE_INTERNAL_AGENT_MESSAGE]: true }, ctx);
         },
     };
 }

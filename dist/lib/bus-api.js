@@ -1,10 +1,10 @@
 /**
- * Telegram bus-aware API runtime
- * Zones: multi-instance bus, telegram api transport, live instance routing
- * Wraps the direct Telegram Bot API runtime so follower instances can route outbound calls through the bus leader
+ * Bale bus-aware API runtime
+ * Zones: multi-instance bus, bale api transport, live instance routing
+ * Wraps the direct Bale Bot API runtime so follower instances can route outbound calls through the bus leader
  */
-import { markTelegramBusCrossTargetDelivery, parseTelegramBusSelectedMenuTextEffect, stripTelegramBusApiMetadata, } from "./bus.js";
-import { buildTelegramAnswerGuestQueryBody, assertTelegramApiCallAuthority, isTelegramApiCommitUnknownError, isTelegramMessageNotModifiedError, TelegramApiAuthorityError, TelegramApiCommitUnknownError, } from "./telegram-api.js";
+import { markBaleBusCrossTargetDelivery, parseBaleBusSelectedMenuTextEffect, stripBaleBusApiMetadata, } from "./bus.js";
+import { buildBaleAnswerGuestQueryBody, assertBaleApiCallAuthority, isBaleApiCommitUnknownError, isBaleMessageNotModifiedError, BaleApiAuthorityError, BaleApiCommitUnknownError, } from "./bale-api.js";
 function asRecord(value) {
     return value && typeof value === "object" && !Array.isArray(value)
         ? value
@@ -32,13 +32,13 @@ function markFollowerCrossTargetDelivery(body, defaultTarget) {
     const isDifferentTarget = threadId === undefined
         ? defaultTarget.threadId !== undefined
         : threadId !== defaultTarget.threadId;
-    return isDifferentTarget ? markTelegramBusCrossTargetDelivery(body) : body;
+    return isDifferentTarget ? markBaleBusCrossTargetDelivery(body) : body;
 }
-function rejectTelegramDirectOwnership(method) {
-    return Promise.reject(new Error(`Telegram ${method} requires direct transport ownership.`));
+function rejectBaleDirectOwnership(method) {
+    return Promise.reject(new Error(`Bale ${method} requires direct transport ownership.`));
 }
 /** Bound selected-menu projection only; no ordinary/raw API fallback and no activation during preparation. */
-export function createTelegramSelectedMenuTextApi(deps) {
+export function createBaleSelectedMenuTextApi(deps) {
     const { operationId, registrationGeneration, assertAuthority, deliver } = deps, target = { ...deps.target };
     if (typeof assertAuthority !== "function" ||
         typeof deliver !== "function" ||
@@ -50,7 +50,7 @@ export function createTelegramSelectedMenuTextApi(deps) {
         target.chatId <= 0 ||
         !Number.isSafeInteger(target.threadId) ||
         target.threadId <= 0)
-        throw new TelegramApiAuthorityError(false);
+        throw new BaleApiAuthorityError(false);
     const invoke = async (edit, raw, options) => {
         let issued = false;
         const assertCurrent = () => {
@@ -58,7 +58,7 @@ export function createTelegramSelectedMenuTextApi(deps) {
                 assertAuthority();
             }
             catch {
-                throw new TelegramApiAuthorityError(issued);
+                throw new BaleApiAuthorityError(issued);
             }
         };
         try {
@@ -72,7 +72,7 @@ export function createTelegramSelectedMenuTextApi(deps) {
                         "reply_markup",
                         ...(edit ? ["message_id"] : ["reply_parameters"]),
                     ].includes(key)))
-                throw new TelegramApiAuthorityError(false);
+                throw new BaleApiAuthorityError(false);
             const body = structuredClone(raw), reply = body.reply_parameters;
             if (body.chat_id !== target.chatId ||
                 body.message_thread_id !== target.threadId ||
@@ -85,8 +85,8 @@ export function createTelegramSelectedMenuTextApi(deps) {
                             true ||
                         !Number.isSafeInteger(reply.message_id) ||
                         reply.message_id <= 0)))
-                throw new TelegramApiAuthorityError(false);
-            const effect = parseTelegramBusSelectedMenuTextEffect({
+                throw new BaleApiAuthorityError(false);
+            const effect = parseBaleBusSelectedMenuTextEffect({
                 kind: edit ? "edit-text" : "send-text",
                 text: body.text,
                 ...(body.parse_mode !== undefined
@@ -104,7 +104,7 @@ export function createTelegramSelectedMenuTextApi(deps) {
                         : {}),
             });
             if (!effect)
-                throw new TelegramApiAuthorityError(false);
+                throw new BaleApiAuthorityError(false);
             assertCurrent();
             issued = true;
             const observed = await deliver.call(deps, effect, assertAuthority);
@@ -122,12 +122,12 @@ export function createTelegramSelectedMenuTextApi(deps) {
             return observed.messageId;
         }
         catch (error) {
-            if (error instanceof TelegramApiAuthorityError ||
-                isTelegramApiCommitUnknownError(error))
+            if (error instanceof BaleApiAuthorityError ||
+                isBaleApiCommitUnknownError(error))
                 throw error;
             if (issued)
-                throw new TelegramApiCommitUnknownError(edit ? "editMessageText" : "sendMessage", error);
-            throw new TelegramApiAuthorityError(false);
+                throw new BaleApiCommitUnknownError(edit ? "editMessageText" : "sendMessage", error);
+            throw new BaleApiAuthorityError(false);
         }
     };
     return {
@@ -141,8 +141,8 @@ export function createTelegramSelectedMenuTextApi(deps) {
     };
 }
 /** Followers route every chat action through the leader's generic `sendChatAction` call. */
-function sendTelegramFollowerChatAction(deps, chatId, action, options) {
-    assertTelegramApiCallAuthority(options?.assertAuthority, false);
+function sendBaleFollowerChatAction(deps, chatId, action, options) {
+    assertBaleApiCallAuthority(options?.assertAuthority, false);
     const body = withDefaultThreadTarget({
         chat_id: chatId,
         action,
@@ -156,14 +156,14 @@ function sendTelegramFollowerChatAction(deps, chatId, action, options) {
     return deps.callFollowerApi("call", args, options?.assertAuthority
         ? { assertAuthority: options.assertAuthority } : undefined).then(asBoolean);
 }
-export function createTelegramBusAwareApiRuntime(deps) {
+export function createBaleBusAwareApiRuntime(deps) {
     return {
         call(method, body, options) {
             if (deps.ownsDirect())
                 return deps.directRuntime.call(method, body, options);
             // A process-local authority callback cannot cross IPC as an enforceable grant.
             if (options?.assertAuthority)
-                return Promise.reject(new TelegramApiAuthorityError(false));
+                return Promise.reject(new BaleApiAuthorityError(false));
             return deps.callFollowerApi("call", [
                 method,
                 body,
@@ -174,7 +174,7 @@ export function createTelegramBusAwareApiRuntime(deps) {
             if (deps.ownsDirect())
                 return deps.directRuntime.callMultipart(method, fields, fileField, filePath, fileName, options);
             if (options?.assertAuthority)
-                return Promise.reject(new TelegramApiAuthorityError(false));
+                return Promise.reject(new BaleApiAuthorityError(false));
             return deps.callFollowerApi("callMultipart", [
                 method,
                 fields,
@@ -197,18 +197,18 @@ export function createTelegramBusAwareApiRuntime(deps) {
         deleteWebhook(signal) {
             return deps.ownsDirect()
                 ? deps.directRuntime.deleteWebhook(signal)
-                : rejectTelegramDirectOwnership("deleteWebhook");
+                : rejectBaleDirectOwnership("deleteWebhook");
         },
         getUpdates(body, signal) {
             return deps.ownsDirect()
                 ? deps.directRuntime.getUpdates(body, signal)
-                : rejectTelegramDirectOwnership("getUpdates");
+                : rejectBaleDirectOwnership("getUpdates");
         },
         setMyCommands(commands, options) {
             if (deps.ownsDirect())
                 return deps.directRuntime.setMyCommands(commands, options);
             if (options?.assertAuthority)
-                return Promise.reject(new TelegramApiAuthorityError(false));
+                return Promise.reject(new BaleApiAuthorityError(false));
             return deps
                 .callFollowerApi("call", ["setMyCommands", { commands }])
                 .then(asBoolean);
@@ -216,17 +216,17 @@ export function createTelegramBusAwareApiRuntime(deps) {
         sendChatAction(chatId, action, options) {
             return deps.ownsDirect()
                 ? deps.directRuntime.sendChatAction(chatId, action, options)
-                : sendTelegramFollowerChatAction(deps, chatId, action, options);
+                : sendBaleFollowerChatAction(deps, chatId, action, options);
         },
         sendTypingAction(chatId, options) {
             return deps.ownsDirect()
                 ? deps.directRuntime.sendTypingAction(chatId, options)
-                : sendTelegramFollowerChatAction(deps, chatId, "typing", options);
+                : sendBaleFollowerChatAction(deps, chatId, "typing", options);
         },
         sendRecordVoiceAction(chatId, options) {
             return deps.ownsDirect()
                 ? deps.directRuntime.sendRecordVoiceAction(chatId, options)
-                : sendTelegramFollowerChatAction(deps, chatId, "record_voice", options);
+                : sendBaleFollowerChatAction(deps, chatId, "record_voice", options);
         },
         sendMessageDraft(chatId, draftId, text, options) {
             const body = {
@@ -251,9 +251,9 @@ export function createTelegramBusAwareApiRuntime(deps) {
         },
         sendMessage(body, options) {
             if (deps.ownsDirect())
-                return deps.directRuntime.sendMessage(stripTelegramBusApiMetadata(body), options);
+                return deps.directRuntime.sendMessage(stripBaleBusApiMetadata(body), options);
             if (options?.assertAuthority)
-                return Promise.reject(new TelegramApiAuthorityError(false));
+                return Promise.reject(new BaleApiAuthorityError(false));
             return deps
                 .callFollowerApi("call", [
                 "sendMessage",
@@ -263,9 +263,9 @@ export function createTelegramBusAwareApiRuntime(deps) {
         },
         sendRichMessage(body, options) {
             if (deps.ownsDirect())
-                return deps.directRuntime.sendRichMessage(stripTelegramBusApiMetadata(body), options);
+                return deps.directRuntime.sendRichMessage(stripBaleBusApiMetadata(body), options);
             if (options?.assertAuthority)
-                return Promise.reject(new TelegramApiAuthorityError(false));
+                return Promise.reject(new BaleApiAuthorityError(false));
             return deps
                 .callFollowerApi("call", [
                 "sendRichMessage",
@@ -284,13 +284,13 @@ export function createTelegramBusAwareApiRuntime(deps) {
             if (deps.ownsDirect())
                 return deps.directRuntime.editMessageText(body, options);
             if (options?.assertAuthority)
-                throw new TelegramApiAuthorityError(false);
+                throw new BaleApiAuthorityError(false);
             try {
                 await deps.callFollowerApi("call", ["editMessageText", body]);
                 return "edited";
             }
             catch (error) {
-                if (isTelegramMessageNotModifiedError(error))
+                if (isBaleMessageNotModifiedError(error))
                     return "unchanged";
                 throw error;
             }
@@ -313,7 +313,7 @@ export function createTelegramBusAwareApiRuntime(deps) {
                 return;
             }
             if (assertAuthority)
-                throw new TelegramApiAuthorityError(false);
+                throw new BaleApiAuthorityError(false);
             await deps.callFollowerApi("call", [
                 "answerCallbackQuery",
                 {
@@ -329,7 +329,7 @@ export function createTelegramBusAwareApiRuntime(deps) {
             }
             await deps.callFollowerApi("call", [
                 "answerGuestQuery",
-                buildTelegramAnswerGuestQueryBody(guestQueryId, text, options),
+                buildBaleAnswerGuestQueryBody(guestQueryId, text, options),
             ]);
         },
         answerGuestQueryForInlineMessage(guestQueryId, text, options) {
@@ -337,12 +337,12 @@ export function createTelegramBusAwareApiRuntime(deps) {
             // transport; follower forwarding cannot preserve the inline message id.
             return deps.ownsDirect()
                 ? deps.directRuntime.answerGuestQueryForInlineMessage(guestQueryId, text, options)
-                : rejectTelegramDirectOwnership("answerGuestQueryForInlineMessage");
+                : rejectBaleDirectOwnership("answerGuestQueryForInlineMessage");
         },
         editGuestInlineMessage(inlineMessageId, content, options) {
             return deps.ownsDirect()
                 ? deps.directRuntime.editGuestInlineMessage(inlineMessageId, content, options)
-                : rejectTelegramDirectOwnership("editGuestInlineMessage");
+                : rejectBaleDirectOwnership("editGuestInlineMessage");
         },
         async deleteMessage(chatId, messageId) {
             if (deps.ownsDirect())

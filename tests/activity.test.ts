@@ -1,5 +1,5 @@
 /**
- * Telegram activity API domain regressions
+ * Bale activity API domain regressions
  * Zones: pi agent lifecycle, extension API, operational delivery
  * Mirrors lib/activity.ts and protects registration, normalization, source identity, coalescing, delivery contexts, and shutdown fencing
  */
@@ -7,34 +7,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  clearTelegramActivityHandlers,
-  createTelegramActivityBridgeRuntime,
-  createTelegramActivityDispatcher,
-  createTelegramActivityPublicationRuntime,
-  createTelegramActivityRuntime,
-  createTelegramAssistantOutputRuntime,
-  registerTelegramActivityHandler,
-  type TelegramActivityEvent,
-  type TelegramAssistantSegmentEvent,
+  clearBaleActivityHandlers,
+  createBaleActivityBridgeRuntime,
+  createBaleActivityDispatcher,
+  createBaleActivityPublicationRuntime,
+  createBaleActivityRuntime,
+  createBaleAssistantOutputRuntime,
+  registerBaleActivityHandler,
+  type BaleActivityEvent,
+  type BaleAssistantSegmentEvent,
 } from "../lib/activity.ts";
-import { createTelegramBusAwareApiRuntime } from "../lib/bus-api.ts";
+import { createBaleBusAwareApiRuntime } from "../lib/bus-api.ts";
 import {
-  bindTelegramDeliveryRuntime,
-  clearTelegramDeliveryRuntime,
-  type TelegramDeliveryRuntime,
+  bindBaleDeliveryRuntime,
+  clearBaleDeliveryRuntime,
+  type BaleDeliveryRuntime,
 } from "../lib/delivery.ts";
 import {
-  createTelegramAssistantOutputMutationFence,
-  createTelegramAssistantOutputSender,
-  createTelegramButtonActionStore,
-  createTelegramButtonReplyPlanner,
+  createBaleAssistantOutputMutationFence,
+  createBaleAssistantOutputSender,
+  createBaleButtonActionStore,
+  createBaleButtonReplyPlanner,
 } from "../lib/outbound.ts";
-import type { TelegramBridgeApiRuntime } from "../lib/telegram-api.ts";
+import type { BaleBridgeApiRuntime } from "../lib/bale-api.ts";
 
 for (const outcome of ["settled", "unconfirmed", "reset", "failed", "capture-failed", "notify-failed", "async-notify-failed"] as const)
 test(`Publication drain hints follow actual final decrement and preserve uncertainty (${outcome})`, async () => {
   let notifications = 0;
-  const publication = createTelegramActivityPublicationRuntime({ captureDrain() {
+  const publication = createBaleActivityPublicationRuntime({ captureDrain() {
     if (outcome === "capture-failed") throw new Error("observer");
     return () => {
       assert.equal(publication.hasPending(), false);
@@ -61,8 +61,8 @@ test(`Publication drain hints follow actual final decrement and preserve uncerta
 for (const stop of [false, true]) test(`Activity drain hints follow the last handler and ignore stopped queues (${stop})`, async () => {
   const entered = Promise.withResolvers<void>(), finish = Promise.withResolvers<void>();
   let notifications = 0;
-  const unregister = registerTelegramActivityHandler({ id: "drain-observer", async handle() { entered.resolve(); await finish.promise; } });
-  const dispatcher = createTelegramActivityDispatcher({ captureDrain: () => () => {
+  const unregister = registerBaleActivityHandler({ id: "drain-observer", async handle() { entered.resolve(); await finish.promise; } });
+  const dispatcher = createBaleActivityDispatcher({ captureDrain: () => () => {
     assert.equal(dispatcher.hasPending?.(), false); notifications++;
   } });
   try {
@@ -76,7 +76,7 @@ for (const stop of [false, true]) test(`Activity drain hints follow the last han
 });
 
 test("Live work publication observation includes reservations, queued/running tails, failure and reset", async () => {
-  const publication = createTelegramActivityPublicationRuntime();
+  const publication = createBaleActivityPublicationRuntime();
   assert.equal(publication.hasPending(), false);
   const reserved = publication.reserve(); assert.equal(publication.hasPending(), true);
   const entered = Promise.withResolvers<void>(), finish = Promise.withResolvers<void>();
@@ -94,8 +94,8 @@ test("Live work publication observation includes reservations, queued/running ta
 
 test("Live work activity fanout observation covers queued handlers before public transport", async () => {
   const entered = Promise.withResolvers<void>(), finish = Promise.withResolvers<void>();
-  const unregister = registerTelegramActivityHandler({ id: "work-observation", async handle() { entered.resolve(); await finish.promise; } });
-  const dispatcher = createTelegramActivityDispatcher();
+  const unregister = registerBaleActivityHandler({ id: "work-observation", async handle() { entered.resolve(); await finish.promise; } });
+  const dispatcher = createBaleActivityDispatcher();
   try {
     assert.equal(dispatcher.hasPending?.(), false);
     dispatcher.dispatch(createEvent("agent-end")); assert.equal(dispatcher.hasPending?.(), true);
@@ -106,7 +106,7 @@ test("Live work activity fanout observation covers queued handlers before public
 });
 
 test("Activity publication isolates failed tasks and fences queued work across reset", async () => {
-  const publication = createTelegramActivityPublicationRuntime();
+  const publication = createBaleActivityPublicationRuntime();
   const events: string[] = [];
   const failed = publication.enqueue(async () => { throw new Error("fixture publication failure"); });
   const next = publication.enqueue(async () => { events.push("after-failure"); });
@@ -130,10 +130,10 @@ for (const outcome of ["reset", "failure", "stop"] as const) {
   test(`Assistant publication preparation settles after ${outcome}`, async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    const publication = createTelegramActivityPublicationRuntime();
+    const publication = createBaleActivityPublicationRuntime();
     const blocker = publication.enqueue(async () => { await gate; });
     const effects: string[] = [];
-    const output = createTelegramAssistantOutputRuntime({
+    const output = createBaleAssistantOutputRuntime({
       enqueue: publication.enqueue, canDeliver: () => true,
       prepareSend: () => ({ wait: async () => { effects.push("wait"); }, settle: () => { effects.push("settle"); } }),
       send: async () => { effects.push("send"); throw new Error("fixture"); },
@@ -151,7 +151,7 @@ for (const outcome of ["reset", "failure", "stop"] as const) {
 }
 
 test("Publication reservations release on cancellation/reset and accept one task", async () => {
-  const publication = createTelegramActivityPublicationRuntime();
+  const publication = createBaleActivityPublicationRuntime();
   const events: string[] = [];
   const cancelled = publication.reserve();
   const next = publication.enqueue(async () => { events.push("next"); });
@@ -172,7 +172,7 @@ test("Publication reservations release on cancellation/reset and accept one task
 
 for (const mode of ["settled", "unconfirmed", "duplicate", "reset", "reset-unconfirmed"] as const) {
   test(`Detached publication work observes lifetime without ordering or renewal (${mode})`, async () => {
-    const publication = createTelegramActivityPublicationRuntime(), work = publication.beginWork();
+    const publication = createBaleActivityPublicationRuntime(), work = publication.beginWork();
     assert.equal(publication.hasPending(), true); assert.equal(publication.hasUnconfirmed(), false);
     let published = false; await publication.enqueue(async () => { published = true; });
     assert.equal(published, true, "Tracked work cannot block or reorder ordinary publication"); assert.equal(publication.hasPending(), true);
@@ -193,7 +193,7 @@ function waitForActivityDispatch(): Promise<void> {
 function createEvent(
   type: "agent-start" | "agent-end" | "agent-settled",
   sequence = 1,
-): TelegramActivityEvent {
+): BaleActivityEvent {
   return {
     type,
     activityId: "activity-one",
@@ -204,20 +204,20 @@ function createEvent(
 }
 
 test.afterEach(() => {
-  clearTelegramActivityHandlers();
-  clearTelegramDeliveryRuntime();
+  clearBaleActivityHandlers();
+  clearBaleDeliveryRuntime();
 });
 
 test("Activity registry orders stable ids and rejects duplicates", async () => {
   const events: string[] = [];
-  registerTelegramActivityHandler({
+  registerBaleActivityHandler({
     id: "second",
     order: 10,
     handle: () => {
       events.push("second");
     },
   });
-  const disposeFirst = registerTelegramActivityHandler({
+  const disposeFirst = registerBaleActivityHandler({
     id: "first",
     order: 0,
     handle: () => {
@@ -226,13 +226,13 @@ test("Activity registry orders stable ids and rejects duplicates", async () => {
   });
   assert.throws(
     () =>
-      registerTelegramActivityHandler({
+      registerBaleActivityHandler({
         id: "first",
         handle: () => {},
       }),
     /already registered/,
   );
-  const dispatcher = createTelegramActivityDispatcher();
+  const dispatcher = createBaleActivityDispatcher();
   dispatcher.dispatch(createEvent("agent-start"));
   await waitForActivityDispatch();
   assert.deepEqual(events, ["first", "second"]);
@@ -246,7 +246,7 @@ test("Activity dispatcher is non-blocking and isolates handler failures", async 
   let release: (() => void) | undefined;
   const events: string[] = [];
   const failures: string[] = [];
-  registerTelegramActivityHandler({
+  registerBaleActivityHandler({
     id: "slow",
     handle: async (event) => {
       events.push(`${event.type}:start`);
@@ -256,13 +256,13 @@ test("Activity dispatcher is non-blocking and isolates handler failures", async 
       events.push(`${event.type}:end`);
     },
   });
-  registerTelegramActivityHandler({
+  registerBaleActivityHandler({
     id: "broken",
     handle: () => {
       throw new Error("boom");
     },
   });
-  const dispatcher = createTelegramActivityDispatcher({
+  const dispatcher = createBaleActivityDispatcher({
     recordFailure: (id, event) => failures.push(`${id}:${event.type}`),
   });
   dispatcher.dispatch(createEvent("agent-start"));
@@ -275,19 +275,19 @@ test("Activity dispatcher is non-blocking and isolates handler failures", async 
 });
 
 test("Activity dispatcher coalesces adjacent deltas but preserves boundaries", async () => {
-  const received: TelegramActivityEvent[] = [];
-  registerTelegramActivityHandler({
+  const received: BaleActivityEvent[] = [];
+  registerBaleActivityHandler({
     id: "capture",
     handle: (event) => {
       received.push(event);
     },
   });
-  const dispatcher = createTelegramActivityDispatcher();
+  const dispatcher = createBaleActivityDispatcher();
   dispatcher.dispatch({
     type: "assistant-text-delta",
     activityId: "activity-one",
     sequence: 1,
-    source: "telegram",
+    source: "bale",
     timestamp: 1,
     contentIndex: 0,
     delta: "hel",
@@ -296,7 +296,7 @@ test("Activity dispatcher coalesces adjacent deltas but preserves boundaries", a
     type: "assistant-text-delta",
     activityId: "activity-one",
     sequence: 2,
-    source: "telegram",
+    source: "bale",
     timestamp: 2,
     contentIndex: 0,
     delta: "lo",
@@ -304,7 +304,7 @@ test("Activity dispatcher coalesces adjacent deltas but preserves boundaries", a
   dispatcher.dispatch({
     ...createEvent("agent-end", 3),
     activityId: "activity-one",
-    source: "telegram",
+    source: "bale",
   });
   await waitForActivityDispatch();
   assert.equal(received.length, 2);
@@ -317,15 +317,15 @@ test("Activity dispatcher coalesces adjacent deltas but preserves boundaries", a
 });
 
 test("Activity normalizer classifies source and assistant segment placement", async () => {
-  const received: TelegramActivityEvent[] = [];
-  registerTelegramActivityHandler({
+  const received: BaleActivityEvent[] = [];
+  registerBaleActivityHandler({
     id: "capture",
     handle: (event) => {
       received.push(event);
     },
   });
-  const dispatcher = createTelegramActivityDispatcher();
-  const runtime = createTelegramActivityRuntime({
+  const dispatcher = createBaleActivityDispatcher();
+  const runtime = createBaleActivityRuntime({
     generation: "generation-one",
     dispatcher,
     now: () => 10,
@@ -357,7 +357,7 @@ test("Activity normalizer classifies source and assistant segment placement", as
   runtime.onAgentEnd();
   runtime.onAgentSettled();
   await waitForActivityDispatch();
-  assert.equal(received[0]?.source, "telegram");
+  assert.equal(received[0]?.source, "bale");
   assert.deepEqual(received[0]?.target, { chatId: 42, threadId: 7 });
   assert.equal(Object.isFrozen(received[0]?.target), true);
   assert.deepEqual(
@@ -373,7 +373,7 @@ test("Activity normalizer classifies source and assistant segment placement", as
     ],
   );
   const segments = received.filter(
-    (event): event is Extract<TelegramActivityEvent, { type: "assistant-segment" }> =>
+    (event): event is Extract<BaleActivityEvent, { type: "assistant-segment" }> =>
       event.type === "assistant-segment",
   );
   assert.deepEqual(
@@ -384,16 +384,16 @@ test("Activity normalizer classifies source and assistant segment placement", as
 });
 
 test("Activity normalizer discards an aborted pending assistant segment", async () => {
-  const received: TelegramActivityEvent[] = [];
-  registerTelegramActivityHandler({
+  const received: BaleActivityEvent[] = [];
+  registerBaleActivityHandler({
     id: "capture-abort",
     handle: (event) => {
       received.push(event);
     },
   });
-  const runtime = createTelegramActivityRuntime({
+  const runtime = createBaleActivityRuntime({
     generation: "generation-abort",
-    dispatcher: createTelegramActivityDispatcher(),
+    dispatcher: createBaleActivityDispatcher(),
   });
   runtime.recordInputSource("extension");
   runtime.onAgentStart({ chatId: 42 });
@@ -414,16 +414,16 @@ test("Activity normalizer discards an aborted pending assistant segment", async 
 });
 
 test("Activity normalizer exposes coalesced UI prompt waiting boundaries", async () => {
-  const received: TelegramActivityEvent[] = [];
-  registerTelegramActivityHandler({
+  const received: BaleActivityEvent[] = [];
+  registerBaleActivityHandler({
     id: "ui-prompt-capture",
     handle: (event) => {
       received.push(event);
     },
   });
-  const runtime = createTelegramActivityRuntime({
+  const runtime = createBaleActivityRuntime({
     generation: "ui-prompt-boundary",
-    dispatcher: createTelegramActivityDispatcher(),
+    dispatcher: createBaleActivityDispatcher(),
   });
   runtime.recordInputSource("interactive");
   runtime.onAgentStart();
@@ -458,16 +458,16 @@ test("Activity normalizer exposes coalesced UI prompt waiting boundaries", async
 });
 
 test("Activity normalizer exposes completed public blocks without reasoning or tools", async () => {
-  const received: TelegramActivityEvent[] = [];
-  registerTelegramActivityHandler({
+  const received: BaleActivityEvent[] = [];
+  registerBaleActivityHandler({
     id: "public-block-capture",
     handle: (event) => {
       received.push(event);
     },
   });
-  const runtime = createTelegramActivityRuntime({
+  const runtime = createBaleActivityRuntime({
     generation: "proactive-boundary",
-    dispatcher: createTelegramActivityDispatcher(),
+    dispatcher: createBaleActivityDispatcher(),
     now: () => 20,
   });
   runtime.recordInputSource("extension");
@@ -492,7 +492,7 @@ test("Activity normalizer exposes completed public blocks without reasoning or t
   await waitForActivityDispatch();
 
   const segments = received.filter(
-    (event): event is Extract<TelegramActivityEvent, { type: "assistant-segment" }> =>
+    (event): event is Extract<BaleActivityEvent, { type: "assistant-segment" }> =>
       event.type === "assistant-segment",
   );
   assert.deepEqual(
@@ -518,14 +518,14 @@ test("Activity normalizer exposes completed public blocks without reasoning or t
 
 test("Activity normalizer distinguishes local, autonomous, and unknown activities", async () => {
   const sources: string[] = [];
-  registerTelegramActivityHandler({
+  registerBaleActivityHandler({
     id: "capture",
     handle: (event) => {
       if (event.type === "agent-start") sources.push(event.source);
     },
   });
-  const dispatcher = createTelegramActivityDispatcher();
-  const runtime = createTelegramActivityRuntime({
+  const dispatcher = createBaleActivityDispatcher();
+  const runtime = createBaleActivityRuntime({
     generation: "generation-one",
     dispatcher,
   });
@@ -542,15 +542,15 @@ test("Activity normalizer distinguishes local, autonomous, and unknown activitie
 });
 
 test("Activity normalizer abandons standalone compaction before the next run", async () => {
-  const received: TelegramActivityEvent[] = [];
-  registerTelegramActivityHandler({
+  const received: BaleActivityEvent[] = [];
+  registerBaleActivityHandler({
     id: "capture",
     handle: (event) => {
       received.push(event);
     },
   });
-  const dispatcher = createTelegramActivityDispatcher();
-  const runtime = createTelegramActivityRuntime({
+  const dispatcher = createBaleActivityDispatcher();
+  const runtime = createBaleActivityRuntime({
     generation: "generation-one",
     dispatcher,
   });
@@ -571,15 +571,15 @@ test("Activity normalizer abandons standalone compaction before the next run", a
 });
 
 test("Activity normalizer ignores late completion after compaction abandonment", async () => {
-  const received: TelegramActivityEvent[] = [];
-  registerTelegramActivityHandler({
+  const received: BaleActivityEvent[] = [];
+  registerBaleActivityHandler({
     id: "capture",
     handle: (event) => {
       received.push(event);
     },
   });
-  const dispatcher = createTelegramActivityDispatcher();
-  const runtime = createTelegramActivityRuntime({
+  const dispatcher = createBaleActivityDispatcher();
+  const runtime = createBaleActivityRuntime({
     generation: "generation-one",
     dispatcher,
   });
@@ -598,14 +598,14 @@ test("Activity normalizer ignores late completion after compaction abandonment",
 });
 
 test("Activity bridge creates a fresh dispatcher after session replacement", async () => {
-  const received: TelegramActivityEvent[] = [];
-  registerTelegramActivityHandler({
+  const received: BaleActivityEvent[] = [];
+  registerBaleActivityHandler({
     id: "capture",
     handle: (event) => {
       received.push(event);
     },
   });
-  const runtime = createTelegramActivityBridgeRuntime({
+  const runtime = createBaleActivityBridgeRuntime({
     generation: "bridge-generation",
   });
 
@@ -637,7 +637,7 @@ test("In-flight Activity handlers cannot deliver through a replacement session",
   const handlerStarted = new Promise<void>((resolve) => {
     markHandlerStarted = resolve;
   });
-  registerTelegramActivityHandler({
+  registerBaleActivityHandler({
     id: "blocked",
     async handle(_event, ctx) {
       markHandlerStarted?.();
@@ -647,7 +647,7 @@ test("In-flight Activity handlers cannot deliver through a replacement session",
       if (!result.ok) assert.equal(result.reason, "runtime-unavailable");
     },
   });
-  const activityRuntime = createTelegramActivityBridgeRuntime({
+  const activityRuntime = createBaleActivityBridgeRuntime({
     generation: "bridge-generation",
   });
   activityRuntime.onSessionStart?.();
@@ -655,7 +655,7 @@ test("In-flight Activity handlers cannot deliver through a replacement session",
   await handlerStarted;
 
   activityRuntime.onSessionShutdown();
-  bindTelegramDeliveryRuntime({
+  bindBaleDeliveryRuntime({
     generation: "replacement-delivery",
     shutdown() {},
     async sendView() {
@@ -691,7 +691,7 @@ test("In-flight Activity handlers cannot deliver through a replacement session",
 
 test("Activity context delegates to delivery with source-specific default scope", async () => {
   const scopes: string[] = [];
-  const deliveryRuntime: TelegramDeliveryRuntime = {
+  const deliveryRuntime: BaleDeliveryRuntime = {
     generation: "delivery-one",
     shutdown() {},
     async sendView(_view, options) {
@@ -724,8 +724,8 @@ test("Activity context delegates to delivery with source-specific default scope"
       return { ok: true, value: undefined };
     },
   };
-  bindTelegramDeliveryRuntime(deliveryRuntime);
-  registerTelegramActivityHandler({
+  bindBaleDeliveryRuntime(deliveryRuntime);
+  registerBaleActivityHandler({
     id: "delivery",
     handle: async (event, ctx) => {
       if (event.type !== "agent-start") return;
@@ -739,10 +739,10 @@ test("Activity context delegates to delivery with source-specific default scope"
       }
     },
   });
-  const dispatcher = createTelegramActivityDispatcher();
+  const dispatcher = createBaleActivityDispatcher();
   dispatcher.dispatch({
     ...createEvent("agent-start"),
-    source: "telegram",
+    source: "bale",
     target: Object.freeze({ chatId: 42, threadId: 7 }),
   });
   dispatcher.dispatch({
@@ -761,13 +761,13 @@ test("Activity context delegates to delivery with source-specific default scope"
   ]);
 });
 
-test("Delayed Telegram activity keeps the originating immutable target", async () => {
+test("Delayed Bale activity keeps the originating immutable target", async () => {
   const targets: Array<{ chatId: number; threadId?: number }> = [];
   let releaseFirst: (() => void) | undefined;
   const firstGate = new Promise<void>((resolve) => {
     releaseFirst = resolve;
   });
-  bindTelegramDeliveryRuntime({
+  bindBaleDeliveryRuntime({
     generation: "delivery-one",
     shutdown() {},
     async sendView(_view, options) {
@@ -794,23 +794,23 @@ test("Delayed Telegram activity keeps the originating immutable target", async (
       return { ok: true, value: undefined };
     },
   });
-  registerTelegramActivityHandler({
+  registerBaleActivityHandler({
     id: "delayed-target",
     handle: async (event, ctx) => {
       if (event.activityId === "activity-one") await firstGate;
       await ctx.send({ text: event.activityId });
     },
   });
-  const dispatcher = createTelegramActivityDispatcher();
+  const dispatcher = createBaleActivityDispatcher();
   dispatcher.dispatch({
     ...createEvent("agent-start"),
-    source: "telegram",
+    source: "bale",
     target: Object.freeze({ chatId: 42, threadId: 7 }),
   });
   dispatcher.dispatch({
     ...createEvent("agent-start", 2),
     activityId: "activity-two",
-    source: "telegram",
+    source: "bale",
     target: Object.freeze({ chatId: 42, threadId: 8 }),
   });
   await waitForActivityDispatch();
@@ -826,14 +826,14 @@ test("Delayed Telegram activity keeps the originating immutable target", async (
 
 test("Activity shutdown fences queued handlers and clears normalization state", async () => {
   const received: string[] = [];
-  registerTelegramActivityHandler({
+  registerBaleActivityHandler({
     id: "capture",
     handle: (event) => {
       received.push(event.type);
     },
   });
-  const dispatcher = createTelegramActivityDispatcher();
-  const runtime = createTelegramActivityRuntime({
+  const dispatcher = createBaleActivityDispatcher();
+  const runtime = createBaleActivityRuntime({
     generation: "generation-one",
     dispatcher,
   });
@@ -846,8 +846,8 @@ test("Activity shutdown fences queued handlers and clears normalization state", 
 
 function assistantSegment(
   sequence: number,
-  overrides: Partial<TelegramAssistantSegmentEvent> = {},
-): TelegramAssistantSegmentEvent {
+  overrides: Partial<BaleAssistantSegmentEvent> = {},
+): BaleAssistantSegmentEvent {
   return {
     type: "assistant-segment",
     activityId: "activity-1",
@@ -864,7 +864,7 @@ function assistantSegment(
 test("Assistant output projection admits all public local blocks once and in order", async () => {
   const sent: string[] = [];
   const failures: string[] = [];
-  const runtime = createTelegramAssistantOutputRuntime({
+  const runtime = createBaleAssistantOutputRuntime({
     canDeliver: () => true,
     send: async (event) => {
       if (event.sequence === 6) throw new Error("failed");
@@ -876,18 +876,18 @@ test("Assistant output projection admits all public local blocks once and in ord
   runtime.accept(assistantSegment(1));
   runtime.accept(assistantSegment(1));
   runtime.accept(
-    assistantSegment(2, { source: "telegram", placement: "intermediate" }),
+    assistantSegment(2, { source: "bale", placement: "intermediate" }),
   );
-  assert.equal(runtime.hasAdmittedTelegramIntermediate("segment-2"), true);
-  assert.equal(runtime.hasAdmittedTelegramIntermediate(" segment-2 "), true);
+  assert.equal(runtime.hasAdmittedBaleIntermediate("segment-2"), true);
+  assert.equal(runtime.hasAdmittedBaleIntermediate(" segment-2 "), true);
   runtime.beginTurn();
-  assert.equal(runtime.hasAdmittedTelegramIntermediate("segment-2"), false);
+  assert.equal(runtime.hasAdmittedBaleIntermediate("segment-2"), false);
   runtime.accept(
-    assistantSegment(3, { source: "telegram", placement: "final" }),
+    assistantSegment(3, { source: "bale", placement: "final" }),
   );
   runtime.accept(
     assistantSegment(4, {
-      source: "telegram",
+      source: "bale",
       placement: "terminal-partial",
     }),
   );
@@ -899,7 +899,7 @@ test("Assistant output projection admits all public local blocks once and in ord
   runtime.accept(assistantSegment(9));
   runtime.accept(assistantSegment(10, { source: "unknown" }));
   runtime.accept(
-    assistantSegment(11, { source: "telegram", placement: "intermediate" }),
+    assistantSegment(11, { source: "bale", placement: "intermediate" }),
   );
   await runtime.waitForIdle();
   assert.deepEqual(sent, [
@@ -913,7 +913,7 @@ test("Assistant output projection admits all public local blocks once and in ord
   ]);
   assert.deepEqual(failures, ["failed"]);
   runtime.stop();
-  assert.equal(runtime.hasAdmittedTelegramIntermediate("segment-2"), false);
+  assert.equal(runtime.hasAdmittedBaleIntermediate("segment-2"), false);
 });
 
 test("Assistant output projection preserves follower order and admission authority", async () => {
@@ -923,8 +923,8 @@ test("Assistant output projection preserves follower order and admission authori
   const gate = new Promise<void>((resolve) => {
     releaseFirst = resolve;
   });
-  const api = createTelegramBusAwareApiRuntime({
-    directRuntime: {} as TelegramBridgeApiRuntime,
+  const api = createBaleBusAwareApiRuntime({
+    directRuntime: {} as BaleBridgeApiRuntime,
     ownsDirect: () => false,
     callFollowerApi: async (_method, args) => {
       calls.push(
@@ -937,7 +937,7 @@ test("Assistant output projection preserves follower order and admission authori
       return { message_id: calls.length };
     },
   });
-  const runtime = createTelegramAssistantOutputRuntime({
+  const runtime = createBaleAssistantOutputRuntime({
     captureAuthority: () => authority,
     isAuthorityActive: (admitted) => admitted === authority,
     canDeliver: () => true,
@@ -962,7 +962,7 @@ test("Assistant output projection preserves follower order and admission authori
 test("Assistant output mutation fence rejects replaced authority", async () => {
   let active = true;
   const calls: string[] = [];
-  const fence = createTelegramAssistantOutputMutationFence(() => active);
+  const fence = createBaleAssistantOutputMutationFence(() => active);
   active = false;
   await assert.rejects(
     fence.run(async () => {
@@ -976,8 +976,8 @@ test("Assistant output mutation fence rejects replaced authority", async () => {
 
 test("Assistant output projection plans prompt buttons before proactive delivery", async () => {
   const sent: Array<Record<string, unknown>> = [];
-  const buttonStore = createTelegramButtonActionStore();
-  const send = createTelegramAssistantOutputSender<string>({
+  const buttonStore = createBaleButtonActionStore();
+  const send = createBaleAssistantOutputSender<string>({
     sendMessage: async (body) => {
       sent.push(body);
       return { message_id: 1 };
@@ -988,7 +988,7 @@ test("Assistant output projection plans prompt buttons before proactive delivery
     },
     editMessage: async () => "edited",
     getAssistantRenderingMode: () => "rich",
-    planButtonReply: createTelegramButtonReplyPlanner(buttonStore),
+    planButtonReply: createBaleButtonReplyPlanner(buttonStore),
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1002,7 +1002,7 @@ test("Assistant output projection plans prompt buttons before proactive delivery
       text: [
         "Ready.",
         "",
-        "<!-- telegram_button {Continue|Continue the workflow.} -->",
+        "<!-- bale_button {Continue|Continue the workflow.} -->",
       ].join("\n"),
     }),
     {
@@ -1031,7 +1031,7 @@ test("Assistant output projection plans prompt buttons before proactive delivery
 for (const rendering of ["rich", "html"] as const) {
   test(`Delayed ${rendering} assistant projection keeps original prompt anchors across turns`, async () => {
     const bodies: Array<Record<string, unknown>> = [];
-    const send = createTelegramAssistantOutputSender<string>({
+    const send = createBaleAssistantOutputSender<string>({
       sendMessage: async (body) => { bodies.push(body); return { message_id: bodies.length }; },
       sendRichMessage: async (body) => { bodies.push(body); return { message_id: bodies.length }; },
       editMessage: async () => "edited", getAssistantRenderingMode: () => rendering,
@@ -1039,8 +1039,8 @@ for (const rendering of ["rich", "html"] as const) {
     });
     const target = { chatId: rendering === "rich" ? 701 : 702, threadId: 42 };
     const authority = { target, route: "direct" as const, directEpoch: 1, transportStamp: "fixture" };
-    const output = createTelegramAssistantOutputRuntime({ canDeliver: () => true, send: (event) => send(event, authority, () => true) });
-    const activity = createTelegramActivityRuntime({
+    const output = createBaleAssistantOutputRuntime({ canDeliver: () => true, send: (event) => send(event, authority, () => true) });
+    const activity = createBaleActivityRuntime({
       generation: "fixture", dispatcher: { dispatch: () => {}, stop: () => {} },
       observeEvent: (event) => { if (event.type === "assistant-segment") output.accept(event); },
     });
@@ -1065,7 +1065,7 @@ for (const rendering of ["rich", "html"] as const) {
 
 test("Assistant output projection strips foreign comments and skips comment-only segments", async () => {
   const sent: Array<Record<string, unknown>> = [];
-  const send = createTelegramAssistantOutputSender<string>({
+  const send = createBaleAssistantOutputSender<string>({
     sendMessage: async (body) => {
       sent.push(body);
       return { message_id: 1 };
@@ -1123,7 +1123,7 @@ test("Assistant output Rich and HTML senders fence after async transformation", 
       release = resolve;
     });
     const transportCalls: string[] = [];
-    const send = createTelegramAssistantOutputSender<string>({
+    const send = createBaleAssistantOutputSender<string>({
       sendMessage: async () => {
         transportCalls.push("html");
         return { message_id: 1 };
@@ -1173,7 +1173,7 @@ test("Assistant output projection drops queued work after generation stop", asyn
     release = resolve;
   });
   const sent: number[] = [];
-  const runtime = createTelegramAssistantOutputRuntime({
+  const runtime = createBaleAssistantOutputRuntime({
     canDeliver: () => true,
     send: async (event) => {
       sent.push(event.sequence);

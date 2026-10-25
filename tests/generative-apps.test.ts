@@ -24,17 +24,17 @@ import {
   installGenerativeApp,
   invokeGenerativeApp,
   parseGenerativeAppBoundAction,
-  registerTelegramBindTool,
+  registerBaleBindTool,
   resolveGenerativeAppDir,
   resolveGenerativeAppModulePath,
 } from "../lib/generative-apps.ts";
 import {
-  bindTelegramDeliveryRuntime,
-  createTelegramBridgeDeliveryRuntime,
-  createTelegramDeliveryTargetPolicyRuntime,
-  editTelegramView,
-  isTelegramDeliveryHandleCurrent,
-  sendTelegramView,
+  bindBaleDeliveryRuntime,
+  createBaleBridgeDeliveryRuntime,
+  createBaleDeliveryTargetPolicyRuntime,
+  editBaleView,
+  isBaleDeliveryHandleCurrent,
+  sendBaleView,
 } from "../lib/delivery.ts";
 import type { ExtensionAPI } from "../lib/pi.ts";
 
@@ -106,7 +106,7 @@ test("Generative App bound-action parser separates ordinary prompts from strict 
 });
 
 test("Generative App install initializes state and later methods commit or remain output-only", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(root, "counter", statefulApp);
@@ -220,7 +220,7 @@ test("Generative App install initializes state and later methods commit or remai
 });
 
 test("Generative App initialization failure preserves a working install and rejects silent replacement", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(root, "counter", statefulApp);
@@ -249,7 +249,7 @@ test("Generative App initialization failure preserves a working install and reje
 });
 
 test("Generative App explicit replacement publishes only an initialized new application", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(root, "counter", statefulApp);
@@ -293,7 +293,7 @@ test("Generative App explicit replacement publishes only an initialized new appl
 });
 
 test("Generative App replacement fences buttons from the previous installation generation", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(root, "counter", statefulApp);
@@ -322,7 +322,7 @@ test("Generative App replacement fences buttons from the previous installation g
 });
 
 test("Generative App replacement requires an existing installation", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(root, "counter", statefulApp);
@@ -336,7 +336,7 @@ test("Generative App replacement requires an existing installation", async () =>
 });
 
 test("Generative App method arguments round-trip scalar, object, and absent shapes", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(
@@ -378,7 +378,7 @@ export function echo({ argument }) { return { output: JSON.stringify(argument ??
 });
 
 test("Generative App method failure leaves state and journal unchanged and later calls succeed", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(
@@ -417,7 +417,7 @@ export function increment({ state }) { return { state: { count: state.count + 1 
 });
 
 test("Generative App rejects oversized argument, output, and state before durable mutation", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(
@@ -459,7 +459,7 @@ export function huge_state() { return { state: { blob: "y".repeat(270 * 1024) },
 });
 
 test("Generative App install rejects an oversized module", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(
@@ -481,7 +481,7 @@ test("Generative App install rejects an oversized module", async () => {
 });
 
 test("Generative App install rejects noncanonical scripts and source symlinks", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const wrongStem = await writeApp(root, "source", statefulApp);
@@ -502,7 +502,7 @@ test("Generative App install rejects noncanonical scripts and source symlinks", 
 });
 
 test("Generative App install rejects a symlinked managed root", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   const outside = join(root, "outside");
   try {
@@ -520,7 +520,7 @@ test("Generative App install rejects a symlinked managed root", async () => {
 });
 
 test("Generative App invocation recovers current state from the last complete journal line", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(root, "counter", statefulApp);
@@ -554,7 +554,7 @@ test("Generative App invocation recovers current state from the last complete jo
 });
 
 test("Generative App invocation reloads same-size module edits even when file timestamps match", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(
@@ -596,7 +596,7 @@ export function inspect() { return { output: "old" }; }
 });
 
 test("Generative App transition lock serializes sibling processes and recovers a dead owner", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(
@@ -651,7 +651,7 @@ process.stdout.write(result.output);
 });
 
 test("Generative App bounded process port uses argv execution and captures structured output", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const script = await writeApp(
@@ -684,7 +684,7 @@ export async function inspect({ run, argument }) {
 });
 
 test("Generative App worker never starts a process after cancellation", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const marker = join(root, "after-abort.txt");
@@ -728,7 +728,7 @@ export async function mutate({ run, signal }) {
 });
 
 test("Generative App worker bounds synchronous methods and cancels in-flight processes", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   try {
     const hanging = await writeApp(
@@ -790,7 +790,7 @@ export async function mutate({ run }) {
 });
 
 test("Generative App live surfaces suppress unchanged frames, remain non-overlapping, and close on omitted hints", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   const timers: Array<() => void> = [];
   const edits: string[] = [];
@@ -857,7 +857,7 @@ export async function refresh() {
 });
 
 test("Generative App live surfaces fence a cancelled in-flight refresh from its replacement", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   const edits: string[] = [];
   let plans = 0;
@@ -910,7 +910,7 @@ export async function refresh() {
 });
 
 test("Generative App live surfaces retry one retained frame without re-invoking refresh", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   const timers: Array<{ callback: () => void; delayMs: number }> = [];
   let plans = 0;
@@ -965,7 +965,7 @@ export function refresh() { return { output: "changed", refreshAfterMs: 3000 }; 
 });
 
 test("Generative App live surfaces invalidate unavailable deliveries with bounded diagnostics", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   const events: Array<{ category: string; details?: Record<string, unknown> }> = [];
   let plans = 0;
@@ -1020,7 +1020,7 @@ export function refresh() { return { output: "changed", refreshAfterMs: 3000 }; 
   }
 });
 
-test("telegram_bind Tool output contributes exactly one leading newline", () => {
+test("bale_bind Tool output contributes exactly one leading newline", () => {
   assert.equal(formatGenerativeAppToolOutput("ready"), "\nready");
   assert.equal(formatGenerativeAppToolOutput("\n\nready"), "\nready");
   assert.equal(formatGenerativeAppToolOutput(""), "\n(Generative App returned no output)");
@@ -1030,8 +1030,8 @@ test("telegram_bind Tool output contributes exactly one leading newline", () => 
   assert.match(formatDisplayedGenerativeAppToolOutput(), /Do not repeat/u);
 });
 
-test("telegram_bind displays app output directly in an active Telegram turn", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+test("bale_bind displays app output directly in an active Bale turn", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   let tool: {
     execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
@@ -1044,7 +1044,7 @@ test("telegram_bind displays app output directly in an active Telegram turn", as
   const deliveries: unknown[][] = [];
   try {
     const script = await writeApp(root, "counter", statefulApp);
-    registerTelegramBindTool(pi, {
+    registerBaleBindTool(pi, {
       agentDir,
       getActiveTurn: () => ({
         chatId: 123,
@@ -1099,8 +1099,8 @@ test("telegram_bind displays app output directly in an active Telegram turn", as
   }
 });
 
-test("telegram_bind attaches hinted successful delivery to the live-surface scheduler", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+test("bale_bind attaches hinted successful delivery to the live-surface scheduler", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   let tool: { execute: (id: string, params: Record<string, unknown>) => Promise<unknown> } | undefined;
   const timers: Array<() => void> = [];
@@ -1111,7 +1111,7 @@ test("telegram_bind attaches hinted successful delivery to the live-surface sche
 export function init() { return { state: {}, output: "initial", refreshAfterMs: 2000 }; }
 export function refresh() { return { output: "updated" }; }
 `);
-    registerTelegramBindTool(pi, {
+    registerBaleBindTool(pi, {
       agentDir,
       getActiveProfileName: () => "work",
       getActiveTurn: () => ({ chatId: 123, replyToMessageId: 456 }),
@@ -1143,8 +1143,8 @@ export function refresh() { return { output: "updated" }; }
   }
 });
 
-test("telegram_bind classifies Delivery message-unavailable live edits", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+test("bale_bind classifies Delivery message-unavailable live edits", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   let tool: { execute: (id: string, params: Record<string, unknown>) => Promise<unknown> } | undefined;
   const timers: Array<() => void> = [];
@@ -1155,7 +1155,7 @@ test("telegram_bind classifies Delivery message-unavailable live edits", async (
 export function init() { return { state: {}, output: "initial", refreshAfterMs: 2000 }; }
 export function refresh() { return { output: "updated", refreshAfterMs: 3000 }; }
 `);
-    registerTelegramBindTool(pi, {
+    registerBaleBindTool(pi, {
       agentDir,
       getActiveTurn: () => ({ chatId: 123, replyToMessageId: 456 }),
       isDeliveryHandleCurrent: () => true,
@@ -1188,20 +1188,20 @@ export function refresh() { return { output: "updated", refreshAfterMs: 3000 }; 
   }
 });
 
-test("telegram_bind live surfaces retain classic, leader, and follower delivery targets", async () => {
+test("bale_bind live surfaces retain classic, leader, and follower delivery targets", async () => {
   const cases = [
     { name: "classic", ownsDirect: true, follower: false, active: { chatId: 123 } },
     { name: "leader", ownsDirect: true, follower: false, active: { chatId: 123, threadId: 7 } },
     { name: "follower", ownsDirect: false, follower: true, active: { chatId: 123, threadId: 8 } },
   ] as const;
   for (const entry of cases) {
-    const root = await mkdtemp(join(tmpdir(), `pi-telegram-generative-app-${entry.name}-`));
+    const root = await mkdtemp(join(tmpdir(), `pi-bale-generative-app-${entry.name}-`));
     const agentDir = join(root, "agent");
     let tool: { execute: (id: string, params: Record<string, unknown>) => Promise<unknown> } | undefined;
     const timers: Array<() => void> = [];
     const sends: Array<Record<string, unknown>> = [];
     const edits: Array<Record<string, unknown>> = [];
-    const policy = createTelegramDeliveryTargetPolicyRuntime({
+    const policy = createBaleDeliveryTargetPolicyRuntime({
       ownsDirect: () => entry.ownsDirect,
       isFollowerRegistered: () => entry.follower,
       getAllowedChatId: () => 123,
@@ -1211,7 +1211,7 @@ test("telegram_bind live surfaces retain classic, leader, and follower delivery 
       getActiveTurnTarget: () => entry.active,
       getActiveGuestQueryId: () => undefined,
     });
-    const runtime = createTelegramBridgeDeliveryRuntime({
+    const runtime = createBaleBridgeDeliveryRuntime({
       generation: `delivery-${entry.name}`,
       getTargetPolicyView: policy.getTargetPolicyView,
       getActiveTurnTarget: policy.getActiveTurnTarget,
@@ -1223,14 +1223,14 @@ test("telegram_bind live surfaces retain classic, leader, and follower delivery 
       },
       recordOwnership: () => undefined,
     });
-    const unbind = bindTelegramDeliveryRuntime(runtime);
+    const unbind = bindBaleDeliveryRuntime(runtime);
     try {
       const script = await writeApp(root, "dashboard", `
 export function init() { return { state: {}, output: "initial", refreshAfterMs: 2000 }; }
 export function refresh() { return { output: "updated" }; }
 `);
       const pi = { registerTool(definition: typeof tool) { tool = definition; } } as unknown as ExtensionAPI;
-      registerTelegramBindTool(pi, {
+      registerBaleBindTool(pi, {
         agentDir,
         getActiveProfileName: () => "work",
         getActiveTurn: () => ({
@@ -1238,15 +1238,15 @@ export function refresh() { return { output: "updated" }; }
           replyToMessageId: 456,
           target: entry.active,
         }),
-        isDeliveryHandleCurrent: isTelegramDeliveryHandleCurrent,
+        isDeliveryHandleCurrent: isBaleDeliveryHandleCurrent,
         planOutput: (markdown) => ({ markdown }),
-        sendView: (view, options) => sendTelegramView(
-          view as Parameters<typeof sendTelegramView>[0],
+        sendView: (view, options) => sendBaleView(
+          view as Parameters<typeof sendBaleView>[0],
           options,
         ),
-        editView: (handle, view) => editTelegramView(
+        editView: (handle, view) => editBaleView(
           handle,
-          view as Parameters<typeof editTelegramView>[1],
+          view as Parameters<typeof editBaleView>[1],
         ),
         liveSurfaceSetTimer(callback) {
           timers.push(callback);
@@ -1277,8 +1277,8 @@ export function refresh() { return { output: "updated" }; }
   }
 });
 
-test("telegram_bind Tool exposes mutually exclusive install and invocation shapes", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-generative-app-"));
+test("bale_bind Tool exposes mutually exclusive install and invocation shapes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-generative-app-"));
   const agentDir = join(root, "agent");
   let tool: {
     execute: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
@@ -1292,8 +1292,8 @@ test("telegram_bind Tool exposes mutually exclusive install and invocation shape
   } as unknown as ExtensionAPI;
   try {
     const script = await writeApp(root, "counter", statefulApp);
-    registerTelegramBindTool(pi, { agentDir });
-    assert.equal(tool?.name, "telegram_bind");
+    registerBaleBindTool(pi, { agentDir });
+    assert.equal(tool?.name, "bale_bind");
     assert.equal((tool?.parameters as { type?: unknown }).type, "object");
     assert.equal("anyOf" in (tool?.parameters as object), false);
     const parameters = tool?.parameters as { properties?: Record<string, unknown> };

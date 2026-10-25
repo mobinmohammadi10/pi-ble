@@ -1,6 +1,6 @@
 /**
- * Public Telegram outbound API
+ * Public Bale outbound API
  * Zones: package boundary, extension interop
  * Exposes stable outbound handler and diagnostics surfaces while keeping delivery internals package-private
  */
-export { recordTelegramRuntimeEvent, registerTelegramOutboundHandler, } from "../lib/outbound.js";
+export { recordBaleRuntimeEvent, registerBaleOutboundHandler, } from "../lib/outbound.js";

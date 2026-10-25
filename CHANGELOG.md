@@ -1,3 +1,9 @@
+# Bale port — Unreleased
+
+- `bale`: Rename the package, commands, tools, environment variables and runtime paths; use Bale API and file endpoints.
+- `compatibility`: Limit startup to classic DM mode, translate text/reply payloads and reject undocumented methods and Thread targets locally.
+- `docs`: Document local installation and Bale limits; retain original release history below as historical provenance.
+
 # Changelog
 
 > Each release keeps at most 8 outcome records of at most 512 characters.

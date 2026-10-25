@@ -1,23 +1,23 @@
 /**
- * Telegram message ownership helpers
- * Zones: telegram routing, multi-instance bus, in-memory coordination
+ * Bale message ownership helpers
+ * Zones: bale routing, multi-instance bus, in-memory coordination
  * Owns message-id ownership and live forwarding projections so inbound updates resolve back to the instance/target that owns them
  */
-import { TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION, } from "./bus.js";
-import { getTelegramTargetKey } from "./target.js";
-function getTelegramFollowerOwnershipGeneration(follower) {
+import { BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION, } from "./bus.js";
+import { getBaleTargetKey } from "./target.js";
+function getBaleFollowerOwnershipGeneration(follower) {
     return (follower.registrationGeneration ??
         `${follower.instanceId}:${follower.connectedAtMs}`);
 }
-export function createTelegramBusMessageOwnershipRuntime(deps) {
-    const store = createTelegramMessageOwnershipStore({
+export function createBaleBusMessageOwnershipRuntime(deps) {
+    const store = createBaleMessageOwnershipStore({
         getProfileKey: deps.getProfileKey,
         isOwnerGenerationLive(record) {
             if (!record.ownerGeneration)
                 return true;
             return deps.listFollowers().some((follower) => {
                 return (follower.instanceId === record.instanceId &&
-                    getTelegramFollowerOwnershipGeneration(follower) ===
+                    getBaleFollowerOwnershipGeneration(follower) ===
                         record.ownerGeneration);
             });
         },
@@ -30,7 +30,7 @@ export function createTelegramBusMessageOwnershipRuntime(deps) {
             return follower
                 ? {
                     instanceId: follower.instanceId,
-                    ownerGeneration: getTelegramFollowerOwnershipGeneration(follower),
+                    ownerGeneration: getBaleFollowerOwnershipGeneration(follower),
                     recipientBindingKey: record.recipientBindingKey,
                 }
                 : undefined;
@@ -42,7 +42,7 @@ export function createTelegramBusMessageOwnershipRuntime(deps) {
             messageId: input.messageId,
             target: input.target,
             instanceId: input.follower.instanceId,
-            ownerGeneration: getTelegramFollowerOwnershipGeneration(input.follower),
+            ownerGeneration: getBaleFollowerOwnershipGeneration(input.follower),
             recipientBindingKey: input.follower.profileKey,
         });
     };
@@ -59,7 +59,7 @@ export function createTelegramBusMessageOwnershipRuntime(deps) {
                 candidate.profileKey === record.recipientBindingKey);
             // Protocol is live registration authority, not message-cache history.
             // Keep an incomplete known owner foreign so the forwarder fails closed.
-            return follower?.protocol?.capabilities.includes(TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION)
+            return follower?.protocol?.capabilities.includes(BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION)
                 ? { ...record, protocolIdentity: follower.protocol }
                 : record;
         },
@@ -79,14 +79,14 @@ export function createTelegramBusMessageOwnershipRuntime(deps) {
             const ownership = store.get(chatId, messageId);
             return (ownership?.instanceId === follower.instanceId &&
                 ownership.ownerGeneration ===
-                    getTelegramFollowerOwnershipGeneration(follower));
+                    getBaleFollowerOwnershipGeneration(follower));
         },
     };
 }
-function getTelegramMessageOwnershipKey(chatId, messageId, profileKey) {
+function getBaleMessageOwnershipKey(chatId, messageId, profileKey) {
     return `${profileKey ?? ""}:${chatId}:${messageId}`;
 }
-function createTelegramMessageOwnershipRecord(input) {
+function createBaleMessageOwnershipRecord(input) {
     return {
         chatId: input.chatId,
         messageId: input.messageId,
@@ -103,14 +103,14 @@ function createTelegramMessageOwnershipRecord(input) {
         updatedAt: input.now,
     };
 }
-export function createTelegramMessageOwnershipStore(options = {}) {
+export function createBaleMessageOwnershipStore(options = {}) {
     const records = new Map();
     return {
         record: (input) => {
             const profileKey = input.profileKey ?? options.getProfileKey?.();
-            const key = getTelegramMessageOwnershipKey(input.chatId, input.messageId, profileKey);
+            const key = getBaleMessageOwnershipKey(input.chatId, input.messageId, profileKey);
             const now = input.now ?? Date.now();
-            const record = createTelegramMessageOwnershipRecord({
+            const record = createBaleMessageOwnershipRecord({
                 ...input,
                 profileKey,
                 now,
@@ -120,7 +120,7 @@ export function createTelegramMessageOwnershipStore(options = {}) {
             return record;
         },
         get: (chatId, messageId) => {
-            const key = getTelegramMessageOwnershipKey(chatId, messageId, options.getProfileKey?.());
+            const key = getBaleMessageOwnershipKey(chatId, messageId, options.getProfileKey?.());
             const record = records.get(key);
             if (!record)
                 return undefined;
@@ -136,15 +136,15 @@ export function createTelegramMessageOwnershipStore(options = {}) {
             }
             return record;
         },
-        forget: (chatId, messageId) => records.delete(getTelegramMessageOwnershipKey(chatId, messageId, options.getProfileKey?.())),
+        forget: (chatId, messageId) => records.delete(getBaleMessageOwnershipKey(chatId, messageId, options.getProfileKey?.())),
         forgetTarget: (target) => {
-            const targetKey = getTelegramTargetKey(target);
+            const targetKey = getBaleTargetKey(target);
             const profileKey = options.getProfileKey?.();
             let removed = 0;
             for (const [key, record] of records) {
                 if ((record.profileKey ?? undefined) !== profileKey)
                     continue;
-                if (getTelegramTargetKey(record.target) !== targetKey)
+                if (getBaleTargetKey(record.target) !== targetKey)
                     continue;
                 records.delete(key);
                 removed += 1;

@@ -1,21 +1,21 @@
 /**
  * Pi prompt-template bridge helpers
- * Zones: pi agent prompts, telegram controls, filesystem
- * Discovers Pi prompt-template slash commands and expands them before Telegram queue dispatch
+ * Zones: pi agent prompts, bale controls, filesystem
+ * Discovers Pi prompt-template slash commands and expands them before Bale queue dispatch
  */
 
 import { readFileSync } from "node:fs";
 import type { PiSlashCommandInfo } from "./pi.ts";
 
-export interface TelegramPromptTemplateCommand {
+export interface BalePromptTemplateCommand {
   command: string;
   description?: string;
   path: string;
 }
 
-export type TelegramPromptTemplateReader = (path: string) => string;
+export type BalePromptTemplateReader = (path: string) => string;
 
-const TELEGRAM_BOT_COMMAND_NAME_PATTERN = /^[a-z0-9_]{1,32}$/;
+const BALE_BOT_COMMAND_NAME_PATTERN = /^[a-z0-9_]{1,32}$/;
 
 function stripPromptTemplateFrontmatter(content: string): string {
   if (!content.startsWith("---")) return content;
@@ -79,11 +79,11 @@ export function substitutePromptTemplateArgs(
   return result.replace(/\$ARGUMENTS/g, allArgs).replace(/\$@/g, allArgs);
 }
 
-function isTelegramPromptTemplateCommandName(name: string): boolean {
-  return TELEGRAM_BOT_COMMAND_NAME_PATTERN.test(name);
+function isBalePromptTemplateCommandName(name: string): boolean {
+  return BALE_BOT_COMMAND_NAME_PATTERN.test(name);
 }
 
-export function mapPiPromptTemplateNameToTelegramCommandName(
+export function mapPiPromptTemplateNameToBaleCommandName(
   name: string,
 ): string | undefined {
   const command = name
@@ -93,34 +93,34 @@ export function mapPiPromptTemplateNameToTelegramCommandName(
     .replace(/^_+|_+$/g, "")
     .slice(0, 32)
     .replace(/_+$/g, "");
-  return isTelegramPromptTemplateCommandName(command) ? command : undefined;
+  return isBalePromptTemplateCommandName(command) ? command : undefined;
 }
 
-export interface TelegramPromptTemplateCommandGetterDeps {
+export interface BalePromptTemplateCommandGetterDeps {
   getCommands: () => readonly PiSlashCommandInfo[];
   reservedCommandNames?: readonly string[];
   getReservedCommandNames?: () => readonly string[];
 }
 
-export function getTelegramPromptTemplateCommands(
+export function getBalePromptTemplateCommands(
   commands: readonly PiSlashCommandInfo[],
   reservedNames: ReadonlySet<string> = new Set(),
-): TelegramPromptTemplateCommand[] {
+): BalePromptTemplateCommand[] {
   const seen = new Set<string>();
-  const promptCommands: TelegramPromptTemplateCommand[] = [];
+  const promptCommands: BalePromptTemplateCommand[] = [];
   for (const command of commands) {
     if (command.source !== "prompt") continue;
-    const telegramCommand = mapPiPromptTemplateNameToTelegramCommandName(
+    const baleCommand = mapPiPromptTemplateNameToBaleCommandName(
       command.name,
     );
-    if (!telegramCommand) continue;
-    if (reservedNames.has(telegramCommand)) continue;
-    if (seen.has(telegramCommand)) continue;
+    if (!baleCommand) continue;
+    if (reservedNames.has(baleCommand)) continue;
+    if (seen.has(baleCommand)) continue;
     const sourcePath = command.sourceInfo?.path;
     if (!sourcePath) continue;
-    seen.add(telegramCommand);
+    seen.add(baleCommand);
     promptCommands.push({
-      command: telegramCommand,
+      command: baleCommand,
       description: command.description,
       path: sourcePath,
     });
@@ -128,11 +128,11 @@ export function getTelegramPromptTemplateCommands(
   return promptCommands.sort((a, b) => a.command.localeCompare(b.command));
 }
 
-export function createTelegramPromptTemplateCommandGetter(
-  deps: TelegramPromptTemplateCommandGetterDeps,
-): () => TelegramPromptTemplateCommand[] {
+export function createBalePromptTemplateCommandGetter(
+  deps: BalePromptTemplateCommandGetterDeps,
+): () => BalePromptTemplateCommand[] {
   return () => {
-    return getTelegramPromptTemplateCommands(
+    return getBalePromptTemplateCommands(
       deps.getCommands(),
       new Set([
         ...(deps.reservedCommandNames ?? []),
@@ -142,11 +142,11 @@ export function createTelegramPromptTemplateCommandGetter(
   };
 }
 
-export function expandTelegramPromptTemplateCommand(
+export function expandBalePromptTemplateCommand(
   commandName: string,
   args: string,
-  commands: readonly TelegramPromptTemplateCommand[],
-  readTemplate: TelegramPromptTemplateReader = (path) =>
+  commands: readonly BalePromptTemplateCommand[],
+  readTemplate: BalePromptTemplateReader = (path) =>
     readFileSync(path, "utf-8"),
 ): string | undefined {
   const command = commands.find(

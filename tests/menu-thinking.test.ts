@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram thinking menu helpers
+ * Regression tests for Bale thinking menu helpers
  * Exercises thinking-menu markup, callback routing, voice guards, and send/update helpers
  */
 
@@ -7,12 +7,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  buildTelegramThinkingMenuRenderPayload,
+  buildBaleThinkingMenuRenderPayload,
   buildThinkingMenuReplyMarkup,
   buildThinkingMenuText,
-  handleTelegramThinkingMenuCallbackAction,
-  openTelegramThinkingMenu,
-  updateTelegramThinkingMenuMessage,
+  handleBaleThinkingMenuCallbackAction,
+  openBaleThinkingMenu,
+  updateBaleThinkingMenuMessage,
 } from "../lib/menu-thinking.ts";
 
 const reasoningModel = {
@@ -46,7 +46,7 @@ test("Thinking callback sets valid levels, refreshes its chooser and reports cur
   const calls: string[] = [];
   let current = "low" as const;
 
-  const handled = await handleTelegramThinkingMenuCallbackAction(
+  const handled = await handleBaleThinkingMenuCallbackAction(
     "q1",
     "thinking:set:high",
     reasoningModel,
@@ -85,7 +85,7 @@ test("Thinking callback handles invalid, voice-active, non-reasoning, and unrela
   };
 
   assert.equal(
-    await handleTelegramThinkingMenuCallbackAction(
+    await handleBaleThinkingMenuCallbackAction(
       "q1",
       "thinking:set:nope",
       reasoningModel,
@@ -94,7 +94,7 @@ test("Thinking callback handles invalid, voice-active, non-reasoning, and unrela
     true,
   );
   assert.equal(
-    await handleTelegramThinkingMenuCallbackAction(
+    await handleBaleThinkingMenuCallbackAction(
       "q2",
       "thinking:set:low",
       reasoningModel,
@@ -103,7 +103,7 @@ test("Thinking callback handles invalid, voice-active, non-reasoning, and unrela
     true,
   );
   assert.equal(
-    await handleTelegramThinkingMenuCallbackAction(
+    await handleBaleThinkingMenuCallbackAction(
       "q3",
       "thinking:set:low",
       { provider: "x", id: "plain" },
@@ -112,7 +112,7 @@ test("Thinking callback handles invalid, voice-active, non-reasoning, and unrela
     true,
   );
   assert.equal(
-    await handleTelegramThinkingMenuCallbackAction(
+    await handleBaleThinkingMenuCallbackAction(
       "q4",
       "menu:model",
       reasoningModel,
@@ -154,23 +154,23 @@ test("Thinking menu open and update helpers apply thinking mode and respect voic
     },
   };
 
-  await openTelegramThinkingMenu(deps);
+  await openBaleThinkingMenu(deps);
   assert.equal(state.messageId, 99);
   assert.equal(state.mode, "thinking");
 
-  await updateTelegramThinkingMenuMessage(state, reasoningModel, "high", deps);
+  await updateBaleThinkingMenuMessage(state, reasoningModel, "high", deps);
   assert.equal(state.mode, "thinking");
   assert.equal(messages.length, 3);
 
   const beforeVoiceGuard = messages.length;
-  await openTelegramThinkingMenu({ ...deps, isVoiceReplyActive: () => true });
-  await updateTelegramThinkingMenuMessage(state, reasoningModel, "low", {
+  await openBaleThinkingMenu({ ...deps, isVoiceReplyActive: () => true });
+  await updateBaleThinkingMenuMessage(state, reasoningModel, "low", {
     ...deps,
     isVoiceReplyActive: () => true,
   });
   assert.equal(messages.length, beforeVoiceGuard);
 
-  const payload = buildTelegramThinkingMenuRenderPayload(reasoningModel, "low");
+  const payload = buildBaleThinkingMenuRenderPayload(reasoningModel, "low");
   assert.equal(payload.nextMode, "thinking");
   assert.equal(payload.mode, "html");
 });

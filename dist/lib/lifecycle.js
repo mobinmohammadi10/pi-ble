@@ -1,6 +1,6 @@
 /**
- * Telegram session lifecycle coordination and hook registration
- * Zones: pi agent lifecycle, telegram session
+ * Bale session lifecycle coordination and hook registration
+ * Zones: pi agent lifecycle, bale session
  * Owns context generations, bounded connect intent across resume, and session sequencing.
  * Transport authority, durable bindings, and queue custody remain with their owners.
  */
@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import * as BusFollower from "./bus-follower.js";
 import * as Machine from "./machine.js";
 import * as Queue from "./queue.js";
-import { formatTelegramConnectionFailure } from "./status.js";
+import { formatBaleConnectionFailure } from "./status.js";
 import * as TextGroups from "./text-groups.js";
 export function createAgentStartDedupHook(inner, resetReplyDedup, schedulePublication) {
     return async (event, ctx) => {
@@ -22,12 +22,12 @@ export function createAgentStartDedupHook(inner, resetReplyDedup, schedulePublic
         return inner(event, ctx);
     };
 }
-const HANDOFF_KEY = Symbol.for("pi-telegram.connection-resume.v1");
+const HANDOFF_KEY = Symbol.for("pi-bale.connection-resume.v1");
 function processHandoffStore() {
     const globals = globalThis;
     return (globals[HANDOFF_KEY] ??= {});
 }
-export function createTelegramConnectionLifecycle(deps) {
+export function createBaleConnectionLifecycle(deps) {
     return {
         onSessionShutdown(event, ctx) {
             deps.intent.suspend({
@@ -59,7 +59,7 @@ export function createTelegramConnectionLifecycle(deps) {
                         return;
                     if (!(await deps.activateProfile(intent.profileName, isCurrent))) {
                         if (isCurrent())
-                            ctx.ui.notify("Telegram profile unavailable. Run /telegram-setup.", "warning");
+                            ctx.ui.notify("Bale profile unavailable. Run /bale-setup.", "warning");
                         return;
                     }
                     if (!isCurrent())
@@ -68,21 +68,21 @@ export function createTelegramConnectionLifecycle(deps) {
                     if (!isCurrent())
                         return;
                     if (!result.ok) {
-                        deps.recordError(new Error(result.message ?? "Telegram resume connection failed."));
-                        ctx.ui.notify(formatTelegramConnectionFailure(result.message), "warning");
+                        deps.recordError(new Error(result.message ?? "Bale resume connection failed."));
+                        ctx.ui.notify(formatBaleConnectionFailure(result.message), "warning");
                     }
                 })()
                     .catch((error) => {
                     deps.recordError(error);
                     if (isCurrent())
-                        ctx.ui.notify(formatTelegramConnectionFailure(error), "warning");
+                        ctx.ui.notify(formatBaleConnectionFailure(error), "warning");
                 })
                     .finally(() => deps.intent.finish(intent.id));
             };
         },
     };
 }
-export function createTelegramConnectionIntentRuntime(options = {}) {
+export function createBaleConnectionIntentRuntime(options = {}) {
     const store = options.store ?? processHandoffStore();
     const now = options.now ?? Date.now;
     const pid = options.pid ?? process.pid;
@@ -141,7 +141,7 @@ export function createTelegramConnectionIntentRuntime(options = {}) {
         },
     };
 }
-export function createTelegramSessionContextStore(options = {}) {
+export function createBaleSessionContextStore(options = {}) {
     let currentContext;
     let currentIdentity;
     let generation = 0;
@@ -197,7 +197,7 @@ export function createTelegramSessionContextStore(options = {}) {
     };
 }
 /** Capture drain hints at work admission; late completion never borrows a replacement session or transport. */
-export function createTelegramSessionDrainObserver(deps) {
+export function createBaleSessionDrainObserver(deps) {
     return () => {
         try {
             const ctx = deps.context.get(), generation = deps.context.getGeneration(), authority = deps.captureAuthority();
@@ -221,7 +221,7 @@ export function createTelegramSessionDrainObserver(deps) {
         }
     };
 }
-export function createTelegramSessionGenerationFence(store, hooks) {
+export function createBaleSessionGenerationFence(store, hooks) {
     return {
         async onSessionStart(event, ctx) {
             const generation = store.set(ctx);
@@ -239,7 +239,7 @@ export function createTelegramSessionGenerationFence(store, hooks) {
         },
     };
 }
-export function createTelegramBridgeSessionLifecycleDeps(ports) {
+export function createBaleBridgeSessionLifecycleDeps(ports) {
     return {
         contextStore: ports.contextStore,
         queue: ports.queue,
@@ -249,7 +249,7 @@ export function createTelegramBridgeSessionLifecycleDeps(ports) {
                 ports.services.mediaGroup.resume(ctx);
                 ports.services.textGroup.resume(ctx);
             },
-            suspendGroupedInput: TextGroups.createTelegramGroupedInputClearer({
+            suspendGroupedInput: TextGroups.createBaleGroupedInputClearer({
                 clearMediaGroups: ports.services.mediaGroup.suspend,
                 clearTextGroups: ports.services.textGroup.suspend,
             }),
@@ -264,15 +264,15 @@ export function createTelegramBridgeSessionLifecycleDeps(ports) {
         },
     };
 }
-export function createTelegramBridgeSessionLifecycleAssembly(deps) {
-    const suspendForReplacement = BusFollower.createTelegramBusFollowerSessionReplacementSuspender({
+export function createBaleBridgeSessionLifecycleAssembly(deps) {
+    const suspendForReplacement = BusFollower.createBaleBusFollowerSessionReplacementSuspender({
         registrationState: deps.follower.registrationState,
         instanceId: deps.follower.instanceId,
         suspendPolling: deps.follower.suspendPolling,
         recordRuntimeEvent: deps.follower.recordRuntimeEvent,
     });
     // A reused context can be current for a successor; inner awaits need this invocation's generation too.
-    const queueLifecycle = (ctx, generation, preserveTarget = true) => Queue.createTelegramSessionLifecycleRuntime({
+    const queueLifecycle = (ctx, generation, preserveTarget = true) => Queue.createBaleSessionLifecycleRuntime({
         ...deps.queue,
         isSessionActive: () => deps.contextStore.isCurrent(ctx, generation),
         stopPolling: () => suspendForReplacement(preserveTarget),
@@ -298,7 +298,7 @@ export function createTelegramBridgeSessionLifecycleAssembly(deps) {
                 return;
             deps.services.capabilityMonitor.start(ctx);
             deps.services.queueWatchdog.start(ctx);
-            await BusFollower.createTelegramBusFollowerSessionRefreshHook({
+            await BusFollower.createBaleBusFollowerSessionRefreshHook({
                 registrationState: deps.follower.registrationState,
                 registrationRuntime: deps.follower.registrationRuntime,
                 getLeaderState: deps.follower.getLeaderState,
@@ -348,15 +348,15 @@ export function createTelegramBridgeSessionLifecycleAssembly(deps) {
             }
         },
     };
-    return createTelegramSessionGenerationFence(deps.contextStore, servicesLifecycle);
+    return createBaleSessionGenerationFence(deps.contextStore, servicesLifecycle);
 }
-function unrefTelegramLifecycleTimer(timer) {
+function unrefBaleLifecycleTimer(timer) {
     if (!timer || typeof timer !== "object")
         return;
     if (typeof timer.unref === "function")
         timer.unref();
 }
-export function createTelegramCompactionObserverState() {
+export function createBaleCompactionObserverState() {
     return { observation: null, typingOwned: false, nextObservation: 0 };
 }
 /**
@@ -364,7 +364,7 @@ export function createTelegramCompactionObserverState() {
  * own observation. Typing ownership is sticky: a repeated start while the observer's own loop runs reports `false`
  * from the shared loop, and must not hand that loop to nobody.
  */
-export function transitionTelegramCompactionObserver(state, event) {
+export function transitionBaleCompactionObserver(state, event) {
     const cancel = state.observation === null ? [] : [{ type: "cancelTimer" }];
     const release = (...tail) => [
         { type: "setInProgress", inProgress: false },
@@ -425,19 +425,19 @@ export function transitionTelegramCompactionObserver(state, event) {
     }
 }
 /**
- * The shell around `transitionTelegramCompactionObserver`: it fences inactive contexts, runs effects with the calling
+ * The shell around `transitionBaleCompactionObserver`: it fences inactive contexts, runs effects with the calling
  * context, reports the typing start back and owns the fallback timer, which keeps the context it was armed under.
  */
-export function createTelegramCompactionObserverRuntime(deps) {
+export function createBaleCompactionObserverRuntime(deps) {
     const timeoutMs = deps.timeoutMs ?? 300_000;
     const setTimer = deps.setTimer ?? setTimeout;
     const clearTimer = deps.clearTimer ?? clearTimeout;
     let fallbackTimer;
     // The context of the event being dispatched; effects run synchronously inside that dispatch.
     let call;
-    const machine = Machine.createTelegramMachineRunner({
-        initial: createTelegramCompactionObserverState(),
-        transition: transitionTelegramCompactionObserver,
+    const machine = Machine.createBaleMachineRunner({
+        initial: createBaleCompactionObserverState(),
+        transition: transitionBaleCompactionObserver,
         run(effect) {
             const ctx = call;
             switch (effect.type) {
@@ -468,7 +468,7 @@ export function createTelegramCompactionObserverRuntime(deps) {
                             contextActive: !deps.isContextActive || deps.isContextActive(armedCtx),
                         });
                     }, timeoutMs);
-                    unrefTelegramLifecycleTimer(fallbackTimer);
+                    unrefBaleLifecycleTimer(fallbackTimer);
                     return;
                 }
                 case "cancelTimer":
@@ -484,7 +484,7 @@ export function createTelegramCompactionObserverRuntime(deps) {
                     return;
                 case "requestDispatch":
                     // Observer expiry releases local presence, not Pi's eventual terminal result.
-                    deps.requestDeferredDispatchNextQueuedTelegramTurn(deps.dispatchNextQueuedTelegramTurn);
+                    deps.requestDeferredDispatchNextQueuedBaleTurn(deps.dispatchNextQueuedBaleTurn);
                     return;
             }
         },
@@ -518,7 +518,7 @@ export function createTelegramCompactionObserverRuntime(deps) {
         },
     };
 }
-export function createTelegramMessageActivityTypingHooks(deps) {
+export function createBaleMessageActivityTypingHooks(deps) {
     const ensureTyping = (ctx) => {
         if (deps.hasActiveTurn())
             deps.startTypingLoop(ctx);
@@ -546,7 +546,7 @@ export function createTelegramMessageActivityTypingHooks(deps) {
         onMessageUpdate: (event, ctx) => handleMessageActivity("update", event, ctx, deps.onMessageUpdate),
     };
 }
-export function appendTelegramLifecycleHooks(base, extra, isSessionActive) {
+export function appendBaleLifecycleHooks(base, extra, isSessionActive) {
     return {
         onSessionStart: async (event, ctx) => {
             await base.onSessionStart(event, ctx);
@@ -562,7 +562,7 @@ export function appendTelegramLifecycleHooks(base, extra, isSessionActive) {
         },
     };
 }
-export function registerTelegramLifecycleHooks(pi, deps) {
+export function registerBaleLifecycleHooks(pi, deps) {
     const isActive = (ctx) => deps.isSessionActive?.(ctx) !== false;
     pi.on("input", async (event, ctx) => {
         if (!isActive(ctx))

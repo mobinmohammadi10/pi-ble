@@ -12,7 +12,7 @@ type CountEvent = { type: "add"; by: number } | { type: "echo" };
 type CountEffect = { type: "log"; value: number } | { type: "add"; by: number };
 
 function createCounter(log: number[]) {
-  const machine = Machine.createTelegramMachineRunner<number, CountEvent, CountEffect>({
+  const machine = Machine.createBaleMachineRunner<number, CountEvent, CountEffect>({
     initial: 0,
     transition: (state, event) =>
       event.type === "add"

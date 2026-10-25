@@ -1,96 +1,96 @@
 /**
- * Telegram outbound button helpers
- * Zones: telegram outbound, assistant markup, callback routing
- * Owns assistant-authored telegram_button extraction, button action storage, callback handling, and prompt-turn construction
+ * Bale outbound button helpers
+ * Zones: bale outbound, assistant markup, callback routing
+ * Owns assistant-authored bale_button extraction, button action storage, callback handling, and prompt-turn construction
  */
 
 import { randomUUID } from "node:crypto";
 
 import type {
-  TelegramInlineKeyboardButtonStyle,
-  TelegramInlineKeyboardMarkup,
+  BaleInlineKeyboardButtonStyle,
+  BaleInlineKeyboardMarkup,
 } from "./keyboard.ts";
 import {
-  getTelegramActionString as getTelegramButtonString,
-  parseTelegramActionPayloadRows,
-  parseTelegramButtonPayloadRows,
-  replaceTelegramButtonFences,
+  getBaleActionString as getBaleButtonString,
+  parseBaleActionPayloadRows,
+  parseBaleButtonPayloadRows,
+  replaceBaleButtonFences,
   replaceTopLevelHtmlComments,
 } from "./outbound-markup.ts";
 import {
-  type PendingTelegramTurn,
-  type TelegramQueueTarget,
-  truncateTelegramQueueSummary,
+  type PendingBaleTurn,
+  type BaleQueueTarget,
+  truncateBaleQueueSummary,
 } from "./queue.ts";
 
-const TELEGRAM_BUTTON_CALLBACK_PREFIX = "tgbtn";
-const TELEGRAM_BUTTON_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
+const BALE_BUTTON_CALLBACK_PREFIX = "tgbtn";
+const BALE_BUTTON_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
 
-export interface TelegramOutboundButtonBinding {
+export interface BaleOutboundButtonBinding {
   generation: string;
   app: string;
   revision: number;
 }
 
-export interface TelegramOutboundButtonAction {
+export interface BaleOutboundButtonAction {
   text: string;
   prompt: string;
-  binding?: TelegramOutboundButtonBinding;
-  selectedStyle?: TelegramInlineKeyboardButtonStyle;
+  binding?: BaleOutboundButtonBinding;
+  selectedStyle?: BaleInlineKeyboardButtonStyle;
   disabled?: true;
 }
 
-export interface TelegramOutboundButtonStoredAction extends TelegramOutboundButtonAction {
+export interface BaleOutboundButtonStoredAction extends BaleOutboundButtonAction {
   createdAt: number;
 }
 
-export type TelegramOutboundButtonMarkup = TelegramInlineKeyboardMarkup;
+export type BaleOutboundButtonMarkup = BaleInlineKeyboardMarkup;
 
-export interface TelegramButtonReplyPlan {
+export interface BaleButtonReplyPlan {
   markdown: string;
-  replyMarkup?: TelegramOutboundButtonMarkup;
+  replyMarkup?: BaleOutboundButtonMarkup;
 }
 
-export interface TelegramButtonActionStore {
-  register: (action: TelegramOutboundButtonAction) => string;
+export interface BaleButtonActionStore {
+  register: (action: BaleOutboundButtonAction) => string;
   resolve: (
     callbackData: string | undefined,
-  ) => TelegramOutboundButtonAction | undefined;
+  ) => BaleOutboundButtonAction | undefined;
 }
 
-export interface TelegramButtonCallbackQuery {
+export interface BaleButtonCallbackQuery {
   id: string;
   data?: string;
   message?: {
     message_id?: number;
     message_thread_id?: number;
     chat?: { id?: number };
-    reply_markup?: TelegramOutboundButtonMarkup;
+    reply_markup?: BaleOutboundButtonMarkup;
   };
 }
 
-export interface TelegramButtonCallbackHandlerDeps<TContext = unknown> {
+export interface BaleButtonCallbackHandlerDeps<TContext = unknown> {
   resolveAction: (
     callbackData: string | undefined,
-  ) => TelegramOutboundButtonAction | undefined;
+  ) => BaleOutboundButtonAction | undefined;
   answerCallbackQuery: (
     callbackQueryId: string,
     text?: string,
   ) => Promise<void>;
   enqueueButtonPrompt: (
-    query: TelegramButtonCallbackQuery,
-    action: TelegramOutboundButtonAction,
+    query: BaleButtonCallbackQuery,
+    action: BaleOutboundButtonAction,
     ctx: TContext,
   ) => boolean | void;
   invokeBoundAction?: (
-    query: TelegramButtonCallbackQuery,
-    action: TelegramOutboundButtonAction,
+    query: BaleButtonCallbackQuery,
+    action: BaleOutboundButtonAction,
     ctx: TContext,
   ) => Promise<false | "new" | "edit">;
   editMessageReplyMarkup?: (
     chatId: number,
     messageId: number,
-    replyMarkup: TelegramOutboundButtonMarkup,
+    replyMarkup: BaleOutboundButtonMarkup,
   ) => Promise<void>;
 }
 
@@ -102,12 +102,12 @@ function normalizeMarkdownAfterButtonExtraction(markdown: string): string {
   return markdown.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function parseTelegramButtonAction(
+function parseBaleButtonAction(
   payload: Record<string, unknown>,
-): TelegramOutboundButtonAction | undefined {
-  const value = getTelegramButtonString(payload, "value");
-  const explicitLabel = getTelegramButtonString(payload, "label");
-  const explicitPrompt = getTelegramButtonString(payload, "prompt");
+): BaleOutboundButtonAction | undefined {
+  const value = getBaleButtonString(payload, "value");
+  const explicitLabel = getBaleButtonString(payload, "label");
+  const explicitPrompt = getBaleButtonString(payload, "prompt");
   const label = explicitLabel ?? value ?? explicitPrompt;
   if (payload.disabled !== undefined && typeof payload.disabled !== "boolean") {
     return undefined;
@@ -129,11 +129,11 @@ function parseTelegramButtonAction(
   };
 }
 
-export function createTelegramButtonActionStore(
+export function createBaleButtonActionStore(
   options: { ttlMs?: number } = {},
-): TelegramButtonActionStore {
-  const ttlMs = options.ttlMs ?? TELEGRAM_BUTTON_ACTION_TTL_MS;
-  const actions = new Map<string, TelegramOutboundButtonStoredAction>();
+): BaleButtonActionStore {
+  const ttlMs = options.ttlMs ?? BALE_BUTTON_ACTION_TTL_MS;
+  const actions = new Map<string, BaleOutboundButtonStoredAction>();
   const cleanup = (currentTime: number): void => {
     for (const [key, action] of actions) {
       if (currentTime - action.createdAt > ttlMs) actions.delete(key);
@@ -143,12 +143,12 @@ export function createTelegramButtonActionStore(
     register: (action) => {
       const currentTime = nowMs();
       cleanup(currentTime);
-      const key = `${TELEGRAM_BUTTON_CALLBACK_PREFIX}:${randomUUID().slice(0, 8)}`;
+      const key = `${BALE_BUTTON_CALLBACK_PREFIX}:${randomUUID().slice(0, 8)}`;
       actions.set(key, { ...action, createdAt: currentTime });
       return key;
     },
     resolve: (callbackData) => {
-      if (!callbackData?.startsWith(`${TELEGRAM_BUTTON_CALLBACK_PREFIX}:`)) {
+      if (!callbackData?.startsWith(`${BALE_BUTTON_CALLBACK_PREFIX}:`)) {
         return undefined;
       }
       const currentTime = nowMs();
@@ -169,43 +169,43 @@ export function createTelegramButtonActionStore(
   };
 }
 
-const DEFAULT_TELEGRAM_BUTTON_REPLY_MARKDOWN = "☑️ **Choose an option:**";
+const DEFAULT_BALE_BUTTON_REPLY_MARKDOWN = "☑️ **Choose an option:**";
 
-function escapeTelegramRichButtonText(text: string): string {
+function escapeBaleRichButtonText(text: string): string {
   return text.replace(
     /[&<>"'`\\*_\[\]{}$~\r\n]/g,
     (character) => `&#${character.charCodeAt(0)};`,
   );
 }
 
-function renderTelegramRichButtonRow(
-  row: TelegramOutboundButtonMarkup["inline_keyboard"][number],
+function renderBaleRichButtonRow(
+  row: BaleOutboundButtonMarkup["inline_keyboard"][number],
 ): string {
   return `<tg-button-row>${row
     .map((button) => {
       const attributes = button.disabled
         ? 'type="disabled"'
-        : `type="callback_data" data="${escapeTelegramRichButtonText(button.callback_data)}"`;
-      return `<tg-button ${attributes}>${escapeTelegramRichButtonText(button.text)}</tg-button>`;
+        : `type="callback_data" data="${escapeBaleRichButtonText(button.callback_data)}"`;
+      return `<tg-button ${attributes}>${escapeBaleRichButtonText(button.text)}</tg-button>`;
     })
     .join("")}</tg-button-row>`;
 }
 
-export function planTelegramButtonReply(
+export function planBaleButtonReply(
   markdown: string,
   deps: {
-    registerAction: (action: TelegramOutboundButtonAction) => string;
-    binding?: TelegramOutboundButtonBinding;
+    registerAction: (action: BaleOutboundButtonAction) => string;
+    binding?: BaleOutboundButtonBinding;
     rendering?: "rich" | "html";
   },
-): TelegramButtonReplyPlan {
-  const keyboard: TelegramOutboundButtonMarkup["inline_keyboard"] = [];
+): BaleButtonReplyPlan {
+  const keyboard: BaleOutboundButtonMarkup["inline_keyboard"] = [];
   const buildRows = (
     payloadRows: Record<string, unknown>[][],
     rich: boolean,
-  ): TelegramOutboundButtonMarkup["inline_keyboard"] | undefined => {
+  ): BaleOutboundButtonMarkup["inline_keyboard"] | undefined => {
     const actions = payloadRows.map((row) =>
-      row.map(parseTelegramButtonAction),
+      row.map(parseBaleButtonAction),
     );
     if (actions.some((row) => row.some((action) => !action))) return undefined;
     if (
@@ -218,7 +218,7 @@ export function planTelegramButtonReply(
         );
         return (
           row.length > 8 ||
-          renderTelegramRichButtonRow(projected).length > 32768
+          renderBaleRichButtonRow(projected).length > 32768
         );
       })
     )
@@ -237,11 +237,11 @@ export function planTelegramButtonReply(
       ),
     );
   };
-  const withRichButtons = replaceTelegramButtonFences(
+  const withRichButtons = replaceBaleButtonFences(
     markdown,
     (payload, closed) => {
       if (!closed) return "";
-      const payloadRows = parseTelegramButtonPayloadRows(payload);
+      const payloadRows = parseBaleButtonPayloadRows(payload);
       if (!payloadRows) return "";
       const rich = deps.rendering !== "html";
       const rows = buildRows(payloadRows, rich);
@@ -250,16 +250,16 @@ export function planTelegramButtonReply(
         keyboard.push(...rows);
         return "";
       }
-      return `\n${rows.map(renderTelegramRichButtonRow).join("\n\n")}\n`;
+      return `\n${rows.map(renderBaleRichButtonRow).join("\n\n")}\n`;
     },
   );
   const stripped = replaceTopLevelHtmlComments(withRichButtons, (comment) => {
-    const command = "telegram_button";
+    const command = "bale_button";
     const normalizedContent = comment.content
       .replace(/^\s+/, "")
       .replace(/^!/, "");
     if (!normalizedContent.startsWith(command)) return comment.raw;
-    const payloadRows = parseTelegramActionPayloadRows(comment, command);
+    const payloadRows = parseBaleActionPayloadRows(comment, command);
     if (!payloadRows) return "";
     const rows = buildRows(payloadRows, false);
     if (rows) keyboard.push(...rows);
@@ -269,7 +269,7 @@ export function planTelegramButtonReply(
   return {
     markdown:
       keyboard.length > 0 && !visibleMarkdown
-        ? DEFAULT_TELEGRAM_BUTTON_REPLY_MARKDOWN
+        ? DEFAULT_BALE_BUTTON_REPLY_MARKDOWN
         : visibleMarkdown,
     ...(keyboard.length > 0
       ? { replyMarkup: { inline_keyboard: keyboard } }
@@ -277,22 +277,22 @@ export function planTelegramButtonReply(
   };
 }
 
-export function createTelegramButtonReplyPlanner(
-  store: Pick<TelegramButtonActionStore, "register">,
-): (markdown: string) => TelegramButtonReplyPlan {
+export function createBaleButtonReplyPlanner(
+  store: Pick<BaleButtonActionStore, "register">,
+): (markdown: string) => BaleButtonReplyPlan {
   return (markdown) =>
-    planTelegramButtonReply(markdown, { registerAction: store.register });
+    planBaleButtonReply(markdown, { registerAction: store.register });
 }
 
-export function createTelegramButtonPromptTurn(options: {
+export function createBaleButtonPromptTurn(options: {
   chatId: number;
   replyToMessageId: number;
   queueOrder: number;
-  action: TelegramOutboundButtonAction;
-  target?: TelegramQueueTarget;
-  telegramPrefix?: string;
-}): PendingTelegramTurn {
-  const prompt = `${options.telegramPrefix ?? "[telegram]"} ${options.action.prompt}`;
+  action: BaleOutboundButtonAction;
+  target?: BaleQueueTarget;
+  balePrefix?: string;
+}): PendingBaleTurn {
+  const prompt = `${options.balePrefix ?? "[bale]"} ${options.action.prompt}`;
   return {
     kind: "prompt",
     chatId: options.chatId,
@@ -305,17 +305,17 @@ export function createTelegramButtonPromptTurn(options: {
     queuedAttachments: [],
     content: [{ type: "text", text: prompt }],
     historyText: options.action.prompt,
-    statusSummary: truncateTelegramQueueSummary(
+    statusSummary: truncateBaleQueueSummary(
       options.action.text || options.action.prompt,
     ),
   };
 }
 
-export function markTelegramButtonSelected(
-  replyMarkup: TelegramOutboundButtonMarkup,
+export function markBaleButtonSelected(
+  replyMarkup: BaleOutboundButtonMarkup,
   callbackData: string,
-  selectedStyle: TelegramInlineKeyboardButtonStyle = "primary",
-): TelegramOutboundButtonMarkup | undefined {
+  selectedStyle: BaleInlineKeyboardButtonStyle = "primary",
+): BaleOutboundButtonMarkup | undefined {
   let matched = false;
   const inlineKeyboard = replyMarkup.inline_keyboard.map((row) =>
     row.map((button) => {
@@ -328,15 +328,15 @@ export function markTelegramButtonSelected(
   return matched ? { inline_keyboard: inlineKeyboard } : undefined;
 }
 
-export async function handleTelegramButtonCallbackQuery<TContext = unknown>(
-  query: TelegramButtonCallbackQuery,
+export async function handleBaleButtonCallbackQuery<TContext = unknown>(
+  query: BaleButtonCallbackQuery,
   ctx: TContext,
-  deps: TelegramButtonCallbackHandlerDeps<TContext>,
+  deps: BaleButtonCallbackHandlerDeps<TContext>,
 ): Promise<boolean> {
   const action = deps.resolveAction(query.data);
 
   if (!action) {
-    if (query.data?.startsWith(`${TELEGRAM_BUTTON_CALLBACK_PREFIX}:`)) {
+    if (query.data?.startsWith(`${BALE_BUTTON_CALLBACK_PREFIX}:`)) {
       await deps.answerCallbackQuery(query.id, "Button action expired");
       return true;
     }
@@ -360,7 +360,7 @@ export async function handleTelegramButtonCallbackQuery<TContext = unknown>(
       const viewMode = await deps.invokeBoundAction(query, action, ctx);
       if (viewMode) {
         if (viewMode === "new" && query.data && query.message?.reply_markup) {
-          const selectedMarkup = markTelegramButtonSelected(
+          const selectedMarkup = markBaleButtonSelected(
             query.message.reply_markup,
             query.data,
             action.selectedStyle,
@@ -393,7 +393,7 @@ export async function handleTelegramButtonCallbackQuery<TContext = unknown>(
   }
   const selectedMarkup =
     query.data && query.message?.reply_markup
-      ? markTelegramButtonSelected(
+      ? markBaleButtonSelected(
           query.message.reply_markup,
           query.data,
           action.selectedStyle,

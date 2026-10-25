@@ -1,6 +1,6 @@
 /**
- * Telegram session lifecycle coordination and hook registration
- * Zones: pi agent lifecycle, telegram session
+ * Bale session lifecycle coordination and hook registration
+ * Zones: pi agent lifecycle, bale session
  * Owns context generations, bounded connect intent across resume, and session sequencing.
  * Transport authority, durable bindings, and queue custody remain with their owners.
  */
@@ -9,17 +9,17 @@ import type { AgentEndEvent, AgentSettledEvent, AgentStartEvent, AssistantMessag
 import * as Machine from "./machine.ts";
 import * as Queue from "./queue.ts";
 export declare function createAgentStartDedupHook(inner: (event: AgentStartEvent, ctx: ExtensionContext) => Promise<void>, resetReplyDedup: () => void, schedulePublication?: (task: () => Promise<void>) => void): (event: AgentStartEvent, ctx: ExtensionContext) => Promise<void>;
-type TelegramBeforeAgentStartEvent = Omit<BeforeAgentStartEvent, "systemPrompt"> & {
+type BaleBeforeAgentStartEvent = Omit<BeforeAgentStartEvent, "systemPrompt"> & {
     systemPrompt: string | string[];
 };
-export interface TelegramBeforeAgentStartResult {
+export interface BaleBeforeAgentStartResult {
     systemPrompt?: string | string[];
     message?: BeforeAgentStartEventResult["message"];
 }
-type TelegramBeforeAgentStartReturn = Promise<TelegramBeforeAgentStartResult | undefined> | TelegramBeforeAgentStartResult | undefined;
-type TelegramLifecycleModel = ExtensionContext["model"];
-type TelegramLifecycleMessage = AgentEndEvent["messages"][number];
-export interface TelegramLifecycleRegistrationDeps {
+type BaleBeforeAgentStartReturn = Promise<BaleBeforeAgentStartResult | undefined> | BaleBeforeAgentStartResult | undefined;
+type BaleLifecycleModel = ExtensionContext["model"];
+type BaleLifecycleMessage = AgentEndEvent["messages"][number];
+export interface BaleLifecycleRegistrationDeps {
     isSessionActive?: (ctx: ExtensionContext) => boolean;
     onInput?: (event: InputEvent, ctx: ExtensionContext) => Promise<void> | void;
     onSessionStart: (event: SessionStartEvent, ctx: ExtensionContext) => Promise<void>;
@@ -27,9 +27,9 @@ export interface TelegramLifecycleRegistrationDeps {
     onSessionBeforeCompact?: (event: SessionBeforeCompactEvent, ctx: ExtensionContext) => Promise<void> | void;
     onSessionCompact?: (event: SessionCompactEvent, ctx: ExtensionContext) => Promise<void> | void;
     onSessionCompactFailed?: (event: SessionCompactFailedEvent, ctx: ExtensionContext) => Promise<void> | void;
-    onBeforeAgentStart: (event: TelegramBeforeAgentStartEvent, ctx: ExtensionContext) => TelegramBeforeAgentStartReturn;
+    onBeforeAgentStart: (event: BaleBeforeAgentStartEvent, ctx: ExtensionContext) => BaleBeforeAgentStartReturn;
     onModelSelect: (event: {
-        model: TelegramLifecycleModel;
+        model: BaleLifecycleModel;
     }, ctx: ExtensionContext) => Promise<void> | void;
     onTurnEnd?: (event: TurnEndEvent, ctx: ExtensionContext) => TurnEndEventResult | undefined;
     onAgentStart: (event: AgentStartEvent, ctx: ExtensionContext) => Promise<void>;
@@ -37,10 +37,10 @@ export interface TelegramLifecycleRegistrationDeps {
     onToolExecutionUpdate?: (event: ToolExecutionUpdateEvent, ctx: ExtensionContext) => Promise<void> | void;
     onToolExecutionEnd: (event: ToolExecutionEndEvent, ctx: ExtensionContext) => Promise<void> | void;
     onMessageStart: (event: {
-        message: TelegramLifecycleMessage;
+        message: BaleLifecycleMessage;
     }, ctx: ExtensionContext) => Promise<void>;
     onMessageUpdate: (event: {
-        message: TelegramLifecycleMessage;
+        message: BaleLifecycleMessage;
         assistantMessageEvent?: AssistantMessageEvent;
     }, ctx: ExtensionContext) => Promise<void>;
     onMessageEnd?: (event: MessageEndEvent, ctx: ExtensionContext) => Promise<void> | void;
@@ -49,29 +49,29 @@ export interface TelegramLifecycleRegistrationDeps {
     onAgentEnd: (event: AgentEndEvent, ctx: ExtensionContext) => Promise<void>;
     onAgentSettled?: (event: AgentSettledEvent, ctx: ExtensionContext) => Promise<void> | void;
 }
-export interface TelegramSessionLifecycleHooks {
+export interface BaleSessionLifecycleHooks {
     onSessionStart: (event: SessionStartEvent, ctx: ExtensionContext) => Promise<void>;
     onSessionShutdown: (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<void>;
 }
-export interface TelegramConnectionIntent {
+export interface BaleConnectionIntent {
     id: string;
     cwd: string;
     profileName?: string;
 }
-interface TelegramConnectionHandoff extends TelegramConnectionIntent {
+interface BaleConnectionHandoff extends BaleConnectionIntent {
     pid: number;
     targetSessionFile: string;
     expiresAtMs: number;
 }
-export interface TelegramConnectionHandoffStore {
-    pending?: TelegramConnectionHandoff;
+export interface BaleConnectionHandoffStore {
+    pending?: BaleConnectionHandoff;
 }
-export interface TelegramConnectionLifecycle {
+export interface BaleConnectionLifecycle {
     prepare(event: SessionStartEvent, ctx: ExtensionContext): (() => void) | undefined;
     onSessionShutdown(event: SessionShutdownEvent, ctx: ExtensionContext): void;
 }
-export declare function createTelegramConnectionLifecycle(deps: {
-    intent: ReturnType<typeof createTelegramConnectionIntentRuntime>;
+export declare function createBaleConnectionLifecycle(deps: {
+    intent: ReturnType<typeof createBaleConnectionIntentRuntime>;
     getGeneration(): number;
     isCurrent(ctx: ExtensionContext): boolean;
     getProfileName(): string | undefined;
@@ -82,9 +82,9 @@ export declare function createTelegramConnectionLifecycle(deps: {
         message?: string;
     }>;
     recordError(error: unknown): void;
-}): TelegramConnectionLifecycle;
-export declare function createTelegramConnectionIntentRuntime(options?: {
-    store?: TelegramConnectionHandoffStore;
+}): BaleConnectionLifecycle;
+export declare function createBaleConnectionIntentRuntime(options?: {
+    store?: BaleConnectionHandoffStore;
     now?: () => number;
     pid?: number;
 }): {
@@ -103,28 +103,28 @@ export declare function createTelegramConnectionIntentRuntime(options?: {
         reason: string;
         cwd: string;
         sessionFile?: string;
-    }): TelegramConnectionIntent | undefined;
+    }): BaleConnectionIntent | undefined;
 };
-export interface TelegramSessionContextStore<TContext> {
+export interface BaleSessionContextStore<TContext> {
     get: () => TContext | undefined;
     getGeneration: () => number;
     isCurrent: (ctx: TContext, generation?: number) => boolean;
     set: (ctx: TContext) => number;
     clear: (ctx?: TContext) => boolean;
 }
-export declare function createTelegramSessionContextStore<TContext>(options?: {
+export declare function createBaleSessionContextStore<TContext>(options?: {
     getIdentity?: (ctx: TContext) => unknown;
-}): TelegramSessionContextStore<TContext>;
+}): BaleSessionContextStore<TContext>;
 /** Capture drain hints at work admission; late completion never borrows a replacement session or transport. */
-export declare function createTelegramSessionDrainObserver<TContext, TAuthority>(deps: {
-    context: Pick<TelegramSessionContextStore<TContext>, "get" | "getGeneration" | "isCurrent">;
+export declare function createBaleSessionDrainObserver<TContext, TAuthority>(deps: {
+    context: Pick<BaleSessionContextStore<TContext>, "get" | "getGeneration" | "isCurrent">;
     captureAuthority: () => TAuthority | undefined;
     isAuthorityActive: (authority: TAuthority) => boolean;
     onDrained: (ctx: TContext) => void;
 }): () => (() => void) | undefined;
-export declare function createTelegramSessionGenerationFence(store: TelegramSessionContextStore<ExtensionContext>, hooks: TelegramSessionLifecycleHooks): TelegramSessionLifecycleHooks;
-export interface TelegramBridgeSessionServiceRuntime {
-    connection?: TelegramConnectionLifecycle;
+export declare function createBaleSessionGenerationFence(store: BaleSessionContextStore<ExtensionContext>, hooks: BaleSessionLifecycleHooks): BaleSessionLifecycleHooks;
+export interface BaleBridgeSessionServiceRuntime {
+    connection?: BaleConnectionLifecycle;
     resumeGroupedInput(ctx: ExtensionContext): void;
     suspendGroupedInput(): void;
     delivery: {
@@ -150,16 +150,16 @@ export interface TelegramBridgeSessionServiceRuntime {
     };
     prepareThreadPreservationOnQuit?: (isSessionCurrent: () => boolean) => (() => Promise<void>) | undefined;
 }
-export interface TelegramBridgeSessionLifecycleAssemblyDeps<TQueueItem, TModel = unknown> {
-    contextStore: TelegramSessionContextStore<ExtensionContext>;
-    queue: Omit<Queue.TelegramSessionLifecycleRuntimeDeps<ExtensionContext, TQueueItem, TModel>, "isSessionActive" | "stopPolling" | "clearPendingMediaGroups">;
-    follower: Omit<BusFollower.TelegramBusFollowerSessionRefreshHookDeps<ExtensionContext>, "isSessionActive"> & BusFollower.TelegramBusFollowerSessionReplacementSuspenderDeps;
-    services: TelegramBridgeSessionServiceRuntime;
+export interface BaleBridgeSessionLifecycleAssemblyDeps<TQueueItem, TModel = unknown> {
+    contextStore: BaleSessionContextStore<ExtensionContext>;
+    queue: Omit<Queue.BaleSessionLifecycleRuntimeDeps<ExtensionContext, TQueueItem, TModel>, "isSessionActive" | "stopPolling" | "clearPendingMediaGroups">;
+    follower: Omit<BusFollower.BaleBusFollowerSessionRefreshHookDeps<ExtensionContext>, "isSessionActive"> & BusFollower.BaleBusFollowerSessionReplacementSuspenderDeps;
+    services: BaleBridgeSessionServiceRuntime;
 }
-export interface TelegramBridgeSessionLifecyclePorts<TQueueItem, TModel = unknown> {
-    contextStore: TelegramSessionContextStore<ExtensionContext>;
-    queue: Omit<Queue.TelegramSessionLifecycleRuntimeDeps<ExtensionContext, TQueueItem, TModel>, "isSessionActive" | "stopPolling" | "clearPendingMediaGroups">;
-    follower: Omit<BusFollower.TelegramBusFollowerSessionRefreshHookDeps<ExtensionContext>, "isSessionActive"> & BusFollower.TelegramBusFollowerSessionReplacementSuspenderDeps;
+export interface BaleBridgeSessionLifecyclePorts<TQueueItem, TModel = unknown> {
+    contextStore: BaleSessionContextStore<ExtensionContext>;
+    queue: Omit<Queue.BaleSessionLifecycleRuntimeDeps<ExtensionContext, TQueueItem, TModel>, "isSessionActive" | "stopPolling" | "clearPendingMediaGroups">;
+    follower: Omit<BusFollower.BaleBusFollowerSessionRefreshHookDeps<ExtensionContext>, "isSessionActive"> & BusFollower.BaleBusFollowerSessionReplacementSuspenderDeps;
     services: {
         mediaGroup: {
             resume(ctx: ExtensionContext): void;
@@ -169,48 +169,48 @@ export interface TelegramBridgeSessionLifecyclePorts<TQueueItem, TModel = unknow
             resume(ctx: ExtensionContext): void;
             suspend(): void;
         };
-        delivery: TelegramBridgeSessionServiceRuntime["delivery"];
-        polling: TelegramBridgeSessionServiceRuntime["polling"];
-        connection?: TelegramBridgeSessionServiceRuntime["connection"];
-        inboundWorker: TelegramBridgeSessionServiceRuntime["inboundWorker"];
-        capabilityMonitor: TelegramBridgeSessionServiceRuntime["capabilityMonitor"];
-        queueWatchdog: TelegramBridgeSessionServiceRuntime["queueWatchdog"];
-        guestPlaceholder?: TelegramBridgeSessionServiceRuntime["guestPlaceholder"];
-        prepareThreadPreservationOnQuit?: TelegramBridgeSessionServiceRuntime["prepareThreadPreservationOnQuit"];
+        delivery: BaleBridgeSessionServiceRuntime["delivery"];
+        polling: BaleBridgeSessionServiceRuntime["polling"];
+        connection?: BaleBridgeSessionServiceRuntime["connection"];
+        inboundWorker: BaleBridgeSessionServiceRuntime["inboundWorker"];
+        capabilityMonitor: BaleBridgeSessionServiceRuntime["capabilityMonitor"];
+        queueWatchdog: BaleBridgeSessionServiceRuntime["queueWatchdog"];
+        guestPlaceholder?: BaleBridgeSessionServiceRuntime["guestPlaceholder"];
+        prepareThreadPreservationOnQuit?: BaleBridgeSessionServiceRuntime["prepareThreadPreservationOnQuit"];
     };
 }
-export declare function createTelegramBridgeSessionLifecycleDeps<TQueueItem, TModel = unknown>(ports: TelegramBridgeSessionLifecyclePorts<TQueueItem, TModel>): TelegramBridgeSessionLifecycleAssemblyDeps<TQueueItem, TModel>;
-export declare function createTelegramBridgeSessionLifecycleAssembly<TQueueItem, TModel = unknown>(deps: TelegramBridgeSessionLifecycleAssemblyDeps<TQueueItem, TModel>): TelegramSessionLifecycleHooks;
-type TelegramLifecycleTimer = number | ReturnType<typeof setTimeout>;
-export interface TelegramCompactionObserverRuntimeDeps<TContext> {
+export declare function createBaleBridgeSessionLifecycleDeps<TQueueItem, TModel = unknown>(ports: BaleBridgeSessionLifecyclePorts<TQueueItem, TModel>): BaleBridgeSessionLifecycleAssemblyDeps<TQueueItem, TModel>;
+export declare function createBaleBridgeSessionLifecycleAssembly<TQueueItem, TModel = unknown>(deps: BaleBridgeSessionLifecycleAssemblyDeps<TQueueItem, TModel>): BaleSessionLifecycleHooks;
+type BaleLifecycleTimer = number | ReturnType<typeof setTimeout>;
+export interface BaleCompactionObserverRuntimeDeps<TContext> {
     isContextActive?: (ctx: TContext) => boolean;
     setCompactionInProgress: (inProgress: boolean) => void;
     updateStatus: (ctx: TContext) => void;
     startTypingLoop?: (ctx: TContext) => boolean | void;
     stopTypingLoop?: () => void;
-    requestDeferredDispatchNextQueuedTelegramTurn: (dispatch: (ctx: TContext) => void) => void;
-    dispatchNextQueuedTelegramTurn: (ctx: TContext) => void;
+    requestDeferredDispatchNextQueuedBaleTurn: (dispatch: (ctx: TContext) => void) => void;
+    dispatchNextQueuedBaleTurn: (ctx: TContext) => void;
     recordRuntimeEvent?: (category: string, error: unknown) => void;
     onCompactionAbandoned?: () => void;
     timeoutMs?: number;
-    setTimer?: (callback: () => void, ms: number) => TelegramLifecycleTimer;
-    clearTimer?: (timer: TelegramLifecycleTimer) => void;
+    setTimer?: (callback: () => void, ms: number) => BaleLifecycleTimer;
+    clearTimer?: (timer: BaleLifecycleTimer) => void;
 }
-export interface TelegramCompactionObserverRuntime<TContext> {
+export interface BaleCompactionObserverRuntime<TContext> {
     onSessionBeforeCompact: (event: SessionBeforeCompactEvent, ctx: TContext) => void;
     onSessionCompact: (event: SessionCompactEvent, ctx: TContext) => void;
     onSessionCompactFailed: (event: SessionCompactFailedEvent, ctx: TContext) => void;
     onSessionShutdown: () => void;
 }
-/** The whole compaction-observer state; only `transitionTelegramCompactionObserver` produces a new one. */
-export interface TelegramCompactionObserverState {
+/** The whole compaction-observer state; only `transitionBaleCompactionObserver` produces a new one. */
+export interface BaleCompactionObserverState {
     /** The fallback timer's observation; a timer from any other one is inert. */
     readonly observation: number | null;
     /** The typing loop is the observer's to stop; a loop the agent already ran is never stopped by compaction. */
     readonly typingOwned: boolean;
     readonly nextObservation: number;
 }
-export type TelegramCompactionObserverEvent = {
+export type BaleCompactionObserverEvent = {
     type: "beforeCompact";
 }
 /** The outcome of the observer's own typing start, reported back by the shell. */
@@ -228,7 +228,7 @@ export type TelegramCompactionObserverEvent = {
 } | {
     type: "shutdown";
 };
-export type TelegramCompactionObserverEffect = {
+export type BaleCompactionObserverEffect = {
     type: "setInProgress";
     inProgress: boolean;
 } | {
@@ -249,32 +249,32 @@ export type TelegramCompactionObserverEffect = {
 } | {
     type: "requestDispatch";
 };
-export declare function createTelegramCompactionObserverState(): TelegramCompactionObserverState;
+export declare function createBaleCompactionObserverState(): BaleCompactionObserverState;
 /**
  * Pure compaction-observer transition. A completion or failure always releases presence; the timeout releases only its
  * own observation. Typing ownership is sticky: a repeated start while the observer's own loop runs reports `false`
  * from the shared loop, and must not hand that loop to nobody.
  */
-export declare function transitionTelegramCompactionObserver(state: TelegramCompactionObserverState, event: TelegramCompactionObserverEvent): Machine.TelegramMachineStep<TelegramCompactionObserverState, TelegramCompactionObserverEffect>;
+export declare function transitionBaleCompactionObserver(state: BaleCompactionObserverState, event: BaleCompactionObserverEvent): Machine.BaleMachineStep<BaleCompactionObserverState, BaleCompactionObserverEffect>;
 /**
- * The shell around `transitionTelegramCompactionObserver`: it fences inactive contexts, runs effects with the calling
+ * The shell around `transitionBaleCompactionObserver`: it fences inactive contexts, runs effects with the calling
  * context, reports the typing start back and owns the fallback timer, which keeps the context it was armed under.
  */
-export declare function createTelegramCompactionObserverRuntime<TContext>(deps: TelegramCompactionObserverRuntimeDeps<TContext>): TelegramCompactionObserverRuntime<TContext>;
-export interface TelegramMessageActivityTypingDeps<TContext> {
+export declare function createBaleCompactionObserverRuntime<TContext>(deps: BaleCompactionObserverRuntimeDeps<TContext>): BaleCompactionObserverRuntime<TContext>;
+export interface BaleMessageActivityTypingDeps<TContext> {
     hasActiveTurn: () => boolean;
     isContextActive?: (ctx: TContext) => boolean;
     getSessionGeneration?: () => number;
     startTypingLoop: (ctx: TContext) => void;
-    onMessageStart: TelegramLifecycleRegistrationDeps["onMessageStart"];
-    onMessageUpdate: TelegramLifecycleRegistrationDeps["onMessageUpdate"];
+    onMessageStart: BaleLifecycleRegistrationDeps["onMessageStart"];
+    onMessageUpdate: BaleLifecycleRegistrationDeps["onMessageUpdate"];
     recordRuntimeEvent?: (category: string, error: unknown, details?: Record<string, unknown>) => void;
 }
-export declare function createTelegramMessageActivityTypingHooks<TContext extends ExtensionContext>(deps: TelegramMessageActivityTypingDeps<TContext>): Pick<TelegramLifecycleRegistrationDeps, "onMessageStart" | "onMessageUpdate">;
-export interface TelegramExtraLifecycleHooks {
+export declare function createBaleMessageActivityTypingHooks<TContext extends ExtensionContext>(deps: BaleMessageActivityTypingDeps<TContext>): Pick<BaleLifecycleRegistrationDeps, "onMessageStart" | "onMessageUpdate">;
+export interface BaleExtraLifecycleHooks {
     onSessionStart?: (event: SessionStartEvent, ctx: ExtensionContext) => Promise<void>;
     onSessionShutdown?: (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<void>;
 }
-export declare function appendTelegramLifecycleHooks(base: TelegramSessionLifecycleHooks, extra: TelegramExtraLifecycleHooks, isSessionActive?: (ctx: ExtensionContext) => boolean): TelegramSessionLifecycleHooks;
-export declare function registerTelegramLifecycleHooks(pi: ExtensionAPI, deps: TelegramLifecycleRegistrationDeps): void;
+export declare function appendBaleLifecycleHooks(base: BaleSessionLifecycleHooks, extra: BaleExtraLifecycleHooks, isSessionActive?: (ctx: ExtensionContext) => boolean): BaleSessionLifecycleHooks;
+export declare function registerBaleLifecycleHooks(pi: ExtensionAPI, deps: BaleLifecycleRegistrationDeps): void;
 export {};

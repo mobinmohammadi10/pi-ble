@@ -1,6 +1,6 @@
 /**
- * Telegram outbound surface helpers
- * Zones: telegram outbound, command templates, voice delivery
+ * Bale outbound surface helpers
+ * Zones: bale outbound, command templates, voice delivery
  * Owns configured outbound handler execution, text transforms, public assistant-output reply composition and mutation fencing, voice-file generation/delivery, runtime-event bridge, and compatibility re-exports; assistant markup parsing lives in outbound-markup and button callback actions live in outbound-buttons
  */
 
@@ -8,36 +8,36 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { TelegramAssistantSegmentEvent } from "./activity.ts";
+import type { BaleAssistantSegmentEvent } from "./activity.ts";
 import {
-  planTelegramButtonReply,
-  type TelegramButtonActionStore,
-  type TelegramOutboundButtonBinding,
-  type TelegramOutboundButtonMarkup,
+  planBaleButtonReply,
+  type BaleButtonActionStore,
+  type BaleOutboundButtonBinding,
+  type BaleOutboundButtonMarkup,
 } from "./outbound-buttons.ts";
 import {
-  planTelegramVoiceReply,
-  stripTelegramCommentMarkupForDelivery,
-  type TelegramVoiceReplyItem,
+  planBaleVoiceReply,
+  stripBaleCommentMarkupForDelivery,
+  type BaleVoiceReplyItem,
 } from "./outbound-markup.ts";
-import { createTelegramVoiceReplySender as createTelegramVoiceReplySenderWithPorts } from "./outbound-voice.ts";
-import { resolveTelegramAttachmentsDir } from "./paths.ts";
-import type { TelegramPreparedPreviewDelivery } from "./preview.ts";
+import { createBaleVoiceReplySender as createBaleVoiceReplySenderWithPorts } from "./outbound-voice.ts";
+import { resolveBaleAttachmentsDir } from "./paths.ts";
+import type { BalePreparedPreviewDelivery } from "./preview.ts";
 import * as Replies from "./replies.ts";
-import type { TelegramTarget } from "./target.ts";
+import type { BaleTarget } from "./target.ts";
 import type {
-  TelegramEditMessageTextBody,
-  TelegramSendMessageBody,
-  TelegramSendRichMessageBody,
-  TelegramSentMessage,
-} from "./telegram-api.ts";
+  BaleEditMessageTextBody,
+  BaleSendMessageBody,
+  BaleSendRichMessageBody,
+  BaleSentMessage,
+} from "./bale-api.ts";
 import {
-  assertTelegramApiCallAuthority,
-  isTelegramApiCommitUnknownError,
-} from "./telegram-api.ts";
+  assertBaleApiCallAuthority,
+  isBaleApiCommitUnknownError,
+} from "./bale-api.ts";
 
-const OUTBOUND_HANDLER_REGISTRY_KEY = "__piTelegramOutboundHandlers__";
-const VOICE_EVENT_RECORDER_KEY = "__piTelegramVoiceEventRecorder__";
+const OUTBOUND_HANDLER_REGISTRY_KEY = "__piBaleOutboundHandlers__";
+const VOICE_EVENT_RECORDER_KEY = "__piBaleVoiceEventRecorder__";
 
 import {
   buildCommandTemplateInvocation,
@@ -54,24 +54,24 @@ const DEFAULT_VOICE_TIMEOUT_MS = 120_000;
 // --- Types ---
 
 /**
- * Record a runtime event that appears in `/telegram-status`.
+ * Record a runtime event that appears in `/bale-status`.
  * Voice synthesis provider extensions can call this to surface diagnostics
- * alongside pi-telegram's own events. Events are silently dropped
- * when pi-telegram is not loaded.
+ * alongside pi-bale's own events. Events are silently dropped
+ * when pi-bale is not loaded.
  */
-export type TelegramRuntimeEventRecorder = (
+export type BaleRuntimeEventRecorder = (
   category: string,
   error: unknown,
   details?: Record<string, unknown>,
 ) => void;
 
-export function bindTelegramRuntimeEventRecorder(
-  recorder: TelegramRuntimeEventRecorder,
+export function bindBaleRuntimeEventRecorder(
+  recorder: BaleRuntimeEventRecorder,
 ): void {
   (globalThis as Record<string, unknown>)[VOICE_EVENT_RECORDER_KEY] = recorder;
 }
 
-export function recordTelegramRuntimeEvent(
+export function recordBaleRuntimeEvent(
   category: string,
   error: unknown,
   details?: Record<string, unknown>,
@@ -80,20 +80,20 @@ export function recordTelegramRuntimeEvent(
     VOICE_EVENT_RECORDER_KEY
   ];
   if (typeof recorder === "function") {
-    (recorder as TelegramRuntimeEventRecorder)(category, error, details);
+    (recorder as BaleRuntimeEventRecorder)(category, error, details);
   }
 }
 
-export type TelegramOutboundCommandTemplateConfig =
+export type BaleOutboundCommandTemplateConfig =
   string | CommandTemplateObjectConfig;
-export interface TelegramOutboundHandlerConfig extends CommandTemplateObjectConfig {
+export interface BaleOutboundHandlerConfig extends CommandTemplateObjectConfig {
   type?: string;
   match?: string | string[];
   output?: string;
   timeout?: number | string;
 }
 
-export interface TelegramVoiceExecOptions {
+export interface BaleVoiceExecOptions {
   cwd?: string;
   timeout?: number;
   signal?: AbortSignal;
@@ -102,25 +102,25 @@ export interface TelegramVoiceExecOptions {
   recover?: () => Promise<void>;
 }
 
-export interface TelegramVoiceExecResult {
+export interface BaleVoiceExecResult {
   stdout: string;
   stderr: string;
   code: number;
   killed: boolean;
 }
 
-export interface TelegramVoiceReplyTurnView {
+export interface BaleVoiceReplyTurnView {
   chatId: number;
   replyToMessageId: number;
-  target?: TelegramTarget;
+  target?: BaleTarget;
 }
 
-export interface TelegramVoiceReplySenderDeps {
+export interface BaleVoiceReplySenderDeps {
   execCommand: (
     command: string,
     args: string[],
-    options?: TelegramVoiceExecOptions,
-  ) => Promise<TelegramVoiceExecResult>;
+    options?: BaleVoiceExecOptions,
+  ) => Promise<BaleVoiceExecResult>;
   sendMultipart: (
     method: string,
     fields: Record<string, string>,
@@ -137,7 +137,7 @@ export interface TelegramVoiceReplySenderDeps {
   sendChatAction?: (chatId: number, action: string) => Promise<unknown>;
   sendRecordVoiceAction?: (chatId: number) => Promise<unknown>;
   isDeliveryActive?: () => boolean;
-  getHandlers?: () => TelegramOutboundHandlerConfig[] | undefined;
+  getHandlers?: () => BaleOutboundHandlerConfig[] | undefined;
   cwd?: string;
   tempDir?: string;
   recordRuntimeEvent?: (
@@ -149,18 +149,18 @@ export interface TelegramVoiceReplySenderDeps {
 
 // --- Programmatic Outbound Handler Registry ---
 
-export type TelegramOutboundProgrammaticHandler = (
+export type BaleOutboundProgrammaticHandler = (
   text: string,
   options?: { lang?: string; rate?: string },
 ) => Promise<string>;
 
-export interface TelegramOutboundHandlerRegistry {
-  handlers: Map<string, TelegramOutboundProgrammaticHandler[]>;
+export interface BaleOutboundHandlerRegistry {
+  handlers: Map<string, BaleOutboundProgrammaticHandler[]>;
 }
 
 // --- Programmatic Outbound Handler Registry Runtime ---
 
-function getOrCreateOutboundHandlerRegistry(): TelegramOutboundHandlerRegistry {
+function getOrCreateOutboundHandlerRegistry(): BaleOutboundHandlerRegistry {
   const existing = (globalThis as Record<string, unknown>)[
     OUTBOUND_HANDLER_REGISTRY_KEY
   ];
@@ -171,9 +171,9 @@ function getOrCreateOutboundHandlerRegistry(): TelegramOutboundHandlerRegistry {
     "handlers" in existing &&
     existing.handlers instanceof Map
   ) {
-    return existing as TelegramOutboundHandlerRegistry;
+    return existing as BaleOutboundHandlerRegistry;
   }
-  const registry: TelegramOutboundHandlerRegistry = {
+  const registry: BaleOutboundHandlerRegistry = {
     handlers: new Map(),
   };
   (globalThis as Record<string, unknown>)[OUTBOUND_HANDLER_REGISTRY_KEY] =
@@ -181,9 +181,9 @@ function getOrCreateOutboundHandlerRegistry(): TelegramOutboundHandlerRegistry {
   return registry;
 }
 
-export function registerTelegramOutboundHandler(
+export function registerBaleOutboundHandler(
   kind: string,
-  handler: TelegramOutboundProgrammaticHandler,
+  handler: BaleOutboundProgrammaticHandler,
 ): () => void {
   const registry = getOrCreateOutboundHandlerRegistry();
   const list = registry.handlers.get(kind) ?? [];
@@ -199,22 +199,22 @@ export function registerTelegramOutboundHandler(
   };
 }
 
-function getTelegramOutboundProgrammaticHandlers(
+function getBaleOutboundProgrammaticHandlers(
   kind: string,
-): TelegramOutboundProgrammaticHandler[] {
+): BaleOutboundProgrammaticHandler[] {
   const registry = getOrCreateOutboundHandlerRegistry();
   return [...(registry.handlers.get(kind) ?? [])];
 }
 
-export interface TelegramOutboundTextReplyRuntimeDeps<TReplyMarkup = unknown> {
-  execCommand: TelegramVoiceReplySenderDeps["execCommand"];
-  getHandlers?: () => TelegramOutboundHandlerConfig[] | undefined;
+export interface BaleOutboundTextReplyRuntimeDeps<TReplyMarkup = unknown> {
+  execCommand: BaleVoiceReplySenderDeps["execCommand"];
+  getHandlers?: () => BaleOutboundHandlerConfig[] | undefined;
   sendTextReply: (
     chatId: number,
     replyToMessageId: number | undefined,
     text: string,
-    options?: { parseMode?: "HTML"; target?: TelegramTarget } & Pick<
-      Replies.TelegramReplyTargetOptions,
+    options?: { parseMode?: "HTML"; target?: BaleTarget } & Pick<
+      Replies.BaleReplyTargetOptions,
       "assertAuthority"
     >,
   ) => Promise<number | undefined>;
@@ -222,49 +222,49 @@ export interface TelegramOutboundTextReplyRuntimeDeps<TReplyMarkup = unknown> {
     chatId: number,
     replyToMessageId: number | undefined,
     markdown: string,
-    options?: { replyMarkup?: TReplyMarkup; target?: TelegramTarget } & Pick<
-      Replies.TelegramReplyTargetOptions,
+    options?: { replyMarkup?: TReplyMarkup; target?: BaleTarget } & Pick<
+      Replies.BaleReplyTargetOptions,
       "assertAuthority"
     >,
   ) => Promise<number | undefined>;
   cwd?: string;
-  recordRuntimeEvent?: TelegramVoiceReplySenderDeps["recordRuntimeEvent"];
+  recordRuntimeEvent?: BaleVoiceReplySenderDeps["recordRuntimeEvent"];
 }
 
-export interface TelegramInlineKeyboardLike {
+export interface BaleInlineKeyboardLike {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
 }
 
-export interface TelegramOutboundTextTransformOptions<TReplyMarkup = unknown> {
-  handlers?: TelegramOutboundHandlerConfig[];
+export interface BaleOutboundTextTransformOptions<TReplyMarkup = unknown> {
+  handlers?: BaleOutboundHandlerConfig[];
   cwd?: string;
-  execCommand: TelegramVoiceReplySenderDeps["execCommand"];
-  recordRuntimeEvent?: TelegramVoiceReplySenderDeps["recordRuntimeEvent"];
+  execCommand: BaleVoiceReplySenderDeps["execCommand"];
+  recordRuntimeEvent?: BaleVoiceReplySenderDeps["recordRuntimeEvent"];
   replyMarkup?: TReplyMarkup;
 }
 
-export interface TelegramOutboundTextTransformResult<TReplyMarkup = unknown> {
+export interface BaleOutboundTextTransformResult<TReplyMarkup = unknown> {
   text: string;
   replyMarkup?: TReplyMarkup;
 }
 
-export interface TelegramOutboundTextPreviewRuntimeDeps<
+export interface BaleOutboundTextPreviewRuntimeDeps<
   TReplyMarkup = unknown,
 > {
-  execCommand: TelegramVoiceReplySenderDeps["execCommand"];
-  getHandlers?: () => TelegramOutboundHandlerConfig[] | undefined;
-  finalizeMarkdownPreview: TelegramPreparedPreviewDelivery<TReplyMarkup>["finalizeMarkdownPreview"];
+  execCommand: BaleVoiceReplySenderDeps["execCommand"];
+  getHandlers?: () => BaleOutboundHandlerConfig[] | undefined;
+  finalizeMarkdownPreview: BalePreparedPreviewDelivery<TReplyMarkup>["finalizeMarkdownPreview"];
   preparePreviewDelivery?: (
     isDeliveryActive: () => boolean,
-  ) => TelegramPreparedPreviewDelivery<TReplyMarkup>;
+  ) => BalePreparedPreviewDelivery<TReplyMarkup>;
   cwd?: string;
-  recordRuntimeEvent?: TelegramVoiceReplySenderDeps["recordRuntimeEvent"];
+  recordRuntimeEvent?: BaleVoiceReplySenderDeps["recordRuntimeEvent"];
 }
 
 // --- Voice Reply Timeout Helpers ---
 
 function getVoiceReplyTimeout(
-  config: TelegramOutboundCommandTemplateConfig | undefined,
+  config: BaleOutboundCommandTemplateConfig | undefined,
 ): number {
   return (
     getCommandTemplateConfiguredTimeout(config) ?? DEFAULT_VOICE_TIMEOUT_MS
@@ -273,7 +273,7 @@ function getVoiceReplyTimeout(
 
 function formatVoiceReplyExecutionFailure(
   label: string,
-  result: TelegramVoiceExecResult,
+  result: BaleVoiceExecResult,
 ): string {
   const parts = [
     `${label} exited with code ${result.code}${result.killed ? " (killed)" : ""}`,
@@ -285,21 +285,21 @@ function formatVoiceReplyExecutionFailure(
 
 function withCommandTemplateRecovery(
   recover: (() => Promise<void>) | undefined,
-): Pick<TelegramVoiceExecOptions, "recover"> {
+): Pick<BaleVoiceExecOptions, "recover"> {
   return recover ? { recover } : {};
 }
 
 async function runVoiceReplyCommand(
   label: string,
-  config: TelegramOutboundCommandTemplateConfig,
+  config: BaleOutboundCommandTemplateConfig,
   values: Record<string, string>,
   options: {
     cwd: string;
     timeout: number;
-    execCommand: TelegramVoiceReplySenderDeps["execCommand"];
+    execCommand: BaleVoiceReplySenderDeps["execCommand"];
     stdin?: string;
   },
-): Promise<TelegramVoiceExecResult> {
+): Promise<BaleVoiceExecResult> {
   if (!options.execCommand) {
     throw new Error("execCommand is required for command template execution");
   }
@@ -355,7 +355,7 @@ function normalizeOutboundHandlerStringList(
 }
 
 function outboundHandlerMatchesType(
-  handler: TelegramOutboundHandlerConfig,
+  handler: BaleOutboundHandlerConfig,
   type: string,
 ): boolean {
   const selectors = [
@@ -366,10 +366,10 @@ function outboundHandlerMatchesType(
   return selectors.includes(type);
 }
 
-export function findTelegramOutboundHandlers(
-  handlers: TelegramOutboundHandlerConfig[] | undefined,
+export function findBaleOutboundHandlers(
+  handlers: BaleOutboundHandlerConfig[] | undefined,
   type: string,
-): TelegramOutboundHandlerConfig[] {
+): BaleOutboundHandlerConfig[] {
   if (!Array.isArray(handlers)) return [];
   return handlers.filter(
     (handler) =>
@@ -386,7 +386,7 @@ function extractVoiceReplyPath(stdout: string): string {
 }
 
 function getVoiceReplyOutputPath(
-  config: TelegramOutboundHandlerConfig,
+  config: BaleOutboundHandlerConfig,
   values: Record<string, string>,
   stdout: string,
 ): string {
@@ -416,20 +416,20 @@ function getVoiceReplyTemplateValues(
   };
 }
 
-function getDefaultTelegramVoiceTempDir(): string {
-  return resolveTelegramAttachmentsDir();
+function getDefaultBaleVoiceTempDir(): string {
+  return resolveBaleAttachmentsDir();
 }
 
-async function generateTelegramVoiceReplyFileWithHandler(
+async function generateBaleVoiceReplyFileWithHandler(
   text: string,
   options: {
     lang?: string;
     rate?: string;
-    handler: TelegramOutboundHandlerConfig;
+    handler: BaleOutboundHandlerConfig;
     tempDir: string;
     cwd: string;
     timeout: number;
-    execCommand: TelegramVoiceReplySenderDeps["execCommand"];
+    execCommand: BaleVoiceReplySenderDeps["execCommand"];
   },
 ): Promise<string | undefined> {
   await mkdir(options.tempDir, { recursive: true });
@@ -486,24 +486,24 @@ async function generateTelegramVoiceReplyFileWithHandler(
   return getVoiceReplyOutputPath(options.handler, values, result.stdout);
 }
 
-export async function generateTelegramVoiceReplyFile(
+export async function generateBaleVoiceReplyFile(
   text: string,
   options: {
     lang?: string;
     rate?: string;
-    handler?: TelegramOutboundHandlerConfig;
+    handler?: BaleOutboundHandlerConfig;
     tempDir?: string;
     cwd?: string;
-    execCommand: TelegramVoiceReplySenderDeps["execCommand"];
+    execCommand: BaleVoiceReplySenderDeps["execCommand"];
   },
 ): Promise<string | undefined> {
   const handler = options.handler;
   if (!handler?.template) return undefined;
-  return generateTelegramVoiceReplyFileWithHandler(text, {
+  return generateBaleVoiceReplyFileWithHandler(text, {
     lang: options.lang,
     rate: options.rate,
     handler,
-    tempDir: options.tempDir ?? getDefaultTelegramVoiceTempDir(),
+    tempDir: options.tempDir ?? getDefaultBaleVoiceTempDir(),
     cwd: options.cwd ?? process.cwd(),
     timeout: getVoiceReplyTimeout(handler),
     execCommand: options.execCommand,
@@ -514,12 +514,12 @@ function getOutboundTextTemplateValues(text: string): Record<string, string> {
   return { text, type: "text" };
 }
 
-async function transformTelegramOutboundTextWithHandler(
+async function transformBaleOutboundTextWithHandler(
   text: string,
   options: {
-    handler: TelegramOutboundHandlerConfig;
+    handler: BaleOutboundHandlerConfig;
     cwd: string;
-    execCommand: TelegramVoiceReplySenderDeps["execCommand"];
+    execCommand: BaleVoiceReplySenderDeps["execCommand"];
   },
 ): Promise<string> {
   const values = getOutboundTextTemplateValues(text);
@@ -569,22 +569,22 @@ async function transformTelegramOutboundTextWithHandler(
   return result.stdout.trim() || text;
 }
 
-async function transformTelegramOutboundText(
+async function transformBaleOutboundText(
   text: string,
   options: {
-    handlers?: TelegramOutboundHandlerConfig[];
+    handlers?: BaleOutboundHandlerConfig[];
     cwd?: string;
-    execCommand: TelegramVoiceReplySenderDeps["execCommand"];
-    recordRuntimeEvent?: TelegramVoiceReplySenderDeps["recordRuntimeEvent"];
+    execCommand: BaleVoiceReplySenderDeps["execCommand"];
+    recordRuntimeEvent?: BaleVoiceReplySenderDeps["recordRuntimeEvent"];
   },
 ): Promise<string> {
   let transformed = text;
-  for (const handler of findTelegramOutboundHandlers(
+  for (const handler of findBaleOutboundHandlers(
     options.handlers,
     "text",
   )) {
     try {
-      transformed = await transformTelegramOutboundTextWithHandler(
+      transformed = await transformBaleOutboundTextWithHandler(
         transformed,
         {
           handler,
@@ -603,25 +603,25 @@ async function transformTelegramOutboundText(
   return transformed;
 }
 
-function isTelegramInlineKeyboardLike(
+function isBaleInlineKeyboardLike(
   replyMarkup: unknown,
-): replyMarkup is TelegramInlineKeyboardLike {
+): replyMarkup is BaleInlineKeyboardLike {
   if (!replyMarkup || typeof replyMarkup !== "object") return false;
   const keyboard = (replyMarkup as { inline_keyboard?: unknown })
     .inline_keyboard;
   return Array.isArray(keyboard);
 }
 
-async function transformTelegramOutboundReplyMarkup<TReplyMarkup>(
+async function transformBaleOutboundReplyMarkup<TReplyMarkup>(
   replyMarkup: TReplyMarkup | undefined,
-  options: Omit<TelegramOutboundTextTransformOptions, "replyMarkup">,
+  options: Omit<BaleOutboundTextTransformOptions, "replyMarkup">,
 ): Promise<TReplyMarkup | undefined> {
-  if (!isTelegramInlineKeyboardLike(replyMarkup)) return replyMarkup;
+  if (!isBaleInlineKeyboardLike(replyMarkup)) return replyMarkup;
   const translatedRows = [];
   for (const row of replyMarkup.inline_keyboard) {
     const translatedRow = [];
     for (const button of row) {
-      const text = await transformTelegramOutboundText(button.text, options);
+      const text = await transformBaleOutboundText(button.text, options);
       translatedRow.push({ ...button, text });
     }
     translatedRows.push(translatedRow);
@@ -629,31 +629,31 @@ async function transformTelegramOutboundReplyMarkup<TReplyMarkup>(
   return { ...replyMarkup, inline_keyboard: translatedRows } as TReplyMarkup;
 }
 
-async function transformTelegramOutboundTextReply<TReplyMarkup = unknown>(
+async function transformBaleOutboundTextReply<TReplyMarkup = unknown>(
   text: string,
-  options: TelegramOutboundTextTransformOptions<TReplyMarkup>,
-): Promise<TelegramOutboundTextTransformResult<TReplyMarkup>> {
+  options: BaleOutboundTextTransformOptions<TReplyMarkup>,
+): Promise<BaleOutboundTextTransformResult<TReplyMarkup>> {
   const transformOptions = {
     handlers: options.handlers,
     cwd: options.cwd,
     execCommand: options.execCommand,
     recordRuntimeEvent: options.recordRuntimeEvent,
   };
-  const transformedText = await transformTelegramOutboundText(
+  const transformedText = await transformBaleOutboundText(
     text,
     transformOptions,
   );
-  const replyMarkup = await transformTelegramOutboundReplyMarkup(
+  const replyMarkup = await transformBaleOutboundReplyMarkup(
     options.replyMarkup,
     transformOptions,
   );
   return { text: transformedText, ...(replyMarkup ? { replyMarkup } : {}) };
 }
 
-export function createTelegramOutboundTextReplyRuntime<TReplyMarkup = unknown>(
-  deps: TelegramOutboundTextReplyRuntimeDeps<TReplyMarkup>,
+export function createBaleOutboundTextReplyRuntime<TReplyMarkup = unknown>(
+  deps: BaleOutboundTextReplyRuntimeDeps<TReplyMarkup>,
 ): Pick<
-  TelegramOutboundTextReplyRuntimeDeps<TReplyMarkup>,
+  BaleOutboundTextReplyRuntimeDeps<TReplyMarkup>,
   "sendTextReply" | "sendMarkdownReply"
 > {
   const sendTextReply = deps.sendTextReply,
@@ -665,21 +665,21 @@ export function createTelegramOutboundTextReplyRuntime<TReplyMarkup = unknown>(
         ...(options.target ? { target: { ...options.target } } : {}),
       };
       const assertAuthority = capturedOptions?.assertAuthority;
-      assertTelegramApiCallAuthority(assertAuthority, false);
-      const transformed = await transformTelegramOutboundText(text, {
+      assertBaleApiCallAuthority(assertAuthority, false);
+      const transformed = await transformBaleOutboundText(text, {
         handlers: deps.getHandlers?.(),
         cwd: deps.cwd,
         execCommand: deps.execCommand,
         recordRuntimeEvent: deps.recordRuntimeEvent,
       });
-      assertTelegramApiCallAuthority(assertAuthority, false);
+      assertBaleApiCallAuthority(assertAuthority, false);
       const messageId = await sendTextReply(
         chatId,
         replyToMessageId,
         transformed,
         capturedOptions,
       );
-      assertTelegramApiCallAuthority(assertAuthority, true);
+      assertBaleApiCallAuthority(assertAuthority, true);
       return messageId;
     },
     sendMarkdownReply: async (chatId, replyToMessageId, markdown, options) => {
@@ -688,10 +688,10 @@ export function createTelegramOutboundTextReplyRuntime<TReplyMarkup = unknown>(
         ...(options.target ? { target: { ...options.target } } : {}),
       };
       const assertAuthority = capturedOptions?.assertAuthority;
-      assertTelegramApiCallAuthority(assertAuthority, false);
-      const deliveryMarkdown = stripTelegramCommentMarkupForDelivery(markdown);
+      assertBaleApiCallAuthority(assertAuthority, false);
+      const deliveryMarkdown = stripBaleCommentMarkupForDelivery(markdown);
       if (!deliveryMarkdown) return undefined;
-      const transformed = await transformTelegramOutboundTextReply(
+      const transformed = await transformBaleOutboundTextReply(
         deliveryMarkdown,
         {
           handlers: deps.getHandlers?.(),
@@ -701,7 +701,7 @@ export function createTelegramOutboundTextReplyRuntime<TReplyMarkup = unknown>(
           replyMarkup: capturedOptions?.replyMarkup,
         },
       );
-      assertTelegramApiCallAuthority(assertAuthority, false);
+      assertBaleApiCallAuthority(assertAuthority, false);
       const messageId = await sendMarkdownReply(
         chatId,
         replyToMessageId,
@@ -713,28 +713,28 @@ export function createTelegramOutboundTextReplyRuntime<TReplyMarkup = unknown>(
             : {}),
         },
       );
-      assertTelegramApiCallAuthority(assertAuthority, true);
+      assertBaleApiCallAuthority(assertAuthority, true);
       return messageId;
     },
   };
 }
 
-export function createTelegramOutboundTextPreviewRuntime<
+export function createBaleOutboundTextPreviewRuntime<
   TReplyMarkup = unknown,
 >(
-  deps: TelegramOutboundTextPreviewRuntimeDeps<TReplyMarkup>,
+  deps: BaleOutboundTextPreviewRuntimeDeps<TReplyMarkup>,
 ): {
-  finalizeMarkdownPreview: TelegramPreparedPreviewDelivery<TReplyMarkup>["finalizeMarkdownPreview"];
+  finalizeMarkdownPreview: BalePreparedPreviewDelivery<TReplyMarkup>["finalizeMarkdownPreview"];
   preparePreviewDelivery: (
     isDeliveryActive: () => boolean,
-  ) => TelegramPreparedPreviewDelivery<TReplyMarkup> | undefined;
+  ) => BalePreparedPreviewDelivery<TReplyMarkup> | undefined;
 } {
   const wrap =
     (
-      finalize: TelegramPreparedPreviewDelivery<TReplyMarkup>["finalizeMarkdownPreview"],
-    ): TelegramPreparedPreviewDelivery<TReplyMarkup>["finalizeMarkdownPreview"] =>
+      finalize: BalePreparedPreviewDelivery<TReplyMarkup>["finalizeMarkdownPreview"],
+    ): BalePreparedPreviewDelivery<TReplyMarkup>["finalizeMarkdownPreview"] =>
     async (chatId, markdown, replyToMessageId, options) => {
-      const transformed = await transformTelegramOutboundTextReply(markdown, {
+      const transformed = await transformBaleOutboundTextReply(markdown, {
         handlers: deps.getHandlers?.(),
         cwd: deps.cwd,
         execCommand: deps.execCommand,
@@ -762,50 +762,50 @@ export function createTelegramOutboundTextPreviewRuntime<
   };
 }
 
-export interface TelegramOutboundReplyPlan<TReplyMarkup = unknown> {
+export interface BaleOutboundReplyPlan<TReplyMarkup = unknown> {
   markdown: string;
   replyMarkup?: TReplyMarkup;
   voiceText?: string;
-  voiceReplies?: TelegramVoiceReplyItem[];
+  voiceReplies?: BaleVoiceReplyItem[];
   lang?: string;
   rate?: string;
 }
 
 // --- Voice Policy Re-Exports ---
 export {
-  clearTelegramVoiceSynthesisProviders,
-  clearTelegramVoiceTranscriptionProviders,
+  clearBaleVoiceSynthesisProviders,
+  clearBaleVoiceTranscriptionProviders,
   computeVoicePromptContribution,
   computeVoiceTurnFlags,
-  getTelegramVoiceReplyMode,
-  getTelegramVoiceSynthesisProviders,
-  getTelegramVoiceTranscriptionProviders,
-  hasTelegramVoiceSynthesisProvider,
-  hasTelegramVoiceTranscriptionProvider,
+  getBaleVoiceReplyMode,
+  getBaleVoiceSynthesisProviders,
+  getBaleVoiceTranscriptionProviders,
+  hasBaleVoiceSynthesisProvider,
+  hasBaleVoiceTranscriptionProvider,
   isVoiceTurn,
-  registerTelegramVoiceSynthesisProvider,
-  registerTelegramVoiceTranscriptionProvider,
+  registerBaleVoiceSynthesisProvider,
+  registerBaleVoiceTranscriptionProvider,
   shouldSuppressPreviewForVoice,
-  type TelegramVoiceReplyMode,
-  type TelegramVoiceSynthesisProvider,
-  type TelegramVoiceSynthesisProviderResult,
-  type TelegramVoiceTranscriptionFile,
-  type TelegramVoiceTranscriptionProvider,
-  type TelegramVoiceTranscriptionProviderResult,
-  type TelegramVoiceTurnView,
+  type BaleVoiceReplyMode,
+  type BaleVoiceSynthesisProvider,
+  type BaleVoiceSynthesisProviderResult,
+  type BaleVoiceTranscriptionFile,
+  type BaleVoiceTranscriptionProvider,
+  type BaleVoiceTranscriptionProviderResult,
+  type BaleVoiceTurnView,
 } from "./voice.ts";
 
-export function createTelegramVoiceReplySender(
-  deps: TelegramVoiceReplySenderDeps,
+export function createBaleVoiceReplySender(
+  deps: BaleVoiceReplySenderDeps,
 ) {
-  return createTelegramVoiceReplySenderWithPorts(deps, {
+  return createBaleVoiceReplySenderWithPorts(deps, {
     findVoiceHandlers: (handlers) =>
-      findTelegramOutboundHandlers(
-        handlers as TelegramOutboundHandlerConfig[] | undefined,
+      findBaleOutboundHandlers(
+        handlers as BaleOutboundHandlerConfig[] | undefined,
         "voice",
       ),
     generateVoiceFile: (text, options) =>
-      generateTelegramVoiceReplyFile(text, {
+      generateBaleVoiceReplyFile(text, {
         lang: options.lang,
         rate: options.rate,
         handler: options.handler,
@@ -814,43 +814,43 @@ export function createTelegramVoiceReplySender(
         execCommand: options.execCommand,
       }),
     getProgrammaticVoiceHandlers: () =>
-      getTelegramOutboundProgrammaticHandlers("voice"),
+      getBaleOutboundProgrammaticHandlers("voice"),
   });
 }
 
 export {
-  createTelegramButtonActionStore,
-  createTelegramButtonPromptTurn,
-  createTelegramButtonReplyPlanner,
-  handleTelegramButtonCallbackQuery,
-  markTelegramButtonSelected,
-  planTelegramButtonReply,
-  type TelegramButtonActionStore,
-  type TelegramButtonCallbackHandlerDeps,
-  type TelegramButtonCallbackQuery,
-  type TelegramButtonReplyPlan,
-  type TelegramOutboundButtonAction,
-  type TelegramOutboundButtonBinding,
-  type TelegramOutboundButtonMarkup,
-  type TelegramOutboundButtonStoredAction,
+  createBaleButtonActionStore,
+  createBaleButtonPromptTurn,
+  createBaleButtonReplyPlanner,
+  handleBaleButtonCallbackQuery,
+  markBaleButtonSelected,
+  planBaleButtonReply,
+  type BaleButtonActionStore,
+  type BaleButtonCallbackHandlerDeps,
+  type BaleButtonCallbackQuery,
+  type BaleButtonReplyPlan,
+  type BaleOutboundButtonAction,
+  type BaleOutboundButtonBinding,
+  type BaleOutboundButtonMarkup,
+  type BaleOutboundButtonStoredAction,
 } from "./outbound-buttons.ts";
 
-export function createTelegramOutboundReplyPlanner(
-  store: Pick<TelegramButtonActionStore, "register">,
+export function createBaleOutboundReplyPlanner(
+  store: Pick<BaleButtonActionStore, "register">,
   getRenderingMode: () => "rich" | "html" = () => "rich",
 ): (
   markdown: string,
-  options?: { binding?: TelegramOutboundButtonBinding },
-) => TelegramOutboundReplyPlan<TelegramOutboundButtonMarkup> {
+  options?: { binding?: BaleOutboundButtonBinding },
+) => BaleOutboundReplyPlan<BaleOutboundButtonMarkup> {
   return (markdown, options) => {
-    const buttonReply = planTelegramButtonReply(markdown, {
+    const buttonReply = planBaleButtonReply(markdown, {
       registerAction: store.register,
       rendering: getRenderingMode(),
       ...(options?.binding ? { binding: options.binding } : {}),
     });
 
-    // Button replies can also contain <!-- telegram_voice --> markup
-    const voiceReply = planTelegramVoiceReply(buttonReply.markdown);
+    // Button replies can also contain <!-- bale_voice --> markup
+    const voiceReply = planBaleVoiceReply(buttonReply.markdown);
 
     return {
       markdown: voiceReply.markdown,
@@ -870,19 +870,19 @@ export function createTelegramOutboundReplyPlanner(
 /**
  * Create an artifact sender that delivers planned voice replies for a turn.
  * Iterates over `voiceReplies` (or a single `voiceText`) and sends each as
- * a Telegram voice message via the voice reply sender. Throws if no voice
+ * a Bale voice message via the voice reply sender. Throws if no voice
  * reply could be delivered.
  */
 
 // --- Outbound Reply Artifacts ---
 
-export function createTelegramOutboundReplyArtifactSender(
-  deps: TelegramVoiceReplySenderDeps,
+export function createBaleOutboundReplyArtifactSender(
+  deps: BaleVoiceReplySenderDeps,
 ) {
   return async (
-    turn: TelegramVoiceReplyTurnView,
+    turn: BaleVoiceReplyTurnView,
     plan: Pick<
-      TelegramOutboundReplyPlan,
+      BaleOutboundReplyPlan,
       "voiceText" | "voiceReplies" | "lang" | "rate" | "replyMarkup"
     >,
     options?: { replyToPrompt?: boolean; isDeliveryActive?: () => boolean },
@@ -890,7 +890,7 @@ export function createTelegramOutboundReplyArtifactSender(
     const isDeliveryActive = () =>
       deps.isDeliveryActive?.() !== false &&
       options?.isDeliveryActive?.() !== false;
-    const sendVoiceReply = createTelegramVoiceReplySender({
+    const sendVoiceReply = createBaleVoiceReplySender({
       ...deps,
       isDeliveryActive,
     });
@@ -918,7 +918,7 @@ export function createTelegramOutboundReplyArtifactSender(
         });
         anyDelivered = true;
       } catch (error) {
-        if (isTelegramApiCommitUnknownError(error)) throw error;
+        if (isBaleApiCommitUnknownError(error)) throw error;
         // sendVoiceReply already recorded the error; continue to next reply
       }
     }
@@ -934,24 +934,24 @@ export function createTelegramOutboundReplyArtifactSender(
 
 // --- Public Assistant Output Delivery ---
 
-export interface TelegramAssistantOutputMutationFence {
+export interface BaleAssistantOutputMutationFence {
   run: <TArgs extends unknown[], TResult>(
     mutation: (...args: TArgs) => Promise<TResult>,
     ...args: TArgs
   ) => Promise<TResult>;
 }
 
-export interface TelegramAssistantOutputDeliveryAuthority<TTransportStamp> {
+export interface BaleAssistantOutputDeliveryAuthority<TTransportStamp> {
   transportStamp: TTransportStamp;
   route: "direct" | "follower" | "none";
   directEpoch?: number | string;
   followerGeneration?: string;
-  target?: TelegramTarget;
+  target?: BaleTarget;
 }
 
-export function createTelegramAssistantOutputMutationFence(
+export function createBaleAssistantOutputMutationFence(
   isAuthorityActive: () => boolean,
-): TelegramAssistantOutputMutationFence {
+): BaleAssistantOutputMutationFence {
   return {
     run(mutation, ...args) {
       if (!isAuthorityActive()) {
@@ -966,27 +966,27 @@ export function createTelegramAssistantOutputMutationFence(
   };
 }
 
-export function createTelegramAssistantOutputSender<
+export function createBaleAssistantOutputSender<
   TTransportStamp,
   TReplyMarkup = unknown,
 >(deps: {
-  recordOwnership?: Replies.TelegramReplyOwnershipRecorder["record"];
-  sendMessage: (body: TelegramSendMessageBody) => Promise<TelegramSentMessage>;
+  recordOwnership?: Replies.BaleReplyOwnershipRecorder["record"];
+  sendMessage: (body: BaleSendMessageBody) => Promise<BaleSentMessage>;
   sendRichMessage: (
-    body: TelegramSendRichMessageBody,
-  ) => Promise<TelegramSentMessage>;
-  editMessage: (body: TelegramEditMessageTextBody) => Promise<unknown>;
+    body: BaleSendRichMessageBody,
+  ) => Promise<BaleSentMessage>;
+  editMessage: (body: BaleEditMessageTextBody) => Promise<unknown>;
   getAssistantRenderingMode: () => "rich" | "html";
   planButtonReply?: (markdown: string) => {
     markdown: string;
     replyMarkup?: TReplyMarkup;
   };
-  execCommand: TelegramOutboundTextReplyRuntimeDeps<TReplyMarkup>["execCommand"];
-  getHandlers?: TelegramOutboundTextReplyRuntimeDeps<TReplyMarkup>["getHandlers"];
-  recordRuntimeEvent?: TelegramOutboundTextReplyRuntimeDeps<TReplyMarkup>["recordRuntimeEvent"];
+  execCommand: BaleOutboundTextReplyRuntimeDeps<TReplyMarkup>["execCommand"];
+  getHandlers?: BaleOutboundTextReplyRuntimeDeps<TReplyMarkup>["getHandlers"];
+  recordRuntimeEvent?: BaleOutboundTextReplyRuntimeDeps<TReplyMarkup>["recordRuntimeEvent"];
 }): (
-  event: TelegramAssistantSegmentEvent,
-  authority: TelegramAssistantOutputDeliveryAuthority<TTransportStamp>,
+  event: BaleAssistantSegmentEvent,
+  authority: BaleAssistantOutputDeliveryAuthority<TTransportStamp>,
   isAuthorityActive: () => boolean,
 ) => Promise<void> {
   return async function sendAssistantOutput(
@@ -996,11 +996,11 @@ export function createTelegramAssistantOutputSender<
   ) {
     const target = authority.target;
     if (!target) {
-      throw new Error("Assistant output has no authorized Telegram target.");
+      throw new Error("Assistant output has no authorized Bale target.");
     }
     const mutationFence =
-      createTelegramAssistantOutputMutationFence(isAuthorityActive);
-    const replyRuntime = Replies.createTelegramRenderedMessageDeliveryRuntime({
+      createBaleAssistantOutputMutationFence(isAuthorityActive);
+    const replyRuntime = Replies.createBaleRenderedMessageDeliveryRuntime({
       recordOwnership: deps.recordOwnership,
       sendMessage(body) {
         return mutationFence.run(deps.sendMessage, body);
@@ -1013,7 +1013,7 @@ export function createTelegramAssistantOutputSender<
         return mutationFence.run(deps.editMessage, body);
       },
     });
-    const outboundRuntime = createTelegramOutboundTextReplyRuntime({
+    const outboundRuntime = createBaleOutboundTextReplyRuntime({
       sendTextReply: replyRuntime.sendTextReply,
       sendMarkdownReply: replyRuntime.sendMarkdownReply,
       execCommand: deps.execCommand,
@@ -1025,7 +1025,7 @@ export function createTelegramAssistantOutputSender<
     };
     await outboundRuntime.sendMarkdownReply(
       target.chatId,
-      event.source === "telegram" ? event.replyToMessageId : undefined,
+      event.source === "bale" ? event.replyToMessageId : undefined,
       buttonReply.markdown,
       {
         target,

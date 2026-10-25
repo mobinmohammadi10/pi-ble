@@ -1,6 +1,6 @@
 /**
- * Telegram inbound routing composition
- * Zones: telegram inbound, orchestration, queue/menu/command composition
+ * Bale inbound routing composition
+ * Zones: bale inbound, orchestration, queue/menu/command composition
  * Wires authorized updates into menus, commands, media grouping, and prompt queueing, and owns exact assistant-output target/route authority capture
  */
 
@@ -10,11 +10,11 @@ import { basename, dirname } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import * as Bus from "./bus.ts";
 import * as Commands from "./commands.ts";
-import type { TelegramConfigStore } from "./config.ts";
-import type { TelegramInboundHandlerRuntime } from "./inbound.ts";
+import type { BaleConfigStore } from "./config.ts";
+import type { BaleInboundHandlerRuntime } from "./inbound.ts";
 import type {
-  TelegramUpdateJournalQueuedCompletion,
-  TelegramUpdateJournalQueuedReceiptEvidence,
+  BaleUpdateJournalQueuedCompletion,
+  BaleUpdateJournalQueuedReceiptEvidence,
 } from "./journal.ts";
 import * as Media from "./media.ts";
 import * as Menu from "./menu.ts";
@@ -24,25 +24,25 @@ import * as PromptTemplates from "./prompt-templates.ts";
 import * as Queue from "./queue.ts";
 import { escapeHtml } from "./rendering.ts";
 import * as Replies from "./replies.ts";
-import type { TelegramBridgeRuntime } from "./runtime.ts";
-import type { TelegramSectionRegistry } from "./sections.ts";
+import type { BaleBridgeRuntime } from "./runtime.ts";
+import type { BaleSectionRegistry } from "./sections.ts";
 import type {
-  TelegramApiCallOptions,
-  TelegramInputRichMessage,
-} from "./telegram-api.ts";
-import * as TelegramApi from "./telegram-api.ts";
+  BaleApiCallOptions,
+  BaleInputRichMessage,
+} from "./bale-api.ts";
+import * as BaleApi from "./bale-api.ts";
 import * as TextGroups from "./text-groups.ts";
 import * as ThreadNaming from "./thread-naming.ts";
 import * as ThreadReconciler from "./thread-reconciler.ts";
 import type {
-  TelegramInstanceThreadIdentityCandidate,
-  TelegramTopicTargetRecord,
+  BaleInstanceThreadIdentityCandidate,
+  BaleTopicTargetRecord,
 } from "./threads.ts";
 import * as Turns from "./turns.ts";
 import * as WorkspaceIdentity from "./workspace-identity.ts";
-import type { createTelegramWorkspaceExternalProtectionCapture } from "./workspace-retirement.ts";
+import type { createBaleWorkspaceExternalProtectionCapture } from "./workspace-retirement.ts";
 
-interface TelegramPromptPeerView {
+interface BalePromptPeerView {
   id?: unknown;
   is_bot?: unknown;
   username?: unknown;
@@ -51,8 +51,8 @@ interface TelegramPromptPeerView {
   title?: unknown;
 }
 
-function formatTelegramPromptPeer(
-  peer: TelegramPromptPeerView | undefined,
+function formatBalePromptPeer(
+  peer: BalePromptPeerView | undefined,
 ): string | undefined {
   if (!peer) return undefined;
   if (typeof peer.username === "string" && peer.username.length > 0) {
@@ -70,36 +70,36 @@ function formatTelegramPromptPeer(
   return typeof peer.id === "number" ? String(peer.id) : undefined;
 }
 
-function isTelegramPromptOwnerPeer(
-  peer: TelegramPromptPeerView | undefined,
+function isBalePromptOwnerPeer(
+  peer: BalePromptPeerView | undefined,
   ownerUserId: number | undefined,
 ): boolean {
   return ownerUserId !== undefined && peer?.id === ownerUserId;
 }
 
-function isTelegramPromptBotPeer(
-  peer: TelegramPromptPeerView | undefined,
+function isBalePromptBotPeer(
+  peer: BalePromptPeerView | undefined,
 ): boolean {
   return peer?.is_bot === true;
 }
 
-export function resolveTelegramGuestPromptPeer(input: {
+export function resolveBaleGuestPromptPeer(input: {
   chatType?: string;
-  chat?: TelegramPromptPeerView;
-  from?: TelegramPromptPeerView;
-  replyFrom?: TelegramPromptPeerView;
-  guestBotCallerUser?: TelegramPromptPeerView;
-  guestBotCallerChat?: TelegramPromptPeerView;
+  chat?: BalePromptPeerView;
+  from?: BalePromptPeerView;
+  replyFrom?: BalePromptPeerView;
+  guestBotCallerUser?: BalePromptPeerView;
+  guestBotCallerChat?: BalePromptPeerView;
   ownerUserId?: number;
 }): string | undefined {
   if (input.chatType !== "private") {
-    return formatTelegramPromptPeer(input.chat);
+    return formatBalePromptPeer(input.chat);
   }
   if (
-    !isTelegramPromptOwnerPeer(input.from, input.ownerUserId) &&
-    !isTelegramPromptBotPeer(input.from)
+    !isBalePromptOwnerPeer(input.from, input.ownerUserId) &&
+    !isBalePromptBotPeer(input.from)
   ) {
-    return formatTelegramPromptPeer(input.from);
+    return formatBalePromptPeer(input.from);
   }
   for (const candidate of [
     input.chat,
@@ -108,20 +108,20 @@ export function resolveTelegramGuestPromptPeer(input: {
     input.replyFrom,
   ]) {
     if (
-      isTelegramPromptOwnerPeer(candidate, input.ownerUserId) ||
-      isTelegramPromptBotPeer(candidate)
+      isBalePromptOwnerPeer(candidate, input.ownerUserId) ||
+      isBalePromptBotPeer(candidate)
     ) {
       continue;
     }
-    const peer = formatTelegramPromptPeer(candidate);
+    const peer = formatBalePromptPeer(candidate);
     if (peer) return peer;
   }
   return undefined;
 }
 
 /** Stable file scope of the remote Guest Mode peer: username, else numeric id; never the bot's own scope. */
-export function resolveTelegramGuestFileScope(
-  input: Parameters<typeof resolveTelegramGuestPromptPeer>[0],
+export function resolveBaleGuestFileScope(
+  input: Parameters<typeof resolveBaleGuestPromptPeer>[0],
 ): string {
   const candidates =
     input.chatType !== "private"
@@ -137,8 +137,8 @@ export function resolveTelegramGuestFileScope(
     if (
       !candidate ||
       (input.chatType === "private" &&
-        (isTelegramPromptOwnerPeer(candidate, input.ownerUserId) ||
-          isTelegramPromptBotPeer(candidate)))
+        (isBalePromptOwnerPeer(candidate, input.ownerUserId) ||
+          isBalePromptBotPeer(candidate)))
     )
       continue;
     if (typeof candidate.username === "string" && candidate.username.length > 0)
@@ -149,10 +149,10 @@ export function resolveTelegramGuestFileScope(
   return "guest";
 }
 
-function appendTelegramSourceAttachmentSection(
+function appendBaleSourceAttachmentSection(
   text: string,
   from: string | undefined,
-  files: Pick<Media.DownloadedTelegramFile, "path">[],
+  files: Pick<Media.DownloadedBaleFile, "path">[],
   outputs: readonly string[] = [],
 ): string {
   if (files.length === 0 && outputs.length === 0) return text;
@@ -194,7 +194,7 @@ function getLeaderTopicProfileKey(
 }
 
 function isCurrentLeaderTopicRecord(
-  record: Threads.TelegramTopicTargetRecord,
+  record: Threads.BaleTopicTargetRecord,
   profileKey: string | undefined,
   instanceId: string | undefined,
 ): boolean {
@@ -203,7 +203,7 @@ function isCurrentLeaderTopicRecord(
 }
 
 function hasActiveLeaderTopic(
-  records: Threads.TelegramTopicTargetRecord[],
+  records: Threads.BaleTopicTargetRecord[],
   profileKey: string | undefined,
   instanceId: string | undefined,
 ): boolean {
@@ -213,38 +213,38 @@ function hasActiveLeaderTopic(
   });
 }
 
-const TELEGRAM_UNBOUND_REROUTE_CALLBACK_PREFIX = "reroute:";
-const TELEGRAM_UNBOUND_REROUTE_RESTORE_MENU_CALLBACK_PREFIX = "rerouterestore:";
-const TELEGRAM_UNBOUND_REROUTE_MENU_CALLBACK_PREFIX = "reroutemenu:";
-const TELEGRAM_UNBOUND_REROUTE_ROOT_CALLBACK_PREFIX = "rerouteroot:";
-const TELEGRAM_UNBOUND_REROUTE_NEW_SLOT_CALLBACK_PREFIX = "reroutenew:";
-const TELEGRAM_UNBOUND_REROUTE_CANCEL_CALLBACK_PREFIX = "reroutecancel:";
-const TELEGRAM_PENDING_CANCELLATION_REVIEW_PREFIX = "reroutecancel:review:";
-const TELEGRAM_RETIRED_HISTORICAL_REVIEW_PREFIX = "reroutecancel:history:";
-const TELEGRAM_SLOT_CAPACITY_MESSAGE =
-  "No Telegram instance slot is available. Automatic reclamation is disabled for safety.";
+const BALE_UNBOUND_REROUTE_CALLBACK_PREFIX = "reroute:";
+const BALE_UNBOUND_REROUTE_RESTORE_MENU_CALLBACK_PREFIX = "rerouterestore:";
+const BALE_UNBOUND_REROUTE_MENU_CALLBACK_PREFIX = "reroutemenu:";
+const BALE_UNBOUND_REROUTE_ROOT_CALLBACK_PREFIX = "rerouteroot:";
+const BALE_UNBOUND_REROUTE_NEW_SLOT_CALLBACK_PREFIX = "reroutenew:";
+const BALE_UNBOUND_REROUTE_CANCEL_CALLBACK_PREFIX = "reroutecancel:";
+const BALE_PENDING_CANCELLATION_REVIEW_PREFIX = "reroutecancel:review:";
+const BALE_RETIRED_HISTORICAL_REVIEW_PREFIX = "reroutecancel:history:";
+const BALE_SLOT_CAPACITY_MESSAGE =
+  "No Bale instance slot is available. Automatic reclamation is disabled for safety.";
 
-function formatTelegramUnboundRerouteCallbackData(
+function formatBaleUnboundRerouteCallbackData(
   rerouteId: string,
   threadId: number,
 ): string {
-  return `${TELEGRAM_UNBOUND_REROUTE_CALLBACK_PREFIX}${rerouteId}:${threadId}`;
+  return `${BALE_UNBOUND_REROUTE_CALLBACK_PREFIX}${rerouteId}:${threadId}`;
 }
 
-function formatTelegramUnboundRerouteRestoreMenuCallbackData(
+function formatBaleUnboundRerouteRestoreMenuCallbackData(
   rerouteId: string,
 ): string {
-  return `${TELEGRAM_UNBOUND_REROUTE_RESTORE_MENU_CALLBACK_PREFIX}${rerouteId}`;
+  return `${BALE_UNBOUND_REROUTE_RESTORE_MENU_CALLBACK_PREFIX}${rerouteId}`;
 }
 
-function formatTelegramUnboundRerouteNewSlotCallbackData(
+function formatBaleUnboundRerouteNewSlotCallbackData(
   rerouteId: string,
   threadId: number,
 ): string {
-  return `${TELEGRAM_UNBOUND_REROUTE_NEW_SLOT_CALLBACK_PREFIX}${rerouteId}:${threadId}`;
+  return `${BALE_UNBOUND_REROUTE_NEW_SLOT_CALLBACK_PREFIX}${rerouteId}:${threadId}`;
 }
 
-function parseTelegramUnboundRerouteRestoreMenuCallbackData(
+function parseBaleUnboundRerouteRestoreMenuCallbackData(
   data: string | undefined,
 ): { rerouteId: string; restore: boolean; root: boolean } | undefined {
   const match = data?.match(
@@ -260,7 +260,7 @@ function parseTelegramUnboundRerouteRestoreMenuCallbackData(
     : undefined;
 }
 
-function parseTelegramUnboundRerouteCallbackData(
+function parseBaleUnboundRerouteCallbackData(
   data: string | undefined,
 ): { rerouteId: string; threadId: number; useNewSlot: boolean } | undefined {
   const match = data?.match(/^(reroute|reroutenew):([a-z0-9]+):(\d+)$/);
@@ -272,9 +272,9 @@ function parseTelegramUnboundRerouteCallbackData(
   return { rerouteId, threadId, useNewSlot: prefix === "reroutenew" };
 }
 
-function getTelegramThreadRecordLabel(
-  record: Threads.TelegramTopicTargetRecord,
-  getDisplayTitle?: Threads.TelegramCurrentThreadAssembly["getDisplayTitle"],
+function getBaleThreadRecordLabel(
+  record: Threads.BaleTopicTargetRecord,
+  getDisplayTitle?: Threads.BaleCurrentThreadAssembly["getDisplayTitle"],
 ): string {
   return (
     getDisplayTitle?.(record.target) ??
@@ -283,18 +283,18 @@ function getTelegramThreadRecordLabel(
 }
 
 function getRestoredThreadName(
-  record: Threads.TelegramTopicTargetRecord,
+  record: Threads.BaleTopicTargetRecord,
   slot: string,
 ): string {
   return record.threadName &&
-    ThreadNaming.isTelegramTopicThreadNameValidForSlot(record.threadName, slot)
+    ThreadNaming.isBaleTopicThreadNameValidForSlot(record.threadName, slot)
     ? record.threadName
-    : (ThreadNaming.chooseTelegramThreadName({ slot }) ?? "Pi");
+    : (ThreadNaming.chooseBaleThreadName({ slot }) ?? "Pi");
 }
 
-function isTelegramLiveThreadTarget(
-  record: Threads.TelegramTopicTargetRecord,
-  liveTargets: readonly Queue.TelegramQueueTarget[] | undefined,
+function isBaleLiveThreadTarget(
+  record: Threads.BaleTopicTargetRecord,
+  liveTargets: readonly Queue.BaleQueueTarget[] | undefined,
 ): boolean {
   if (!liveTargets) return record.status === "active";
   return liveTargets.some(
@@ -304,14 +304,14 @@ function isTelegramLiveThreadTarget(
   );
 }
 
-function getTelegramRoutableThreadRecords(
-  records: readonly Threads.TelegramTopicTargetRecord[],
-  liveTargets: readonly Queue.TelegramQueueTarget[] | undefined,
-): Threads.TelegramTopicTargetRecord[] {
+function getBaleRoutableThreadRecords(
+  records: readonly Threads.BaleTopicTargetRecord[],
+  liveTargets: readonly Queue.BaleQueueTarget[] | undefined,
+): Threads.BaleTopicTargetRecord[] {
   return records.filter(
     (record) =>
       record.status === "active" &&
-      isTelegramLiveThreadTarget(record, liveTargets),
+      isBaleLiveThreadTarget(record, liveTargets),
   );
 }
 
@@ -319,8 +319,8 @@ function getTelegramRoutableThreadRecords(
  * Owner inputs that stayed in All while their chooser moved to a routing tab: a menu-picked command arrives
  * threadless, whereas a typed All input already opens its own tab and leaves with it.
  */
-function getTelegramAllTabSourceMessageIds(
-  messages: readonly Partial<TelegramRoutedMessage>[],
+function getBaleAllTabSourceMessageIds(
+  messages: readonly Partial<BaleRoutedMessage>[],
   chatId: number,
 ): number[] {
   return messages.flatMap((message) =>
@@ -336,25 +336,25 @@ function getTelegramAllTabSourceMessageIds(
 }
 
 /** Failure retains the source for recovery; Threaded Mode never emits a fallback answer into All. */
-const TELEGRAM_THREADED_ROUTING_UNAVAILABLE_ERROR =
+const BALE_THREADED_ROUTING_UNAVAILABLE_ERROR =
   "All is input-only in Threaded Mode; a routing Thread could not be prepared.";
 
 /** What a route chooser moves: `<code>/name</code>` for a command, otherwise "this message". */
-function formatTelegramRouteSubject(command?: string): string {
+function formatBaleRouteSubject(command?: string): string {
   return command ? `<code>/${escapeHtml(command)}</code>` : "this message";
 }
 
 /** Root chooser heading; the buttons themselves name each available action. */
-function formatTelegramTemporaryThreadChooserText(command?: string): string {
+function formatBaleTemporaryThreadChooserText(command?: string): string {
   return [
-    `<b>🚦 Route ${formatTelegramRouteSubject(command)}:</b>`,
+    `<b>🚦 Route ${formatBaleRouteSubject(command)}:</b>`,
     "",
     "<i>The choice expires in 60 minutes.</i>",
   ].join("\n");
 }
 
-/** The message field holding a Telegram file (`file_id`, directly or in a size array), named by Telegram itself. */
-function findTelegramMessageFileField(
+/** The message field holding a Bale file (`file_id`, directly or in a size array), named by Bale itself. */
+function findBaleMessageFileField(
   fields: Record<string, unknown>,
 ): string | undefined {
   const hasFileId = (value: unknown): boolean =>
@@ -368,13 +368,13 @@ function findTelegramMessageFileField(
 }
 
 /** One-line review label for any message: its text, or `📎` plus the caption, file name or file field. */
-function formatTelegramRoutingInputPreview(message: object): string {
+function formatBaleRoutingInputPreview(message: object): string {
   const fields = message as Record<string, unknown>;
   const clean = (value: unknown): string =>
     typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
   let label = clean(fields.text);
   if (!label) {
-    const field = findTelegramMessageFileField(fields);
+    const field = findBaleMessageFileField(fields);
     const file = field ? fields[field] : undefined;
     const fileName = clean(
       !Array.isArray(file) && file
@@ -391,15 +391,15 @@ function formatTelegramRoutingInputPreview(message: object): string {
   );
 }
 
-function buildTelegramUnboundRerouteChooserMarkup(
+function buildBaleUnboundRerouteChooserMarkup(
   rerouteId: string,
-  records: readonly Threads.TelegramTopicTargetRecord[],
+  records: readonly Threads.BaleTopicTargetRecord[],
   options: {
     canRestore: boolean;
     canCancel?: boolean;
-    getDisplayTitle?: Threads.TelegramCurrentThreadAssembly["getDisplayTitle"];
+    getDisplayTitle?: Threads.BaleCurrentThreadAssembly["getDisplayTitle"];
   },
-): Menu.TelegramReplyMarkup {
+): Menu.BaleReplyMarkup {
   const activeRecords = records.filter((record) => record.status === "active");
   const canRestoreAnyLiveThread =
     options.canRestore && activeRecords.length > 0;
@@ -408,7 +408,7 @@ function buildTelegramUnboundRerouteChooserMarkup(
         [
           {
             text: "🔀 Reroute: send it to a Pi thread",
-            callback_data: `${TELEGRAM_UNBOUND_REROUTE_MENU_CALLBACK_PREFIX}${rerouteId}`,
+            callback_data: `${BALE_UNBOUND_REROUTE_MENU_CALLBACK_PREFIX}${rerouteId}`,
           },
         ],
       ]
@@ -418,31 +418,31 @@ function buildTelegramUnboundRerouteChooserMarkup(
       {
         text: "🔁 Restore: move a Pi into this tab",
         callback_data:
-          formatTelegramUnboundRerouteRestoreMenuCallbackData(rerouteId),
+          formatBaleUnboundRerouteRestoreMenuCallbackData(rerouteId),
       },
     ]);
   if (options.canCancel)
     rows.push([
       {
         text: "⛔️ Cancel routing",
-        callback_data: `${TELEGRAM_UNBOUND_REROUTE_CANCEL_CALLBACK_PREFIX}${rerouteId}`,
+        callback_data: `${BALE_UNBOUND_REROUTE_CANCEL_CALLBACK_PREFIX}${rerouteId}`,
       },
     ]);
   return { inline_keyboard: rows };
 }
 
-function buildTelegramUnboundRerouteRestoreChooserMarkup(
+function buildBaleUnboundRerouteRestoreChooserMarkup(
   rerouteId: string,
-  records: readonly Threads.TelegramTopicTargetRecord[],
-  getDisplayTitle?: Threads.TelegramCurrentThreadAssembly["getDisplayTitle"],
-): Menu.TelegramReplyMarkup {
+  records: readonly Threads.BaleTopicTargetRecord[],
+  getDisplayTitle?: Threads.BaleCurrentThreadAssembly["getDisplayTitle"],
+): Menu.BaleReplyMarkup {
   return {
     inline_keyboard: records
       .filter((record) => record.status === "active")
       .map((record) => [
         {
-          text: `🧵 ${getTelegramThreadRecordLabel(record, getDisplayTitle)}`,
-          callback_data: formatTelegramUnboundRerouteNewSlotCallbackData(
+          text: `🧵 ${getBaleThreadRecordLabel(record, getDisplayTitle)}`,
+          callback_data: formatBaleUnboundRerouteNewSlotCallbackData(
             rerouteId,
             record.target.threadId,
           ),
@@ -451,55 +451,55 @@ function buildTelegramUnboundRerouteRestoreChooserMarkup(
   };
 }
 
-function formatTelegramUnboundRerouteChooserText(command?: string): string {
-  return `<b>🔀 Reroute ${formatTelegramRouteSubject(command)} to:</b>`;
+function formatBaleUnboundRerouteChooserText(command?: string): string {
+  return `<b>🔀 Reroute ${formatBaleRouteSubject(command)} to:</b>`;
 }
 
-function formatTelegramUnboundRerouteRestoreChooserText(
+function formatBaleUnboundRerouteRestoreChooserText(
   command?: string,
 ): string {
-  const subject = command ? ` for ${formatTelegramRouteSubject(command)}` : "";
+  const subject = command ? ` for ${formatBaleRouteSubject(command)}` : "";
   return `<b>🔁 Restore a Pi into this tab${subject}:</b>`;
 }
 
-function formatTelegramUnboundTopicGuidance(): string {
+function formatBaleUnboundTopicGuidance(): string {
   return [
     "<b>⚠️ New thread is not a Pi instance.</b>",
     "",
-    "To create a bound Telegram tab:",
+    "To create a bound Bale tab:",
     "<code>1.</code> Start another Pi instance in your terminal.",
-    "<code>2.</code> Run <code>/telegram-connect</code> in that instance.",
-    "<code>3.</code> The bridge will create and bind a fresh Telegram tab for it.",
+    "<code>2.</code> Run <code>/bale-connect</code> in that instance.",
+    "<code>3.</code> The bridge will create and bind a fresh Bale tab for it.",
   ].join("\n");
 }
 
-function formatTelegramTargetKey(target: Queue.TelegramQueueTarget): string {
+function formatBaleTargetKey(target: Queue.BaleQueueTarget): string {
   return `${target.chatId}:${target.threadId ?? "all"}`;
 }
 
 import * as Threads from "./threads.ts";
-import type { TelegramUser } from "./updates.ts";
+import type { BaleUser } from "./updates.ts";
 import * as Updates from "./updates.ts";
-import { getTelegramVoiceReplyMode } from "./voice.ts";
+import { getBaleVoiceReplyMode } from "./voice.ts";
 
 /** Prepare the selected leader's exact retained originals; no copy, adoption, acceptance proof or dispatch. */
-export function prepareTelegramLiveLeaderOriginal(input: {
-  request: Threads.TelegramWorkspaceRestoreRequest;
+export function prepareBaleLiveLeaderOriginal(input: {
+  request: Threads.BaleWorkspaceRestoreRequest;
   messages: readonly unknown[];
   isCurrent(): boolean;
-}): Updates.TelegramLiveDeferredInputPreparation | undefined {
+}): Updates.BaleLiveDeferredInputPreparation | undefined {
   const source = structuredClone(input.request.source),
     messages = [...input.messages];
   if (
     !input.isCurrent() ||
     input.request.owner.owner?.kind !== "leader" ||
     !isDeepStrictEqual(
-      Updates.collectTelegramAdmissionSourceUpdateIds(messages),
+      Updates.collectBaleAdmissionSourceUpdateIds(messages),
       [...source.updateIds].sort((a, b) => a - b),
     )
   )
     return undefined;
-  const originals = messages.map(Updates.inspectTelegramDeferredSource);
+  const originals = messages.map(Updates.inspectBaleDeferredSource);
   if (
     originals.some(
       (original) =>
@@ -509,7 +509,7 @@ export function prepareTelegramLiveLeaderOriginal(input: {
     )
   )
     return undefined;
-  return Updates.prepareTelegramLiveDeferredInput(
+  return Updates.prepareBaleLiveDeferredInput(
     messages,
     input.isCurrent.bind(input),
   );
@@ -521,13 +521,13 @@ export function prepareTelegramLiveLeaderOriginal(input: {
  */
 function findRelocatedBindingOwner(
   view: Readonly<
-    Pick<Threads.TelegramTopicTargetFile, "threads" | "workspaceBindings">
+    Pick<Threads.BaleTopicTargetFile, "threads" | "workspaceBindings">
   >,
-  request: Threads.TelegramWorkspaceRestoreRequest,
+  request: Threads.BaleWorkspaceRestoreRequest,
 ):
   | {
-      row: Threads.TelegramWorkspaceThreadBinding;
-      owner: Threads.TelegramTopicTargetRecord;
+      row: Threads.BaleWorkspaceThreadBinding;
+      owner: Threads.BaleTopicTargetRecord;
     }
   | undefined {
   const rows = (view.workspaceBindings ?? []).filter(
@@ -557,12 +557,12 @@ function findRelocatedBindingOwner(
     : undefined;
 }
 
-export type TelegramLiveRebindCleanupIssue =
+export type BaleLiveRebindCleanupIssue =
   | { status: "not-ready" }
   | {
       status: "finished";
       operationId: string;
-      cleanup: ThreadReconciler.TelegramLiveRebindCleanupOutcome;
+      cleanup: ThreadReconciler.BaleLiveRebindCleanupOutcome;
       recorded: boolean;
     };
 
@@ -574,10 +574,10 @@ function classifyLiveRebindCleanupFailure(
     error instanceof Error &&
     "status" in error &&
     error.status === 400 &&
-    ThreadReconciler.isTelegramTopicDeletedErrorMessage(error.message)
+    ThreadReconciler.isBaleTopicDeletedErrorMessage(error.message)
   )
     return "absent";
-  return TelegramApi.isTelegramApiRequestRejected(error, "deleteForumTopic")
+  return BaleApi.isBaleApiRequestRejected(error, "deleteForumTopic")
     ? "rejected"
     : "unknown";
 }
@@ -586,41 +586,41 @@ function classifyLiveRebindCleanupFailure(
  * Default live-rebind cleanup pacing: quick early attempts, then minutely, within a 15-minute window. The first
  * delay is not cosmetic: a leader's detached command reply still needs the released, cleanup-free row.
  */
-export const TELEGRAM_LIVE_REBIND_CLEANUP_SCHEDULE = Object.freeze({
+export const BALE_LIVE_REBIND_CLEANUP_SCHEDULE = Object.freeze({
   delaysMs: Object.freeze([1_000, 2_000, 5_000, 10_000, 30_000]),
   intervalMs: 60_000,
   windowMs: 15 * 60_000,
 });
 
 /** Chooser-scoped saved command reference; it is never retained after the chooser record. */
-type TelegramLiveRebindSelectedCommandReference = {
+type BaleLiveRebindSelectedCommandReference = {
   operationId: string;
-  preparedSource: Bus.TelegramBusPreparedCommandSource;
-  selectedCommand: Bus.TelegramBusSelectedCommandInput;
+  preparedSource: Bus.BaleBusPreparedCommandSource;
+  selectedCommand: Bus.BaleBusSelectedCommandInput;
 };
 
 /** One warm live attempt with independent leader input/cleanup grants and exact peer donor settlement; no startup recovery or legacy Restore ACK. */
-export function createTelegramLiveRebindCoordinator(input: {
-  request: Threads.TelegramWorkspaceRestoreRequest;
+export function createBaleLiveRebindCoordinator(input: {
+  request: Threads.BaleWorkspaceRestoreRequest;
   /** Captures caller source/reference, admission, profile, transport and Pi lifetime. */
-  authority: Threads.TelegramWorkspaceRestoreAuthority;
+  authority: Threads.BaleWorkspaceRestoreAuthority;
   messages: readonly unknown[];
-  restoreStore: Threads.TelegramWorkspaceRestore;
+  restoreStore: Threads.BaleWorkspaceRestore;
   threadStore: Pick<
-    Threads.TelegramTopicTargetStore,
+    Threads.BaleTopicTargetStore,
     "withWorkspaceRestoreSnapshot"
   >;
   getRecipient():
-    | (Threads.TelegramWorkspaceRestoreRecipient & { bindingKey: string })
+    | (Threads.BaleWorkspaceRestoreRecipient & { bindingKey: string })
     | undefined;
   leader?: {
     apply(
-      intent: Threads.TelegramWorkspaceLiveRebindIntent,
+      intent: Threads.BaleWorkspaceLiveRebindIntent,
       mode: "apply" | "inspect",
       isCurrent: () => boolean,
     ): Promise<void>;
     /** Synchronous local identity only; safe inside a Workspace publication fence. */
-    isApplied(intent: Threads.TelegramWorkspaceLiveRebindIntent): boolean;
+    isApplied(intent: Threads.BaleWorkspaceLiveRebindIntent): boolean;
   } & (
     | {
         /** Confirm ordinary queue admission of these same bound messages, never handler replay. */
@@ -639,12 +639,12 @@ export function createTelegramLiveRebindCoordinator(input: {
       }
   );
   follower?: {
-    run: ReturnType<typeof Bus.createTelegramBusLiveRebindController>;
+    run: ReturnType<typeof Bus.createBaleBusLiveRebindController>;
     /** Explicit staged singleton command branch; absence preserves ordinary live input behavior. */
-    selectedCommand?: Bus.TelegramBusSelectedCommandInput;
+    selectedCommand?: Bus.BaleBusSelectedCommandInput;
   };
   /** Existing profile admission spans the applied recipient, fresh cleanup decision and one native input grant. */
-  cleanupBeforeRelease?(intent: Threads.TelegramWorkspaceLiveRebindIntent, isCurrent: () => boolean): Promise<boolean>;
+  cleanupBeforeRelease?(intent: Threads.BaleWorkspaceLiveRebindIntent, isCurrent: () => boolean): Promise<boolean>;
   /** Restore moves the tab to its new owner: once applied, show that owner's title (best-effort, never blocking). */
   retitle?: (isCurrent: () => boolean) => Promise<void>;
   recordRuntimeEvent?: (
@@ -666,19 +666,19 @@ export function createTelegramLiveRebindCoordinator(input: {
     held = selectedCommand;
   const observedRecipient = input.getRecipient(),
     recipient = observedRecipient && structuredClone(observedRecipient);
-  const sources = messages.map(Updates.inspectTelegramDeferredSource);
+  const sources = messages.map(Updates.inspectBaleDeferredSource);
   const originals =
     recipient?.kind === "follower"
-      ? messages.map(Updates.inspectTelegramDeferredSourceSnapshot)
+      ? messages.map(Updates.inspectBaleDeferredSourceSnapshot)
       : undefined;
-  const fences = messages.map(Updates.getTelegramUpdateExecutionFence);
+  const fences = messages.map(Updates.getBaleUpdateExecutionFence);
   const commandValid =
     follower?.selectedCommand === undefined ||
     (!!held &&
       recipient?.kind === "follower" &&
       isDeepStrictEqual(held.target, request.target) &&
       originals?.length === 1 &&
-      Commands.isTelegramSelectedHeldOriginal(
+      Commands.isBaleSelectedHeldOriginal(
         originals[0]?.update,
         held.target,
         operatorUserId,
@@ -686,9 +686,9 @@ export function createTelegramLiveRebindCoordinator(input: {
       ));
   const valid =
     commandValid &&
-    Threads.isTelegramWorkspaceRestoreRequest(request) &&
+    Threads.isBaleWorkspaceRestoreRequest(request) &&
     !!recipient?.bindingKey &&
-    Threads.isTelegramWorkspaceRestoreRecipient(
+    Threads.isBaleWorkspaceRestoreRecipient(
       recipient && {
         kind: recipient.kind,
         instanceId: recipient.instanceId,
@@ -701,7 +701,7 @@ export function createTelegramLiveRebindCoordinator(input: {
     recipient?.kind ===
       (request.owner.owner?.kind === "leader" ? "leader" : "follower") &&
     isDeepStrictEqual(
-      Updates.collectTelegramAdmissionSourceUpdateIds(messages),
+      Updates.collectBaleAdmissionSourceUpdateIds(messages),
       request.source.updateIds,
     ) &&
     sources.length === request.source.updateIds.length &&
@@ -731,14 +731,14 @@ export function createTelegramLiveRebindCoordinator(input: {
     isDeepStrictEqual(input.getRecipient(), recipient) &&
     messages.every(
       (message, index) =>
-        Updates.getTelegramUpdateExecutionFence(message) === fences[index] &&
+        Updates.getBaleUpdateExecutionFence(message) === fences[index] &&
         fences[index]?.isCurrent() === true,
     );
   const sourceSaved = () =>
     current() &&
     messages.every((message, index) =>
       isDeepStrictEqual(
-        Updates.inspectTelegramDeferredSource(message),
+        Updates.inspectBaleDeferredSource(message),
         sources[index],
       ),
     );
@@ -762,7 +762,7 @@ export function createTelegramLiveRebindCoordinator(input: {
       ? intent
       : undefined;
   };
-  const canonical = (expected: Threads.TelegramWorkspaceLiveRebindIntent) => {
+  const canonical = (expected: Threads.BaleWorkspaceLiveRebindIntent) => {
     if (!current() || !isDeepStrictEqual(retained(), expected)) return false;
     let confirmed = false;
     input.threadStore.withWorkspaceRestoreSnapshot(expected, (snapshot) => {
@@ -774,7 +774,7 @@ export function createTelegramLiveRebindCoordinator(input: {
     });
     return confirmed && current();
   };
-  let preparation: Updates.TelegramLiveDeferredInputPreparation | undefined;
+  let preparation: Updates.BaleLiveDeferredInputPreparation | undefined;
   let saved = false,
     commitIssued = false,
     applyIssued = false,
@@ -786,7 +786,7 @@ export function createTelegramLiveRebindCoordinator(input: {
     cleanupBeforeReleaseDecided = false,
     released = false,
     advancing = false;
-  let preparedSource: Bus.TelegramBusPreparedCommandSource | undefined;
+  let preparedSource: Bus.BaleBusPreparedCommandSource | undefined;
   const runFollower = async (
     mode?: "apply" | "inspect" | "release" | "observe-command",
   ) => {
@@ -837,15 +837,15 @@ export function createTelegramLiveRebindCoordinator(input: {
       generation: recipient!.generation,
       bindingKey: recipient!.bindingKey,
     });
-  const acceptInput = (expected: Threads.TelegramWorkspaceLiveRebindIntent) => {
+  const acceptInput = (expected: Threads.BaleWorkspaceLiveRebindIntent) => {
     if (!expected.inputRelease || expected.inputRelease === "accepted") return expected;
-    let accepted: Threads.TelegramWorkspaceLiveRebindIntent | undefined;
+    let accepted: Threads.BaleWorkspaceLiveRebindIntent | undefined;
     try { accepted = input.restoreStore.advanceLiveRebind(expected, "accept-input", authority); }
     catch { accepted = retained(); }
     return accepted?.inputRelease === "accepted" && canonical(accepted) ? accepted : undefined;
   };
   const releaseFollower = async (
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
   ): Promise<"unknown" | "released"> => {
     if (!held || !peerReleaseIssued) {
       peerReleaseIssued = true;
@@ -885,13 +885,13 @@ export function createTelegramLiveRebindCoordinator(input: {
     const intent = retained();
     if (
       !intent ||
-      !Threads.isTelegramLiveRebindInputAuthorized(intent) ||
+      !Threads.isBaleLiveRebindInputAuthorized(intent) ||
       !canonical(intent) ||
       !leader?.isApplied(intent)
     )
       return "unknown";
     const completions = messages.map(
-      Updates.inspectTelegramDeferredSourceCompletion,
+      Updates.inspectBaleDeferredSourceCompletion,
     );
     const completed = completions.every(
       (completion, index) =>
@@ -907,7 +907,7 @@ export function createTelegramLiveRebindCoordinator(input: {
     operationId: request.operationId,
     /** Body-free copy of the authenticated saved command reference: correlation only, never authority, an ACK or a cleanup permit. */
     selectedCommandReference():
-      TelegramLiveRebindSelectedCommandReference | undefined {
+      BaleLiveRebindSelectedCommandReference | undefined {
       return held && preparedSource
         ? {
             operationId: request.operationId,
@@ -922,7 +922,7 @@ export function createTelegramLiveRebindCoordinator(input: {
       if (!current()) return "unknown";
       try { return observeCommandCompletion(); }
       catch (error) {
-        input.recordRuntimeEvent?.("telegram", error, { phase: "live-rebind-command-observation" });
+        input.recordRuntimeEvent?.("bale", error, { phase: "live-rebind-command-observation" });
         return "unknown";
       }
     },
@@ -944,7 +944,7 @@ export function createTelegramLiveRebindCoordinator(input: {
           const intent = retained();
           if (
             !intent ||
-            !Threads.isTelegramLiveRebindInputAuthorized(intent) ||
+            !Threads.isBaleLiveRebindInputAuthorized(intent) ||
             !canonical(intent) ||
             !leader?.isApplied(intent) ||
             !leader.observeAdmission?.() ||
@@ -962,7 +962,7 @@ export function createTelegramLiveRebindCoordinator(input: {
           if (recipient!.kind === "leader") {
             if (!leader || !!leader.continue === !!leader.complete)
               return "protected";
-            preparation ??= prepareTelegramLiveLeaderOriginal({
+            preparation ??= prepareBaleLiveLeaderOriginal({
               request,
               messages,
               isCurrent: current,
@@ -970,7 +970,7 @@ export function createTelegramLiveRebindCoordinator(input: {
             if (!preparation?.confirmSaved()) return "protected";
           } else {
             if (!input.follower) return "protected";
-            preparation ??= Updates.prepareTelegramLiveDeferredInput(
+            preparation ??= Updates.prepareBaleLiveDeferredInput(
               messages,
               current,
             );
@@ -1032,7 +1032,7 @@ export function createTelegramLiveRebindCoordinator(input: {
           return "protected";
         // A released peer may already have completed its sources; only its retained settlement can reobserve that outcome.
         if (recipient!.kind === "follower" && peerReleaseIssued)
-          return Threads.isTelegramLiveRebindInputAuthorized(intent)
+          return Threads.isBaleLiveRebindInputAuthorized(intent)
             ? await releaseFollower(intent)
             : "protected";
         const mode =
@@ -1061,7 +1061,7 @@ export function createTelegramLiveRebindCoordinator(input: {
           try {
             await input.retitle(current);
           } catch (error) {
-            input.recordRuntimeEvent?.("telegram", error, {
+            input.recordRuntimeEvent?.("bale", error, {
               phase: "live-rebind-title",
             });
           }
@@ -1098,7 +1098,7 @@ export function createTelegramLiveRebindCoordinator(input: {
           if (!intent || !canonical(intent) ||
             (recipient!.kind === "leader" && !leader!.isApplied(intent)) ||
             intent.inputRelease !== "held" || intent.cleanup === "issued") return "unknown";
-          let issued: Threads.TelegramWorkspaceLiveRebindIntent | undefined;
+          let issued: Threads.BaleWorkspaceLiveRebindIntent | undefined;
           try { issued = input.restoreStore.advanceLiveRebind(intent, "issue-input", authority); }
           catch { issued = retained(); }
           if (!issued || issued.inputRelease !== "issued" || !canonical(issued)) return "unknown";
@@ -1133,7 +1133,7 @@ export function createTelegramLiveRebindCoordinator(input: {
         released = true;
         return "released";
       } catch (error) {
-        input.recordRuntimeEvent?.("telegram", error, {
+        input.recordRuntimeEvent?.("bale", error, {
           phase: "live-rebind-routing",
         });
         return "unknown";
@@ -1145,21 +1145,21 @@ export function createTelegramLiveRebindCoordinator(input: {
 }
 
 /** One admitted Restore attempt through recipient readiness, never source dispatch or cleanup. */
-export async function advanceTelegramWorkspaceRestore(input: {
-  request: Threads.TelegramWorkspaceRestoreRequest;
-  authority: Threads.TelegramWorkspaceRestoreAuthority;
-  restoreStore: Threads.TelegramWorkspaceRestore;
-  getRecipient: () => Threads.TelegramWorkspaceRestoreRecipient | undefined;
+export async function advanceBaleWorkspaceRestore(input: {
+  request: Threads.BaleWorkspaceRestoreRequest;
+  authority: Threads.BaleWorkspaceRestoreAuthority;
+  restoreStore: Threads.BaleWorkspaceRestore;
+  getRecipient: () => Threads.BaleWorkspaceRestoreRecipient | undefined;
   /** Adapter proves current canonical ownership and authenticates observations; apply needs a fresh issuance. */
   runRecipient: (input: {
-    intent: Threads.TelegramWorkspaceRestoreIntent;
+    intent: Threads.BaleWorkspaceRestoreIntent;
     mode: "apply" | "inspect";
     isCurrent: () => boolean;
   }) => Promise<
     | {
         operationId: string;
-        recipient: Threads.TelegramWorkspaceRestoreRecipient;
-        target: Threads.TelegramWorkspaceRestoreRequest["target"];
+        recipient: Threads.BaleWorkspaceRestoreRecipient;
+        target: Threads.BaleWorkspaceRestoreRequest["target"];
         slot: string;
         ready: boolean;
       }
@@ -1170,16 +1170,16 @@ export async function advanceTelegramWorkspaceRestore(input: {
    * read-only inspection runs. It never commits a new relocation or applies a target.
    */
   inspectOnly?: true;
-}): Promise<Threads.TelegramWorkspaceRestoreIntent | undefined> {
+}): Promise<Threads.BaleWorkspaceRestoreIntent | undefined> {
   const isCurrent = input.authority.isCurrent.bind(input.authority);
   if (!isCurrent()) return undefined;
   const request = structuredClone(input.request);
-  if (!Threads.isTelegramWorkspaceRestoreRequest(request)) return undefined;
+  if (!Threads.isBaleWorkspaceRestoreRequest(request)) return undefined;
   const getRecipient = input.getRecipient;
   const runRecipient = input.runRecipient;
   const observedRecipient = getRecipient();
   if (
-    !Threads.isTelegramWorkspaceRestoreRecipient(observedRecipient) ||
+    !Threads.isBaleWorkspaceRestoreRecipient(observedRecipient) ||
     observedRecipient.sessionId !== request.binding.sessionId
   )
     return undefined;
@@ -1193,7 +1193,7 @@ export async function advanceTelegramWorkspaceRestore(input: {
     isDeepStrictEqual(getRecipient(), recipient);
   const authority = { executor, operatorUserId, isCurrent: current };
   const { restoreStore } = input;
-  const retained = (): Threads.TelegramWorkspaceRestoreIntent | undefined => {
+  const retained = (): Threads.BaleWorkspaceRestoreIntent | undefined => {
     if (!current()) return undefined;
     const found = restoreStore
       .list()
@@ -1314,14 +1314,14 @@ export async function advanceTelegramWorkspaceRestore(input: {
     : undefined;
 }
 
-async function deleteReservedTelegramTopicThroughReconciler(
+async function deleteReservedBaleTopicThroughReconciler(
   deps: {
     callApi?: <TResponse>(
       method: string,
       body: Record<string, unknown>,
     ) => Promise<TResponse>;
     threadStore?: Pick<
-      Threads.TelegramTopicTargetStore,
+      Threads.BaleTopicTargetStore,
       | "list"
       | "listReservations"
       | "listSyncObservations"
@@ -1366,7 +1366,7 @@ async function deleteReservedTelegramTopicThroughReconciler(
   });
   deps.recordThreadReconciliationPlan?.(plan);
   await ThreadReconciler.applyThreadReconciliationPlan(plan, {
-    isCleanupTargetProtected: Threads.createTelegramCleanupTargetProtection(
+    isCleanupTargetProtected: Threads.createBaleCleanupTargetProtection(
       deps.threadStore,
     ),
     callApi: deps.callApi,
@@ -1385,15 +1385,15 @@ async function deleteReservedTelegramTopicThroughReconciler(
   );
 }
 
-export const TELEGRAM_ALL_TAB_COMMAND_MAX_AGE_MS = 60 * 60_000;
+export const BALE_ALL_TAB_COMMAND_MAX_AGE_MS = 60 * 60_000;
 /** The toast for expired or previous-process routing controls; the chooser notice is written separately. */
-export const TELEGRAM_ROUTING_CHOICE_EXPIRED = "Routing choice expired";
-/** Every temporary routing tab carries this name, whether the bot created it or adopted Telegram's native tab. */
-const TELEGRAM_TEMPORARY_THREAD_NAME = "🚦 Routing";
+export const BALE_ROUTING_CHOICE_EXPIRED = "Routing choice expired";
+/** Every temporary routing tab carries this name, whether the bot created it or adopted Bale's native tab. */
+const BALE_TEMPORARY_THREAD_NAME = "🚦 Routing";
 /** A mobile client's native tab creation precedes the All input it is named after by about a second. */
-const TELEGRAM_IMPLICIT_ALL_INPUT_WINDOW_SEC = 10;
+const BALE_IMPLICIT_ALL_INPUT_WINDOW_SEC = 10;
 
-export function isTelegramAllTabCommandExpired(
+export function isBaleAllTabCommandExpired(
   message: { date?: number; message_thread_id?: number },
   nowMs = Date.now(),
 ): boolean {
@@ -1403,43 +1403,43 @@ export function isTelegramAllTabCommandExpired(
     Number.isFinite(message.date) &&
     message.date > 0 &&
     Number.isFinite(nowMs) &&
-    nowMs - message.date * 1000 >= TELEGRAM_ALL_TAB_COMMAND_MAX_AGE_MS
+    nowMs - message.date * 1000 >= BALE_ALL_TAB_COMMAND_MAX_AGE_MS
   );
 }
 
-export type TelegramRoutedMessage = {
+export type BaleRoutedMessage = {
   date?: number;
-} & Updates.TelegramUpdateMessage &
-  Media.TelegramMediaMessage &
-  Media.TelegramMediaGroupMessage &
-  Commands.TelegramCommandRuntimeMessage &
-  Turns.TelegramTurnMessage;
+} & Updates.BaleUpdateMessage &
+  Media.BaleMediaMessage &
+  Media.BaleMediaGroupMessage &
+  Commands.BaleCommandRuntimeMessage &
+  Turns.BaleTurnMessage;
 
-export type TelegramRoutedCallbackQuery = Updates.TelegramCallbackQuery &
+export type BaleRoutedCallbackQuery = Updates.BaleCallbackQuery &
   Menu.MenuCallbackQuery;
 
-export interface TelegramInboundBusProjectionRuntime {
-  getTargetOwnership: Updates.TelegramTargetOwnershipLookup;
-  getLiveThreadTargets(): Queue.TelegramQueueTarget[];
+export interface BaleInboundBusProjectionRuntime {
+  getTargetOwnership: Updates.BaleTargetOwnershipLookup;
+  getLiveThreadTargets(): Queue.BaleQueueTarget[];
   getLocalThreadLabelForTarget(
-    target: Queue.TelegramQueueTarget,
+    target: Queue.BaleQueueTarget,
   ): string | undefined;
 }
 
-export function createTelegramInboundBusProjectionRuntime(deps: {
+export function createBaleInboundBusProjectionRuntime(deps: {
   instanceId: string;
-  listFollowers(): readonly Bus.TelegramBusFollowerView[];
-  listThreadRecords(): readonly TelegramTopicTargetRecord[];
-  getLeaderTarget(): Queue.TelegramQueueTarget | undefined;
+  listFollowers(): readonly Bus.BaleBusFollowerView[];
+  listThreadRecords(): readonly BaleTopicTargetRecord[];
+  getLeaderTarget(): Queue.BaleQueueTarget | undefined;
   isFollowerRegistered(): boolean;
-  getFollowerTarget(): Queue.TelegramQueueTarget | undefined;
+  getFollowerTarget(): Queue.BaleQueueTarget | undefined;
   getCurrentIdentity(
-    target?: Queue.TelegramQueueTarget,
-  ): TelegramInstanceThreadIdentityCandidate;
-}): TelegramInboundBusProjectionRuntime {
+    target?: Queue.BaleQueueTarget,
+  ): BaleInstanceThreadIdentityCandidate;
+}): BaleInboundBusProjectionRuntime {
   return {
     getTargetOwnership(target) {
-      return Bus.getTelegramFollowerTargetOwnership({
+      return Bus.getBaleFollowerTargetOwnership({
         target,
         followers: deps.listFollowers(),
         activeThreadRecords: deps.listThreadRecords(),
@@ -1447,7 +1447,7 @@ export function createTelegramInboundBusProjectionRuntime(deps: {
       });
     },
     getLiveThreadTargets() {
-      return Bus.listTelegramBusLiveThreadTargets({
+      return Bus.listBaleBusLiveThreadTargets({
         leaderTarget: deps.getLeaderTarget(),
         followers: deps.listFollowers(),
       });
@@ -1470,48 +1470,48 @@ export function createTelegramInboundBusProjectionRuntime(deps: {
 
 /** Fenced temporary-Thread authority; see `captureTemporaryThreadAuthority`. */
 interface TemporaryThreadAuthority {
-  store: Threads.TelegramWorkspaceRestore;
+  store: Threads.BaleWorkspaceRestore;
   operatorUserId: number;
   journalBindingKey: string;
   epoch: number | string;
-  authority: Threads.TelegramWorkspaceRestoreAuthority;
+  authority: Threads.BaleWorkspaceRestoreAuthority;
   isCurrent: () => boolean;
   adopt: (
-    entry: Threads.TelegramTemporaryThreadEntry,
-  ) => Threads.TelegramTemporaryThreadEntry | undefined;
+    entry: Threads.BaleTemporaryThreadEntry,
+  ) => Threads.BaleTemporaryThreadEntry | undefined;
 }
 
-export interface TelegramInboundRouteRuntimeDeps<
-  TMessage extends TelegramRoutedMessage,
-  TCallbackQuery extends TelegramRoutedCallbackQuery,
+export interface BaleInboundRouteRuntimeDeps<
+  TMessage extends BaleRoutedMessage,
+  TCallbackQuery extends BaleRoutedCallbackQuery,
   TContext,
   TModel extends Model.MenuModel,
 > {
   configStore: Pick<
-    TelegramConfigStore,
+    BaleConfigStore,
     "get" | "getAllowedUserId" | "persistAllowedUserId" | "persist"
-  > & { set?: TelegramConfigStore["set"] };
+  > & { set?: BaleConfigStore["set"] };
   callApi?: <TResponse>(
     method: string,
     body: Record<string, unknown>,
-    options?: TelegramApiCallOptions,
+    options?: BaleApiCallOptions,
   ) => Promise<TResponse>;
   getCurrentInstanceId?: () => string | undefined;
   getAdmissionScope?: () => string | undefined;
   getAdmissionJournalBinding?: () => string | undefined;
   getCommandReplyTarget?:
-    Commands.TelegramCommandTargetRuntimeDeps<TContext>["getReplyTarget"];
-  getMessageOwnership?: Updates.TelegramMessageOwnershipLookup;
-  getTargetOwnership?: Updates.TelegramTargetOwnershipLookup;
-  recordMessageOwnership?: Updates.TelegramMessageOwnershipRecorder;
-  getLiveThreadTargets?: () => Queue.TelegramQueueTarget[];
-  getDisplayTitle?: Threads.TelegramCurrentThreadAssembly["getDisplayTitle"];
+    Commands.BaleCommandTargetRuntimeDeps<TContext>["getReplyTarget"];
+  getMessageOwnership?: Updates.BaleMessageOwnershipLookup;
+  getTargetOwnership?: Updates.BaleTargetOwnershipLookup;
+  recordMessageOwnership?: Updates.BaleMessageOwnershipRecorder;
+  getLiveThreadTargets?: () => Queue.BaleQueueTarget[];
+  getDisplayTitle?: Threads.BaleCurrentThreadAssembly["getDisplayTitle"];
   getLocalThreadLabelForTarget?: (
-    target: Queue.TelegramQueueTarget,
+    target: Queue.BaleQueueTarget,
   ) => string | undefined;
   getCurrentLeaderEpoch?: () => number | string | undefined;
   setCurrentLeaderIdentity?: (identity: {
-    target: Queue.TelegramQueueTarget;
+    target: Queue.BaleQueueTarget;
     slot?: string;
     threadName?: string;
   }) => void;
@@ -1520,61 +1520,61 @@ export interface TelegramInboundRouteRuntimeDeps<
   recordThreadReconciliationPlan?: (
     plan: ThreadReconciler.ThreadReconciliationPlan,
   ) => void;
-  handleTelegramTopicLifecycleUpdate?: (
-    lifecycle: Updates.TelegramTopicLifecycleUpdate<TMessage>,
+  handleBaleTopicLifecycleUpdate?: (
+    lifecycle: Updates.BaleTopicLifecycleUpdate<TMessage>,
     ctx: TContext,
   ) => Promise<void> | void;
-  handleTelegramThreadTargetObserved?: (
-    target: Threads.TelegramTopicTargetRecord["target"],
+  handleBaleThreadTargetObserved?: (
+    target: Threads.BaleTopicTargetRecord["target"],
     ctx: TContext,
   ) => Promise<void> | void;
-  foreignOwnedUpdateForwarder?: Updates.TelegramForeignOwnedUpdateForwarder<
+  foreignOwnedUpdateForwarder?: Updates.BaleForeignOwnedUpdateForwarder<
     TContext,
-    Updates.TelegramMessageReactionUpdated,
+    Updates.BaleMessageReactionUpdated,
     TCallbackQuery,
     TMessage
   >;
-  getWorkspaceRestoreStore?: () => Threads.TelegramWorkspaceRestore | undefined;
+  getWorkspaceRestoreStore?: () => Threads.BaleWorkspaceRestore | undefined;
   captureWorkspaceExternalProtection?: ReturnType<
-    typeof createTelegramWorkspaceExternalProtectionCapture
+    typeof createBaleWorkspaceExternalProtectionCapture
   >;
   /** Strict committed abandonment plus retained original; shared by Restore and temporary-input cancellation. */
   inspectRestoreSourceAbandonment?: (
     updateId: number,
     journalBindingKey: string,
-  ) => Threads.TelegramTemporaryThreadCancellationEvidence | undefined;
+  ) => Threads.BaleTemporaryThreadCancellationEvidence | undefined;
   inspectRoutingInputGroupExpiry?: (
-    input: Threads.TelegramTemporaryThreadInput,
+    input: Threads.BaleTemporaryThreadInput,
   ) =>
-    readonly Threads.TelegramTemporaryThreadCancellationEvidence[] | undefined;
+    readonly Threads.BaleTemporaryThreadCancellationEvidence[] | undefined;
   /** Strict active-journal observation only; a hint or missing source never substitutes for this ACK. */
   inspectRestoreSourceCompletion?: (
-    expected: Updates.TelegramDeferredSourceEvidence & {
+    expected: Updates.BaleDeferredSourceEvidence & {
       completionSha256: string;
     },
   ) =>
-    | (Updates.TelegramDeferredSourceEvidence & { completionSha256: string })
+    | (Updates.BaleDeferredSourceEvidence & { completionSha256: string })
     | undefined;
   inspectRestoreQueuedReceipt?: (
-    expected: TelegramUpdateJournalQueuedCompletion & {
+    expected: BaleUpdateJournalQueuedCompletion & {
       journalBindingKey: string;
     },
-  ) => TelegramUpdateJournalQueuedReceiptEvidence | undefined;
+  ) => BaleUpdateJournalQueuedReceiptEvidence | undefined;
   hasWorkspaceRestoreAuthority?: () => boolean;
   /** Exact live root authority; capability advertisement alone cannot replace owned profile/session/recipient fences. */
   hasWorkspaceLiveRebindAuthority?: () => boolean;
-  canUsePreDispatchRebind?: (recipient?: Threads.TelegramWorkspaceRestoreRecipient) => boolean;
+  canUsePreDispatchRebind?: (recipient?: Threads.BaleWorkspaceRestoreRecipient) => boolean;
   /** Strict complete namespace plus exact current/historical references; only an empty result clears journal protection. */
   inspectTemporaryThreadSources?: (
-    target: Queue.TelegramQueueTarget,
+    target: Queue.BaleQueueTarget,
     requiredJournalBindingKeys: readonly string[],
-    ownInputs?: readonly Threads.TelegramTemporaryThreadInput[],
+    ownInputs?: readonly Threads.BaleTemporaryThreadInput[],
   ) => readonly number[] | undefined;
   /** Explicit cleanup-only recovery; never called by a read-only protection observer. */
   recoverTemporaryThreadDeadQueueOwners?: (
-    target: Queue.TelegramQueueTarget,
+    target: Queue.BaleQueueTarget,
     requiredJournalBindingKeys: readonly string[],
-    ownInputs: readonly Threads.TelegramTemporaryThreadInput[],
+    ownInputs: readonly Threads.BaleTemporaryThreadInput[],
     isCurrent: () => boolean,
   ) => number;
   /** Quiet period after the last cancelled input before one cleanup attempt; defaults to 0 ms. */
@@ -1591,46 +1591,46 @@ export interface TelegramInboundRouteRuntimeDeps<
   workspaceRestoreRecipient?: {
     getSessionId: (ctx: TContext) => string | undefined;
     getCwd: (ctx: TContext) => string | undefined;
-    getLeaderIdentity: Threads.TelegramLeaderThreadStateRuntime["getIdentity"];
+    getLeaderIdentity: Threads.BaleLeaderThreadStateRuntime["getIdentity"];
     /** Read-only current leader work; source/chooser lifetime is not recipient authority. */
     observeLeaderWork?: (
-      oldTarget: Queue.TelegramQueueTarget & { threadId: number },
+      oldTarget: Queue.BaleQueueTarget & { threadId: number },
       ctx: TContext,
-    ) => Bus.TelegramBusLiveRebindWorkState;
-    followerRegistry: Pick<Bus.TelegramBusFollowerRegistry, "get" | "register">;
+    ) => Bus.BaleBusLiveRebindWorkState;
+    followerRegistry: Pick<Bus.BaleBusFollowerRegistry, "get" | "register">;
     runFollower: ReturnType<
-      typeof Bus.createTelegramBusWorkspaceRestoreController
+      typeof Bus.createBaleBusWorkspaceRestoreController
     >;
     liveFollower?: {
       /** Pure trusted assembly availability (Commands/native/menu and local protocol), never future target activation. */
       isSelectedCommandAvailable?(
-        follower: Readonly<Bus.TelegramBusFollowerView>,
+        follower: Readonly<Bus.BaleBusFollowerView>,
         name: string,
       ): boolean;
       /** Exact session journal identity from the existing registration/journal owners, never the profile routing key. */
       getJournalBindingKey(
-        follower: Bus.TelegramBusFollowerView,
+        follower: Bus.BaleBusFollowerView,
       ): string | undefined;
-      run: ReturnType<typeof Bus.createTelegramBusLiveRebindController>;
+      run: ReturnType<typeof Bus.createBaleBusLiveRebindController>;
     };
   };
-  bridgeRuntime: TelegramBridgeRuntime;
-  activeTurnRuntime: Queue.TelegramActiveTurnStore;
-  mediaGroupRuntime: Media.TelegramMediaGroupController<TMessage, TContext>;
-  textGroupRuntime: TextGroups.TelegramTextGroupController<TMessage, TContext>;
-  telegramQueueStore: Queue.TelegramQueueStateStore<TContext>;
-  queueMutationRuntime: Queue.TelegramQueueMutationController<TContext>;
-  modelMenuRuntime: Menu.TelegramModelMenuRuntime<TModel>;
+  bridgeRuntime: BaleBridgeRuntime;
+  activeTurnRuntime: Queue.BaleActiveTurnStore;
+  mediaGroupRuntime: Media.BaleMediaGroupController<TMessage, TContext>;
+  textGroupRuntime: TextGroups.BaleTextGroupController<TMessage, TContext>;
+  baleQueueStore: Queue.BaleQueueStateStore<TContext>;
+  queueMutationRuntime: Queue.BaleQueueMutationController<TContext>;
+  modelMenuRuntime: Menu.BaleModelMenuRuntime<TModel>;
   currentModelRuntime: Model.CurrentModelRuntime<TContext, TModel>;
-  modelSwitchController: Model.TelegramModelSwitchController<
+  modelSwitchController: Model.BaleModelSwitchController<
     TContext,
-    Model.ScopedTelegramModel<TModel>
+    Model.ScopedBaleModel<TModel>
   >;
-  menuActions: Menu.TelegramMenuActionRuntime<TContext, TModel>;
-  /** Thinking controls refuse while the active Telegram turn expects a voice reply. */
+  menuActions: Menu.BaleMenuActionRuntime<TContext, TModel>;
+  /** Thinking controls refuse while the active Bale turn expects a voice reply. */
   isVoiceReplyActive?: () => boolean;
   updateSettingsMenuMessage?: (
-    state: Menu.TelegramModelMenuState<TModel>,
+    state: Menu.BaleModelMenuState<TModel>,
     ctx: TContext,
   ) => Promise<void>;
   openQueueMenu: (
@@ -1638,14 +1638,14 @@ export interface TelegramInboundRouteRuntimeDeps<
     replyToMessageId: number,
     ctx: TContext,
     threadId?: number,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openSettingsMenu?: (
     chatId: number,
     replyToMessageId: number | undefined,
     ctx: TContext,
     threadId?: number,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   settingsMenuCallbackHandler?: (
     query: TCallbackQuery,
@@ -1655,14 +1655,14 @@ export interface TelegramInboundRouteRuntimeDeps<
     query: TCallbackQuery,
     ctx: TContext,
   ) => Promise<boolean>;
-  buttonActionStore?: OutboundHandlers.TelegramButtonActionStore;
+  buttonActionStore?: OutboundHandlers.BaleButtonActionStore;
   invokeBoundButtonAction?: (
-    action: OutboundHandlers.TelegramOutboundButtonAction,
+    action: OutboundHandlers.BaleOutboundButtonAction,
     query: TCallbackQuery,
     ctx: TContext,
   ) => Promise<false | "new" | "edit">;
-  inboundHandlerRuntime: TelegramInboundHandlerRuntime<TContext>;
-  threadStore?: Threads.TelegramTopicTargetStore;
+  inboundHandlerRuntime: BaleInboundHandlerRuntime<TContext>;
+  threadStore?: Threads.BaleTopicTargetStore;
   runWorkspaceOperation?: <T>(
     input: {
       operationId: string;
@@ -1673,10 +1673,10 @@ export interface TelegramInboundRouteRuntimeDeps<
   ) => Promise<T>;
   updateStatus: (ctx: TContext, error?: string) => void;
   isContextActive?: (ctx: TContext) => boolean;
-  dispatchNextQueuedTelegramTurn: (ctx: TContext) => void;
+  dispatchNextQueuedBaleTurn: (ctx: TContext) => void;
   requestNextDispatchAnnouncement?: () => void;
   cancelNextDispatchAnnouncement?: () => void;
-  requestDeferredDispatchNextQueuedTelegramTurn?: (
+  requestDeferredDispatchNextQueuedBaleTurn?: (
     dispatch: (ctx: TContext) => void,
   ) => void;
   hasDeferredDispatchContext?: () => boolean;
@@ -1689,33 +1689,33 @@ export interface TelegramInboundRouteRuntimeDeps<
   answerCallbackQuery: (
     callbackQueryId: string,
     text?: string,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   editInteractiveMessage?: (
     chatId: number,
     messageId: number,
     text: string,
     mode: "markdown" | "html" | "plain",
-    replyMarkup: Menu.TelegramReplyMarkup,
+    replyMarkup: Menu.BaleReplyMarkup,
     options?: {
-      target?: Queue.TelegramQueueTarget;
-      assertAuthority?: TelegramApiCallOptions["assertAuthority"];
+      target?: Queue.BaleQueueTarget;
+      assertAuthority?: BaleApiCallOptions["assertAuthority"];
     },
   ) => Promise<void>;
   editMessageReplyMarkup?: (
     chatId: number,
     messageId: number,
-    replyMarkup: OutboundHandlers.TelegramOutboundButtonMarkup,
+    replyMarkup: OutboundHandlers.BaleOutboundButtonMarkup,
   ) => Promise<void>;
   sendInteractiveMessage?: (
     chatId: number,
     text: string,
     mode: "markdown" | "html" | "plain",
-    replyMarkup: Menu.TelegramReplyMarkup,
+    replyMarkup: Menu.BaleReplyMarkup,
     options?: {
-      target?: Queue.TelegramQueueTarget;
+      target?: Queue.BaleQueueTarget;
       replyToMessageId?: number;
-      assertAuthority?: TelegramApiCallOptions["assertAuthority"];
+      assertAuthority?: BaleApiCallOptions["assertAuthority"];
     },
   ) => Promise<number | undefined>;
   deleteMessage?: (chatId: number, messageId: number) => Promise<void>;
@@ -1734,23 +1734,23 @@ export interface TelegramInboundRouteRuntimeDeps<
     text: string,
     options?: {
       parseMode?: "HTML";
-      target?: Queue.TelegramQueueTarget;
-      assertAuthority?: TelegramApiCallOptions["assertAuthority"];
+      target?: Queue.BaleQueueTarget;
+      assertAuthority?: BaleApiCallOptions["assertAuthority"];
     },
   ) => Promise<number | undefined>;
-  setMyCommands: Commands.TelegramBotCommandRegistrationDeps["setMyCommands"];
+  setMyCommands: Commands.BaleBotCommandRegistrationDeps["setMyCommands"];
   /** Captures independent recipient authority, never the source execution or dialog handle. */
   captureThreadNameRecipientAuthority?: (
-    target: Queue.TelegramQueueTarget,
+    target: Queue.BaleQueueTarget,
     ctx: TContext,
   ) => (() => void) | undefined;
   validateThreadName?: (threadName: string) => string | undefined;
-  renameCurrentThread?: Commands.TelegramThreadDisplayNameRenamePort;
-  resetCurrentThreadName?: Commands.TelegramThreadDisplayNameResetPort;
+  renameCurrentThread?: Commands.BaleThreadDisplayNameRenamePort;
+  resetCurrentThreadName?: Commands.BaleThreadDisplayNameResetPort;
   getCommands: () => Parameters<
-    typeof PromptTemplates.getTelegramPromptTemplateCommands
+    typeof PromptTemplates.getBalePromptTemplateCommands
   >[0];
-  downloadFile: Media.DownloadTelegramMessageFilesDeps["downloadFile"];
+  downloadFile: Media.DownloadBaleMessageFilesDeps["downloadFile"];
   resolveTimeLine?: (chatId: number) => string | null;
   getThinkingLevel: () => Model.ThinkingLevel;
   setThinkingLevel: (level: Model.ThinkingLevel) => void;
@@ -1761,7 +1761,7 @@ export interface TelegramInboundRouteRuntimeDeps<
   setModel: (model: TModel) => Promise<boolean>;
   sendUserMessage?: (
     message: string,
-    options?: Queue.TelegramPromptDeliveryOptions,
+    options?: Queue.BalePromptDeliveryOptions,
   ) => void;
   isIdle: (ctx: TContext) => boolean;
   hasPendingMessages: (ctx: TContext) => boolean;
@@ -1775,22 +1775,22 @@ export interface TelegramInboundRouteRuntimeDeps<
     error: unknown,
     details?: Record<string, unknown>,
   ) => void;
-  beginCommandEffectWork?: Commands.TelegramCommandRuntimeDeps<
+  beginCommandEffectWork?: Commands.BaleCommandRuntimeDeps<
     TMessage,
     TContext
   >["beginCommandEffectWork"];
-  sectionRegistry?: TelegramSectionRegistry;
+  sectionRegistry?: BaleSectionRegistry;
   sendSectionRichMessage?: (
     chatId: number,
-    message: TelegramInputRichMessage,
+    message: BaleInputRichMessage,
     options?: { target?: { chatId: number; threadId?: number } },
   ) => Promise<number | undefined>;
 }
 
-const TELEGRAM_OWNED_CALLBACK_PREFIXES = [
+const BALE_OWNED_CALLBACK_PREFIXES = [
   "allmenu:",
-  TELEGRAM_UNBOUND_REROUTE_CALLBACK_PREFIX,
-  TELEGRAM_UNBOUND_REROUTE_CANCEL_CALLBACK_PREFIX,
+  BALE_UNBOUND_REROUTE_CALLBACK_PREFIX,
+  BALE_UNBOUND_REROUTE_CANCEL_CALLBACK_PREFIX,
   "compact:",
   "menu:",
   "model:",
@@ -1803,70 +1803,70 @@ const TELEGRAM_OWNED_CALLBACK_PREFIXES = [
   "thinking:",
 ] as const;
 
-function isTelegramOwnedCallbackData(data: string): boolean {
-  return TELEGRAM_OWNED_CALLBACK_PREFIXES.some((prefix) =>
+function isBaleOwnedCallbackData(data: string): boolean {
+  return BALE_OWNED_CALLBACK_PREFIXES.some((prefix) =>
     data.startsWith(prefix),
   );
 }
 
-export function createTelegramInboundRouteRuntime<
-  TUpdate extends Updates.TelegramUpdateFlow & {
+export function createBaleInboundRouteRuntime<
+  TUpdate extends Updates.BaleUpdateFlow & {
     message?: TMessage;
     edited_message?: TMessage;
     callback_query?: TCallbackQuery;
   },
-  TMessage extends TelegramRoutedMessage,
-  TCallbackQuery extends TelegramRoutedCallbackQuery,
+  TMessage extends BaleRoutedMessage,
+  TCallbackQuery extends BaleRoutedCallbackQuery,
   TContext,
   TModel extends Model.MenuModel,
 >(
-  deps: TelegramInboundRouteRuntimeDeps<
+  deps: BaleInboundRouteRuntimeDeps<
     TMessage,
     TCallbackQuery,
     TContext,
     TModel
   >,
-): Updates.TelegramUpdateRuntimeController<TContext, TUpdate> & {
+): Updates.BaleUpdateRuntimeController<TContext, TUpdate> & {
   expireRoutingInput: NonNullable<
-    Updates.TelegramUpdateWorkerRuntimeDeps<TContext>["expireRoutingInput"]
+    Updates.BaleUpdateWorkerRuntimeDeps<TContext>["expireRoutingInput"]
   >;
   shouldReviewHistoricalInput: NonNullable<
-    Updates.TelegramUpdateWorkerRuntimeDeps<TContext>["shouldReviewHistoricalInput"]
+    Updates.BaleUpdateWorkerRuntimeDeps<TContext>["shouldReviewHistoricalInput"]
   >;
   shouldHoldPendingInput: NonNullable<
-    Updates.TelegramUpdateWorkerRuntimeDeps<TContext>["shouldHoldPendingInput"]
+    Updates.BaleUpdateWorkerRuntimeDeps<TContext>["shouldHoldPendingInput"]
   >;
   forgetPreviousWorld(
-    input: Updates.TelegramHeldSourcePreparation<TContext>,
+    input: Updates.BaleHeldSourcePreparation<TContext>,
     captureTransport?: (ctx: TContext) => (() => boolean) | undefined,
   ): Promise<{ forgotten: number; deleted: number }>;
   beforeQueueReceiptPublished: NonNullable<
-    Updates.TelegramUpdateWorkerRuntimeDeps<TContext>["beforeQueueReceiptPublished"]
+    Updates.BaleUpdateWorkerRuntimeDeps<TContext>["beforeQueueReceiptPublished"]
   >;
   onQueueReceiptCommitted: NonNullable<
-    Updates.TelegramUpdateWorkerRuntimeDeps<TContext>["onQueueReceiptCommitted"]
+    Updates.BaleUpdateWorkerRuntimeDeps<TContext>["onQueueReceiptCommitted"]
   >;
   onQueueReceiptCompleted: NonNullable<
-    Updates.TelegramUpdateWorkerRuntimeDeps<TContext>["onQueueReceiptCompleted"]
+    Updates.BaleUpdateWorkerRuntimeDeps<TContext>["onQueueReceiptCompleted"]
   >;
   onUpdateCompleted: NonNullable<
-    Updates.TelegramUpdateWorkerRuntimeDeps<TContext>["onUpdateCompleted"]
+    Updates.BaleUpdateWorkerRuntimeDeps<TContext>["onUpdateCompleted"]
   >;
   onWorkspaceRestoreRecipientObserved(
-    follower: Bus.TelegramBusFollowerView,
+    follower: Bus.BaleBusFollowerView,
     isCurrent: () => boolean,
     ctx: TContext | undefined,
   ): Promise<void> | undefined;
   waitForRestoreSettlement(): Promise<void>;
   /** Commands-owned registry port for dormant scoped recipient assembly, not ordinary update replay. */
   prepareHeldCommand: ReturnType<
-    typeof Commands.createTelegramCommandHandlerTargetRuntime<
+    typeof Commands.createBaleCommandHandlerTargetRuntime<
       TMessage,
       TContext
     >
   >["prepareHeldCommand"];
   canPrepareHeldCommand: ReturnType<
-    typeof Commands.createTelegramCommandHandlerTargetRuntime<
+    typeof Commands.createBaleCommandHandlerTargetRuntime<
       TMessage,
       TContext
     >
@@ -1877,36 +1877,36 @@ export function createTelegramInboundRouteRuntime<
   onDeliverySettled(ctx: TContext): void;
   /** Fresh body-free recipient observation only; never reconstructs an attempt or grants cleanup. */
   observeLiveRebindLeaderWork(
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
-  ): Promise<Bus.TelegramBusLiveRebindWorkObservation | undefined>;
+  ): Promise<Bus.BaleBusLiveRebindWorkObservation | undefined>;
   /** Fresh non-destructive candidate only; no retained idle, cleanup action or deletion grant. */
   prepareLiveRebindLeaderCleanup(
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
-  ): Promise<ThreadReconciler.TelegramLiveRebindCleanupPreparation | undefined>;
+  ): Promise<ThreadReconciler.BaleLiveRebindCleanupPreparation | undefined>;
   /** Requires the authenticated peer's exact retained released carrier; never recreates save/apply/release. */
   prepareLiveRebindFollowerCleanup(
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
-  ): Promise<ThreadReconciler.TelegramLiveRebindCleanupPreparation | undefined>;
+  ): Promise<ThreadReconciler.BaleLiveRebindCleanupPreparation | undefined>;
   /**
    * One cleanup attempt under fresh admission: a fresh clear sample, then the durable issue marker, one unretried
    * deletion and the terminal record. `not-ready` leaves the released row unissued; `undefined` is lost authority.
    */
   issueLiveRebindLeaderCleanup(
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
-  ): Promise<TelegramLiveRebindCleanupIssue | undefined>;
+  ): Promise<BaleLiveRebindCleanupIssue | undefined>;
   issueLiveRebindFollowerCleanup(
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
-  ): Promise<TelegramLiveRebindCleanupIssue | undefined>;
+  ): Promise<BaleLiveRebindCleanupIssue | undefined>;
   /** Coordinator-only prompt admission; caller retains Workspace/canonical and exact recipient authority. */
   continueLiveRebindPrompt(
     messages: readonly TMessage[],
     ctx: TContext,
-    target: Queue.TelegramQueueTarget & { threadId: number },
+    target: Queue.BaleQueueTarget & { threadId: number },
     isCurrent: () => boolean,
   ): Promise<boolean>;
 } {
@@ -1915,7 +1915,7 @@ export function createTelegramInboundRouteRuntime<
         kind: "unbound";
         target: { chatId: number; threadId: number };
         messageId?: number;
-        temporaryThread?: Threads.TelegramTemporaryThreadEntry;
+        temporaryThread?: Threads.BaleTemporaryThreadEntry;
       }
     | {
         kind: "previous-leader";
@@ -1927,7 +1927,7 @@ export function createTelegramInboundRouteRuntime<
         instanceId?: string;
       };
   type PendingUnboundReroute = {
-    sourceTarget: Queue.TelegramQueueTarget;
+    sourceTarget: Queue.BaleQueueTarget;
     chooserMessageId?: number;
     rootChooserText?: string;
     messages: TMessage[];
@@ -1937,32 +1937,32 @@ export function createTelegramInboundRouteRuntime<
     phase: PendingReroutePhase;
     workspaceRestore?: {
       operationId: string;
-      record: Threads.TelegramTopicTargetRecord;
+      record: Threads.BaleTopicTargetRecord;
       messages: TMessage[];
     };
     liveRebind?: {
-      record: Threads.TelegramTopicTargetRecord;
+      record: Threads.BaleTopicTargetRecord;
       messages: TMessage[];
       template?: {
-        command: Commands.ParsedTelegramCommand;
+        command: Commands.ParsedBaleCommand;
         expandedSha256: string;
       };
-      continueCommand?: Commands.ParsedTelegramCommand;
-      menuCommand?: Commands.ParsedTelegramCommand;
-      abortCommand?: Commands.ParsedTelegramCommand;
-      nextCommand?: Commands.ParsedTelegramCommand;
-      stopCommand?: Commands.ParsedTelegramCommand;
-      helpCommand?: Commands.ParsedTelegramCommand;
-      nameCommand?: Commands.ParsedTelegramCommand;
-      confirmationCommand?: Commands.ParsedTelegramCommand;
-      extensionCommand?: Commands.ParsedTelegramCommand;
+      continueCommand?: Commands.ParsedBaleCommand;
+      menuCommand?: Commands.ParsedBaleCommand;
+      abortCommand?: Commands.ParsedBaleCommand;
+      nextCommand?: Commands.ParsedBaleCommand;
+      stopCommand?: Commands.ParsedBaleCommand;
+      helpCommand?: Commands.ParsedBaleCommand;
+      nameCommand?: Commands.ParsedBaleCommand;
+      confirmationCommand?: Commands.ParsedBaleCommand;
+      extensionCommand?: Commands.ParsedBaleCommand;
       extensionKind?: Commands.PreparedSelectedCommand["kind"];
-      coordinator?: ReturnType<typeof createTelegramLiveRebindCoordinator>;
+      coordinator?: ReturnType<typeof createBaleLiveRebindCoordinator>;
       commandCompletionWaited?: true;
       isCurrent?: () => boolean;
     };
     /** The acknowledged tab presenting an All source; `sourceTarget` is this tab, not the original's location. */
-    temporaryThread?: Threads.TelegramTemporaryThreadEntry;
+    temporaryThread?: Threads.BaleTemporaryThreadEntry;
     /** Source copies left in All (a menu-picked command); deleted once, when the input is consumed. */
     allTabCopies?: number[];
     /** This live opening attempt did not remove its All originals; replay/revival cannot reconstruct that fact. */
@@ -1991,7 +1991,7 @@ export function createTelegramInboundRouteRuntime<
       /** Per-source retention receipts; the chooser is cancelled once every source has one. */
       sourceResults?: Map<
         number,
-        NonNullable<ReturnType<typeof Updates.abandonTelegramDeferredUpdate>>
+        NonNullable<ReturnType<typeof Updates.abandonBaleDeferredUpdate>>
       >;
     };
     pauseExpiry?: () => void;
@@ -2015,8 +2015,8 @@ export function createTelegramInboundRouteRuntime<
     pending: PendingUnboundReroute,
   ): string | undefined =>
     pending.dispatchKind === "command"
-      ? Commands.parseTelegramCommand(
-          Media.extractFirstTelegramMessageText(pending.messages).trim(),
+      ? Commands.parseBaleCommand(
+          Media.extractFirstBaleMessageText(pending.messages).trim(),
         )?.name
       : undefined;
   /** Untouched by selection or dispatch, so the owner may still cancel and Restore may retain it. */
@@ -2037,7 +2037,7 @@ export function createTelegramInboundRouteRuntime<
       updateId: number;
       operatorUserId: number;
       journalBindingKey: string;
-      executor: Threads.TelegramWorkspaceRestoreExecutor;
+      executor: Threads.BaleWorkspaceRestoreExecutor;
       generation: number | undefined;
       scope: string | undefined;
       target: { chatId: number; threadId: number };
@@ -2048,10 +2048,10 @@ export function createTelegramInboundRouteRuntime<
   const guidedUnboundTopicKeys = new Set<string>();
   let nextUnboundRerouteId = 0;
   type RecoverySource =
-    Updates.TelegramDeferredAbandonmentRecoveryPage["sources"][number];
+    Updates.BaleDeferredAbandonmentRecoveryPage["sources"][number];
   type CancellationReview = {
     id: string;
-    target: Queue.TelegramQueueTarget;
+    target: Queue.BaleQueueTarget;
     messageId: number;
     ownerUserId: number;
     journalBindingKey: string;
@@ -2067,18 +2067,18 @@ export function createTelegramInboundRouteRuntime<
     >;
   };
   let cancellationReview: CancellationReview | undefined;
-  const requestDispatchNextQueuedTelegramTurn = (ctx: TContext): void => {
-    deps.dispatchNextQueuedTelegramTurn(ctx);
+  const requestDispatchNextQueuedBaleTurn = (ctx: TContext): void => {
+    deps.dispatchNextQueuedBaleTurn(ctx);
     if (
-      deps.requestDeferredDispatchNextQueuedTelegramTurn &&
+      deps.requestDeferredDispatchNextQueuedBaleTurn &&
       deps.hasDeferredDispatchContext?.() !== false
     ) {
-      deps.requestDeferredDispatchNextQueuedTelegramTurn(
-        deps.dispatchNextQueuedTelegramTurn,
+      deps.requestDeferredDispatchNextQueuedBaleTurn(
+        deps.dispatchNextQueuedBaleTurn,
       );
     }
   };
-  const resolveTelegramThreadLabel = (message: {
+  const resolveBaleThreadLabel = (message: {
     chat: { id: number };
     message_thread_id?: number;
   }): string | undefined => {
@@ -2107,7 +2107,7 @@ export function createTelegramInboundRouteRuntime<
         continue;
       }
       return record.threadName &&
-        ThreadNaming.isTelegramTopicThreadNameValidForSlot(
+        ThreadNaming.isBaleTopicThreadNameValidForSlot(
           record.threadName,
           record.slot,
         )
@@ -2117,13 +2117,13 @@ export function createTelegramInboundRouteRuntime<
     return undefined;
   };
   const createAdmissionReceipts = (
-    queueKind: Queue.TelegramQueueItemKind,
+    queueKind: Queue.BaleQueueItemKind,
     sources: readonly unknown[],
-  ): Queue.TelegramQueueAdmissionReceipt[] => {
+  ): Queue.BaleQueueAdmissionReceipt[] => {
     const sourceUpdateIds =
-      Updates.collectTelegramAdmissionSourceUpdateIds(sources);
+      Updates.collectBaleAdmissionSourceUpdateIds(sources);
     if (sourceUpdateIds.length === 0) return [];
-    const receipt = Queue.createTelegramQueueAdmissionReceipt({
+    const receipt = Queue.createBaleQueueAdmissionReceipt({
       queueKind,
       scope: deps.getAdmissionScope?.() ?? "",
       sourceUpdateIds,
@@ -2140,9 +2140,9 @@ export function createTelegramInboundRouteRuntime<
   };
   const reportQueueAdmission = (
     sources: readonly unknown[],
-    receipts: readonly Queue.TelegramQueueAdmissionReceipt[],
+    receipts: readonly Queue.BaleQueueAdmissionReceipt[],
   ): void => {
-    Updates.reportTelegramQueueAdmission(sources, receipts);
+    Updates.reportBaleQueueAdmission(sources, receipts);
   };
   const removePendingReroute = (id: string): void => {
     pendingUnboundReroutes.get(id)?.stopExpiry?.();
@@ -2160,7 +2160,7 @@ export function createTelegramInboundRouteRuntime<
       return false;
     if (pendingUnboundReroutes.get(id) !== pending) return true;
     for (const message of pending.messages)
-      Updates.reportTelegramUpdateCompleted(message);
+      Updates.reportBaleUpdateCompleted(message);
     removePendingReroute(id);
     return true;
   };
@@ -2174,7 +2174,7 @@ export function createTelegramInboundRouteRuntime<
     )
       return;
     pending.stopExpiry?.();
-    const execution = Updates.getTelegramUpdateExecutionFence(
+    const execution = Updates.getBaleUpdateExecutionFence(
       pending.messages[0],
     );
     const onAbort = () => removePendingReroute(id);
@@ -2203,7 +2203,7 @@ export function createTelegramInboundRouteRuntime<
         date * 1000 > Date.now()
       )
         return;
-      pending.expiresAtMs = date * 1000 + TELEGRAM_ALL_TAB_COMMAND_MAX_AGE_MS;
+      pending.expiresAtMs = date * 1000 + BALE_ALL_TAB_COMMAND_MAX_AGE_MS;
     }
     const schedule = (): void => {
       if (
@@ -2214,7 +2214,7 @@ export function createTelegramInboundRouteRuntime<
         return;
       if (expirePendingCommand(id, pending)) return;
       const delay = Math.min(
-        TELEGRAM_ALL_TAB_COMMAND_MAX_AGE_MS,
+        BALE_ALL_TAB_COMMAND_MAX_AGE_MS,
         pending.expiresAtMs! - Date.now(),
       );
       timer = setTimeout(schedule, Math.max(1, delay));
@@ -2242,7 +2242,7 @@ export function createTelegramInboundRouteRuntime<
     prunePendingCommandReroutes();
     if (pendingUnboundReroutes.size >= 100) {
       throw new Error(
-        "Telegram route chooser capacity reached; source remains retryable.",
+        "Bale route chooser capacity reached; source remains retryable.",
       );
     }
     nextUnboundRerouteId += 1;
@@ -2283,7 +2283,7 @@ export function createTelegramInboundRouteRuntime<
         )
       ) {
         try {
-          const lifetime = Updates.armTelegramRoutingInputs(
+          const lifetime = Updates.armBaleRoutingInputs(
             pending.messages,
             owner,
             {
@@ -2311,13 +2311,13 @@ export function createTelegramInboundRouteRuntime<
       return;
     const source = pending.messages[0];
     const text = source?.text?.trim();
-    const execution = Updates.getTelegramUpdateExecutionFence(source);
-    const sourceIds = Updates.collectTelegramAdmissionSourceUpdateIds(
+    const execution = Updates.getBaleUpdateExecutionFence(source);
+    const sourceIds = Updates.collectBaleAdmissionSourceUpdateIds(
       pending.messages,
     );
     if (
       !text ||
-      Commands.parseTelegramCommand(text)?.name !== "start" ||
+      Commands.parseBaleCommand(text)?.name !== "start" ||
       source?.from?.id === undefined ||
       !execution?.isCurrent() ||
       sourceIds.length !== 1 ||
@@ -2334,7 +2334,7 @@ export function createTelegramInboundRouteRuntime<
       )
         continue;
       const oldSource = old.messages[0];
-      const oldIds = Updates.collectTelegramAdmissionSourceUpdateIds(
+      const oldIds = Updates.collectBaleAdmissionSourceUpdateIds(
         old.messages,
       );
       if (
@@ -2342,11 +2342,11 @@ export function createTelegramInboundRouteRuntime<
         oldSource?.text?.trim() !== text ||
         oldIds.length !== 1 ||
         oldIds[0]! >= sourceIds[0]! ||
-        Updates.getTelegramUpdateExecutionFence(oldSource)?.signal !==
+        Updates.getBaleUpdateExecutionFence(oldSource)?.signal !==
           execution.signal
       )
         continue;
-      if (Updates.reportTelegramUpdateCompleted(oldSource))
+      if (Updates.reportBaleUpdateCompleted(oldSource))
         removePendingReroute(oldId);
     }
   };
@@ -2371,10 +2371,10 @@ export function createTelegramInboundRouteRuntime<
       timer: ReturnType<typeof setTimeout>;
     }
   >();
-  const threadNameDialog = ThreadNaming.createTelegramThreadNameDialogRuntime();
+  const threadNameDialog = ThreadNaming.createBaleThreadNameDialogRuntime();
   const getThreadNameDialogScope = () =>
     deps.getCurrentInstanceId?.() ?? "local";
-  const menuCallbackHandler = Menu.createTelegramMenuCallbackHandlerForContext<
+  const menuCallbackHandler = Menu.createBaleMenuCallbackHandlerForContext<
     TCallbackQuery,
     TContext,
     TModel
@@ -2397,7 +2397,7 @@ export function createTelegramInboundRouteRuntime<
     setModel: deps.setModel,
     setCurrentModel: deps.currentModelRuntime.setCurrentModel,
     stagePendingModelSwitch: deps.modelSwitchController.stagePendingSwitch,
-    restartInterruptedTelegramTurn:
+    restartInterruptedBaleTurn:
       deps.modelSwitchController.restartInterruptedTurn,
     sectionRegistry: deps.sectionRegistry,
     editInteractiveMessage: deps.editInteractiveMessage,
@@ -2408,7 +2408,7 @@ export function createTelegramInboundRouteRuntime<
     enqueueSectionPrompt: async (
       prompt: string,
       ctx: TContext,
-      target?: Queue.TelegramQueueTarget,
+      target?: Queue.BaleQueueTarget,
       source?: unknown,
     ) => {
       const chatId = target?.chatId ?? deps.configStore.getAllowedUserId();
@@ -2418,7 +2418,7 @@ export function createTelegramInboundRouteRuntime<
         "prompt",
         source === undefined ? [] : [source],
       );
-      const turn: Queue.PendingTelegramTurn = {
+      const turn: Queue.PendingBaleTurn = {
         kind: "prompt",
         chatId,
         ...(target ? { target } : {}),
@@ -2431,11 +2431,11 @@ export function createTelegramInboundRouteRuntime<
         content: [
           {
             type: "text",
-            text: `[telegram] ${prompt}`,
+            text: `[bale] ${prompt}`,
           },
         ],
-        historyText: Turns.truncateTelegramQueueSummary(prompt),
-        statusSummary: Turns.truncateTelegramQueueSummary(prompt),
+        historyText: Turns.truncateBaleQueueSummary(prompt),
+        statusSummary: Turns.truncateBaleQueueSummary(prompt),
         ...(admissionReceipts.length > 0 ? { admissionReceipts } : {}),
       };
       deps.queueMutationRuntime.append(turn, ctx);
@@ -2444,16 +2444,16 @@ export function createTelegramInboundRouteRuntime<
         admissionReceipts,
       );
       deps.updateStatus(ctx);
-      requestDispatchNextQueuedTelegramTurn(ctx);
+      requestDispatchNextQueuedBaleTurn(ctx);
     },
   });
-  const cloneTelegramMessagesForThread = (
+  const cloneBaleMessagesForThread = (
     messages: TMessage[],
     threadId: number,
     copies?: ReadonlyMap<number, number>,
   ): TMessage[] => {
     return messages.map((message) => {
-      const ids = Updates.collectTelegramAdmissionSourceUpdateIds([message]);
+      const ids = Updates.collectBaleAdmissionSourceUpdateIds([message]);
       const copyId = copies && ids.length === 1 ? copies.get(ids[0]!) : undefined;
       if (copies && (!Number.isSafeInteger(copyId) || copyId! <= 0))
         throw new Error("Reroute destination copy identity is unavailable.");
@@ -2463,13 +2463,13 @@ export function createTelegramInboundRouteRuntime<
         message_thread_id: threadId,
         reply_to_message: undefined,
       } as TMessage;
-      return Updates.carryTelegramUpdateExecutionFence(message,
-        copies ? Turns.withTelegramTurnReplyAnchor(routed) : routed);
+      return Updates.carryBaleUpdateExecutionFence(message,
+        copies ? Turns.withBaleTurnReplyAnchor(routed) : routed);
     });
   };
   /** Whether a chooser is still pending in this Thread, ignoring the ones the caller itself owns. */
   const hasPendingRerouteForTarget = (
-    target: Queue.TelegramQueueTarget,
+    target: Queue.BaleQueueTarget,
     own?: (pending: PendingUnboundReroute) => boolean,
   ): boolean =>
     [...pendingUnboundReroutes.values()].some(
@@ -2479,19 +2479,19 @@ export function createTelegramInboundRouteRuntime<
         !own?.(pending),
     );
   const isOwnTemporaryChooser =
-    (entry: Threads.TelegramTemporaryThreadEntry) =>
+    (entry: Threads.BaleTemporaryThreadEntry) =>
     (pending: PendingUnboundReroute): boolean =>
       pending.temporaryThread?.token === entry.token &&
       isDeepStrictEqual(pending.temporaryThread.source, entry.source);
   const hasOtherTemporaryThreadReroute = (
-    target: Queue.TelegramQueueTarget,
-    own: Threads.TelegramTemporaryThreadEntry,
+    target: Queue.BaleQueueTarget,
+    own: Threads.BaleTemporaryThreadEntry,
   ): boolean => hasPendingRerouteForTarget(target, isOwnTemporaryChooser(own));
   const applyThreadCleanupPlan = async (
     plan: ThreadReconciler.ThreadReconciliationPlan,
     assertExecutionCurrent?: () => void,
-    restoreCleanup?: Threads.TelegramWorkspaceRestoreIntent,
-    temporaryCleanup?: Threads.TelegramTemporaryThreadEntry,
+    restoreCleanup?: Threads.BaleWorkspaceRestoreIntent,
+    temporaryCleanup?: Threads.BaleTemporaryThreadEntry,
   ): Promise<boolean> => {
     assertExecutionCurrent?.();
     if (
@@ -2546,11 +2546,11 @@ export function createTelegramInboundRouteRuntime<
                   temporaryDeleteConfirmed = true;
                 return result;
               } catch (error) {
-                const missingTarget = TelegramApi.getTelegramApiErrorRequestTarget(error);
+                const missingTarget = BaleApi.getBaleApiErrorRequestTarget(error);
                 if (method === "deleteForumTopic" && missingTarget && error instanceof Error &&
-                    TelegramApi.isTelegramApiRequestRejected(error, method) &&
-                    TelegramApi.isTelegramStaleTargetHttpError(error) &&
-                    ThreadReconciler.isTelegramTopicDeletedErrorMessage(error.message) &&
+                    BaleApi.isBaleApiRequestRejected(error, method) &&
+                    BaleApi.isBaleStaleTargetHttpError(error) &&
+                    ThreadReconciler.isBaleTopicDeletedErrorMessage(error.message) &&
                     missingTarget?.chatId === temporaryCleanup.target?.chatId &&
                     missingTarget?.threadId === temporaryCleanup.target?.threadId &&
                     missingTarget?.chatId === body.chat_id && missingTarget?.threadId === body.message_thread_id) {
@@ -2585,8 +2585,8 @@ export function createTelegramInboundRouteRuntime<
     );
   };
   const findCreatedTemporaryThread = (
-    target: Queue.TelegramQueueTarget,
-  ): Threads.TelegramTemporaryThreadEntry | undefined => {
+    target: Queue.BaleQueueTarget,
+  ): Threads.BaleTemporaryThreadEntry | undefined => {
     try {
       return deps
         .getWorkspaceRestoreStore?.()
@@ -2652,20 +2652,20 @@ export function createTelegramInboundRouteRuntime<
     };
   };
   const isTemporaryTabTarget = (
-    target: Queue.TelegramQueueTarget | undefined,
+    target: Queue.BaleQueueTarget | undefined,
   ): boolean => !!target && findCreatedTemporaryThread(target) !== undefined;
   /** Restore may choose one input only when every other known group is cancelled or a live unassigned chooser that can be retained. */
   const areTemporaryThreadSiblingsAccountedForRestore = (
-    entry: Threads.TelegramTemporaryThreadEntry,
+    entry: Threads.BaleTemporaryThreadEntry,
     from: PendingUnboundReroute,
   ): boolean => {
     const target = entry.target;
     if (!target) return false;
     const group = {
       journalBindingKey: entry.source.journalBindingKey,
-      updateIds: Updates.collectTelegramAdmissionSourceUpdateIds(from.messages),
+      updateIds: Updates.collectBaleAdmissionSourceUpdateIds(from.messages),
     };
-    const inputs = Threads.getTelegramTemporaryThreadInputs(entry),
+    const inputs = Threads.getBaleTemporaryThreadInputs(entry),
       resolved = [
         ...(entry.cancelledInputs ?? []),
         ...(entry.completedInputs ?? []),
@@ -2683,7 +2683,7 @@ export function createTelegramInboundRouteRuntime<
     );
     const groupOf = (pending: PendingUnboundReroute) => ({
       journalBindingKey: entry.source.journalBindingKey,
-      updateIds: Updates.collectTelegramAdmissionSourceUpdateIds(
+      updateIds: Updates.collectBaleAdmissionSourceUpdateIds(
         pending.messages,
       ),
     });
@@ -2709,18 +2709,18 @@ export function createTelegramInboundRouteRuntime<
     );
   };
   const isRerouteTargetProtected = (
-    target: Queue.TelegramQueueTarget,
-    ownRestore?: Threads.TelegramWorkspaceRestoreIntent,
-    ownTemporary?: Threads.TelegramTemporaryThreadEntry,
+    target: Queue.BaleQueueTarget,
+    ownRestore?: Threads.BaleWorkspaceRestoreIntent,
+    ownTemporary?: Threads.BaleTemporaryThreadEntry,
     restoreFrom?: PendingUnboundReroute,
   ): boolean => {
-    const matches = (candidate: Queue.TelegramQueueTarget): boolean =>
+    const matches = (candidate: Queue.BaleQueueTarget): boolean =>
       candidate.chatId === target.chatId &&
       candidate.threadId === target.threadId;
     const activeTarget = deps.activeTurnRuntime.getTarget();
     if (
       (activeTarget && matches(activeTarget)) ||
-      deps.telegramQueueStore
+      deps.baleQueueStore
         .getQueuedItems()
         .some((item) => item.target && matches(item.target)) ||
       (deps.getLiveThreadTargets?.() ?? []).some(matches) ||
@@ -2737,14 +2737,14 @@ export function createTelegramInboundRouteRuntime<
       return true;
     const store = deps.getWorkspaceRestoreStore?.();
     if (deps.getWorkspaceRestoreStore && !store) return true;
-    let temporary: Threads.TelegramTemporaryThreadEntry[];
+    let temporary: Threads.BaleTemporaryThreadEntry[];
     try {
       temporary = store?.listTemporaryThreads() ?? [];
     } catch {
       return true;
     }
     // Only the source's own Forward/Cancel may remove its retained tab; adoption may have changed its executor.
-    const ownTab = (entry: Threads.TelegramTemporaryThreadEntry): boolean =>
+    const ownTab = (entry: Threads.BaleTemporaryThreadEntry): boolean =>
       !!ownTemporary &&
       entry.token === ownTemporary.token &&
       isDeepStrictEqual(entry.source, ownTemporary.source) &&
@@ -2755,8 +2755,8 @@ export function createTelegramInboundRouteRuntime<
           !!entry.target &&
           matches(entry.target) &&
           (!ownTab(entry) ||
-            (Threads.getTelegramTemporaryThreadInputs(entry).length > 1 &&
-              !Threads.isTelegramTemporaryThreadFullyResolved(entry) &&
+            (Threads.getBaleTemporaryThreadInputs(entry).length > 1 &&
+              !Threads.isBaleTemporaryThreadFullyResolved(entry) &&
               !(
                 restoreFrom &&
                 areTemporaryThreadSiblingsAccountedForRestore(
@@ -2782,7 +2782,7 @@ export function createTelegramInboundRouteRuntime<
             [
               deps.getAdmissionJournalBinding?.(),
               ownTemporary!.source.journalBindingKey,
-              ...Threads.getTelegramTemporaryThreadInputs(ownTemporary!).map(
+              ...Threads.getBaleTemporaryThreadInputs(ownTemporary!).map(
                 (input) => input.journalBindingKey,
               ),
             ].filter((key): key is string => !!key),
@@ -2792,7 +2792,7 @@ export function createTelegramInboundRouteRuntime<
           deps.inspectTemporaryThreadSources?.(
             { chatId: target.chatId, threadId: target.threadId! },
             required,
-            Threads.getTelegramTemporaryThreadInputs(ownTemporary!),
+            Threads.getBaleTemporaryThreadInputs(ownTemporary!),
           )?.length !== 0
         )
           return true;
@@ -2865,7 +2865,7 @@ export function createTelegramInboundRouteRuntime<
       });
     } catch (error) {
       acceptedWorkClear = false;
-      deps.recordRuntimeEvent?.("telegram", error, {
+      deps.recordRuntimeEvent?.("bale", error, {
         phase: "workspace-restore-protection",
       });
     }
@@ -2994,8 +2994,8 @@ export function createTelegramInboundRouteRuntime<
   ): { chatId: number; sourceUpdateIds: number[]; sourceMessageIds: number[]; messageIds: number[] } | undefined => {
     try {
       const originals = pending.messages.map((message) => {
-        const snapshot = Updates.inspectTelegramDeferredSourceSnapshot(message);
-        const ids = Updates.collectTelegramAdmissionSourceUpdateIds([message]);
+        const snapshot = Updates.inspectBaleDeferredSourceSnapshot(message);
+        const ids = Updates.collectBaleAdmissionSourceUpdateIds([message]);
         const original = snapshot?.update.message as TMessage | undefined;
         if (
           !snapshot ||
@@ -3069,7 +3069,7 @@ export function createTelegramInboundRouteRuntime<
       return true;
     } catch (error) {
       assertExecutionCurrent?.();
-      deps.recordRuntimeEvent?.("telegram", error, {
+      deps.recordRuntimeEvent?.("bale", error, {
         phase: "reroute-chooser-delete",
         chatId,
         messageId,
@@ -3090,7 +3090,7 @@ export function createTelegramInboundRouteRuntime<
         await deps.deleteMessage(chatId, messageId);
         return;
       } catch (error) {
-        deps.recordRuntimeEvent?.("telegram", error, {
+        deps.recordRuntimeEvent?.("bale", error, {
           phase: "reroute-chooser-delete",
           chatId,
           messageId,
@@ -3112,7 +3112,7 @@ export function createTelegramInboundRouteRuntime<
     target: { chatId: number; threadId: number } | undefined,
     messageId: number | undefined,
     assertExecutionCurrent?: () => void,
-    ownTemporary?: Threads.TelegramTemporaryThreadEntry,
+    ownTemporary?: Threads.BaleTemporaryThreadEntry,
   ): Promise<boolean> => {
     if (!target || !deps.threadStore) return true;
     const nowMs = Date.now();
@@ -3156,7 +3156,7 @@ export function createTelegramInboundRouteRuntime<
   const closePreviousLeaderThread = async (
     target: { chatId: number; threadId: number } | undefined,
     assertExecutionCurrent?: () => void,
-    restoreCleanup?: Threads.TelegramWorkspaceRestoreIntent,
+    restoreCleanup?: Threads.BaleWorkspaceRestoreIntent,
   ): Promise<boolean> => {
     if (!target || !deps.threadStore) return true;
     const currentLeaderEpoch = deps.getCurrentLeaderEpoch?.();
@@ -3182,7 +3182,7 @@ export function createTelegramInboundRouteRuntime<
     target: { chatId: number; threadId: number } | undefined,
     instanceId: string | undefined,
     assertExecutionCurrent?: () => void,
-    restoreCleanup?: Threads.TelegramWorkspaceRestoreIntent,
+    restoreCleanup?: Threads.BaleWorkspaceRestoreIntent,
   ): Promise<boolean> => {
     if (!target || !deps.threadStore) return true;
     const currentLeaderEpoch = deps.getCurrentLeaderEpoch?.();
@@ -3213,7 +3213,7 @@ export function createTelegramInboundRouteRuntime<
    * tab's temporary entry protected; selected, queued, running or unknown work is never touched.
    */
   const disposeTemporaryThreadSiblingsAfterRestore = async (
-    intent: Threads.TelegramWorkspaceRestoreIntent,
+    intent: Threads.BaleWorkspaceRestoreIntent,
     ctx: TContext,
     restoreCurrent: () => boolean,
   ): Promise<void> => {
@@ -3235,7 +3235,7 @@ export function createTelegramInboundRouteRuntime<
       updateIds: [...intent.request.source.updateIds],
     };
     if (
-      !Threads.getTelegramTemporaryThreadInputs(entry).some((input) =>
+      !Threads.getBaleTemporaryThreadInputs(entry).some((input) =>
         isDeepStrictEqual(input, group),
       )
     )
@@ -3260,7 +3260,7 @@ export function createTelegramInboundRouteRuntime<
         !pending.workspaceRestore &&
         pending.messages.every(
           (source) =>
-            Updates.getTelegramUpdateExecutionFence(source)?.signal.aborted ===
+            Updates.getBaleUpdateExecutionFence(source)?.signal.aborted ===
             false,
         ) &&
         cancellation.ownerUserId === operatorUserId &&
@@ -3304,11 +3304,11 @@ export function createTelegramInboundRouteRuntime<
     signal:
       | {
           kind: "source";
-          evidence: Threads.TelegramWorkspaceRestoreSourceSettlement;
+          evidence: Threads.BaleWorkspaceRestoreSourceSettlement;
         }
       | {
           kind: "recipient";
-          follower: Bus.TelegramBusFollowerView;
+          follower: Bus.BaleBusFollowerView;
           isCurrent: () => boolean;
         },
     ctx: TContext,
@@ -3335,9 +3335,9 @@ export function createTelegramInboundRouteRuntime<
       return (
         signal.isCurrent() &&
         !!live &&
-        Bus.hasTelegramBusCapability(
+        Bus.hasBaleBusCapability(
           live.protocol,
-          Bus.TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE,
+          Bus.BALE_BUS_CAPABILITY_WORKSPACE_RESTORE,
         ) &&
         isDeepStrictEqual(
           {
@@ -3356,7 +3356,7 @@ export function createTelegramInboundRouteRuntime<
       );
     };
     const recipientMatches = (
-      intent: Threads.TelegramWorkspaceRestoreIntent,
+      intent: Threads.BaleWorkspaceRestoreIntent,
     ): boolean => {
       if (!follower) return true;
       const ready = intent.readyRecipient ?? intent.recipient;
@@ -3367,14 +3367,14 @@ export function createTelegramInboundRouteRuntime<
         ready.generation === follower.registrationGeneration &&
         !!follower.cwd &&
         intent.request.binding.cwd ===
-          WorkspaceIdentity.normalizeTelegramWorkspacePath(follower.cwd) &&
+          WorkspaceIdentity.normalizeBaleWorkspacePath(follower.cwd) &&
         intent.request.binding.slot === follower.slot &&
         isDeepStrictEqual(intent.request.target, follower.target)
       );
     };
     // A same-session successor already registered on the relocated target may prove an issued grant by inspection only.
     const inspectableSuccessor = (
-      intent: Threads.TelegramWorkspaceRestoreIntent,
+      intent: Threads.BaleWorkspaceRestoreIntent,
     ): boolean =>
       !!follower?.registrationGeneration &&
       !!follower.cwd &&
@@ -3382,7 +3382,7 @@ export function createTelegramInboundRouteRuntime<
       intent.request.owner.owner?.kind === "manual-follower" &&
       follower.sessionId === intent.request.binding.sessionId &&
       intent.request.binding.cwd ===
-        WorkspaceIdentity.normalizeTelegramWorkspacePath(follower.cwd) &&
+        WorkspaceIdentity.normalizeBaleWorkspacePath(follower.cwd) &&
       intent.request.binding.slot === follower.slot &&
       isDeepStrictEqual(intent.request.target, follower.target);
     const instanceId = deps.getCurrentInstanceId?.(),
@@ -3405,7 +3405,7 @@ export function createTelegramInboundRouteRuntime<
     const leaderSessionId = deps.workspaceRestoreRecipient?.getSessionId(ctx);
     const leaderCwd = deps.workspaceRestoreRecipient?.getCwd(ctx);
     const leaderAt = (
-      request: Threads.TelegramWorkspaceRestoreRequest,
+      request: Threads.BaleWorkspaceRestoreRequest,
     ): boolean => {
       const ports = deps.workspaceRestoreRecipient;
       const cwd = ports?.getCwd(ctx),
@@ -3415,7 +3415,7 @@ export function createTelegramInboundRouteRuntime<
         cwd === leaderCwd &&
         ports?.getSessionId(ctx) === leaderSessionId &&
         leaderSessionId === request.binding.sessionId &&
-        WorkspaceIdentity.normalizeTelegramWorkspacePath(cwd) ===
+        WorkspaceIdentity.normalizeBaleWorkspacePath(cwd) ===
           request.binding.cwd &&
         !!local &&
         local.slot === request.binding.slot &&
@@ -3423,12 +3423,12 @@ export function createTelegramInboundRouteRuntime<
       );
     };
     const observeLeaderRestore = (
-      intent: Threads.TelegramWorkspaceRestoreIntent,
-      recipient: Threads.TelegramWorkspaceRestoreRecipient,
+      intent: Threads.BaleWorkspaceRestoreIntent,
+      recipient: Threads.BaleWorkspaceRestoreRecipient,
       isCurrent: () => boolean,
     ): Awaited<
       ReturnType<
-        Parameters<typeof advanceTelegramWorkspaceRestore>[0]["runRecipient"]
+        Parameters<typeof advanceBaleWorkspaceRestore>[0]["runRecipient"]
       >
     > => {
       const threads = deps.threadStore;
@@ -3437,7 +3437,7 @@ export function createTelegramInboundRouteRuntime<
       const { request } = intent;
       let observation: Awaited<
         ReturnType<
-          Parameters<typeof advanceTelegramWorkspaceRestore>[0]["runRecipient"]
+          Parameters<typeof advanceBaleWorkspaceRestore>[0]["runRecipient"]
         >
       >;
       threads.withWorkspaceRestoreSnapshot(intent, (snapshot) => {
@@ -3448,7 +3448,7 @@ export function createTelegramInboundRouteRuntime<
           owner.instanceId !== recipient.instanceId ||
           owner.owner.instanceId !== recipient.instanceId ||
           !owner.owner.cwd ||
-          WorkspaceIdentity.normalizeTelegramWorkspacePath(owner.owner.cwd) !==
+          WorkspaceIdentity.normalizeBaleWorkspacePath(owner.owner.cwd) !==
             request.binding.cwd
         )
           return;
@@ -3464,7 +3464,7 @@ export function createTelegramInboundRouteRuntime<
     };
     // Same-process lost replies stay with their chooser; this path only serves a restarted leader process.
     const inspectableLeader = (
-      intent: Threads.TelegramWorkspaceRestoreIntent,
+      intent: Threads.BaleWorkspaceRestoreIntent,
     ): boolean =>
       !!evidence &&
       intent.request.owner.owner?.kind === "leader" &&
@@ -3485,8 +3485,8 @@ export function createTelegramInboundRouteRuntime<
       deps.configStore.getAllowedUserId() === operatorUserId &&
       recipientCurrent();
     const recoveryRecipient = (
-      intent: Threads.TelegramWorkspaceRestoreIntent,
-    ): Bus.TelegramBusFollowerView | undefined => {
+      intent: Threads.BaleWorkspaceRestoreIntent,
+    ): Bus.BaleBusFollowerView | undefined => {
       const ready = intent.readyRecipient ?? intent.recipient;
       if (
         !deps.inspectRestoreSourceCompletion ||
@@ -3504,16 +3504,16 @@ export function createTelegramInboundRouteRuntime<
       return ready?.kind === "follower" &&
         live?.registrationGeneration &&
         live.cwd &&
-        Bus.hasTelegramBusCapability(
+        Bus.hasBaleBusCapability(
           live.protocol,
-          Bus.TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE,
+          Bus.BALE_BUS_CAPABILITY_WORKSPACE_RESTORE,
         ) &&
-        Bus.hasTelegramBusCapability(
+        Bus.hasBaleBusCapability(
           live.protocol,
-          Bus.TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+          Bus.BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
         ) &&
         live.sessionId === intent.request.binding.sessionId &&
-        WorkspaceIdentity.normalizeTelegramWorkspacePath(live.cwd) ===
+        WorkspaceIdentity.normalizeBaleWorkspacePath(live.cwd) ===
           intent.request.binding.cwd &&
         live.slot === intent.request.binding.slot &&
         isDeepStrictEqual(live.target, intent.request.target)
@@ -3521,8 +3521,8 @@ export function createTelegramInboundRouteRuntime<
         : undefined;
     };
     const recoveryLeader = (
-      intent: Threads.TelegramWorkspaceRestoreIntent,
-    ): Threads.TelegramWorkspaceRestoreRecipient | undefined => {
+      intent: Threads.BaleWorkspaceRestoreIntent,
+    ): Threads.BaleWorkspaceRestoreRecipient | undefined => {
       const ready = intent.readyRecipient ?? intent.recipient;
       if (
         evidence?.kind !== "completed" ||
@@ -3601,7 +3601,7 @@ export function createTelegramInboundRouteRuntime<
           })
           .map((intent) => intent.request.operationId) ?? [];
     } catch (error) {
-      deps.recordRuntimeEvent?.("telegram", error, {
+      deps.recordRuntimeEvent?.("bale", error, {
         phase: "workspace-restore-settlement",
       });
       return;
@@ -3619,7 +3619,7 @@ export function createTelegramInboundRouteRuntime<
             if (!current()) return;
             const store = deps.getWorkspaceRestoreStore!();
             if (!store) return;
-            const authority: Threads.TelegramWorkspaceRestoreAuthority = {
+            const authority: Threads.BaleWorkspaceRestoreAuthority = {
               executor: { instanceId, leaderEpoch: String(epoch) },
               operatorUserId,
               isCurrent: current,
@@ -3632,7 +3632,7 @@ export function createTelegramInboundRouteRuntime<
             };
             // Exact owner abandonment of every original is terminal for an unsent Restore; no cleanup or delivery follows.
             const abandoned = (
-              value: Threads.TelegramWorkspaceRestoreIntent,
+              value: Threads.BaleWorkspaceRestoreIntent,
             ): boolean => {
               if (
                 evidence?.kind !== "completed" ||
@@ -3649,7 +3649,7 @@ export function createTelegramInboundRouteRuntime<
                   proof?.journalBindingKey === sourceBinding &&
                   proof.updateId === updateId &&
                   proof.operatorAuthorityId ===
-                    `telegram-owner:${operatorUserId}`
+                    `bale-owner:${operatorUserId}`
                 );
               });
             };
@@ -3668,7 +3668,7 @@ export function createTelegramInboundRouteRuntime<
                 intent.operatorUserId === operatorUserId
               ) {
                 const ports = deps.workspaceRestoreRecipient!;
-                const successor: Threads.TelegramWorkspaceRestoreRecipient = {
+                const successor: Threads.BaleWorkspaceRestoreRecipient = {
                   kind: "follower",
                   instanceId: follower.instanceId,
                   sessionId: follower.sessionId!,
@@ -3676,7 +3676,7 @@ export function createTelegramInboundRouteRuntime<
                 };
                 const { request } = intent;
                 // Adoption plus inspect never consumes the original apply grant, delivers input or issues cleanup.
-                await advanceTelegramWorkspaceRestore({
+                await advanceBaleWorkspaceRestore({
                   request,
                   authority,
                   restoreStore: store,
@@ -3705,7 +3705,7 @@ export function createTelegramInboundRouteRuntime<
                 intent.operatorUserId === operatorUserId
               ) {
                 const threads = deps.threadStore!;
-                const leader: Threads.TelegramWorkspaceRestoreRecipient = {
+                const leader: Threads.BaleWorkspaceRestoreRecipient = {
                   kind: "leader",
                   instanceId,
                   sessionId: intent.request.binding.sessionId!,
@@ -3714,7 +3714,7 @@ export function createTelegramInboundRouteRuntime<
                 const { request } = intent;
                 await threads.load();
                 assertCurrent();
-                await advanceTelegramWorkspaceRestore({
+                await advanceBaleWorkspaceRestore({
                   request,
                   authority,
                   restoreStore: store,
@@ -3802,15 +3802,15 @@ export function createTelegramInboundRouteRuntime<
                   if (!settlementCanonicalCurrent()) continue; // A local target alone cannot authorize executor adoption.
                 }
                 const inspect = (
-                  acceptance: Threads.TelegramWorkspaceRestoreSourceAcceptance,
-                  operation: Threads.TelegramWorkspaceRestoreIntent,
+                  acceptance: Threads.BaleWorkspaceRestoreSourceAcceptance,
+                  operation: Threads.BaleWorkspaceRestoreIntent,
                 ): boolean => {
                   const completion = {
                     journalBindingKey: sourceBinding,
                     updateId: acceptance.updateId,
                     sourceSha256: acceptance.sourceSha256,
                     completionSha256:
-                      Threads.getTelegramWorkspaceRestoreSourceCompletionSha256(
+                      Threads.getBaleWorkspaceRestoreSourceCompletionSha256(
                         operation,
                         acceptance,
                       ),
@@ -3832,7 +3832,7 @@ export function createTelegramInboundRouteRuntime<
                       : value.kind === "forwarded") && inspect(value, expected),
                 );
                 if (accepted.length) {
-                  const successor: Threads.TelegramWorkspaceRestoreRecipient =
+                  const successor: Threads.BaleWorkspaceRestoreRecipient =
                     localRecipient ?? {
                       kind: "follower",
                       instanceId: liveRecipient!.instanceId,
@@ -3840,7 +3840,7 @@ export function createTelegramInboundRouteRuntime<
                       generation: liveRecipient!.registrationGeneration!,
                     };
                   const { request } = expected;
-                  const inspected = await advanceTelegramWorkspaceRestore({
+                  const inspected = await advanceBaleWorkspaceRestore({
                     request,
                     authority: recoveryAuthority,
                     restoreStore: store,
@@ -3885,7 +3885,7 @@ export function createTelegramInboundRouteRuntime<
                   );
                   const recovered = new Map<
                     string,
-                    Threads.TelegramWorkspaceRestoreSourceSettlement
+                    Threads.BaleWorkspaceRestoreSourceSettlement
                   >();
                   for (const acceptance of accepted.filter(
                     (value) =>
@@ -3937,17 +3937,17 @@ export function createTelegramInboundRouteRuntime<
                   !!live?.cwd &&
                   live.registrationGeneration === ready.generation &&
                   live.sessionId === ready.sessionId &&
-                  WorkspaceIdentity.normalizeTelegramWorkspacePath(live.cwd) ===
+                  WorkspaceIdentity.normalizeBaleWorkspacePath(live.cwd) ===
                     intent.request.binding.cwd &&
                   live.slot === intent.request.binding.slot &&
                   isDeepStrictEqual(live.target, intent.request.target) &&
-                  Bus.hasTelegramBusCapability(
+                  Bus.hasBaleBusCapability(
                     live.protocol,
-                    Bus.TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE,
+                    Bus.BALE_BUS_CAPABILITY_WORKSPACE_RESTORE,
                   ) &&
-                  Bus.hasTelegramBusCapability(
+                  Bus.hasBaleBusCapability(
                     live.protocol,
-                    Bus.TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+                    Bus.BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
                   )
                 );
               };
@@ -4083,7 +4083,7 @@ export function createTelegramInboundRouteRuntime<
         ),
       )
       .catch((error) => {
-        deps.recordRuntimeEvent?.("telegram", error, {
+        deps.recordRuntimeEvent?.("bale", error, {
           phase: "workspace-restore-settlement",
         });
       });
@@ -4092,7 +4092,7 @@ export function createTelegramInboundRouteRuntime<
     return task;
   };
   const beforeQueueReceiptPublished: NonNullable<
-    Updates.TelegramUpdateWorkerRuntimeDeps<TContext>["beforeQueueReceiptPublished"]
+    Updates.BaleUpdateWorkerRuntimeDeps<TContext>["beforeQueueReceiptPublished"]
   > = async (receipt, queueOwner, ctx, isWorkerCurrent) => {
     const heldScopes = commandHandler.prepareHeldQueueReceipt(
       receipt,
@@ -4139,7 +4139,7 @@ export function createTelegramInboundRouteRuntime<
         "Workspace Restore queued acceptance authority is unavailable.",
       );
     }
-    const expectedReceipt: TelegramUpdateJournalQueuedCompletion = {
+    const expectedReceipt: BaleUpdateJournalQueuedCompletion = {
       queueKind: receipt.queueKind,
       receiptId: receipt.receiptId,
       sourceUpdateIds: [...receipt.sourceUpdateIds],
@@ -4165,7 +4165,7 @@ export function createTelegramInboundRouteRuntime<
     };
     assertCurrent();
     const recipientGuards: Array<() => boolean> = [];
-    const sourceCompletions: Updates.TelegramQueueSourceCompletion[] = [];
+    const sourceCompletions: Updates.BaleQueueSourceCompletion[] = [];
     await deps.runWorkspaceOperation(
       {
         operationId: `restore-queue-acceptance-${randomBytes(16).toString("hex")}`,
@@ -4233,7 +4233,7 @@ export function createTelegramInboundRouteRuntime<
               isDeepStrictEqual(local.target, request.target) &&
               ports.getSessionId(ctx) === recipient.sessionId &&
               !!cwd &&
-              WorkspaceIdentity.normalizeTelegramWorkspacePath(cwd) ===
+              WorkspaceIdentity.normalizeBaleWorkspacePath(cwd) ===
                 request.binding.cwd
             );
           };
@@ -4265,7 +4265,7 @@ export function createTelegramInboundRouteRuntime<
                 owners[0].instanceId === instanceId &&
                 owners[0].owner.instanceId === instanceId &&
                 !!owners[0].owner.cwd &&
-                WorkspaceIdentity.normalizeTelegramWorkspacePath(
+                WorkspaceIdentity.normalizeBaleWorkspacePath(
                   owners[0].owner.cwd,
                 ) === request.binding.cwd &&
                 owners[0].profileKey === request.owner.profileKey &&
@@ -4277,7 +4277,7 @@ export function createTelegramInboundRouteRuntime<
           };
           recipientGuards.push(recipientCurrent);
           // Storage owns the canonical CAS; its in-transaction authority callback cannot reacquire the snapshot lock.
-          const authority: Threads.TelegramWorkspaceRestoreAuthority = {
+          const authority: Threads.BaleWorkspaceRestoreAuthority = {
             executor: { instanceId, leaderEpoch: String(epoch) },
             operatorUserId,
             isCurrent: liveRecipientCurrent,
@@ -4289,7 +4289,7 @@ export function createTelegramInboundRouteRuntime<
               throw new Error(
                 "Workspace Restore queued recipient authority changed.",
               );
-            const evidence: Threads.TelegramWorkspaceRestoreSourceAcceptance = {
+            const evidence: Threads.BaleWorkspaceRestoreSourceAcceptance = {
               ...source,
               journalBindingKey: binding,
               recipient,
@@ -4298,7 +4298,7 @@ export function createTelegramInboundRouteRuntime<
               queueKind: receipt.queueKind,
               queueOwnerSha256: proof.queueOwnerSha256,
             };
-            let accepted: Threads.TelegramWorkspaceRestoreIntent | undefined,
+            let accepted: Threads.BaleWorkspaceRestoreIntent | undefined,
               failure: unknown;
             try {
               accepted = active.recordSourceAcceptance(
@@ -4343,7 +4343,7 @@ export function createTelegramInboundRouteRuntime<
               ...source,
               journalBindingKey: binding,
               completionSha256:
-                Threads.getTelegramWorkspaceRestoreSourceCompletionSha256(
+                Threads.getBaleWorkspaceRestoreSourceCompletionSha256(
                   accepted,
                   evidence,
                 ),
@@ -4373,7 +4373,7 @@ export function createTelegramInboundRouteRuntime<
     return sourceCompletions.sort((a, b) => a.updateId - b.updateId);
   };
   const onQueueReceiptCompleted = (
-    receipt: Updates.TelegramQueueAdmissionReceiptLike,
+    receipt: Updates.BaleQueueAdmissionReceiptLike,
     ctx: TContext,
   ): void => {
     // A hint re-enters admission and rereads scoped proof; it never supplies completed command evidence for a queued source.
@@ -4393,7 +4393,7 @@ export function createTelegramInboundRouteRuntime<
       retireCompletedTemporaryThread(updateId, ctx, receipt.journalBindingKey);
   };
   const onQueueReceiptCommitted = (
-    receipt: Updates.TelegramQueueAdmissionReceiptLike,
+    receipt: Updates.BaleQueueAdmissionReceiptLike,
     ctx: TContext,
   ): void => {
     if (receipt.journalBindingKey)
@@ -4427,11 +4427,11 @@ export function createTelegramInboundRouteRuntime<
     )
       return;
     const store = cap.store;
-    const matches = (entry: Threads.TelegramTemporaryThreadEntry) =>
+    const matches = (entry: Threads.BaleTemporaryThreadEntry) =>
       entry.source.journalBindingKey === journalBindingKey &&
       entry.source.updateId === updateId;
-    const inGroup = (entry: Threads.TelegramTemporaryThreadEntry) =>
-      Threads.getTelegramTemporaryThreadInputs(entry).some(
+    const inGroup = (entry: Threads.BaleTemporaryThreadEntry) =>
+      Threads.getBaleTemporaryThreadInputs(entry).some(
         (input) =>
           input.journalBindingKey === journalBindingKey &&
           input.updateIds.includes(updateId),
@@ -4483,7 +4483,7 @@ export function createTelegramInboundRouteRuntime<
                 store.retireTemporaryThread(entry, cap.authority);
               return;
             }
-            const group = Threads.getTelegramTemporaryThreadInputs(entry).find(
+            const group = Threads.getBaleTemporaryThreadInputs(entry).find(
               (input) =>
                 input.journalBindingKey === journalBindingKey &&
                 input.updateIds.includes(updateId),
@@ -4567,11 +4567,11 @@ export function createTelegramInboundRouteRuntime<
   const getLiveRebindMenu = (messages: readonly TMessage[]) => {
     const command =
       messages.length === 1
-        ? Commands.parseTelegramCommand(
-            Media.extractFirstTelegramMessageText([...messages]),
+        ? Commands.parseBaleCommand(
+            Media.extractFirstBaleMessageText([...messages]),
           )
         : undefined;
-    const action = command && Commands.buildTelegramCommandAction(command.name);
+    const action = command && Commands.buildBaleCommandAction(command.name);
     if (
       !command ||
       !action ||
@@ -4585,30 +4585,30 @@ export function createTelegramInboundRouteRuntime<
   };
   const getLiveRebindAbort = (messages: readonly TMessage[]) => {
     if (messages.length !== 1) return undefined;
-    const command = Commands.parseTelegramCommand(
-      Media.extractFirstTelegramMessageText([...messages]),
+    const command = Commands.parseBaleCommand(
+      Media.extractFirstBaleMessageText([...messages]),
     );
     return command?.name === "abort" ? command : undefined;
   };
   const getLiveRebindNext = (messages: readonly TMessage[]) => {
     if (messages.length !== 1) return undefined;
-    const command = Commands.parseTelegramCommand(
-      Media.extractFirstTelegramMessageText([...messages]),
+    const command = Commands.parseBaleCommand(
+      Media.extractFirstBaleMessageText([...messages]),
     );
     return command?.name === "next" ? command : undefined;
   };
   const getLiveRebindStop = (messages: readonly TMessage[]) => {
     if (messages.length !== 1 || !deps.cancelNextDispatchAnnouncement)
       return undefined;
-    const command = Commands.parseTelegramCommand(
-      Media.extractFirstTelegramMessageText([...messages]),
+    const command = Commands.parseBaleCommand(
+      Media.extractFirstBaleMessageText([...messages]),
     );
     return command?.name === "stop" ? command : undefined;
   };
   const getLiveRebindHelp = (messages: readonly TMessage[]) => {
     if (messages.length !== 1) return undefined;
-    const command = Commands.parseTelegramCommand(
-      Media.extractFirstTelegramMessageText([...messages]),
+    const command = Commands.parseBaleCommand(
+      Media.extractFirstBaleMessageText([...messages]),
     );
     return command?.name === "start" || command?.name === "help"
       ? command
@@ -4616,8 +4616,8 @@ export function createTelegramInboundRouteRuntime<
   };
   const getLiveRebindName = (messages: readonly TMessage[]) => {
     if (messages.length !== 1) return undefined;
-    const command = Commands.parseTelegramCommand(
-      Media.extractFirstTelegramMessageText([...messages]),
+    const command = Commands.parseBaleCommand(
+      Media.extractFirstBaleMessageText([...messages]),
     );
     if (
       command?.name !== "name" ||
@@ -4638,8 +4638,8 @@ export function createTelegramInboundRouteRuntime<
       !deps.captureThreadNameRecipientAuthority
     )
       return undefined;
-    const command = Commands.parseTelegramCommand(
-      Media.extractFirstTelegramMessageText([...messages]),
+    const command = Commands.parseBaleCommand(
+      Media.extractFirstBaleMessageText([...messages]),
     );
     return command?.name === "compact" || command?.name === "new"
       ? command
@@ -4647,20 +4647,20 @@ export function createTelegramInboundRouteRuntime<
   };
   const getLiveRebindContinue = (messages: readonly TMessage[]) => {
     if (messages.length !== 1) return undefined;
-    const command = Commands.parseTelegramCommand(
-      Media.extractFirstTelegramMessageText([...messages]),
+    const command = Commands.parseBaleCommand(
+      Media.extractFirstBaleMessageText([...messages]),
     );
     return command?.name === "continue" ? command : undefined;
   };
   const getLiveRebindTemplate = (messages: readonly TMessage[]) => {
     if (messages.length !== 1) return undefined;
-    const command = Commands.parseTelegramCommand(
-      Media.extractFirstTelegramMessageText([...messages]),
+    const command = Commands.parseBaleCommand(
+      Media.extractFirstBaleMessageText([...messages]),
     );
     if (
       !command ||
       reservedCommandNames().has(command.name) ||
-      Commands.findTelegramExtensionCommand(command.name)
+      Commands.findBaleExtensionCommand(command.name)
     )
       return undefined;
     try {
@@ -4677,20 +4677,20 @@ export function createTelegramInboundRouteRuntime<
   };
   const getLiveRebindExtension = (messages: readonly TMessage[]) => {
     if (messages.length !== 1) return undefined;
-    const command = Commands.parseTelegramCommand(
-      Media.extractFirstTelegramMessageText([...messages]),
+    const command = Commands.parseBaleCommand(
+      Media.extractFirstBaleMessageText([...messages]),
     );
     return command &&
-      Commands.findTelegramExtensionCommand(command.name)?.selected
+      Commands.findBaleExtensionCommand(command.name)?.selected
       ? command
       : undefined;
   };
   const prepareLiveSelection = async (
     selection: NonNullable<PendingUnboundReroute["liveRebind"]>,
-    selectedTarget: Queue.TelegramQueueTarget & { threadId: number },
+    selectedTarget: Queue.BaleQueueTarget & { threadId: number },
     ctx: TContext,
   ): Promise<
-    ReturnType<typeof createTelegramLiveRebindCoordinator> | undefined
+    ReturnType<typeof createBaleLiveRebindCoordinator> | undefined
   > => {
     const target = { ...selectedTarget };
     const ports = deps.workspaceRestoreRecipient,
@@ -4740,8 +4740,8 @@ export function createTelegramInboundRouteRuntime<
       followerJournal = liveFollower?.getJournalBindingKey;
     const commandName =
       !isLeader && selection.messages.length === 1
-        ? Commands.parseTelegramCommand(
-            Media.extractFirstTelegramMessageText([...selection.messages]),
+        ? Commands.parseBaleCommand(
+            Media.extractFirstBaleMessageText([...selection.messages]),
           )?.name
         : undefined;
     const selectedCommand = commandName
@@ -4756,7 +4756,7 @@ export function createTelegramInboundRouteRuntime<
       isLeader
         ? !deps.setCurrentLeaderIdentity ||
           callerSessionId !== binding.sessionId ||
-          WorkspaceIdentity.normalizeTelegramWorkspacePath(callerCwd) !==
+          WorkspaceIdentity.normalizeBaleWorkspacePath(callerCwd) !==
             binding.cwd
         : !follower?.registrationGeneration ||
           !follower.profileKey ||
@@ -4764,7 +4764,7 @@ export function createTelegramInboundRouteRuntime<
           follower.instanceId !== selection.record.instanceId ||
           follower.sessionId !== binding.sessionId ||
           !follower.cwd ||
-          WorkspaceIdentity.normalizeTelegramWorkspacePath(follower.cwd) !==
+          WorkspaceIdentity.normalizeBaleWorkspacePath(follower.cwd) !==
             binding.cwd ||
           follower.slot !== binding.slot ||
           !follower.busSocketPath ||
@@ -4773,14 +4773,14 @@ export function createTelegramInboundRouteRuntime<
           !liveFollower
     )
       return undefined;
-    const request: Threads.TelegramWorkspaceRestoreRequest = {
+    const request: Threads.BaleWorkspaceRestoreRequest = {
       operationId: `live-${randomBytes(16).toString("hex")}`,
       binding: structuredClone(binding),
       owner: structuredClone(selection.record),
       target: { ...target },
       source: {
         journalBindingKey,
-        updateIds: Updates.collectTelegramAdmissionSourceUpdateIds(
+        updateIds: Updates.collectBaleAdmissionSourceUpdateIds(
           selection.messages,
         ),
       },
@@ -4905,11 +4905,11 @@ export function createTelegramInboundRouteRuntime<
       }
       return (
         !!live &&
-        Bus.isSameTelegramBusFollowerRegistration(live, follower!) &&
+        Bus.isSameBaleBusFollowerRegistration(live, follower!) &&
         [
-          ...Bus.TELEGRAM_BUS_LIVE_REBIND_CAPABILITIES,
-          ...(heldSelected ? Bus.getTelegramBusHeldCommandCapabilities(heldSelected.name) : []),
-        ].every((cap) => Bus.hasTelegramBusCapability(live.protocol, cap)) &&
+          ...Bus.BALE_BUS_LIVE_REBIND_CAPABILITIES,
+          ...(heldSelected ? Bus.getBaleBusHeldCommandCapabilities(heldSelected.name) : []),
+        ].every((cap) => Bus.hasBaleBusCapability(live.protocol, cap)) &&
         !!live.target &&
         live.target.chatId === binding.target.chatId &&
         (live.target.threadId === binding.target.threadId ||
@@ -4919,7 +4919,7 @@ export function createTelegramInboundRouteRuntime<
     };
     const getRecipient = (
       snapshot?: Readonly<
-        Pick<Threads.TelegramTopicTargetFile, "threads" | "workspaceBindings">
+        Pick<Threads.BaleTopicTargetFile, "threads" | "workspaceBindings">
       >,
     ) => {
       if (!recipientLifetime() || !followerCurrent()) return undefined;
@@ -4973,7 +4973,7 @@ export function createTelegramInboundRouteRuntime<
           .listLiveRebindings()
           .find((value) => value.request.operationId === request.operationId);
         if (
-          intent && Threads.isTelegramLiveRebindInputAuthorized(intent) &&
+          intent && Threads.isBaleLiveRebindInputAuthorized(intent) &&
           isDeepStrictEqual(intent.request, request) &&
           intent.operatorUserId === operatorUserId &&
           isDeepStrictEqual(intent.executor, {
@@ -5011,13 +5011,13 @@ export function createTelegramInboundRouteRuntime<
     };
     const original = selection.messages[0],
       originalSnapshots = selection.messages.map(
-        Updates.inspectTelegramDeferredSourceSnapshot,
+        Updates.inspectBaleDeferredSourceSnapshot,
       );
     if (
       originalSnapshots.some((snapshot) => !snapshot) ||
       (heldSelected &&
         (originalSnapshots.length !== 1 ||
-          !Commands.isTelegramSelectedHeldOriginal(
+          !Commands.isBaleSelectedHeldOriginal(
             originalSnapshots[0]?.update,
             target,
             operatorUserId,
@@ -5029,7 +5029,7 @@ export function createTelegramInboundRouteRuntime<
     // Each selected owner gets a fresh fenced copy of the original, retargeted to the new Thread. These stay
     // closures because `source` is reassigned after a held selection is frozen.
     const retargetedOriginal = () => [
-      Updates.carryTelegramUpdateExecutionFence(original, {
+      Updates.carryBaleUpdateExecutionFence(original, {
         ...original,
         message_thread_id: target.threadId,
         ...(original.message_thread_id === target.threadId
@@ -5046,7 +5046,7 @@ export function createTelegramInboundRouteRuntime<
       },
       assertRecipientCurrent,
       reportCompleted: () =>
-        Updates.reportTelegramUpdateCompleted(original, source),
+        Updates.reportBaleUpdateCompleted(original, source),
     });
     const menu =
       isLeader &&
@@ -5101,7 +5101,7 @@ export function createTelegramInboundRouteRuntime<
         selectedPorts("help/start"),
       );
     const sourceFence =
-      original && Updates.getTelegramUpdateExecutionFence(original);
+      original && Updates.getBaleUpdateExecutionFence(original);
     let releaseSelectedSource: (() => void) | undefined;
     const finishSelectedSource = () => {
       const release = releaseSelectedSource;
@@ -5109,15 +5109,15 @@ export function createTelegramInboundRouteRuntime<
       release?.();
     };
     const originalUnchanged = () =>
-      Updates.getTelegramUpdateExecutionFence(original) === sourceFence &&
+      Updates.getBaleUpdateExecutionFence(original) === sourceFence &&
       sourceFence?.isCurrent() === true &&
       isDeepStrictEqual(
-        Updates.inspectTelegramDeferredSource(original),
+        Updates.inspectBaleDeferredSource(original),
         source,
       );
     const reportSelectedCompleted = () => {
       try {
-        return Updates.reportTelegramUpdateCompleted(original, source);
+        return Updates.reportBaleUpdateCompleted(original, source);
       } finally {
         finishSelectedSource();
       }
@@ -5147,7 +5147,7 @@ export function createTelegramInboundRouteRuntime<
                 "Live-rebind selected name source authority changed (lifetime or syntax).",
               );
             if (
-              Updates.getTelegramUpdateExecutionFence(original) !==
+              Updates.getBaleUpdateExecutionFence(original) !==
                 sourceFence ||
               sourceFence?.isCurrent() !== true
             )
@@ -5156,7 +5156,7 @@ export function createTelegramInboundRouteRuntime<
               );
             if (
               !isDeepStrictEqual(
-                Updates.inspectTelegramDeferredSource(original),
+                Updates.inspectBaleDeferredSource(original),
                 source,
               )
             )
@@ -5265,7 +5265,7 @@ export function createTelegramInboundRouteRuntime<
         extensionRecipient();
         assertRecipientCurrent();
       };
-      const prepared = await Commands.prepareTelegramSelectedExtensionCommand(
+      const prepared = await Commands.prepareBaleSelectedExtensionCommand(
         selection.extensionCommand,
         {
           assertSourceCurrent: assertExtensionSource,
@@ -5288,11 +5288,11 @@ export function createTelegramInboundRouteRuntime<
         );
       } else {
         const receiptOwner =
-            Updates.prepareTelegramDeferredQueueAdmission(original),
+            Updates.prepareBaleDeferredQueueAdmission(original),
           preparedSource = { ...source };
         if (!receiptOwner?.isCurrent()) return undefined;
         const plan = prepared.plan;
-        let admittedTurn: Queue.PendingTelegramTurn | undefined;
+        let admittedTurn: Queue.PendingBaleTurn | undefined;
         generated = {
           async continue(messages, isCurrent) {
             await continueLiveRebindInput(messages, ctx, target, isCurrent, {
@@ -5311,7 +5311,7 @@ export function createTelegramInboundRouteRuntime<
               prepared.assertRegistrationCurrent();
               assertRecipientCurrent();
               const receipt = admittedTurn.admissionReceipts?.[0];
-              const matches = deps.telegramQueueStore
+              const matches = deps.baleQueueStore
                 .getQueuedItems()
                 .filter(
                   (item) =>
@@ -5389,7 +5389,7 @@ export function createTelegramInboundRouteRuntime<
     const preDispatchCleanup =
       deps.runWorkspaceOperation !== undefined && deps.canUsePreDispatchRebind?.(recipient) === true;
     const createCoordinator = () =>
-      createTelegramLiveRebindCoordinator({
+      createBaleLiveRebindCoordinator({
         request,
         messages: selection.messages,
         restoreStore: store,
@@ -5404,9 +5404,9 @@ export function createTelegramInboundRouteRuntime<
               const callApi = deps.callApi!;
               const slot = binding.slot ?? "";
               const resolveTitle = () => deps.getDisplayTitle?.(expected.target) ??
-                ThreadNaming.getTelegramTopicTitleForThreadName(getRestoredThreadName(request.owner, slot), slot);
+                ThreadNaming.getBaleTopicTitleForThreadName(getRestoredThreadName(request.owner, slot), slot);
               const title = resolveTitle();
-              const bindingCurrent = (frame: Threads.TelegramWorkspaceThreadBinding) =>
+              const bindingCurrent = (frame: Threads.BaleWorkspaceThreadBinding) =>
                 isCurrent() && deps.callApi === callApi &&
                 isDeepStrictEqual(threads.getWorkspaceBindingByTarget(frame.target, frame.sessionId), frame);
               const assertTitle = () => {
@@ -5435,7 +5435,7 @@ export function createTelegramInboundRouteRuntime<
         },
         getRecipient,
         ...(preDispatchCleanup ? {
-          async cleanupBeforeRelease(intent: Threads.TelegramWorkspaceLiveRebindIntent, isCurrent: () => boolean) {
+          async cleanupBeforeRelease(intent: Threads.BaleWorkspaceLiveRebindIntent, isCurrent: () => boolean) {
             const delay = deps.liveRebindCleanupSchedule?.delaysMs[0] ?? 1_000;
             await new Promise<void>(resolve => { const timer = setTimeout(resolve, delay); timer.unref?.(); });
             if (!isCurrent()) return false;
@@ -5595,7 +5595,7 @@ export function createTelegramInboundRouteRuntime<
                             );
                         }
                         releaseSelectedSource =
-                          Updates.acquireTelegramUpdateRouting(original);
+                          Updates.acquireBaleUpdateRouting(original);
                       }
                       void completeCommand()
                         .catch((error) => {
@@ -5672,7 +5672,7 @@ export function createTelegramInboundRouteRuntime<
         recordRuntimeEvent: deps.recordRuntimeEvent,
       });
     let coordinator:
-      ReturnType<typeof createTelegramLiveRebindCoordinator> | undefined;
+      ReturnType<typeof createBaleLiveRebindCoordinator> | undefined;
     let selectedQueue:
         | ReturnType<typeof commandHandler.prepareSelectedQueueCommand>
         | undefined,
@@ -5686,7 +5686,7 @@ export function createTelegramInboundRouteRuntime<
           if (!current() || !getRecipient()) return "protected";
           // Selection may change only worker-owned clock metadata, never the prepared original payload.
           const selected = selection.messages.map(
-            Updates.inspectTelegramDeferredSourceSnapshot,
+            Updates.inspectBaleDeferredSourceSnapshot,
           );
           if (
             !current() ||
@@ -5731,30 +5731,30 @@ export function createTelegramInboundRouteRuntime<
     };
   };
   function inspectLiveRebindRecipient(
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
     mode: "work",
-  ): Promise<Bus.TelegramBusLiveRebindWorkObservation | undefined>;
+  ): Promise<Bus.BaleBusLiveRebindWorkObservation | undefined>;
   function inspectLiveRebindRecipient(
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
     mode: "cleanup" | "follower-cleanup",
-  ): Promise<ThreadReconciler.TelegramLiveRebindCleanupPreparation | undefined>;
+  ): Promise<ThreadReconciler.BaleLiveRebindCleanupPreparation | undefined>;
   function inspectLiveRebindRecipient(
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
     mode: "issue" | "follower-issue",
     admittedOrigin?: () => boolean,
-  ): Promise<TelegramLiveRebindCleanupIssue | undefined>;
+  ): Promise<BaleLiveRebindCleanupIssue | undefined>;
   async function inspectLiveRebindRecipient(
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
     mode: "work" | "cleanup" | "follower-cleanup" | "issue" | "follower-issue",
     admittedOrigin?: () => boolean,
   ): Promise<
-    | Bus.TelegramBusLiveRebindWorkObservation
-    | ThreadReconciler.TelegramLiveRebindCleanupPreparation
-    | TelegramLiveRebindCleanupIssue
+    | Bus.BaleBusLiveRebindWorkObservation
+    | ThreadReconciler.BaleLiveRebindCleanupPreparation
+    | BaleLiveRebindCleanupIssue
     | undefined
   > {
     const ports = deps.workspaceRestoreRecipient,
@@ -5851,7 +5851,7 @@ export function createTelegramInboundRouteRuntime<
             follower.sessionId !== recipient.sessionId ||
             follower.registrationGeneration !== recipient.generation ||
             !follower.cwd ||
-            WorkspaceIdentity.normalizeTelegramWorkspacePath(follower.cwd) !==
+            WorkspaceIdentity.normalizeBaleWorkspacePath(follower.cwd) !==
               request.binding.cwd ||
             follower.slot !== request.binding.slot ||
             !follower.busSocketPath ||
@@ -5861,7 +5861,7 @@ export function createTelegramInboundRouteRuntime<
             recipient.sessionId !== sessionId ||
             recipient.generation !== String(generation) ||
             request.owner.owner?.kind !== "leader" ||
-            WorkspaceIdentity.normalizeTelegramWorkspacePath(cwd) !==
+            WorkspaceIdentity.normalizeBaleWorkspacePath(cwd) !==
               request.binding.cwd)
       )
         return undefined;
@@ -5874,9 +5874,9 @@ export function createTelegramInboundRouteRuntime<
           peer?.run === peerRun &&
           peer?.getJournalBindingKey === peerJournal &&
           !!live &&
-          Bus.isSameTelegramBusFollowerRegistration(live, follower!) &&
-          Bus.TELEGRAM_BUS_LIVE_REBIND_CAPABILITIES.every((cap) =>
-            Bus.hasTelegramBusCapability(live.protocol, cap),
+          Bus.isSameBaleBusFollowerRegistration(live, follower!) &&
+          Bus.BALE_BUS_LIVE_REBIND_CAPABILITIES.every((cap) =>
+            Bus.hasBaleBusCapability(live.protocol, cap),
           ) &&
           !!live.target &&
           live.target.chatId === request.target.chatId &&
@@ -5909,7 +5909,7 @@ export function createTelegramInboundRouteRuntime<
         followerCurrent();
       // After the issue marker, the exact issued row (not the released original) is the canonical evidence.
       const assertCanonical = (
-        row: Threads.TelegramWorkspaceLiveRebindIntent = expected,
+        row: Threads.BaleWorkspaceLiveRebindIntent = expected,
       ) => {
         if (!current())
           throw new Error("Live-rebind work recipient authority changed.");
@@ -5942,7 +5942,7 @@ export function createTelegramInboundRouteRuntime<
           if (protectedTarget !== false) return undefined;
         }
         const target = { ...request.binding.target };
-        let value: Bus.TelegramBusLiveRebindWorkState | undefined;
+        let value: Bus.BaleBusLiveRebindWorkState | undefined;
         if (followerMode) {
           const observation = await peerRun!.call(peer, {
             operationId: request.operationId,
@@ -6033,7 +6033,7 @@ export function createTelegramInboundRouteRuntime<
       if (!current()) return undefined;
       if (issueMode) {
         // One admission spans the fresh sample, durable issue marker, single deletion and terminal record.
-        const execute = async (): Promise<TelegramLiveRebindCleanupIssue | undefined> => {
+        const execute = async (): Promise<BaleLiveRebindCleanupIssue | undefined> => {
             const prepared = await sample();
             if (
               !prepared ||
@@ -6117,23 +6117,23 @@ export function createTelegramInboundRouteRuntime<
     }
   }
   const observeLiveRebindLeaderWork = (
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
   ) => inspectLiveRebindRecipient(intent, ctx, "work");
   const prepareLiveRebindLeaderCleanup = (
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
   ) => inspectLiveRebindRecipient(intent, ctx, "cleanup");
   const prepareLiveRebindFollowerCleanup = (
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
   ) => inspectLiveRebindRecipient(intent, ctx, "follower-cleanup");
   const issueLiveRebindLeaderCleanup = (
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
   ) => inspectLiveRebindRecipient(intent, ctx, "issue");
   const issueLiveRebindFollowerCleanup = (
-    intent: Threads.TelegramWorkspaceLiveRebindIntent,
+    intent: Threads.BaleWorkspaceLiveRebindIntent,
     ctx: TContext,
   ) => inspectLiveRebindRecipient(intent, ctx, "follower-issue");
   // One pacing chain per operation: a waiting timer or a running attempt; repeated choices never start another.
@@ -6327,7 +6327,7 @@ export function createTelegramInboundRouteRuntime<
       for (const entry of cap.store.listTemporaryThreads()) {
         if (!cap.isCurrent()) return;
         if (entry.phase === "created" && entry.target && !entry.cleanupIssued &&
-          Threads.isTelegramTemporaryThreadFullyResolved(entry))
+          Threads.isBaleTemporaryThreadFullyResolved(entry))
           scheduleTemporaryThreadCleanup(entry.target, ctx);
       }
     } catch (error) {
@@ -6337,8 +6337,8 @@ export function createTelegramInboundRouteRuntime<
   const restoreWorkspace = deps.workspaceRestoreRecipient
     ? async (input: {
         operationId: string;
-        record: Threads.TelegramTopicTargetRecord;
-        target: Threads.TelegramTopicTargetRecord["target"];
+        record: Threads.BaleTopicTargetRecord;
+        target: Threads.BaleTopicTargetRecord["target"];
         messages: readonly TMessage[];
         ctx: TContext;
         isCurrent: () => boolean;
@@ -6347,11 +6347,11 @@ export function createTelegramInboundRouteRuntime<
           isRecipientCurrent: () => boolean,
           recordForwardAcceptance: (
             message: TMessage,
-            delivery: Bus.TelegramBusFollowerDeliveryIdentity,
-          ) => Updates.TelegramDeferredSourceEvidence,
+            delivery: Bus.BaleBusFollowerDeliveryIdentity,
+          ) => Updates.BaleDeferredSourceEvidence,
           recordLocalAcceptance: (
             message: TMessage,
-          ) => Updates.TelegramDeferredSourceEvidence,
+          ) => Updates.BaleDeferredSourceEvidence,
         ) => Promise<boolean>;
       }) => {
         const ports = deps.workspaceRestoreRecipient!;
@@ -6371,7 +6371,7 @@ export function createTelegramInboundRouteRuntime<
           scope = deps.getAdmissionScope?.();
         const journalBindingKey = deps.getAdmissionJournalBinding?.(),
           generation = deps.getSessionGeneration();
-        const sourceIds = Updates.collectTelegramAdmissionSourceUpdateIds(
+        const sourceIds = Updates.collectBaleAdmissionSourceUpdateIds(
           input.messages,
         );
         if (
@@ -6410,7 +6410,7 @@ export function createTelegramInboundRouteRuntime<
           (bindings.length === 1 ? bindings[0] : undefined);
         if (!binding || !binding.sessionId || !binding.slot) return "protected";
         const { sessionId, slot } = binding;
-        const request: Threads.TelegramWorkspaceRestoreRequest = {
+        const request: Threads.BaleWorkspaceRestoreRequest = {
           operationId: input.operationId,
           binding,
           owner: structuredClone(input.record),
@@ -6425,11 +6425,11 @@ export function createTelegramInboundRouteRuntime<
         const getRecipient = (
           snapshot?: Readonly<
             Pick<
-              Threads.TelegramTopicTargetFile,
+              Threads.BaleTopicTargetFile,
               "threads" | "workspaceBindings"
             >
           >,
-        ): Threads.TelegramWorkspaceRestoreRecipient | undefined => {
+        ): Threads.BaleWorkspaceRestoreRecipient | undefined => {
           if (!current()) return undefined;
           const liveBindings = (
             snapshot
@@ -6468,7 +6468,7 @@ export function createTelegramInboundRouteRuntime<
             if (
               ports.getSessionId(input.ctx) !== sessionId ||
               !cwd ||
-              WorkspaceIdentity.normalizeTelegramWorkspacePath(cwd) !==
+              WorkspaceIdentity.normalizeBaleWorkspacePath(cwd) !==
                 binding.cwd ||
               !deps.setCurrentLeaderIdentity
             )
@@ -6487,12 +6487,12 @@ export function createTelegramInboundRouteRuntime<
             !follower?.registrationGeneration ||
             !follower.cwd ||
             follower.sessionId !== sessionId ||
-            WorkspaceIdentity.normalizeTelegramWorkspacePath(follower.cwd) !==
+            WorkspaceIdentity.normalizeBaleWorkspacePath(follower.cwd) !==
               binding.cwd ||
             follower.slot !== slot ||
-            !Bus.hasTelegramBusCapability(
+            !Bus.hasBaleBusCapability(
               follower.protocol,
-              Bus.TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE,
+              Bus.BALE_BUS_CAPABILITY_WORKSPACE_RESTORE,
             )
           )
             return undefined;
@@ -6516,7 +6516,7 @@ export function createTelegramInboundRouteRuntime<
           operatorUserId,
           isCurrent: current,
         };
-        const ready = await advanceTelegramWorkspaceRestore({
+        const ready = await advanceBaleWorkspaceRestore({
           request,
           authority,
           restoreStore: store,
@@ -6584,7 +6584,7 @@ export function createTelegramInboundRouteRuntime<
             let observation: Awaited<
               ReturnType<
                 Parameters<
-                  typeof advanceTelegramWorkspaceRestore
+                  typeof advanceBaleWorkspaceRestore
                 >[0]["runRecipient"]
               >
             >;
@@ -6640,7 +6640,7 @@ export function createTelegramInboundRouteRuntime<
             return observation;
           },
         }).catch((error) => {
-          deps.recordRuntimeEvent?.("telegram", error, {
+          deps.recordRuntimeEvent?.("bale", error, {
             phase: "workspace-restore-recipient",
           });
           return undefined;
@@ -6672,13 +6672,13 @@ export function createTelegramInboundRouteRuntime<
               message_thread_id: request.target.threadId,
               name:
                 deps.getDisplayTitle?.(request.target) ??
-                ThreadNaming.getTelegramTopicTitleForThreadName(
+                ThreadNaming.getBaleTopicTitleForThreadName(
                   getRestoredThreadName(request.owner, slot),
                   slot,
                 ),
             });
           } catch (error) {
-            deps.recordRuntimeEvent?.("telegram", error, {
+            deps.recordRuntimeEvent?.("bale", error, {
               phase: "workspace-restore-title",
             });
           }
@@ -6693,14 +6693,14 @@ export function createTelegramInboundRouteRuntime<
           return "protected";
         const recordAcceptance = (
           message: TMessage,
-          delivery?: Bus.TelegramBusFollowerDeliveryIdentity,
-        ): Updates.TelegramDeferredSourceEvidence => {
+          delivery?: Bus.BaleBusFollowerDeliveryIdentity,
+        ): Updates.BaleDeferredSourceEvidence => {
           if (
             !recipientCurrent() ||
             recipient.kind !== (delivery ? "follower" : "leader")
           )
             throw new Error("Workspace Restore acceptance authority changed.");
-          const source = Updates.inspectTelegramDeferredSource(message);
+          const source = Updates.inspectBaleDeferredSource(message);
           const follower = ports.followerRegistry.get(recipient.instanceId);
           const ownership = deps.getTargetOwnership?.(request.target);
           if (
@@ -6716,7 +6716,7 @@ export function createTelegramInboundRouteRuntime<
                 delivery.recipientBindingKey !==
                   ownership.recipientBindingKey ||
                 delivery.deliveryId !==
-                  Bus.createTelegramBusFollowerDeliveryIdentity({
+                  Bus.createBaleBusFollowerDeliveryIdentity({
                     kind: "leader.forwardMessage",
                     recipientBindingKey: ownership.recipientBindingKey,
                     sourceUpdateId: source.updateId,
@@ -6726,7 +6726,7 @@ export function createTelegramInboundRouteRuntime<
             throw new Error(
               "Workspace Restore acceptance source or delivery changed.",
             );
-          const evidence: Threads.TelegramWorkspaceRestoreSourceAcceptance = {
+          const evidence: Threads.BaleWorkspaceRestoreSourceAcceptance = {
             ...source,
             recipient,
             ...(delivery
@@ -6747,7 +6747,7 @@ export function createTelegramInboundRouteRuntime<
             !recipientCurrent()
           )
             throw new Error("Workspace Restore dispatch proof is unavailable.");
-          let accepted: Threads.TelegramWorkspaceRestoreIntent | undefined;
+          let accepted: Threads.BaleWorkspaceRestoreIntent | undefined;
           let failure: { error: unknown } | undefined;
           const acceptanceAuthority = {
             ...authority,
@@ -6799,7 +6799,7 @@ export function createTelegramInboundRouteRuntime<
           return {
             ...source,
             completionSha256:
-              Threads.getTelegramWorkspaceRestoreSourceCompletionSha256(
+              Threads.getBaleWorkspaceRestoreSourceCompletionSha256(
                 accepted,
                 evidence,
               ),
@@ -6813,7 +6813,7 @@ export function createTelegramInboundRouteRuntime<
             (message) => recordAcceptance(message),
           );
         } catch (error) {
-          deps.recordRuntimeEvent?.("telegram", error, {
+          deps.recordRuntimeEvent?.("bale", error, {
             phase: "workspace-restore-dispatch",
           });
         }
@@ -6854,10 +6854,10 @@ export function createTelegramInboundRouteRuntime<
   ): Promise<void> => {
     if (pending.dispatchKind === "command" && dispatchReroutedCommandMessages) {
       await dispatchReroutedCommandMessages(messages, ctx);
-      // Every command chooser deferred its exact original, whether the tab came from Telegram or the bridge.
+      // Every command chooser deferred its exact original, whether the tab came from Bale or the bridge.
       // A queued command retains its separately reported receipt; this cannot settle accepted queue custody.
       for (const message of messages)
-        Updates.reportTelegramUpdateCompleted(message);
+        Updates.reportBaleUpdateCompleted(message);
       return;
     }
     await promptEnqueue(messages, ctx);
@@ -6865,11 +6865,11 @@ export function createTelegramInboundRouteRuntime<
   /** Local menu acceptance owns a one-shot effect; source removal and cleanup precede its release, never its replay. */
   const stageTemporaryRerouteMenu = async (
     pending: PendingUnboundReroute,
-    command: Commands.ParsedTelegramCommand,
+    command: Commands.ParsedBaleCommand,
     messages: TMessage[],
     ctx: TContext,
     assertRecipientCurrent: () => void,
-    completion: NonNullable<ReturnType<typeof Updates.prepareTelegramDeferredSourceCompletion>>,
+    completion: NonNullable<ReturnType<typeof Updates.prepareBaleDeferredSourceCompletion>>,
   ): Promise<(() => Promise<void>) | undefined> => {
     const original = pending.messages[0];
     const cap = captureTemporaryThreadAuthority(ctx);
@@ -6878,7 +6878,7 @@ export function createTelegramInboundRouteRuntime<
     let accept!: (value: boolean) => void, resume!: (value: boolean) => void;
     const accepted = new Promise<boolean>(resolve => { accept = resolve; });
     const released = new Promise<boolean>(resolve => { resume = resolve; });
-    const admission: Commands.TelegramSelectedCommandAdmission = {
+    const admission: Commands.BaleSelectedCommandAdmission = {
       assertSourceCurrent() {
         if (!completion.isCurrent()) throw new Error("Rerouted menu source authority changed.");
       },
@@ -6910,7 +6910,7 @@ export function createTelegramInboundRouteRuntime<
       try {
         const confirmed = await new Promise<boolean>(resolve => {
           let done = false, unsubscribe: (() => void) | undefined;
-          const signal = Updates.getTelegramUpdateExecutionFence(original)?.signal;
+          const signal = Updates.getBaleUpdateExecutionFence(original)?.signal;
           const finish = (result: boolean) => {
             if (done) return;
             done = true;
@@ -6926,7 +6926,7 @@ export function createTelegramInboundRouteRuntime<
           };
           const timer = setTimeout(abort, deps.liveRebindCommandCompletionTimeoutMs ?? 8_000);
           timer.unref?.();
-          unsubscribe = Updates.subscribeTelegramDeferredSourceCompletion(original, observe);
+          unsubscribe = Updates.subscribeBaleDeferredSourceCompletion(original, observe);
           signal?.addEventListener("abort", abort, { once: true });
           if (signal?.aborted) abort(); else observe();
         });
@@ -6954,7 +6954,7 @@ export function createTelegramInboundRouteRuntime<
     pending: PendingUnboundReroute,
     query: TCallbackQuery,
     successMessage: string,
-    assertExecutionCurrent = Updates.createTelegramUpdateExecutionFenceGuard(
+    assertExecutionCurrent = Updates.createBaleUpdateExecutionFenceGuard(
       query,
     ),
     retainRecord = false,
@@ -7001,7 +7001,7 @@ export function createTelegramInboundRouteRuntime<
         store
           ?.listTemporaryThreads()
           .find((value) => value.token === entry.token);
-      const updateIds = Updates.collectTelegramAdmissionSourceUpdateIds(
+      const updateIds = Updates.collectBaleAdmissionSourceUpdateIds(
         pending.messages,
       );
       return !!stored?.forwardedInputs?.some((input) =>
@@ -7023,7 +7023,7 @@ export function createTelegramInboundRouteRuntime<
     if (!entry || !cap) return false;
     const group = {
       journalBindingKey: entry.source.journalBindingKey,
-      updateIds: Updates.collectTelegramAdmissionSourceUpdateIds(
+      updateIds: Updates.collectBaleAdmissionSourceUpdateIds(
         pending.messages,
       ),
     };
@@ -7053,14 +7053,14 @@ export function createTelegramInboundRouteRuntime<
   /** Publish display copies under the native one-shot grant; positive output is not input/source settlement. */
   const publishPendingRerouteCopies = async (
     pending: PendingUnboundReroute,
-    record: Threads.TelegramTopicTargetRecord,
+    record: Threads.BaleTopicTargetRecord,
     ctx: TContext,
     assertExecutionCurrent: () => void,
     foreign: boolean,
   ): Promise<(() => void) | undefined> => {
     const source = resolvePendingRerouteForwardSource(pending);
     const target = { ...record.target };
-    const recordIdentity = (value: Threads.TelegramTopicTargetRecord | undefined) => value && ({
+    const recordIdentity = (value: Threads.BaleTopicTargetRecord | undefined) => value && ({
       target: value.target, profileKey: value.profileKey, owner: value.owner,
       instanceId: value.instanceId, slot: value.slot, createdAtMs: value.createdAtMs,
     });
@@ -7082,11 +7082,11 @@ export function createTelegramInboundRouteRuntime<
     const cap = captureTemporaryThreadAuthority(ctx, () => {
       try {
         assertExecutionCurrent();
-        const current = getTelegramRoutableThreadRecords(deps.threadStore!.list(), deps.getLiveThreadTargets?.())
+        const current = getBaleRoutableThreadRecords(deps.threadStore!.list(), deps.getLiveThreadTargets?.())
           .find((value) => isDeepStrictEqual(value.target, target));
         return isDeepStrictEqual(recordIdentity(current), expectedRecord) &&
           isDeepStrictEqual(bindingIdentity(), expectedBindings) &&
-          (!foreign || Bus.isTelegramBusForwardOwnershipCurrent(expectedOwnership!, deps.getTargetOwnership?.(target)));
+          (!foreign || Bus.isBaleBusForwardOwnershipCurrent(expectedOwnership!, deps.getTargetOwnership?.(target)));
       } catch { return false; }
     });
     if (!cap?.isCurrent()) return;
@@ -7149,8 +7149,8 @@ export function createTelegramInboundRouteRuntime<
     assertExecutionCurrent?: () => void,
     recordForwardAcceptance?: (
       message: TMessage,
-      delivery: Bus.TelegramBusFollowerDeliveryIdentity,
-    ) => Updates.TelegramDeferredSourceEvidence,
+      delivery: Bus.BaleBusFollowerDeliveryIdentity,
+    ) => Updates.BaleDeferredSourceEvidence,
   ): Promise<boolean> => {
     assertExecutionCurrent?.();
     const forwardMessage = deps.foreignOwnedUpdateForwarder?.forwardMessage;
@@ -7168,7 +7168,7 @@ export function createTelegramInboundRouteRuntime<
     const ownership = structuredClone(liveOwnership);
     const copies = pending.rerouteCopies;
     const published = !!copies && isDeepStrictEqual(copies.target, target);
-    const messages = cloneTelegramMessagesForThread(
+    const messages = cloneBaleMessagesForThread(
       pending.messages,
       threadId,
       published ? copies.bySourceUpdateId : undefined,
@@ -7195,7 +7195,7 @@ export function createTelegramInboundRouteRuntime<
           ctx,
           assertAuthority() {
             assertExecutionCurrent?.();
-            Updates.assertTelegramUpdateExecutionCurrent(message);
+            Updates.assertBaleUpdateExecutionCurrent(message);
           },
         }),
       ),
@@ -7215,7 +7215,7 @@ export function createTelegramInboundRouteRuntime<
           outcome.value.delivery,
         );
         assertExecutionCurrent?.();
-        Updates.reportTelegramUpdateCompleted(
+        Updates.reportBaleUpdateCompleted(
           pending.messages[index],
           expectedSource,
         );
@@ -7293,9 +7293,9 @@ export function createTelegramInboundRouteRuntime<
           entry.source.journalBindingKey !== cap.journalBindingKey
         )
           return;
-        const owner = `telegram-owner:${cap.operatorUserId}`;
+        const owner = `bale-owner:${cap.operatorUserId}`;
         if (reconcileExpiry && deps.inspectRoutingInputGroupExpiry) {
-          for (const group of Threads.getTelegramTemporaryThreadInputs(entry)) {
+          for (const group of Threads.getBaleTemporaryThreadInputs(entry)) {
             if (
               [
                 ...(entry.cancelledInputs ?? []),
@@ -7315,7 +7315,7 @@ export function createTelegramInboundRouteRuntime<
               continue;
             entry = cap.adopt(entry);
             if (!entry || !cap.isCurrent()) return;
-            let recorded: Threads.TelegramTemporaryThreadEntry | undefined,
+            let recorded: Threads.BaleTemporaryThreadEntry | undefined,
               failure: unknown;
             try {
               recorded = store.recordTemporaryThreadInputExpiry(
@@ -7347,7 +7347,7 @@ export function createTelegramInboundRouteRuntime<
           }
         }
         if (
-          !Threads.isTelegramTemporaryThreadFullyResolved(entry) ||
+          !Threads.isBaleTemporaryThreadFullyResolved(entry) ||
           hasPendingRerouteForTarget(target)
         )
           return;
@@ -7373,7 +7373,7 @@ export function createTelegramInboundRouteRuntime<
         if (!entry || !cap.isCurrent()) return;
         if (isRerouteTargetProtected(target, undefined, entry) && deps.recoverTemporaryThreadDeadQueueOwners &&
             store.inspectTemporaryThreadTarget(entry, cap.authority)?.kind === "temporary") {
-          const inputs = Threads.getTelegramTemporaryThreadInputs(entry);
+          const inputs = Threads.getBaleTemporaryThreadInputs(entry);
           const removed = deps.recoverTemporaryThreadDeadQueueOwners(
             target, [cap.journalBindingKey, ...inputs.map(input => input.journalBindingKey)],
             inputs, cap.isCurrent,
@@ -7437,7 +7437,7 @@ export function createTelegramInboundRouteRuntime<
           // A follower ACK can precede recipient receipt disposal. Reobserve a protected, unissued tab;
           // elapsed time never grants deletion, and an issued/unknown delete can never enter this path.
           if (retained?.phase === "created" && !retained.cleanupIssued &&
-            Threads.isTelegramTemporaryThreadFullyResolved(retained) &&
+            Threads.isBaleTemporaryThreadFullyResolved(retained) &&
             cap.store.inspectTemporaryThreadTarget(retained, cap.authority)?.kind === "temporary" && cap.isCurrent())
             queueTemporaryThreadCleanup(token, cap, 1000, reconcileExpiry, true);
         })
@@ -7465,7 +7465,7 @@ export function createTelegramInboundRouteRuntime<
   };
   /** Starts the quiet period for resolved groups or body-free expiry reconciliation; fresh input/authority revokes it. */
   const scheduleTemporaryThreadCleanup = (
-    target: Queue.TelegramQueueTarget,
+    target: Queue.BaleQueueTarget,
     ctx: TContext,
     reconcileExpiry = false,
   ): void => {
@@ -7477,7 +7477,7 @@ export function createTelegramInboundRouteRuntime<
       hasPendingRerouteForTarget(target)
     )
       return;
-    let entry: Threads.TelegramTemporaryThreadEntry | undefined;
+    let entry: Threads.BaleTemporaryThreadEntry | undefined;
     try {
       entry = cap.store
         .listTemporaryThreads()
@@ -7501,10 +7501,10 @@ export function createTelegramInboundRouteRuntime<
       return;
     if (
       !reconcileExpiry &&
-      !Threads.isTelegramTemporaryThreadFullyResolved(entry)
+      !Threads.isBaleTemporaryThreadFullyResolved(entry)
     ) {
       try {
-        reconcileExpiry = Threads.getTelegramTemporaryThreadInputs(entry).some(
+        reconcileExpiry = Threads.getBaleTemporaryThreadInputs(entry).some(
           (group) => !!deps.inspectRoutingInputGroupExpiry?.(group),
         );
       } catch (error) {
@@ -7516,7 +7516,7 @@ export function createTelegramInboundRouteRuntime<
     }
     if (
       !reconcileExpiry &&
-      !Threads.isTelegramTemporaryThreadFullyResolved(entry)
+      !Threads.isBaleTemporaryThreadFullyResolved(entry)
     )
       return;
     // No grace by default: the attempt still queues behind the Cancel's own Workspace operation, so the notice lands first.
@@ -7556,7 +7556,7 @@ export function createTelegramInboundRouteRuntime<
       current = cap.isCurrent;
     const input = {
       journalBindingKey,
-      updateIds: Updates.collectTelegramAdmissionSourceUpdateIds(
+      updateIds: Updates.collectBaleAdmissionSourceUpdateIds(
         pending.messages,
       ),
     };
@@ -7587,7 +7587,7 @@ export function createTelegramInboundRouteRuntime<
         return (
           evidence?.journalBindingKey === journalBindingKey &&
           evidence.updateId === updateId &&
-          evidence.operatorAuthorityId === `telegram-owner:${operatorUserId}`
+          evidence.operatorAuthorityId === `bale-owner:${operatorUserId}`
         );
       }) &&
       current()
@@ -7602,7 +7602,7 @@ export function createTelegramInboundRouteRuntime<
       !!results &&
       pending.messages.length > 0 &&
       pending.messages.every((source) => {
-        const [updateId] = Updates.collectTelegramAdmissionSourceUpdateIds([
+        const [updateId] = Updates.collectBaleAdmissionSourceUpdateIds([
           source,
         ]);
         return updateId !== undefined && results.has(updateId);
@@ -7620,13 +7620,13 @@ export function createTelegramInboundRouteRuntime<
   ): boolean => {
     const results = (pending.abandonment!.sourceResults ??= new Map());
     for (const source of pending.messages) {
-      const [updateId] = Updates.collectTelegramAdmissionSourceUpdateIds([
+      const [updateId] = Updates.collectBaleAdmissionSourceUpdateIds([
         source,
       ]);
       if (updateId === undefined) return false;
       if (results.has(updateId)) continue;
-      const result = Updates.abandonTelegramDeferredUpdate(source, {
-        operatorAuthorityId: `telegram-owner:${operatorUserId}`,
+      const result = Updates.abandonBaleDeferredUpdate(source, {
+        operatorAuthorityId: `bale-owner:${operatorUserId}`,
         isCurrent,
       });
       if (!result) return false;
@@ -7639,7 +7639,7 @@ export function createTelegramInboundRouteRuntime<
     pending: PendingUnboundReroute,
     updateId: number,
     result: NonNullable<
-      ReturnType<typeof Updates.abandonTelegramDeferredUpdate>
+      ReturnType<typeof Updates.abandonBaleDeferredUpdate>
     >,
   ): boolean => {
     const cancellation = pending.abandonment!;
@@ -7734,7 +7734,7 @@ export function createTelegramInboundRouteRuntime<
         (key) => key !== "update_id" && key !== "message",
       ) ||
       !isReviewText(message, anyKind) ||
-      Reflect.has(message!, "pi_telegram_source_update_id")
+      Reflect.has(message!, "pi_bale_source_update_id")
     )
       return undefined;
     return message;
@@ -7743,7 +7743,7 @@ export function createTelegramInboundRouteRuntime<
     if (!deps.threadStore)
       throw new Error("Historical routing requires a current Thread snapshot.");
     if (deps.threadStore.getBotState().threadMode === "disabled") return true;
-    return !getTelegramRoutableThreadRecords(
+    return !getBaleRoutableThreadRecords(
       deps.threadStore.list(),
       deps.getLiveThreadTargets?.(),
     ).some(
@@ -7754,7 +7754,7 @@ export function createTelegramInboundRouteRuntime<
   };
   /** New-world restart: forget previous-instance Restore/temporary state, then one silent delete per positively disposable tab. */
   const forgetPreviousWorld = async (
-    input: Updates.TelegramHeldSourcePreparation<TContext>,
+    input: Updates.BaleHeldSourcePreparation<TContext>,
     captureTransport?: (ctx: TContext) => (() => boolean) | undefined,
   ): Promise<{ forgotten: number; deleted: number }> => {
     const result = { forgotten: 0, deleted: 0 };
@@ -7803,7 +7803,7 @@ export function createTelegramInboundRouteRuntime<
                 entry.phase === "created" &&
                 cap.store.inspectTemporaryThreadTarget(entry, cap.authority)
                   ?.kind === "temporary" &&
-                Threads.getTelegramTemporaryThreadInputs(entry).some(
+                Threads.getBaleTemporaryThreadInputs(entry).some(
                   (source) =>
                     source.journalBindingKey === journalBindingKey &&
                     source.updateIds.some((id) =>
@@ -7865,7 +7865,7 @@ export function createTelegramInboundRouteRuntime<
                 ...new Set([
                   cap.journalBindingKey,
                   entry.source.journalBindingKey,
-                  ...Threads.getTelegramTemporaryThreadInputs(entry).map(
+                  ...Threads.getBaleTemporaryThreadInputs(entry).map(
                     (input) => input.journalBindingKey,
                   ),
                 ]),
@@ -7874,7 +7874,7 @@ export function createTelegramInboundRouteRuntime<
                 deps.inspectTemporaryThreadSources?.(
                   target,
                   required,
-                  Threads.getTelegramTemporaryThreadInputs(entry),
+                  Threads.getBaleTemporaryThreadInputs(entry),
                 )?.length !== 0 ||
                 !cap.isCurrent()
               )
@@ -7910,7 +7910,7 @@ export function createTelegramInboundRouteRuntime<
             )
               continue;
             if (
-              Threads.getTelegramTemporaryThreadInputs(entry).some(
+              Threads.getBaleTemporaryThreadInputs(entry).some(
                 (group) => !!deps.inspectRoutingInputGroupExpiry?.(group),
               )
             )
@@ -7938,7 +7938,7 @@ export function createTelegramInboundRouteRuntime<
     const members = store
       .listTemporaryThreads()
       .filter((temporary) =>
-        Threads.getTelegramTemporaryThreadInputs(temporary).some(
+        Threads.getBaleTemporaryThreadInputs(temporary).some(
           (input) =>
             input.journalBindingKey === binding &&
             input.updateIds.includes(entry.updateId),
@@ -7985,7 +7985,7 @@ export function createTelegramInboundRouteRuntime<
       chooser = lifetime?.chooser,
       operator = deps.configStore.getAllowedUserId();
     if (
-      !Updates.isRevivableTelegramRoutingInput(entry, Date.now()) ||
+      !Updates.isRevivableBaleRoutingInput(entry, Date.now()) ||
       !chooser ||
       !deps.threadStore ||
       operator === undefined ||
@@ -8011,7 +8011,7 @@ export function createTelegramInboundRouteRuntime<
     if (!current()) return false;
     await deps.threadStore.load();
     if (!current()) return false;
-    const routable = getTelegramRoutableThreadRecords(
+    const routable = getBaleRoutableThreadRecords(
       deps.threadStore.list(),
       deps.getLiveThreadTargets?.(),
     );
@@ -8030,7 +8030,7 @@ export function createTelegramInboundRouteRuntime<
     entry: RecoverySource["original"],
     ctx: TContext,
     signal: AbortSignal,
-  ): Promise<Updates.TelegramHistoricalReviewVerdict> => {
+  ): Promise<Updates.BaleHistoricalReviewVerdict> => {
     if (signal.aborted) throw new Error("Historical routing generation ended.");
     const message = entry.update.message as Partial<TMessage> | undefined;
     if (await canReviveRoutingChooser(entry, message, ctx, signal))
@@ -8057,7 +8057,7 @@ export function createTelegramInboundRouteRuntime<
       message.message_id! > 0 &&
       Number.isSafeInteger(message.message_thread_id) &&
       message.message_thread_id! > 0 &&
-      !Reflect.has(message, "pi_telegram_source_update_id") &&
+      !Reflect.has(message, "pi_bale_source_update_id") &&
       !Reflect.has(message, "business_connection_id");
     const temporary = isRecordedTemporaryThreadInputHeld(
       entry,
@@ -8098,24 +8098,24 @@ export function createTelegramInboundRouteRuntime<
     for (const pending of pendingUnboundReroutes.values()) {
       if (
         pending.abandonment?.journalBindingKey === binding &&
-        Updates.collectTelegramAdmissionSourceUpdateIds(
+        Updates.collectBaleAdmissionSourceUpdateIds(
           pending.messages,
         ).includes(entry.updateId) &&
         // Revoked carriers describe a past attempt, not a live selection veto.
         // Current claim/entry authority still comes from the worker and journal CAS.
         pending.messages.some(
           (value) =>
-            Updates.getTelegramUpdateExecutionFence(value)?.signal.aborted !==
+            Updates.getBaleUpdateExecutionFence(value)?.signal.aborted !==
             true,
         ) &&
         (!isPendingRerouteUntouched(pending) || pending.abandonment.running)
       )
         return undefined;
     }
-    return formatTelegramRoutingInputPreview(message);
+    return formatBaleRoutingInputPreview(message);
   };
   const expireRoutingInput = async (
-    source: Updates.TelegramRoutingInputExpirySource,
+    source: Updates.BaleRoutingInputExpirySource,
     ctx: TContext,
     signal: AbortSignal,
   ): Promise<void> => {
@@ -8157,7 +8157,7 @@ export function createTelegramInboundRouteRuntime<
         const temporary = restores
           ?.listTemporaryThreads()
           .find((entry) =>
-            Threads.getTelegramTemporaryThreadInputs(entry).some(
+            Threads.getBaleTemporaryThreadInputs(entry).some(
               (input) =>
                 input.journalBindingKey === source.journalBindingKey &&
                 input.updateIds.includes(source.original.updateId),
@@ -8176,7 +8176,7 @@ export function createTelegramInboundRouteRuntime<
         if (chooser) views.set(`${chooser.chatId}:${chooser.messageId}`, { ...chooser });
         for (const [id, pending] of pendingUnboundReroutes) {
           if (
-            !Updates.collectTelegramAdmissionSourceUpdateIds(
+            !Updates.collectBaleAdmissionSourceUpdateIds(
               pending.messages,
             ).includes(source.original.updateId)
           )
@@ -8241,7 +8241,7 @@ export function createTelegramInboundRouteRuntime<
           if (!movedIntoTab)
             await deleteAllTabMessages(
               temporary.target.chatId,
-              getTelegramAllTabSourceMessageIds(
+              getBaleAllTabSourceMessageIds(
                 [message!],
                 temporary.target.chatId,
               ),
@@ -8256,14 +8256,14 @@ export function createTelegramInboundRouteRuntime<
   ): Promise<void> => {
     if (!isCurrent()) return;
     const data = (action: string) =>
-      `${TELEGRAM_PENDING_CANCELLATION_REVIEW_PREFIX}${view.id}:${action}`;
-    const rows: Menu.TelegramReplyMarkup["inline_keyboard"] = [
+      `${BALE_PENDING_CANCELLATION_REVIEW_PREFIX}${view.id}:${action}`;
+    const rows: Menu.BaleReplyMarkup["inline_keyboard"] = [
       [{ text: "⬆️ Main menu", callback_data: "menu:back" }],
     ];
     const lines = [
       "<b>☑️ Review pending cancellations:</b>",
       "",
-      "Finish stopping routing retries to retain the original privately. No new delivery is started; previously accepted work may continue. No Telegram message or Thread is deleted.",
+      "Finish stopping routing retries to retain the original privately. No new delivery is started; previously accepted work may continue. No Bale message or Thread is deleted.",
     ];
     if (!view.sources.length)
       lines.push("", "No supported pending cancellations on this page.");
@@ -8306,7 +8306,7 @@ export function createTelegramInboundRouteRuntime<
       query.message.chat.id === view.target.chatId &&
       (query.message.message_thread_id === undefined ||
         query.message.message_thread_id === view.target.threadId);
-    if (query.data?.startsWith(TELEGRAM_RETIRED_HISTORICAL_REVIEW_PREFIX)) {
+    if (query.data?.startsWith(BALE_RETIRED_HISTORICAL_REVIEW_PREFIX)) {
       await deps.answerCallbackQuery(
         query.id,
         "This control is no longer available",
@@ -8314,9 +8314,9 @@ export function createTelegramInboundRouteRuntime<
       return true;
     }
     const ownsReview =
-      query.data?.startsWith(TELEGRAM_PENDING_CANCELLATION_REVIEW_PREFIX) ===
+      query.data?.startsWith(BALE_PENDING_CANCELLATION_REVIEW_PREFIX) ===
       true;
-    const prefix = TELEGRAM_PENDING_CANCELLATION_REVIEW_PREFIX;
+    const prefix = BALE_PENDING_CANCELLATION_REVIEW_PREFIX;
     if (!ownsReview && cancellationReview && matches(cancellationReview)) {
       if (cancellationReview.running && cancellationReview.isCurrent()) {
         await deps.answerCallbackQuery(query.id, "Cancellation is in progress");
@@ -8333,7 +8333,7 @@ export function createTelegramInboundRouteRuntime<
       );
       return true;
     };
-    const execution = Updates.getTelegramUpdateExecutionFence(query);
+    const execution = Updates.getBaleUpdateExecutionFence(query);
     const chatId = query.message?.chat.id;
     const messageId = query.message?.message_id;
     if (
@@ -8406,7 +8406,7 @@ export function createTelegramInboundRouteRuntime<
           isCurrent: () => cancellationReview === next && current(),
         };
         cancellationReview = view = next;
-        const page = Updates.inspectTelegramAbandoningUpdates(query, {
+        const page = Updates.inspectBaleAbandoningUpdates(query, {
           journalBindingKey,
           isCurrent: next.isCurrent,
           ...(parsed?.[2] === "more"
@@ -8464,7 +8464,7 @@ export function createTelegramInboundRouteRuntime<
           async () => {
             if (!isCurrent()) return;
             source.result ??= source.retry({
-              operatorAuthorityId: `telegram-owner:${owner}`,
+              operatorAuthorityId: `bale-owner:${owner}`,
               isCurrent,
             });
             if (!source.result) {
@@ -8475,7 +8475,7 @@ export function createTelegramInboundRouteRuntime<
               if (
                 pending.abandonment?.ownerUserId !== owner ||
                 pending.abandonment.journalBindingKey !== journalBindingKey ||
-                !Updates.collectTelegramAdmissionSourceUpdateIds(
+                !Updates.collectBaleAdmissionSourceUpdateIds(
                   pending.messages,
                 ).includes(source.original.updateId)
               )
@@ -8516,7 +8516,7 @@ export function createTelegramInboundRouteRuntime<
           query.id,
           selected?.result
             ? "Routing cancelled; view update failed. Retry the same button"
-            : "Recovery incomplete; inputs stay protected. Check /telegram-status --debug",
+            : "Recovery incomplete; inputs stay protected. Check /bale-status --debug",
         );
     } finally {
       if (view) view.running = false;
@@ -8546,7 +8546,7 @@ export function createTelegramInboundRouteRuntime<
     try {
       const own = {
         journalBindingKey: cancellation.journalBindingKey,
-        updateIds: Updates.collectTelegramAdmissionSourceUpdateIds(
+        updateIds: Updates.collectBaleAdmissionSourceUpdateIds(
           pending.messages,
         ),
       };
@@ -8582,7 +8582,7 @@ export function createTelegramInboundRouteRuntime<
     ctx: TContext,
   ): Promise<boolean> => {
     if (
-      !query.data?.startsWith(TELEGRAM_UNBOUND_REROUTE_CANCEL_CALLBACK_PREFIX)
+      !query.data?.startsWith(BALE_UNBOUND_REROUTE_CANCEL_CALLBACK_PREFIX)
     )
       return false;
     const rerouteId = query.data.match(/^reroutecancel:([a-z0-9]+)$/)?.[1];
@@ -8591,14 +8591,14 @@ export function createTelegramInboundRouteRuntime<
       : undefined;
     const cancellation = pending?.abandonment;
     const sources = pending?.messages ?? [];
-    const execution = Updates.getTelegramUpdateExecutionFence(query);
+    const execution = Updates.getBaleUpdateExecutionFence(query);
     const isAuthorityCurrent = () =>
       !!cancellation &&
       execution?.isCurrent() === true &&
       sources.length > 0 &&
       sources.every(
         (source) =>
-          Updates.getTelegramUpdateExecutionFence(source)?.signal.aborted ===
+          Updates.getBaleUpdateExecutionFence(source)?.signal.aborted ===
           false,
       ) &&
       deps.isContextActive?.(ctx) === true &&
@@ -8629,7 +8629,7 @@ export function createTelegramInboundRouteRuntime<
         query.id,
         pending
           ? "This message can no longer be cancelled"
-          : TELEGRAM_ROUTING_CHOICE_EXPIRED,
+          : BALE_ROUTING_CHOICE_EXPIRED,
       );
       return true;
     }
@@ -8718,7 +8718,7 @@ export function createTelegramInboundRouteRuntime<
     query: TCallbackQuery,
     operation: () => Promise<boolean>,
   ): Promise<boolean> => {
-    Updates.assertTelegramUpdateExecutionCurrent(query);
+    Updates.assertBaleUpdateExecutionCurrent(query);
     const pending = pendingUnboundReroutes.get(rerouteId);
     if (
       pending?.phase.kind === "forward-unknown" &&
@@ -8737,11 +8737,11 @@ export function createTelegramInboundRouteRuntime<
         pending.abandonment?.running ||
         pending.messages.some(
           (message) =>
-            Updates.getTelegramUpdateExecutionFence(message)?.isCurrent() ===
+            Updates.getBaleUpdateExecutionFence(message)?.isCurrent() ===
             false,
         ))
     ) {
-      await deps.answerCallbackQuery(query.id, TELEGRAM_ROUTING_CHOICE_EXPIRED);
+      await deps.answerCallbackQuery(query.id, BALE_ROUTING_CHOICE_EXPIRED);
       return true;
     }
     const releases: Array<() => void> = [];
@@ -8749,7 +8749,7 @@ export function createTelegramInboundRouteRuntime<
       if (pending && matchesRerouteChooser(pending, query)) {
         try {
           for (const message of pending.messages)
-            releases.push(Updates.acquireTelegramUpdateRouting(message));
+            releases.push(Updates.acquireBaleUpdateRouting(message));
         } catch (error) {
           deps.recordRuntimeEvent?.("routing", error, {
             phase: "routing-input-selection",
@@ -8770,12 +8770,12 @@ export function createTelegramInboundRouteRuntime<
     query: TCallbackQuery,
     _ctx: TContext,
   ): Promise<boolean> => {
-    const parsed = parseTelegramUnboundRerouteRestoreMenuCallbackData(
+    const parsed = parseBaleUnboundRerouteRestoreMenuCallbackData(
       query.data,
     );
     if (!parsed) return false;
     const assertExecutionCurrent =
-      Updates.createTelegramUpdateExecutionFenceGuard(query);
+      Updates.createBaleUpdateExecutionFenceGuard(query);
     assertExecutionCurrent();
     const chatId = query.message?.chat?.id;
     const messageId = query.message?.message_id;
@@ -8789,7 +8789,7 @@ export function createTelegramInboundRouteRuntime<
       (parsed.root && pending.rootChooserText === undefined) ||
       expirePendingCommand(parsed.rerouteId, pending)
     ) {
-      await deps.answerCallbackQuery(query.id, TELEGRAM_ROUTING_CHOICE_EXPIRED);
+      await deps.answerCallbackQuery(query.id, BALE_ROUTING_CHOICE_EXPIRED);
       return true;
     }
     if (parsed.restore && pending.sourceTarget.threadId === undefined) {
@@ -8801,12 +8801,12 @@ export function createTelegramInboundRouteRuntime<
     }
     await deps.threadStore.load();
     assertExecutionCurrent();
-    const activeRecords = getTelegramRoutableThreadRecords(
+    const activeRecords = getBaleRoutableThreadRecords(
       deps.threadStore.list(),
       deps.getLiveThreadTargets?.(),
     );
     const replyMarkup = parsed.root
-      ? buildTelegramUnboundRerouteChooserMarkup(
+      ? buildBaleUnboundRerouteChooserMarkup(
           parsed.rerouteId,
           activeRecords,
           {
@@ -8816,7 +8816,7 @@ export function createTelegramInboundRouteRuntime<
           },
         )
       : parsed.restore
-        ? buildTelegramUnboundRerouteRestoreChooserMarkup(
+        ? buildBaleUnboundRerouteRestoreChooserMarkup(
             parsed.rerouteId,
             activeRecords,
             deps.getDisplayTitle,
@@ -8824,8 +8824,8 @@ export function createTelegramInboundRouteRuntime<
         : {
             inline_keyboard: activeRecords.map((record) => [
               {
-                text: `🧵 ${getTelegramThreadRecordLabel(record, deps.getDisplayTitle)}`,
-                callback_data: formatTelegramUnboundRerouteCallbackData(
+                text: `🧵 ${getBaleThreadRecordLabel(record, deps.getDisplayTitle)}`,
+                callback_data: formatBaleUnboundRerouteCallbackData(
                   parsed.rerouteId,
                   record.target.threadId,
                 ),
@@ -8835,17 +8835,17 @@ export function createTelegramInboundRouteRuntime<
     const chooserText = parsed.root
       ? pending.rootChooserText!
       : parsed.restore
-        ? formatTelegramUnboundRerouteRestoreChooserText(
+        ? formatBaleUnboundRerouteRestoreChooserText(
             getPendingRerouteCommandName(pending),
           )
-        : formatTelegramUnboundRerouteChooserText(
+        : formatBaleUnboundRerouteChooserText(
             getPendingRerouteCommandName(pending),
           );
     if (!parsed.root)
       replyMarkup.inline_keyboard.unshift([
         {
           text: "⬆️ Back",
-          callback_data: `${TELEGRAM_UNBOUND_REROUTE_ROOT_CALLBACK_PREFIX}${parsed.rerouteId}`,
+          callback_data: `${BALE_UNBOUND_REROUTE_ROOT_CALLBACK_PREFIX}${parsed.rerouteId}`,
         },
       ]);
     if (deps.editInteractiveMessage) {
@@ -8877,10 +8877,10 @@ export function createTelegramInboundRouteRuntime<
     ctx: TContext,
     afterAdmission: (release: () => Promise<void>) => void,
   ): Promise<boolean> => {
-    const parsed = parseTelegramUnboundRerouteCallbackData(query.data);
+    const parsed = parseBaleUnboundRerouteCallbackData(query.data);
     if (!parsed) return false;
     const assertExecutionCurrent =
-      Updates.createTelegramUpdateExecutionFenceGuard(query);
+      Updates.createBaleUpdateExecutionFenceGuard(query);
     assertExecutionCurrent();
     const chatId = query.message?.chat?.id;
     const pending = pendingUnboundReroutes.get(parsed.rerouteId);
@@ -8891,7 +8891,7 @@ export function createTelegramInboundRouteRuntime<
       !matchesRerouteChooser(pending, query) ||
       expirePendingCommand(parsed.rerouteId, pending)
     ) {
-      await deps.answerCallbackQuery(query.id, TELEGRAM_ROUTING_CHOICE_EXPIRED);
+      await deps.answerCallbackQuery(query.id, BALE_ROUTING_CHOICE_EXPIRED);
       return true;
     }
     await deps.threadStore.load();
@@ -8900,7 +8900,7 @@ export function createTelegramInboundRouteRuntime<
       pendingUnboundReroutes.get(parsed.rerouteId) !== pending ||
       expirePendingCommand(parsed.rerouteId, pending)
     ) {
-      await deps.answerCallbackQuery(query.id, TELEGRAM_ROUTING_CHOICE_EXPIRED);
+      await deps.answerCallbackQuery(query.id, BALE_ROUTING_CHOICE_EXPIRED);
       return true;
     }
     if (pending.phase.kind === "finalizing") {
@@ -8970,7 +8970,7 @@ export function createTelegramInboundRouteRuntime<
     const record =
       pending.liveRebind?.record ??
       pending.workspaceRestore?.record ??
-      getTelegramRoutableThreadRecords(
+      getBaleRoutableThreadRecords(
         deps.threadStore.list(),
         deps.getLiveThreadTargets?.(),
       ).find(
@@ -8982,7 +8982,7 @@ export function createTelegramInboundRouteRuntime<
       await deps.answerCallbackQuery(query.id, "Thread is not active yet");
       return true;
     }
-    const reroutedMessages = cloneTelegramMessagesForThread(
+    const reroutedMessages = cloneBaleMessagesForThread(
       pending.messages,
       parsed.threadId,
     );
@@ -9164,23 +9164,23 @@ export function createTelegramInboundRouteRuntime<
     // Albums enter through prompt coalescing, but a producer command cannot borrow that admission mode.
     const groupedExtension =
       pending.messages.length > 1 &&
-      Commands.findTelegramExtensionCommand(
-        Commands.parseTelegramCommand(
-          Media.extractFirstTelegramMessageText(pending.messages),
+      Commands.findBaleExtensionCommand(
+        Commands.parseBaleCommand(
+          Media.extractFirstBaleMessageText(pending.messages),
         )?.name,
       );
     const groupedFollowerCommand =
       record.owner?.kind === "manual-follower" &&
       pending.messages.length > 1 &&
-      Commands.parseTelegramCommand(
-        Media.extractFirstTelegramMessageText(pending.messages),
+      Commands.parseBaleCommand(
+        Media.extractFirstBaleMessageText(pending.messages),
       );
     // Follower syntax is shared; prepareLiveSelection asks the recipient's registry before freezing or saving.
     const selectedFollowerCommand =
       record.owner?.kind === "manual-follower" &&
       pending.messages.length === 1 &&
-      Commands.parseTelegramCommand(
-        Media.extractFirstTelegramMessageText(pending.messages),
+      Commands.parseBaleCommand(
+        Media.extractFirstBaleMessageText(pending.messages),
       );
     if (
       parsed.useNewSlot &&
@@ -9219,10 +9219,10 @@ export function createTelegramInboundRouteRuntime<
     // unavailable recipients and refused Restore capability never turn a waiting source into a selected grant.
     const selectPendingDestination = async (): Promise<boolean> => {
       try {
-        const release = Updates.acquireTelegramUpdateRouting(
+        const release = Updates.acquireBaleUpdateRouting(
           pending.messages[0],
           true,
-          Updates.collectTelegramAdmissionSourceUpdateIds(pending.messages),
+          Updates.collectBaleAdmissionSourceUpdateIds(pending.messages),
         );
         release();
       } catch (error) {
@@ -9297,7 +9297,7 @@ export function createTelegramInboundRouteRuntime<
           selection.coordinator.observeCommandCompletion() !== undefined) {
           selection.commandCompletionWaited = true;
           const coordinator = selection.coordinator;
-          const signal = Updates.getTelegramUpdateExecutionFence(query)?.signal;
+          const signal = Updates.getBaleUpdateExecutionFence(query)?.signal;
           outcome = await new Promise<"unknown" | "released">((resolve) => {
             let settled = false;
             const subscriptions: (() => void)[] = [];
@@ -9318,7 +9318,7 @@ export function createTelegramInboundRouteRuntime<
             const timer = setTimeout(abort, completionTimeoutMs);
             timer.unref?.();
             for (const message of selection.messages) {
-              const unsubscribe = Updates.subscribeTelegramDeferredSourceCompletion(message, observe);
+              const unsubscribe = Updates.subscribeBaleDeferredSourceCompletion(message, observe);
               if (unsubscribe) subscriptions.push(unsubscribe);
             }
             signal?.addEventListener("abort", abort, { once: true });
@@ -9471,14 +9471,14 @@ export function createTelegramInboundRouteRuntime<
             assertRecipientCurrent();
             if (recipient.kind === "leader") {
               if (recipient.instanceId !== currentInstanceId) return false;
-              const routed = cloneTelegramMessagesForThread(
+              const routed = cloneBaleMessagesForThread(
                 pending.messages,
                 sourceTarget.threadId,
               );
               const messages =
                 pending.dispatchKind === "command"
                   ? routed.map((message, index) =>
-                      Updates.bindTelegramUpdateCompletionAcceptance(
+                      Updates.bindBaleUpdateCompletionAcceptance(
                         message,
                         () => recordLocalAcceptance(pending.messages[index]!),
                       ),
@@ -9565,12 +9565,12 @@ export function createTelegramInboundRouteRuntime<
       return true;
     }
     const localMessages = pending.rerouteCopies
-      ? cloneTelegramMessagesForThread(pending.messages, parsed.threadId, pending.rerouteCopies.bySourceUpdateId)
+      ? cloneBaleMessagesForThread(pending.messages, parsed.threadId, pending.rerouteCopies.bySourceUpdateId)
       : reroutedMessages;
     const command = pending.dispatchKind === "command"
       ? getLiveRebindMenu(localMessages) ?? getLiveRebindHelp(localMessages) : undefined;
     const completion = pending.rerouteCopies && command
-      ? Updates.prepareTelegramDeferredSourceCompletion(pending.messages[0]) : undefined;
+      ? Updates.prepareBaleDeferredSourceCompletion(pending.messages[0]) : undefined;
     if (command && completion) {
       const release = await stageTemporaryRerouteMenu(pending, command, localMessages, ctx, assertRerouteCurrent, completion);
       if (!release) {
@@ -9589,7 +9589,7 @@ export function createTelegramInboundRouteRuntime<
     query: TCallbackQuery,
     ctx: TContext,
   ): Promise<boolean> => {
-    const parsed = parseTelegramUnboundRerouteCallbackData(query.data);
+    const parsed = parseBaleUnboundRerouteCallbackData(query.data);
     if (!parsed) return false;
     return withPendingRerouteSelection(parsed.rerouteId, query, async () => {
       let release: (() => Promise<void>) | undefined;
@@ -9614,7 +9614,7 @@ export function createTelegramInboundRouteRuntime<
     query: TCallbackQuery,
     ctx: TContext,
   ): Promise<boolean> => {
-    const parsed = parseTelegramUnboundRerouteCallbackData(query.data);
+    const parsed = parseBaleUnboundRerouteCallbackData(query.data);
     const pending = parsed && pendingUnboundReroutes.get(parsed.rerouteId);
     if (
       !parsed ||
@@ -9650,11 +9650,11 @@ export function createTelegramInboundRouteRuntime<
     ctx: TContext,
   ): Promise<void> => {
     const assertExecutionCurrent =
-      Updates.createTelegramUpdateExecutionFenceGuard(query);
+      Updates.createBaleUpdateExecutionFenceGuard(query);
     assertExecutionCurrent();
     if (await handleCancellationReview(query, ctx)) return;
     if (await handleUnboundRerouteCancelCallback(query, ctx)) return;
-    const restore = parseTelegramUnboundRerouteRestoreMenuCallbackData(
+    const restore = parseBaleUnboundRerouteRestoreMenuCallbackData(
       query.data,
     );
     if (
@@ -9666,7 +9666,7 @@ export function createTelegramInboundRouteRuntime<
       return;
     if (await handleUnboundRerouteCallback(query, ctx)) return;
     if (deps.buttonActionStore) {
-      const handled = await OutboundHandlers.handleTelegramButtonCallbackQuery(
+      const handled = await OutboundHandlers.handleBaleButtonCallbackQuery(
         query,
         ctx,
         {
@@ -9691,7 +9691,7 @@ export function createTelegramInboundRouteRuntime<
                     replyMarkup,
                   );
                 } catch (error) {
-                  deps.recordRuntimeEvent?.("telegram", error, {
+                  deps.recordRuntimeEvent?.("bale", error, {
                     phase: "button-selection-mark",
                     chatId,
                     messageId,
@@ -9708,8 +9708,8 @@ export function createTelegramInboundRouteRuntime<
             const admissionReceipts = createAdmissionReceipts("prompt", [
               buttonQuery,
             ]);
-            const turn: Queue.PendingTelegramTurn = {
-              ...OutboundHandlers.createTelegramButtonPromptTurn({
+            const turn: Queue.PendingBaleTurn = {
+              ...OutboundHandlers.createBaleButtonPromptTurn({
                 chatId,
                 target:
                   typeof buttonQuery.message?.message_thread_id === "number"
@@ -9721,8 +9721,8 @@ export function createTelegramInboundRouteRuntime<
                 replyToMessageId: messageId,
                 queueOrder,
                 action,
-                telegramPrefix: Turns.createTelegramTurnPrefix({
-                  thread: resolveTelegramThreadLabel({
+                balePrefix: Turns.createBaleTurnPrefix({
+                  thread: resolveBaleThreadLabel({
                     chat: { id: chatId },
                     message_thread_id: buttonQuery.message?.message_thread_id,
                   }),
@@ -9730,19 +9730,19 @@ export function createTelegramInboundRouteRuntime<
               }),
               ...(admissionReceipts.length > 0 ? { admissionReceipts } : {}),
             };
-            const result = Queue.appendTelegramPromptTurnOnce(
-              deps.telegramQueueStore.getQueuedItems(),
+            const result = Queue.appendBalePromptTurnOnce(
+              deps.baleQueueStore.getQueuedItems(),
               turn,
             );
             if (!result.appended) {
               reportQueueAdmission([buttonQuery], admissionReceipts);
               return false;
             }
-            Updates.assertTelegramUpdateExecutionCurrent(buttonQuery);
-            deps.telegramQueueStore.setQueuedItems(result.items);
+            Updates.assertBaleUpdateExecutionCurrent(buttonQuery);
+            deps.baleQueueStore.setQueuedItems(result.items);
             reportQueueAdmission([buttonQuery], admissionReceipts);
             deps.updateStatus(context);
-            requestDispatchNextQueuedTelegramTurn(context);
+            requestDispatchNextQueuedBaleTurn(context);
             return true;
           },
         },
@@ -9792,7 +9792,7 @@ export function createTelegramInboundRouteRuntime<
         ? () => {
             if (!isCurrent())
               throw new Error(
-                "Telegram Thread name callback lost owner authority.",
+                "Bale Thread name callback lost owner authority.",
               );
           }
         : undefined;
@@ -9806,13 +9806,13 @@ export function createTelegramInboundRouteRuntime<
             assertRecipient();
             if (!current || !portsCurrent())
               throw new Error(
-                "Telegram Thread name callback lost port authority.",
+                "Bale Thread name callback lost port authority.",
               );
           }
         : undefined;
       const editOptions:
         | []
-        | [{ target: Queue.TelegramQueueTarget; assertAuthority: () => void }] =
+        | [{ target: Queue.BaleQueueTarget; assertAuthority: () => void }] =
         assertEffectAuthority
           ? [{ target: { ...target }, assertAuthority: assertEffectAuthority }]
           : [];
@@ -9866,8 +9866,8 @@ export function createTelegramInboundRouteRuntime<
           );
         }
         const replyText = result.message
-          ? Commands.formatTelegramInformationHeading("✅", result.message)
-          : Commands.formatTelegramAutomaticThreadDisplayNameRestoredHeading(
+          ? Commands.formatBaleInformationHeading("✅", result.message)
+          : Commands.formatBaleAutomaticThreadDisplayNameRestoredHeading(
               result.threadName ?? "automatic",
             );
         if (!isCurrent()) return;
@@ -9891,7 +9891,7 @@ export function createTelegramInboundRouteRuntime<
       } catch (error) {
         if (!isCurrent()) return;
         reopen = true;
-        deps.recordRuntimeEvent?.("telegram-command", error, {
+        deps.recordRuntimeEvent?.("bale-command", error, {
           command: "name",
           phase: "reset",
         });
@@ -9910,7 +9910,7 @@ export function createTelegramInboundRouteRuntime<
       }
       return;
     }
-    const handledByNew = await Commands.handleTelegramNewConfirmationCallback(
+    const handledByNew = await Commands.handleBaleNewConfirmationCallback(
       query,
       {
         ctx,
@@ -9918,12 +9918,12 @@ export function createTelegramInboundRouteRuntime<
         editInteractiveMessage: deps.editInteractiveMessage ?? (async () => {}),
         deleteMessage: deps.deleteMessage ?? (async () => {}),
         runNew: async (newCtx) => {
-          await Commands.handleTelegramNewCommand({
+          await Commands.handleBaleNewCommand({
             isIdle: () => deps.isIdle(newCtx),
             hasPendingMessages: () => deps.hasPendingMessages(newCtx),
-            hasActiveTelegramTurn: deps.activeTurnRuntime.has,
+            hasActiveBaleTurn: deps.activeTurnRuntime.has,
             hasDispatchPending: deps.bridgeRuntime.lifecycle.hasDispatchPending,
-            hasQueuedTelegramItems: deps.telegramQueueStore.hasQueuedItems,
+            hasQueuedBaleItems: deps.baleQueueStore.hasQueuedItems,
             isCompactionInProgress:
               deps.bridgeRuntime.lifecycle.isCompactionInProgress,
             requestNewSession: deps.requestNewSession
@@ -9950,28 +9950,28 @@ export function createTelegramInboundRouteRuntime<
     assertExecutionCurrent();
     if (handledByNew) return;
     const handledByCompact =
-      await Commands.handleTelegramCompactConfirmationCallback(query, {
+      await Commands.handleBaleCompactConfirmationCallback(query, {
         ctx,
         answerCallbackQuery: deps.answerCallbackQuery,
         editInteractiveMessage: deps.editInteractiveMessage ?? (async () => {}),
         runCompact: async (compactCtx, chatId, replyToMessageId, target) => {
-          await Commands.handleTelegramCompactCommand({
+          await Commands.handleBaleCompactCommand({
             isIdle: () => deps.isIdle(compactCtx),
             hasPendingMessages: () => deps.hasPendingMessages(compactCtx),
-            hasActiveTelegramTurn: deps.activeTurnRuntime.has,
+            hasActiveBaleTurn: deps.activeTurnRuntime.has,
             hasDispatchPending: deps.bridgeRuntime.lifecycle.hasDispatchPending,
-            hasQueuedTelegramItems: deps.telegramQueueStore.hasQueuedItems,
+            hasQueuedBaleItems: deps.baleQueueStore.hasQueuedItems,
             isCompactionInProgress:
               deps.bridgeRuntime.lifecycle.isCompactionInProgress,
             setCompactionInProgress:
               deps.bridgeRuntime.lifecycle.setCompactionInProgress,
             updateStatus: () => deps.updateStatus(compactCtx),
-            dispatchNextQueuedTelegramTurn: () =>
-              deps.dispatchNextQueuedTelegramTurn(compactCtx),
-            requestDeferredDispatchNextQueuedTelegramTurn:
-              deps.requestDeferredDispatchNextQueuedTelegramTurn
+            dispatchNextQueuedBaleTurn: () =>
+              deps.dispatchNextQueuedBaleTurn(compactCtx),
+            requestDeferredDispatchNextQueuedBaleTurn:
+              deps.requestDeferredDispatchNextQueuedBaleTurn
                 ? (dispatch) =>
-                    deps.requestDeferredDispatchNextQueuedTelegramTurn?.(() =>
+                    deps.requestDeferredDispatchNextQueuedBaleTurn?.(() =>
                       dispatch(),
                     )
                 : undefined,
@@ -10007,7 +10007,7 @@ export function createTelegramInboundRouteRuntime<
     assertExecutionCurrent();
     if (handledBySettings) return;
     const callbackData = query.data;
-    if (callbackData && !isTelegramOwnedCallbackData(callbackData)) {
+    if (callbackData && !isBaleOwnedCallbackData(callbackData)) {
       const chatId = query.message?.chat?.id;
       const messageId = query.message?.message_id;
       if (typeof chatId === "number" && typeof messageId === "number") {
@@ -10017,7 +10017,7 @@ export function createTelegramInboundRouteRuntime<
             ? { chatId, threadId: query.message.message_thread_id }
             : { chatId };
         const admissionReceipts = createAdmissionReceipts("prompt", [query]);
-        const turn: Queue.PendingTelegramTurn = {
+        const turn: Queue.PendingBaleTurn = {
           kind: "prompt",
           chatId,
           target,
@@ -10032,16 +10032,16 @@ export function createTelegramInboundRouteRuntime<
           statusSummary: callbackData,
           ...(admissionReceipts.length > 0 ? { admissionReceipts } : {}),
         };
-        const result = Queue.appendTelegramPromptTurnOnce(
-          deps.telegramQueueStore.getQueuedItems(),
+        const result = Queue.appendBalePromptTurnOnce(
+          deps.baleQueueStore.getQueuedItems(),
           turn,
         );
         if (result.appended) {
-          Updates.assertTelegramUpdateExecutionCurrent(query);
-          deps.telegramQueueStore.setQueuedItems(result.items);
+          Updates.assertBaleUpdateExecutionCurrent(query);
+          deps.baleQueueStore.setQueuedItems(result.items);
           reportQueueAdmission([query], admissionReceipts);
           deps.updateStatus(ctx);
-          requestDispatchNextQueuedTelegramTurn(ctx);
+          requestDispatchNextQueuedBaleTurn(ctx);
         } else {
           reportQueueAdmission([query], admissionReceipts);
         }
@@ -10051,7 +10051,7 @@ export function createTelegramInboundRouteRuntime<
     }
     await menuCallbackHandler(query, ctx);
   };
-  const preparePromptTurn = Turns.createTelegramPromptTurnRuntimePreparer<
+  const preparePromptTurn = Turns.createBalePromptTurnRuntimePreparer<
     TMessage,
     TContext
   >({
@@ -10063,26 +10063,26 @@ export function createTelegramInboundRouteRuntime<
     getAdmissionScope: deps.getAdmissionScope,
     getAdmissionJournalBinding: deps.getAdmissionJournalBinding,
     assertExecutionCurrent(message) {
-      Updates.assertTelegramUpdateExecutionCurrent(message);
+      Updates.assertBaleUpdateExecutionCurrent(message);
     },
 
     // Voice policy resolves missing, invalid, and legacy manual config to hidden.
-    getVoiceReplyMode: () => getTelegramVoiceReplyMode(deps.configStore.get()),
-    getTelegramThreadLabel: resolveTelegramThreadLabel,
+    getVoiceReplyMode: () => getBaleVoiceReplyMode(deps.configStore.get()),
+    getBaleThreadLabel: resolveBaleThreadLabel,
   });
   const enqueueContinueTurn = async (
     message: TMessage,
     ctx: TContext,
     admission?: {
       assertCurrent: () => void;
-      report: (turn: Queue.PendingTelegramTurn) => void;
+      report: (turn: Queue.PendingBaleTurn) => void;
     },
   ): Promise<void> => {
     admission?.assertCurrent();
-    Updates.assertTelegramUpdateExecutionCurrent(message);
+    Updates.assertBaleUpdateExecutionCurrent(message);
     if (!admission)
       deps.bridgeRuntime.lifecycle.setFoldQueuedPromptsIntoHistory(false);
-    const continueMessage = Updates.carryTelegramUpdateExecutionFence(message, {
+    const continueMessage = Updates.carryBaleUpdateExecutionFence(message, {
       ...message,
       text: "continue",
       caption: undefined,
@@ -10097,7 +10097,7 @@ export function createTelegramInboundRouteRuntime<
       statusSummary: "continue",
     };
     admission?.assertCurrent();
-    Updates.assertTelegramUpdateExecutionCurrent(message);
+    Updates.assertBaleUpdateExecutionCurrent(message);
     deps.queueMutationRuntime.append(continueTurn, ctx);
     if (admission) admission.report(continueTurn);
     else
@@ -10105,38 +10105,38 @@ export function createTelegramInboundRouteRuntime<
         [continueMessage],
         continueTurn.admissionReceipts ?? [],
       );
-    requestDispatchNextQueuedTelegramTurn(ctx);
+    requestDispatchNextQueuedBaleTurn(ctx);
   };
   const reservedCommandNames = () =>
-    new Set(Commands.getTelegramReservedCommandNames());
+    new Set(Commands.getBaleReservedCommandNames());
   const getPromptTemplateCommands = () =>
-    PromptTemplates.getTelegramPromptTemplateCommands(
+    PromptTemplates.getBalePromptTemplateCommands(
       deps.getCommands(),
       reservedCommandNames(),
     );
   const expandPromptTemplateCommand = (name: string, args: string) =>
-    PromptTemplates.expandTelegramPromptTemplateCommand(
+    PromptTemplates.expandBalePromptTemplateCommand(
       name,
       args,
       getPromptTemplateCommands(),
     );
-  const commandHandler = Commands.createTelegramCommandHandlerTargetRuntime<
+  const commandHandler = Commands.createBaleCommandHandlerTargetRuntime<
     TMessage,
     TContext
   >({
     assertExecutionCurrent(message) {
-      Updates.assertTelegramUpdateExecutionCurrent(message);
+      Updates.assertBaleUpdateExecutionCurrent(message);
     },
     hasAbortHandler: deps.bridgeRuntime.abort.hasHandler,
     clearPendingModelSwitch: deps.modelSwitchController.clearPendingSwitch,
-    hasQueuedTelegramItems: deps.telegramQueueStore.hasQueuedItems,
-    clearQueuedTelegramItems: deps.queueMutationRuntime.clear,
+    hasQueuedBaleItems: deps.baleQueueStore.hasQueuedItems,
+    clearQueuedBaleItems: deps.queueMutationRuntime.clear,
     setFoldQueuedPromptsIntoHistory:
       deps.bridgeRuntime.lifecycle.setFoldQueuedPromptsIntoHistory,
     abortCurrentTurn: deps.bridgeRuntime.abort.abortTurn,
     isIdle: deps.isIdle,
     hasPendingMessages: deps.hasPendingMessages,
-    hasActiveTelegramTurn: deps.activeTurnRuntime.has,
+    hasActiveBaleTurn: deps.activeTurnRuntime.has,
     hasDispatchPending: deps.bridgeRuntime.lifecycle.hasDispatchPending,
     isCompactionInProgress: deps.bridgeRuntime.lifecycle.isCompactionInProgress,
     setCompactionInProgress:
@@ -10144,14 +10144,14 @@ export function createTelegramInboundRouteRuntime<
     updateStatus: deps.updateStatus,
     isContextActive: deps.isContextActive,
     beginCommandEffectWork: deps.beginCommandEffectWork,
-    dispatchNextQueuedTelegramTurn: deps.dispatchNextQueuedTelegramTurn,
+    dispatchNextQueuedBaleTurn: deps.dispatchNextQueuedBaleTurn,
     requestNextDispatchAnnouncement: deps.requestNextDispatchAnnouncement,
     cancelNextTransitionAnnouncements: () => {
       deps.activeTurnRuntime.clearNextAbortAnnouncement();
       deps.cancelNextDispatchAnnouncement?.();
     },
-    requestDeferredDispatchNextQueuedTelegramTurn:
-      deps.requestDeferredDispatchNextQueuedTelegramTurn,
+    requestDeferredDispatchNextQueuedBaleTurn:
+      deps.requestDeferredDispatchNextQueuedBaleTurn,
     startTypingLoop: deps.startTypingLoop,
     stopTypingLoop: deps.stopTypingLoop,
     enqueueContinueTurn,
@@ -10189,7 +10189,7 @@ export function createTelegramInboundRouteRuntime<
     showStatus: deps.menuActions.sendStatusMessage,
     openModelMenu: deps.menuActions.openModelMenu,
     openThinkingMenu: (message, ctx, options) => {
-      const target = Commands.getTelegramCommandMessageTarget(message);
+      const target = Commands.getBaleCommandMessageTarget(message);
       return deps.menuActions.openThinkingMenu(
         target.chatId,
         target.replyToMessageId,
@@ -10199,7 +10199,7 @@ export function createTelegramInboundRouteRuntime<
       );
     },
     openQueueMenu: (message, ctx, options) => {
-      const target = Commands.getTelegramCommandMessageTarget(message);
+      const target = Commands.getBaleCommandMessageTarget(message);
       return deps.openQueueMenu(
         target.chatId,
         target.replyToMessageId,
@@ -10219,7 +10219,7 @@ export function createTelegramInboundRouteRuntime<
       const assertSemanticCurrent = admission?.assertSemanticCurrent;
       const assertSelectedRecipient = admission?.assertRecipientCurrent;
       assertSemanticCurrent?.();
-      const address = Updates.getTelegramMessageTarget(message);
+      const address = Updates.getBaleMessageTarget(message);
       const target = address && { ...address };
       const {
         sendInteractiveMessage,
@@ -10239,7 +10239,7 @@ export function createTelegramInboundRouteRuntime<
         await deps.sendTextReply(
           message.chat.id,
           message.message_id,
-          Commands.formatTelegramInformationHeading(
+          Commands.formatBaleInformationHeading(
             "🏷️",
             "Usage: /name Navigator",
           ),
@@ -10292,7 +10292,7 @@ export function createTelegramInboundRouteRuntime<
         ? () => {
             if (!isCurrent())
               throw new Error(
-                "Telegram Thread name dialog lost recipient authority.",
+                "Bale Thread name dialog lost recipient authority.",
               );
           }
         : undefined;
@@ -10351,7 +10351,7 @@ export function createTelegramInboundRouteRuntime<
             assertPublished() {
               if (!lifetime.isCurrent())
                 throw new Error(
-                  "Telegram Thread name dialog publication is no longer current.",
+                  "Bale Thread name dialog publication is no longer current.",
                 );
             },
           };
@@ -10378,11 +10378,11 @@ export function createTelegramInboundRouteRuntime<
     sendInteractiveMessage: deps.sendInteractiveMessage,
     recordRuntimeEvent: deps.recordRuntimeEvent,
   });
-  const promptEnqueueController = Queue.createTelegramPromptEnqueueController<
+  const promptEnqueueController = Queue.createBalePromptEnqueueController<
     TMessage,
     TContext
   >({
-    ...deps.telegramQueueStore,
+    ...deps.baleQueueStore,
     hasPendingDispatch: deps.bridgeRuntime.lifecycle.hasDispatchPending,
     getFoldQueuedPromptsIntoHistory:
       deps.bridgeRuntime.lifecycle.shouldFoldQueuedPromptsIntoHistory,
@@ -10398,14 +10398,14 @@ export function createTelegramInboundRouteRuntime<
       };
     },
     updateStatus: deps.updateStatus,
-    dispatchNextQueuedTelegramTurn: requestDispatchNextQueuedTelegramTurn,
+    dispatchNextQueuedBaleTurn: requestDispatchNextQueuedBaleTurn,
     assertExecutionCurrent: (messages) =>
-      Updates.assertTelegramUpdateExecutionCurrent(messages[0]),
+      Updates.assertBaleUpdateExecutionCurrent(messages[0]),
   });
   const promptEnqueue = async (
     messages: TMessage[],
     ctx: TContext,
-  ): Promise<Queue.PendingTelegramTurn> => {
+  ): Promise<Queue.PendingBaleTurn> => {
     return promptEnqueueController.enqueue(messages, ctx, (turn) => {
       reportQueueAdmission(messages, turn.admissionReceipts ?? []);
     });
@@ -10413,19 +10413,19 @@ export function createTelegramInboundRouteRuntime<
   const continueLiveRebindPrompt = (
     originals: readonly TMessage[],
     ctx: TContext,
-    selectedTarget: Queue.TelegramQueueTarget & { threadId: number },
+    selectedTarget: Queue.BaleQueueTarget & { threadId: number },
     isCurrent: () => boolean,
   ): Promise<boolean> =>
     continueLiveRebindInput(originals, ctx, selectedTarget, isCurrent);
   const continueLiveRebindInput = async (
     originals: readonly TMessage[],
     ctx: TContext,
-    selectedTarget: Queue.TelegramQueueTarget & { threadId: number },
+    selectedTarget: Queue.BaleQueueTarget & { threadId: number },
     isCurrent: () => boolean,
     generated?: {
       prompt: string;
       assertRegistrationCurrent(): void;
-      onQueued(turn: Queue.PendingTelegramTurn): void;
+      onQueued(turn: Queue.PendingBaleTurn): void;
     },
   ): Promise<boolean> => {
     const messages = [...originals],
@@ -10434,9 +10434,9 @@ export function createTelegramInboundRouteRuntime<
       journalBindingKey = deps.getAdmissionJournalBinding?.();
     const scope = deps.getAdmissionScope?.(),
       generation = deps.getSessionGeneration?.();
-    const sources = messages.map(Updates.inspectTelegramDeferredSource);
-    const fences = messages.map(Updates.getTelegramUpdateExecutionFence);
-    const ids = Updates.collectTelegramAdmissionSourceUpdateIds(messages);
+    const sources = messages.map(Updates.inspectBaleDeferredSource);
+    const fences = messages.map(Updates.getBaleUpdateExecutionFence);
+    const ids = Updates.collectBaleAdmissionSourceUpdateIds(messages);
     const current = () =>
       isCurrent() &&
       !!operatorUserId &&
@@ -10459,7 +10459,7 @@ export function createTelegramInboundRouteRuntime<
           message.from?.id === operatorUserId &&
           !message.from?.is_bot &&
           fences[index]?.isCurrent() === true &&
-          Updates.getTelegramUpdateExecutionFence(message) === fences[index] &&
+          Updates.getBaleUpdateExecutionFence(message) === fences[index] &&
           sources[index]?.journalBindingKey === journalBindingKey &&
           !sources[index]?.completionSha256,
       );
@@ -10469,7 +10469,7 @@ export function createTelegramInboundRouteRuntime<
         !current() ||
         !messages.every((message, index) =>
           isDeepStrictEqual(
-            Updates.inspectTelegramDeferredSource(message),
+            Updates.inspectBaleDeferredSource(message),
             sources[index],
           ),
         )
@@ -10481,11 +10481,11 @@ export function createTelegramInboundRouteRuntime<
     try {
       assertCurrent();
       for (const message of messages)
-        references.push(Updates.acquireTelegramUpdateRouting(message));
+        references.push(Updates.acquireBaleUpdateRouting(message));
       assertCurrent();
       const routed = messages.map((message) => {
         const sameTarget = message.message_thread_id === target.threadId;
-        return Updates.carryTelegramUpdateExecutionFence(message, {
+        return Updates.carryBaleUpdateExecutionFence(message, {
           ...message,
           message_thread_id: target.threadId,
           ...(sameTarget ? {} : { message_id: 0, reply_to_message: undefined }),
@@ -10498,7 +10498,7 @@ export function createTelegramInboundRouteRuntime<
           turnCtx,
           (turn) => {
             assertCurrent();
-            admitted = Updates.reportTelegramQueueAdmission(
+            admitted = Updates.reportBaleQueueAdmission(
               messages,
               turn.admissionReceipts ?? [],
             );
@@ -10512,8 +10512,8 @@ export function createTelegramInboundRouteRuntime<
       };
       if (generated) {
         if (routed.length !== 1) return false;
-        await Queue.enqueueTelegramPromptTurnRuntime(routed, {
-          ...deps.telegramQueueStore,
+        await Queue.enqueueBalePromptTurnRuntime(routed, {
+          ...deps.baleQueueStore,
           hasPendingDispatch: deps.bridgeRuntime.lifecycle.hasDispatchPending,
           getFoldQueuedPromptsIntoHistory:
             deps.bridgeRuntime.lifecycle.shouldFoldQueuedPromptsIntoHistory,
@@ -10523,17 +10523,17 @@ export function createTelegramInboundRouteRuntime<
           assertExecutionCurrent: assertCurrent,
           async prepareTurn(values) {
             // Only the captured producer text enters the normal turn builder; raw command media/handlers never run.
-            const turn = await Turns.buildTelegramPromptTurnRuntime({
+            const turn = await Turns.buildBalePromptTurnRuntime({
               messages: values,
-              telegramPrefix: Turns.createTelegramTurnPrefix({
-                thread: resolveTelegramThreadLabel(values[0]!),
+              balePrefix: Turns.createBaleTurnPrefix({
+                thread: resolveBaleThreadLabel(values[0]!),
               }),
               rawText: generated.prompt,
               files: [],
               queueOrder: deps.bridgeRuntime.queue.allocateItemOrder(),
               inferImageMimeType: Media.guessMediaType,
               timeLine: deps.resolveTimeLine?.(target.chatId),
-              voiceReplyMode: getTelegramVoiceReplyMode(deps.configStore.get()),
+              voiceReplyMode: getBaleVoiceReplyMode(deps.configStore.get()),
               admissionScope: scope,
               admissionJournalBinding: journalBindingKey,
             });
@@ -10564,7 +10564,7 @@ export function createTelegramInboundRouteRuntime<
           onQueued(turn) {
             assertCurrent();
             generated.onQueued(turn);
-            admitted = Updates.reportTelegramQueueAdmission(
+            admitted = Updates.reportBaleQueueAdmission(
               messages,
               turn.admissionReceipts ?? [],
             );
@@ -10574,8 +10574,8 @@ export function createTelegramInboundRouteRuntime<
               );
           },
           updateStatus: () => deps.updateStatus(ctx),
-          dispatchNextQueuedTelegramTurn: () =>
-            requestDispatchNextQueuedTelegramTurn(ctx),
+          dispatchNextQueuedBaleTurn: () =>
+            requestDispatchNextQueuedBaleTurn(ctx),
         });
       } else await enqueue(routed, ctx);
       return admitted && current();
@@ -10593,7 +10593,7 @@ export function createTelegramInboundRouteRuntime<
     ctx: TContext,
   ): Promise<boolean> => {
     const message = messages[0],
-      target = message && Updates.getTelegramMessageTarget(message);
+      target = message && Updates.getBaleMessageTarget(message);
     const store = deps.getWorkspaceRestoreStore?.();
     if (!target?.threadId || !store) return false;
     let found = store
@@ -10605,15 +10605,15 @@ export function createTelegramInboundRouteRuntime<
           entry.target.chatId === target.chatId &&
           entry.target.threadId === target.threadId,
       );
-    const key = formatTelegramTargetKey(target),
+    const key = formatBaleTargetKey(target),
       implicit = implicitThreadCreations.get(key);
     if (!found && !implicit) return false;
-    const updateIds = Updates.collectTelegramAdmissionSourceUpdateIds(messages);
+    const updateIds = Updates.collectBaleAdmissionSourceUpdateIds(messages);
     const operatorUserId = deps.configStore.getAllowedUserId();
     const cap = captureTemporaryThreadAuthority(ctx, () =>
       messages.every(
         (source) =>
-          Updates.getTelegramUpdateExecutionFence(source)?.isCurrent() ===
+          Updates.getBaleUpdateExecutionFence(source)?.isCurrent() ===
             true &&
           source.chat.type === "private" &&
           source.chat.id === target.chatId &&
@@ -10652,7 +10652,7 @@ export function createTelegramInboundRouteRuntime<
       );
       if (!found || !cap.isCurrent())
         throw new Error(
-          "Implicit Telegram Thread registration was not acknowledged; source remains protected.",
+          "Implicit Bale Thread registration was not acknowledged; source remains protected.",
         );
       implicitThreadCreations.delete(key);
       // Adopted native tabs share the routing name; a failed rename never blocks routing.
@@ -10660,7 +10660,7 @@ export function createTelegramInboundRouteRuntime<
         await deps.callApi?.("editForumTopic", {
           chat_id: target.chatId,
           message_thread_id: target.threadId,
-          name: TELEGRAM_TEMPORARY_THREAD_NAME,
+          name: BALE_TEMPORARY_THREAD_NAME,
         });
       } catch (error) {
         deps.recordRuntimeEvent?.("routing", error, {
@@ -10716,14 +10716,14 @@ export function createTelegramInboundRouteRuntime<
   const publishRerouteChooser = async (
     pending: PendingUnboundReroute,
     text: string,
-    replyMarkup: Menu.TelegramReplyMarkup,
+    replyMarkup: Menu.BaleReplyMarkup,
     sendOptions: {
-      target?: Queue.TelegramQueueTarget;
+      target?: Queue.BaleQueueTarget;
       replyToMessageId?: number;
     },
   ): Promise<number | undefined> => {
     const target = pending.sourceTarget;
-    const recorded = Updates.getTelegramUpdateRoutingInput(
+    const recorded = Updates.getBaleUpdateRoutingInput(
       pending.messages[0],
     )?.chooser;
     if (
@@ -10764,7 +10764,7 @@ export function createTelegramInboundRouteRuntime<
     const message = messages[0];
     if (!message || !deps.threadStore) return;
     const records = deps.threadStore.list();
-    const activeRecords = getTelegramRoutableThreadRecords(
+    const activeRecords = getBaleRoutableThreadRecords(
       records,
       deps.getLiveThreadTargets?.(),
     );
@@ -10773,7 +10773,7 @@ export function createTelegramInboundRouteRuntime<
         ? { chatId: message.chat.id, threadId: message.message_thread_id }
         : undefined;
     const sourceKey = sourceTarget
-      ? formatTelegramTargetKey(sourceTarget)
+      ? formatBaleTargetKey(sourceTarget)
       : undefined;
     const includeGuidance = sourceKey
       ? !guidedUnboundTopicKeys.has(sourceKey)
@@ -10784,8 +10784,8 @@ export function createTelegramInboundRouteRuntime<
         message.chat.id,
         message.message_id,
         [
-          includeGuidance ? formatTelegramUnboundTopicGuidance() : undefined,
-          `This thread is not bound to a Pi instance. Open an active Pi thread or run ${Commands.formatTelegramPiCommandHtml("/telegram-connect")} from a Pi session to bind one.`,
+          includeGuidance ? formatBaleUnboundTopicGuidance() : undefined,
+          `This thread is not bound to a Pi instance. Open an active Pi thread or run ${Commands.formatBalePiCommandHtml("/bale-connect")} from a Pi session to bind one.`,
         ]
           .filter((line): line is string => typeof line === "string")
           .join("\n\n"),
@@ -10795,8 +10795,8 @@ export function createTelegramInboundRouteRuntime<
     }
     const command =
       messages.length === 1
-        ? getKnownTelegramAllTabCommand(
-            Media.extractFirstTelegramMessageText(messages).trim(),
+        ? getKnownBaleAllTabCommand(
+            Media.extractFirstBaleMessageText(messages).trim(),
           )
         : undefined;
     const rerouteId = storePendingUnboundReroute(
@@ -10805,7 +10805,7 @@ export function createTelegramInboundRouteRuntime<
     );
     if (reportDeferred) {
       for (const source of messages) {
-        Updates.reportTelegramUpdateDeferred(source);
+        Updates.reportBaleUpdateDeferred(source);
       }
     }
     const inTemporaryThread = await recordUnboundTemporaryThreadInput(
@@ -10832,9 +10832,9 @@ export function createTelegramInboundRouteRuntime<
           (source) =>
             source.chat.type === "private" &&
             source.from?.id === ownerUserId &&
-            Updates.getTelegramUpdateExecutionFence(source)?.isCurrent() ===
+            Updates.getBaleUpdateExecutionFence(source)?.isCurrent() ===
               true &&
-            Updates.supportsTelegramDeferredAbandonment(
+            Updates.supportsBaleDeferredAbandonment(
               source,
               journalBindingKey,
             ),
@@ -10845,9 +10845,9 @@ export function createTelegramInboundRouteRuntime<
           pending.abandonment = { ownerUserId, journalBindingKey, leaderEpoch };
       }
     }
-    const text = formatTelegramTemporaryThreadChooserText(command?.name);
+    const text = formatBaleTemporaryThreadChooserText(command?.name);
     pending.rootChooserText = text;
-    const replyMarkup = buildTelegramUnboundRerouteChooserMarkup(
+    const replyMarkup = buildBaleUnboundRerouteChooserMarkup(
       rerouteId,
       activeRecords,
       {
@@ -10883,7 +10883,7 @@ export function createTelegramInboundRouteRuntime<
     message: TMessage,
     ctx: TContext,
   ): Promise<void> => {
-    const groupKey = Media.getTelegramMediaGroupKey(message);
+    const groupKey = Media.getBaleMediaGroupKey(message);
     if (!groupKey) {
       await sendUnboundRerouteChooserNow([message], ctx);
       return;
@@ -10914,15 +10914,15 @@ export function createTelegramInboundRouteRuntime<
     }, 1200);
     timer.unref?.();
     pendingUnboundRerouteMediaGroups.set(groupKey, { messages, timer });
-    Updates.reportTelegramUpdateDeferred(message);
+    Updates.reportBaleUpdateDeferred(message);
   };
-  const getKnownTelegramAllTabCommand = (
+  const getKnownBaleAllTabCommand = (
     text: string,
-  ): Commands.ParsedTelegramCommand | undefined => {
-    const command = Commands.parseTelegramCommand(text);
+  ): Commands.ParsedBaleCommand | undefined => {
+    const command = Commands.parseBaleCommand(text);
     if (!command) return undefined;
     if (reservedCommandNames().has(command.name)) return command;
-    if (Commands.findTelegramExtensionCommand(command.name)) return command;
+    if (Commands.findBaleExtensionCommand(command.name)) return command;
     if (
       getPromptTemplateCommands().some(
         (template) => template.command === command.name,
@@ -10960,7 +10960,7 @@ export function createTelegramInboundRouteRuntime<
         message.date !== undefined &&
         message.date >= implicit.createdAtSec &&
         message.date - implicit.createdAtSec <=
-          TELEGRAM_IMPLICIT_ALL_INPUT_WINDOW_SEC &&
+          BALE_IMPLICIT_ALL_INPUT_WINDOW_SEC &&
         implicit.ctx === ctx &&
         implicit.operatorUserId === cap.operatorUserId &&
         implicit.journalBindingKey === cap.journalBindingKey &&
@@ -10982,19 +10982,19 @@ export function createTelegramInboundRouteRuntime<
    * a voice note, a file or a coalesced album, is held untouched as one prompt.
    */
   const sendAllTabTemporaryInputChooser = async (
-    command: Commands.ParsedTelegramCommand | undefined,
+    command: Commands.ParsedBaleCommand | undefined,
     commandText: string,
     messages: readonly TMessage[],
     ctx: TContext,
   ): Promise<boolean> => {
     const message = messages[0];
     if (!message) return false;
-    const updateIds = Updates.collectTelegramAdmissionSourceUpdateIds([
+    const updateIds = Updates.collectBaleAdmissionSourceUpdateIds([
       ...messages,
     ]).sort((a, b) => a - b);
     const updateId = updateIds[0];
     const group = { journalBindingKey: "", updateIds };
-    const execution = Updates.getTelegramUpdateExecutionFence(message);
+    const execution = Updates.getBaleUpdateExecutionFence(message);
     const cap = captureTemporaryThreadAuthority(
       ctx,
       () => execution?.isCurrent() === true,
@@ -11026,7 +11026,7 @@ export function createTelegramInboundRouteRuntime<
             entry.source.journalBindingKey === journalBindingKey &&
             entry.source.updateId === updateId,
         );
-    let entry: Threads.TelegramTemporaryThreadEntry | undefined;
+    let entry: Threads.BaleTemporaryThreadEntry | undefined;
     // A tab opened by this call, by the bot or adopted from the client, gets the input's one forwarded copy; re-entry
     // after a restart finds its tab already prepared and never forwards again.
     let openedNow = false;
@@ -11073,7 +11073,7 @@ export function createTelegramInboundRouteRuntime<
               await deps.callApi!("editForumTopic", {
                 chat_id: native.implicit.target.chatId,
                 message_thread_id: native.implicit.target.threadId,
-                name: TELEGRAM_TEMPORARY_THREAD_NAME,
+                name: BALE_TEMPORARY_THREAD_NAME,
               });
             } catch (error) {
               deps.recordRuntimeEvent?.("routing", error, {
@@ -11098,7 +11098,7 @@ export function createTelegramInboundRouteRuntime<
             "createForumTopic",
             {
               chat_id: operatorUserId,
-              name: TELEGRAM_TEMPORARY_THREAD_NAME,
+              name: BALE_TEMPORARY_THREAD_NAME,
             },
           );
         } catch (error) {
@@ -11132,7 +11132,7 @@ export function createTelegramInboundRouteRuntime<
     const held: TMessage[] =
       messages.length === 1 && typeof message.text === "string"
         ? [
-            Updates.carryTelegramUpdateExecutionFence(message, {
+            Updates.carryBaleUpdateExecutionFence(message, {
               ...message,
               text: commandText,
               caption: undefined,
@@ -11140,12 +11140,12 @@ export function createTelegramInboundRouteRuntime<
           ]
         : [...messages];
     if (entry.phase !== "created" || !entry.target) {
-      for (const input of held) Updates.reportTelegramUpdateDeferred(input);
-      deps.recordRuntimeEvent?.("routing", new Error(TELEGRAM_THREADED_ROUTING_UNAVAILABLE_ERROR), { phase: "temporary-thread-unconfirmed" });
+      for (const input of held) Updates.reportBaleUpdateDeferred(input);
+      deps.recordRuntimeEvent?.("routing", new Error(BALE_THREADED_ROUTING_UNAVAILABLE_ERROR), { phase: "temporary-thread-unconfirmed" });
       return true;
     }
     const target = entry.target;
-    const records = getTelegramRoutableThreadRecords(
+    const records = getBaleRoutableThreadRecords(
       deps.threadStore?.list() ?? [],
       deps.getLiveThreadTargets?.(),
     );
@@ -11156,16 +11156,16 @@ export function createTelegramInboundRouteRuntime<
     );
     const pending = pendingUnboundReroutes.get(rerouteId)!;
     pending.temporaryThread = entry;
-    pending.allTabCopies = getTelegramAllTabSourceMessageIds(
+    pending.allTabCopies = getBaleAllTabSourceMessageIds(
       messages,
       target.chatId,
     );
-    for (const input of held) Updates.reportTelegramUpdateDeferred(input);
+    for (const input of held) Updates.reportBaleUpdateDeferred(input);
     // Cancel is offered only when the exact source can still be abandoned; the tab removal needs that retention first.
     if (
       deps.editInteractiveMessage &&
       held.every((input) =>
-        Updates.supportsTelegramDeferredAbandonment(input, journalBindingKey),
+        Updates.supportsBaleDeferredAbandonment(input, journalBindingKey),
       )
     ) {
       pending.abandonment = {
@@ -11174,7 +11174,7 @@ export function createTelegramInboundRouteRuntime<
         leaderEpoch: epoch,
       };
     }
-    pending.rootChooserText = formatTelegramTemporaryThreadChooserText(
+    pending.rootChooserText = formatBaleTemporaryThreadChooserText(
       command?.name,
     );
     const tabCopyId = openedNow
@@ -11196,7 +11196,7 @@ export function createTelegramInboundRouteRuntime<
       const chooserId = await publishRerouteChooser(
         pending,
         pending.rootChooserText,
-        buildTelegramUnboundRerouteChooserMarkup(rerouteId, records, {
+        buildBaleUnboundRerouteChooserMarkup(rerouteId, records, {
           canRestore: true,
           canCancel: !!pending.abandonment,
           getDisplayTitle: deps.getDisplayTitle,
@@ -11219,20 +11219,20 @@ export function createTelegramInboundRouteRuntime<
   ): Promise<void> => {
     if (await sendAllTabTemporaryInputChooser(undefined, "", messages, ctx))
       return;
-    throw new Error(TELEGRAM_THREADED_ROUTING_UNAVAILABLE_ERROR);
+    throw new Error(BALE_THREADED_ROUTING_UNAVAILABLE_ERROR);
   };
   const dispatchCommandOrPrompt =
-    Commands.createTelegramCommandOrPromptDispatcher<TMessage, TContext>({
-      extractRawText: Media.extractFirstTelegramMessageText,
+    Commands.createBaleCommandOrPromptDispatcher<TMessage, TContext>({
+      extractRawText: Media.extractFirstBaleMessageText,
       assertExecutionCurrent(message) {
-        Updates.assertTelegramUpdateExecutionCurrent(message);
+        Updates.assertBaleUpdateExecutionCurrent(message);
       },
       shouldIgnoreMessages: (messages) =>
-        !Media.hasTelegramMessagesPromptContent(messages),
+        !Media.hasBaleMessagesPromptContent(messages),
       consumeThreadNameInput: async (messages) => {
         const message = messages[0];
         if (!message || messages.length !== 1) return false;
-        const address = Updates.getTelegramMessageTarget(message);
+        const address = Updates.getBaleMessageTarget(message);
         if (!address) return false;
         const target = { ...address },
           replyToMessageId = message.message_id;
@@ -11259,7 +11259,7 @@ export function createTelegramInboundRouteRuntime<
           ? () => {
               if (!isCurrent())
                 throw new Error(
-                  "Telegram Thread name input lost owner authority.",
+                  "Bale Thread name input lost owner authority.",
                 );
             }
           : undefined;
@@ -11273,7 +11273,7 @@ export function createTelegramInboundRouteRuntime<
               assertRecipient();
               if (!portsCurrent())
                 throw new Error(
-                  "Telegram Thread name result lost port authority.",
+                  "Bale Thread name result lost port authority.",
                 );
               assertRecipient();
             }
@@ -11289,7 +11289,7 @@ export function createTelegramInboundRouteRuntime<
           lifetime.finish();
           return true;
         }
-        const name = Media.extractFirstTelegramMessageText(messages).trim();
+        const name = Media.extractFirstBaleMessageText(messages).trim();
         const reset = /^[A-Z]$/.test(name) && !!resetCurrentThreadName;
         if (!reset) {
           const validationError = validateThreadName?.(name);
@@ -11302,8 +11302,8 @@ export function createTelegramInboundRouteRuntime<
               target.chatId,
               replyToMessageId,
               validationError
-                ? Commands.formatTelegramInvalidInstanceName(validationError)
-                : Commands.formatTelegramInformationHeading(
+                ? Commands.formatBaleInvalidInstanceName(validationError)
+                : Commands.formatBaleInformationHeading(
                     "⚠️",
                     "Send 1–96 printable ASCII characters.",
                   ),
@@ -11329,13 +11329,13 @@ export function createTelegramInboundRouteRuntime<
           const replyText =
             result?.ok && !result.message
               ? reset
-                ? Commands.formatTelegramAutomaticThreadDisplayNameRestoredHeading(
+                ? Commands.formatBaleAutomaticThreadDisplayNameRestoredHeading(
                     result.threadName ?? name,
                   )
-                : Commands.formatTelegramThreadDisplayNameSavedHeading(
+                : Commands.formatBaleThreadDisplayNameSavedHeading(
                     result.threadName ?? consumed.name,
                   )
-              : Commands.formatTelegramInformationHeading(
+              : Commands.formatBaleInformationHeading(
                   result?.ok ? "✅" : "⚠️",
                   result?.message ??
                     (reset
@@ -11343,9 +11343,9 @@ export function createTelegramInboundRouteRuntime<
                       : "Thread display name update failed."),
                 );
           if (result?.ok) {
-            Updates.assertTelegramUpdateExecutionCurrent(message);
+            Updates.assertBaleUpdateExecutionCurrent(message);
             if (!isCurrent()) return true;
-            Updates.reportTelegramUpdateCompleted(message);
+            Updates.reportBaleUpdateCompleted(message);
             if (!isCurrent()) return true;
             // Input completion cannot lend its ended handle to detached recipient/API effects.
             void sendTextReply(
@@ -11354,7 +11354,7 @@ export function createTelegramInboundRouteRuntime<
               replyText,
               replyOptions(),
             ).catch((error) =>
-              deps.recordRuntimeEvent?.("telegram-command", error, {
+              deps.recordRuntimeEvent?.("bale-command", error, {
                 command: "name",
                 phase: reset ? "reset-result" : "rename-result",
               }),
@@ -11376,13 +11376,13 @@ export function createTelegramInboundRouteRuntime<
       },
       handleCommand: commandHandler,
       executeExtensionCommand: async (command, message, ctx) => {
-        const extensionCommand = Commands.findTelegramExtensionCommand(
+        const extensionCommand = Commands.findBaleExtensionCommand(
           command.name,
         );
         if (!extensionCommand) return false;
-        const sourceTarget = Updates.getTelegramMessageTarget(message);
+        const sourceTarget = Updates.getBaleMessageTarget(message);
         const assertExecutionCurrent =
-          Updates.createTelegramUpdateExecutionFenceGuard(message);
+          Updates.createBaleUpdateExecutionFenceGuard(message);
         try {
           assertExecutionCurrent();
           await extensionCommand.handler({
@@ -11414,7 +11414,7 @@ export function createTelegramInboundRouteRuntime<
           });
           assertExecutionCurrent();
         } catch (error) {
-          deps.recordRuntimeEvent?.("telegram-command", error, {
+          deps.recordRuntimeEvent?.("bale-command", error, {
             command: command.name,
           });
           assertExecutionCurrent();
@@ -11429,7 +11429,7 @@ export function createTelegramInboundRouteRuntime<
       },
       expandPromptTemplateCommand,
       replaceMessageText: (message, text) =>
-        Updates.carryTelegramUpdateExecutionFence(message, {
+        Updates.carryBaleUpdateExecutionFence(message, {
           ...message,
           text,
           caption: undefined,
@@ -11439,40 +11439,40 @@ export function createTelegramInboundRouteRuntime<
       },
     });
   dispatchReroutedCommandMessages = dispatchCommandOrPrompt;
-  const mediaDispatch = Media.createTelegramMediaGroupDispatchRuntime<
+  const mediaDispatch = Media.createBaleMediaGroupDispatchRuntime<
     TMessage,
     TContext
   >({
     mediaGroups: deps.mediaGroupRuntime,
     dispatchMessages: dispatchCommandOrPrompt,
-    onDeferredMessage: Updates.reportTelegramUpdateDeferred,
+    onDeferredMessage: Updates.reportBaleUpdateDeferred,
   });
-  const textDispatch = TextGroups.createTelegramTextGroupDispatchRuntime<
+  const textDispatch = TextGroups.createBaleTextGroupDispatchRuntime<
     TMessage,
     TContext
   >({
     textGroups: deps.textGroupRuntime,
     dispatchMessages: dispatchCommandOrPrompt,
     dispatchSingleMessage: mediaDispatch.handleMessage,
-    onDeferredMessage: Updates.reportTelegramUpdateDeferred,
+    onDeferredMessage: Updates.reportBaleUpdateDeferred,
   });
-  const editRuntime = Turns.createTelegramQueuedPromptEditRuntime<
+  const editRuntime = Turns.createBaleQueuedPromptEditRuntime<
     TMessage,
     TContext
   >({
-    ...deps.telegramQueueStore,
+    ...deps.baleQueueStore,
     updateStatus: deps.updateStatus,
   });
-  const handleTelegramTopicLifecycleUpdate = async (
-    lifecycle: Updates.TelegramTopicLifecycleUpdate<TMessage>,
+  const handleBaleTopicLifecycleUpdate = async (
+    lifecycle: Updates.BaleTopicLifecycleUpdate<TMessage>,
     ctx: TContext,
   ): Promise<void> => {
     const assertExecutionCurrent =
-      Updates.createTelegramUpdateExecutionFenceGuard(lifecycle.message);
+      Updates.createBaleUpdateExecutionFenceGuard(lifecycle.message);
     assertExecutionCurrent();
-    await deps.handleTelegramTopicLifecycleUpdate?.(lifecycle, ctx);
+    await deps.handleBaleTopicLifecycleUpdate?.(lifecycle, ctx);
     assertExecutionCurrent();
-    const key = formatTelegramTargetKey(lifecycle.target);
+    const key = formatBaleTargetKey(lifecycle.target);
     if (lifecycle.kind !== "created" || !deps.threadStore) {
       implicitThreadCreations.delete(key);
       return;
@@ -11481,13 +11481,13 @@ export function createTelegramInboundRouteRuntime<
     assertExecutionCurrent();
     const message = lifecycle.message,
       created = message.forum_topic_created;
-    const [updateId] = Updates.collectTelegramAdmissionSourceUpdateIds([
+    const [updateId] = Updates.collectBaleAdmissionSourceUpdateIds([
       message,
     ]);
     const cap = captureTemporaryThreadAuthority(
       ctx,
       () =>
-        Updates.getTelegramUpdateExecutionFence(message)?.isCurrent() === true,
+        Updates.getBaleUpdateExecutionFence(message)?.isCurrent() === true,
     );
     if (
       created &&
@@ -11497,7 +11497,7 @@ export function createTelegramInboundRouteRuntime<
       cap &&
       deps.runWorkspaceOperation &&
       updateId !== undefined &&
-      !Updates.isTelegramHistoricalInput(message) &&
+      !Updates.isBaleHistoricalInput(message) &&
       message.chat.type === "private" &&
       message.chat.id === cap.operatorUserId &&
       message.from?.id === cap.operatorUserId &&
@@ -11528,20 +11528,20 @@ export function createTelegramInboundRouteRuntime<
   // Answer the guest query immediately so the agent-end edit can replace the
   // early ACK once the turn settles. The ACK is the first placeholder frame and
   // the loop rotates through the remaining frames until the replacement.
-  const TELEGRAM_GUEST_ACK_HTML = Replies.buildTelegramGuestPlaceholderFrame(0);
-  const handleAuthorizedTelegramGuestMessage = async (
-    guestMessage: Updates.TelegramGuestMessage & { from: TelegramUser },
+  const BALE_GUEST_ACK_HTML = Replies.buildBaleGuestPlaceholderFrame(0);
+  const handleAuthorizedBaleGuestMessage = async (
+    guestMessage: Updates.BaleGuestMessage & { from: BaleUser },
     ctx: TContext,
   ): Promise<void> => {
     const assertExecutionCurrent =
-      Updates.createTelegramUpdateExecutionFenceGuard(guestMessage);
+      Updates.createBaleUpdateExecutionFenceGuard(guestMessage);
     assertExecutionCurrent();
     let guestInlineMessageId: string | undefined;
     if (deps.answerGuestQueryForInlineMessage) {
       try {
         guestInlineMessageId = await deps.answerGuestQueryForInlineMessage(
           guestMessage.guest_query_id,
-          TELEGRAM_GUEST_ACK_HTML,
+          BALE_GUEST_ACK_HTML,
           { parseMode: "HTML" },
         );
         if (guestInlineMessageId) {
@@ -11567,7 +11567,7 @@ export function createTelegramInboundRouteRuntime<
     // Media messages carry the user's text as a caption.
     const text = guestMessage.text ?? guestMessage.caption ?? "";
     const gm = guestMessage as unknown as Record<string, unknown>;
-    // Build telegram prefix with guest context
+    // Build bale prefix with guest context
     const chatRaw = gm.chat as Record<string, unknown>;
     const chatType = chatRaw?.type as string;
     const fromRaw = gm.from as Record<string, unknown> | undefined;
@@ -11578,8 +11578,8 @@ export function createTelegramInboundRouteRuntime<
     const guestBotCallerChat = gm.guest_bot_caller_chat as
       Record<string, unknown> | undefined;
     const ownerUserId = deps.configStore.getAllowedUserId();
-    const replyPeer = formatTelegramPromptPeer(replyFromRaw);
-    const guestPeer = resolveTelegramGuestPromptPeer({
+    const replyPeer = formatBalePromptPeer(replyFromRaw);
+    const guestPeer = resolveBaleGuestPromptPeer({
       chatType,
       chat: chatRaw,
       from: fromRaw,
@@ -11588,7 +11588,7 @@ export function createTelegramInboundRouteRuntime<
       guestBotCallerChat,
       ownerUserId,
     });
-    const prefixParts = ["telegram"];
+    const prefixParts = ["bale"];
     if (guestPeer) {
       prefixParts.push(`guest:${guestPeer}`);
     } else if (chatType === "private") {
@@ -11605,15 +11605,15 @@ export function createTelegramInboundRouteRuntime<
         },
       );
     }
-    const telegramPrefix = `[${prefixParts.join("|")}]`;
+    const balePrefix = `[${prefixParts.join("|")}]`;
     // Extract reply context
     const replyText = replyMsg
       ? ((replyMsg.text as string) || (replyMsg.caption as string) || "").trim()
       : "";
     // Download files, run inbound handlers
-    const guestMsg = guestMessage as unknown as Media.TelegramMediaMessage;
+    const guestMsg = guestMessage as unknown as Media.BaleMediaMessage;
     // Guest message IDs belong to the peer's chat; scope files to that peer so they cannot collide with bot-chat files.
-    const guestScope = resolveTelegramGuestFileScope({
+    const guestScope = resolveBaleGuestFileScope({
       chatType,
       chat: chatRaw,
       from: fromRaw,
@@ -11633,8 +11633,8 @@ export function createTelegramInboundRouteRuntime<
         source ? { ...source, scope: guestScope } : source,
       );
     const replyFiles = guestMsg.reply_to_message
-      ? await Media.downloadTelegramMessageFiles(
-          [guestMsg.reply_to_message as Media.TelegramMediaMessage],
+      ? await Media.downloadBaleMessageFiles(
+          [guestMsg.reply_to_message as Media.BaleMediaMessage],
           { downloadFile: downloadGuestFile },
         )
       : [];
@@ -11644,7 +11644,7 @@ export function createTelegramInboundRouteRuntime<
         ? await deps.inboundHandlerRuntime.process(replyFiles, "", ctx)
         : undefined;
     assertExecutionCurrent();
-    const files = await Media.downloadTelegramMessageFiles([guestMsg], {
+    const files = await Media.downloadBaleMessageFiles([guestMsg], {
       downloadFile: downloadGuestFile,
     });
     assertExecutionCurrent();
@@ -11661,27 +11661,27 @@ export function createTelegramInboundRouteRuntime<
       const replyBlock = replyText
         ? `${replyHeader} ${replyText}`
         : replyHeader;
-      sourceContext = appendTelegramSourceAttachmentSection(
+      sourceContext = appendBaleSourceAttachmentSection(
         replyBlock,
         replyPeer,
         processedReply?.promptFiles ?? replyFiles,
         processedReply?.handlerOutputs,
       );
     }
-    const promptText = Turns.buildTelegramTurnPrompt({
-      telegramPrefix,
+    const promptText = Turns.buildBaleTurnPrompt({
+      balePrefix,
       rawText,
       files,
       promptFiles: processed.promptFiles,
       handlerOutputs: processed.handlerOutputs,
       sourceContext,
-      // Guest Mode allows exactly one reply within Telegram's limited response
+      // Guest Mode allows exactly one reply within Bale's limited response
       // window; the note travels with the turn text so the agent sees it at
       // execution time without a guest-specific system prompt variant.
       guestTurn: true,
     });
     const order = deps.bridgeRuntime.queue.allocateItemOrder();
-    const content: Queue.TelegramPromptContent[] = [
+    const content: Queue.BalePromptContent[] = [
       { type: "text", text: promptText },
     ];
     for (const file of processed.promptFiles) {
@@ -11700,7 +11700,7 @@ export function createTelegramInboundRouteRuntime<
       }
     }
     const admissionReceipts = createAdmissionReceipts("prompt", [guestMessage]);
-    const guestTurn: Queue.PendingTelegramTurn = {
+    const guestTurn: Queue.PendingBaleTurn = {
       kind: "prompt",
       chatId: 0,
       replyToMessageId: 0,
@@ -11712,52 +11712,52 @@ export function createTelegramInboundRouteRuntime<
       laneOrder: order,
       queuedAttachments: [],
       content,
-      historyText: Turns.formatTelegramTurnStatusSummary(
+      historyText: Turns.formatBaleTurnStatusSummary(
         processed.rawText || text,
         processed.promptFiles,
         processed.handlerOutputs,
       ),
-      statusSummary: Turns.truncateTelegramQueueSummary(
+      statusSummary: Turns.truncateBaleQueueSummary(
         processed.rawText || text,
       ),
       ...(admissionReceipts.length > 0 ? { admissionReceipts } : {}),
     };
-    const items = deps.telegramQueueStore.getQueuedItems();
-    Updates.assertTelegramUpdateExecutionCurrent(guestMessage);
-    deps.telegramQueueStore.setQueuedItems(
-      Queue.appendTelegramQueueItem(items, guestTurn),
+    const items = deps.baleQueueStore.getQueuedItems();
+    Updates.assertBaleUpdateExecutionCurrent(guestMessage);
+    deps.baleQueueStore.setQueuedItems(
+      Queue.appendBaleQueueItem(items, guestTurn),
     );
     reportQueueAdmission([guestMessage], admissionReceipts);
     deps.updateStatus(ctx);
-    requestDispatchNextQueuedTelegramTurn(ctx);
+    requestDispatchNextQueuedBaleTurn(ctx);
   };
-  const runtime = Updates.createTelegramPairedUpdateRuntime<TContext, TUpdate>({
+  const runtime = Updates.createBalePairedUpdateRuntime<TContext, TUpdate>({
     getAllowedUserId: deps.configStore.getAllowedUserId,
     getCurrentInstanceId: deps.getCurrentInstanceId,
     getMessageOwnership: deps.getMessageOwnership,
     getTargetOwnership: deps.getTargetOwnership,
     recordMessageOwnership: deps.recordMessageOwnership,
-    handleTelegramTopicLifecycleUpdate,
+    handleBaleTopicLifecycleUpdate,
     foreignOwnedUpdateForwarder: deps.foreignOwnedUpdateForwarder,
     persistAllowedUserId: deps.configStore.persistAllowedUserId,
     updateStatus: deps.updateStatus,
     removePendingMediaGroupMessages: deps.mediaGroupRuntime.removeMessages,
     flushPendingMediaGroupMessage: deps.mediaGroupRuntime.flushMessage,
     flushPendingTextGroupMessage: deps.textGroupRuntime.flushMessage,
-    removeQueuedTelegramTurnsByMessageIds:
+    removeQueuedBaleTurnsByMessageIds:
       deps.queueMutationRuntime.removeByMessageIds,
-    applyQueuedTelegramTurnReactionByMessageId:
+    applyQueuedBaleTurnReactionByMessageId:
       deps.queueMutationRuntime.applyReactionByMessageId,
     answerCallbackQuery: deps.answerCallbackQuery,
     answerGuestQuery: deps.answerGuestQuery,
-    handleAuthorizedTelegramCallbackQuery: callbackHandler,
+    handleAuthorizedBaleCallbackQuery: callbackHandler,
     sendTextReply: deps.sendTextReply,
-    handleAuthorizedTelegramMessage: async (message, ctx) => {
+    handleAuthorizedBaleMessage: async (message, ctx) => {
       const assertExecutionCurrent =
-        Updates.createTelegramUpdateExecutionFenceGuard(message);
+        Updates.createBaleUpdateExecutionFenceGuard(message);
       assertExecutionCurrent();
       if (typeof message.message_thread_id === "number") {
-        await deps.handleTelegramThreadTargetObserved?.(
+        await deps.handleBaleThreadTargetObserved?.(
           {
             chatId: message.chat.id,
             threadId: message.message_thread_id,
@@ -11766,7 +11766,7 @@ export function createTelegramInboundRouteRuntime<
         );
         assertExecutionCurrent();
       }
-      const text = Media.extractFirstTelegramMessageText([
+      const text = Media.extractFirstBaleMessageText([
         message as TMessage,
       ]).trim();
       if (deps.threadStore && typeof message.message_thread_id !== "number") {
@@ -11777,13 +11777,13 @@ export function createTelegramInboundRouteRuntime<
           return;
         }
         const records = deps.threadStore.list();
-        const bindings = getTelegramRoutableThreadRecords(
+        const bindings = getBaleRoutableThreadRecords(
           records,
           deps.getLiveThreadTargets?.(),
         );
-        const command = getKnownTelegramAllTabCommand(text);
+        const command = getKnownBaleAllTabCommand(text);
         const [sourceUpdateId] =
-          Updates.collectTelegramAdmissionSourceUpdateIds([message]);
+          Updates.collectBaleAdmissionSourceUpdateIds([message]);
         const presented =
           sourceUpdateId !== undefined &&
           deps
@@ -11801,7 +11801,7 @@ export function createTelegramInboundRouteRuntime<
           command &&
           command.name !== "thread" &&
           !presented &&
-          isTelegramAllTabCommandExpired(message)
+          isBaleAllTabCommandExpired(message)
         )
           return;
         if (
@@ -11822,7 +11822,7 @@ export function createTelegramInboundRouteRuntime<
           !command &&
           needsThread &&
           typeof message.text !== "string" &&
-          Media.hasTelegramMessagesPromptContent([message as TMessage])
+          Media.hasBaleMessagesPromptContent([message as TMessage])
         ) {
           if (message.media_group_id) {
             deps.mediaGroupRuntime.queueMessage({
@@ -11831,7 +11831,7 @@ export function createTelegramInboundRouteRuntime<
               dispatchMessages: (messages, queuedCtx) =>
                 routeAllTabAlbum(messages, queuedCtx ?? ctx),
             });
-            Updates.reportTelegramUpdateDeferred(message as TMessage);
+            Updates.reportBaleUpdateDeferred(message as TMessage);
             return;
           }
           if (
@@ -11855,7 +11855,7 @@ export function createTelegramInboundRouteRuntime<
               });
             } catch (error) {
               if (
-                Threads.isTelegramTopicModeUnavailableError(error)
+                Threads.isBaleTopicModeUnavailableError(error)
               ) {
                 deps.threadStore.setBotState({
                   threadMode: "disabled",
@@ -11868,24 +11868,24 @@ export function createTelegramInboundRouteRuntime<
                 await textDispatch.handleMessage(message as TMessage, ctx);
                 return;
               }
-              deps.recordRuntimeEvent?.("telegram", error, {
+              deps.recordRuntimeEvent?.("bale", error, {
                 phase: "threadless-topic-capability-check",
                 chatId: probeTarget.chatId,
                 threadId: probeTarget.threadId,
               });
             }
           }
-          throw new Error(TELEGRAM_THREADED_ROUTING_UNAVAILABLE_ERROR);
+          throw new Error(BALE_THREADED_ROUTING_UNAVAILABLE_ERROR);
         }
       }
       await textDispatch.handleMessage(message as TMessage, ctx);
     },
-    handleAuthorizedTelegramEditedMessage: editRuntime.updateFromEditedMessage,
-    handleAuthorizedTelegramGuestMessage,
-    handleUnboundTelegramTopicMessage: (message, ctx) => {
+    handleAuthorizedBaleEditedMessage: editRuntime.updateFromEditedMessage,
+    handleAuthorizedBaleGuestMessage,
+    handleUnboundBaleTopicMessage: (message, ctx) => {
       const operation = async (): Promise<void> => {
         const assertExecutionCurrent =
-          Updates.createTelegramUpdateExecutionFenceGuard(message);
+          Updates.createBaleUpdateExecutionFenceGuard(message);
         assertExecutionCurrent();
         if (!deps.threadStore) {
           await textDispatch.handleMessage(message as TMessage, ctx);
@@ -11894,7 +11894,7 @@ export function createTelegramInboundRouteRuntime<
         await deps.threadStore.load();
         assertExecutionCurrent();
         if (
-          Updates.isTelegramHistoricalInput(
+          Updates.isBaleHistoricalInput(
             message,
             (entry) => reviewMessage(entry) !== undefined,
           ) &&
@@ -11902,7 +11902,7 @@ export function createTelegramInboundRouteRuntime<
           deps.getCurrentLeaderEpoch?.() !== undefined &&
           needsHistoricalReview(message as TMessage)
         ) {
-          if (!Updates.reportTelegramHistoricalRoutingReview(message))
+          if (!Updates.reportBaleHistoricalRoutingReview(message))
             throw new Error("Historical routing hold is unavailable.");
           return;
         }
@@ -11910,12 +11910,12 @@ export function createTelegramInboundRouteRuntime<
           await textDispatch.handleMessage(message as TMessage, ctx);
           return;
         }
-        const target = Updates.getTelegramMessageTarget(message);
+        const target = Updates.getBaleMessageTarget(message);
         if (!target?.threadId) {
           await textDispatch.handleMessage(message as TMessage, ctx);
           return;
         }
-        const text = Media.extractFirstTelegramMessageText([
+        const text = Media.extractFirstBaleMessageText([
           message as TMessage,
         ]).trim();
         const instanceId = deps.getCurrentInstanceId?.();
@@ -11932,7 +11932,7 @@ export function createTelegramInboundRouteRuntime<
             ? (ctx as { cwd: string }).cwd
             : undefined;
         const claimLeaderWorkspaceBinding = ():
-          Threads.TelegramWorkspaceThreadBinding | undefined => {
+          Threads.BaleWorkspaceThreadBinding | undefined => {
           const sessionId = deps.workspaceRestoreRecipient?.getSessionId(ctx);
           if (!leaderWorkspaceCwd || !sessionId || !instanceId)
             return undefined;
@@ -11953,14 +11953,14 @@ export function createTelegramInboundRouteRuntime<
           return binding;
         };
         const reclaimUnboundTargetForLeader = async (
-          base: Partial<Threads.TelegramTopicTargetRecord> &
-            Pick<Threads.TelegramTopicTargetRecord, "createdAtMs">,
+          base: Partial<Threads.BaleTopicTargetRecord> &
+            Pick<Threads.BaleTopicTargetRecord, "createdAtMs">,
           profileKey: string,
           slot: string,
           threadName: string,
           event: string,
           details: Record<string, unknown>,
-          leaderBinding?: Threads.TelegramWorkspaceThreadBinding,
+          leaderBinding?: Threads.BaleWorkspaceThreadBinding,
         ): Promise<void> => {
           if (leaderBinding) {
             const {
@@ -12042,7 +12042,7 @@ export function createTelegramInboundRouteRuntime<
           await textDispatch.handleMessage(message as TMessage, ctx);
         };
         const records = deps.threadStore.list();
-        const routableRecords = getTelegramRoutableThreadRecords(
+        const routableRecords = getBaleRoutableThreadRecords(
           records,
           deps.getLiveThreadTargets?.(),
         );
@@ -12076,7 +12076,7 @@ export function createTelegramInboundRouteRuntime<
               target.chatId,
               message.message_id,
               "Instance " +
-                getTelegramThreadRecordLabel(existing, deps.getDisplayTitle) +
+                getBaleThreadRecordLabel(existing, deps.getDisplayTitle) +
                 " is starting. Please wait…",
               { target },
             );
@@ -12088,9 +12088,9 @@ export function createTelegramInboundRouteRuntime<
               message.message_id,
               "Instance " +
                 escapeHtml(
-                  getTelegramThreadRecordLabel(existing, deps.getDisplayTitle),
+                  getBaleThreadRecordLabel(existing, deps.getDisplayTitle),
                 ) +
-                ` is not currently registered with the Telegram bus. This thread is preserved; retry shortly. If it does not recover, run ${Commands.formatTelegramPiCommandHtml("/telegram-connect")} in that Pi instance.`,
+                ` is not currently registered with the Bale bus. This thread is preserved; retry shortly. If it does not recover, run ${Commands.formatBalePiCommandHtml("/bale-connect")} in that Pi instance.`,
               { parseMode: "HTML", target },
             );
             return;
@@ -12118,7 +12118,7 @@ export function createTelegramInboundRouteRuntime<
         if (deletedObservation) {
           deps.recordRuntimeEvent?.(
             "inbound-worker",
-            "Discarded update from a confirmed deleted Telegram thread",
+            "Discarded update from a confirmed deleted Bale thread",
             {
               phase: "discard-deleted-thread",
               chatId: target.chatId,
@@ -12143,14 +12143,14 @@ export function createTelegramInboundRouteRuntime<
               "). Closing and deleting this old topic. Use the current thread tab instead.",
             { target },
           );
-          await deleteReservedTelegramTopicThroughReconciler(
+          await deleteReservedBaleTopicThroughReconciler(
             deps,
             { chatId: target.chatId, threadId: target.threadId },
             message.message_id,
           );
           return;
         }
-        const command = getKnownTelegramAllTabCommand(text);
+        const command = getKnownBaleAllTabCommand(text);
         if (command && hasAnyRoutableThread) {
           await sendUnboundRerouteChooser(message as TMessage, ctx);
           return;
@@ -12175,7 +12175,7 @@ export function createTelegramInboundRouteRuntime<
               });
             } catch (error) {
               currentLeaderIsStale =
-                Threads.isTelegramTopicTargetStaleError(error);
+                Threads.isBaleTopicTargetStaleError(error);
               if (!currentLeaderIsStale) throw error;
             }
             if (currentLeaderIsStale) {
@@ -12198,7 +12198,7 @@ export function createTelegramInboundRouteRuntime<
                 await deps.sendTextReply(
                   target.chatId,
                   message.message_id,
-                  TELEGRAM_SLOT_CAPACITY_MESSAGE,
+                  BALE_SLOT_CAPACITY_MESSAGE,
                   { target },
                 );
                 return;
@@ -12251,14 +12251,14 @@ export function createTelegramInboundRouteRuntime<
             await deps.sendTextReply(
               target.chatId,
               message.message_id,
-              TELEGRAM_SLOT_CAPACITY_MESSAGE,
+              BALE_SLOT_CAPACITY_MESSAGE,
               { target },
             );
             return;
           }
           const identityThreadName =
             priorLeaderIdentity?.threadName &&
-            ThreadNaming.isTelegramTopicThreadNameValidForSlot(
+            ThreadNaming.isBaleTopicThreadNameValidForSlot(
               priorLeaderIdentity.threadName,
               slot,
             )
@@ -12267,7 +12267,7 @@ export function createTelegramInboundRouteRuntime<
           const threadName =
             priorLeaderRecord?.threadName ??
             identityThreadName ??
-            ThreadNaming.chooseTelegramThreadName({ slot }) ??
+            ThreadNaming.chooseBaleThreadName({ slot }) ??
             "Pi";
           await reclaimUnboundTargetForLeader(
             { createdAtMs: priorLeaderRecord?.createdAtMs ?? Date.now() },
@@ -12330,26 +12330,26 @@ export function createTelegramInboundRouteRuntime<
 
 // --- Assistant Output Delivery Authority ---
 
-export interface TelegramAssistantOutputAuthority<TTransportStamp> {
+export interface BaleAssistantOutputAuthority<TTransportStamp> {
   transportStamp: TTransportStamp;
   route: "direct" | "follower" | "none";
   directEpoch?: number | string;
   followerGeneration?: string;
-  target?: Queue.TelegramQueueTarget;
+  target?: Queue.BaleQueueTarget;
 }
 
-export interface TelegramAssistantOutputAuthorityRuntime<TTransportStamp> {
-  captureAuthority: () => TelegramAssistantOutputAuthority<TTransportStamp>;
+export interface BaleAssistantOutputAuthorityRuntime<TTransportStamp> {
+  captureAuthority: () => BaleAssistantOutputAuthority<TTransportStamp>;
   isAuthorityActive: (
-    authority: TelegramAssistantOutputAuthority<TTransportStamp>,
+    authority: BaleAssistantOutputAuthority<TTransportStamp>,
   ) => boolean;
   canDeliver: () => boolean;
 }
 
-export function createTelegramAssistantOutputAuthorityRuntime<
+export function createBaleAssistantOutputAuthorityRuntime<
   TTransportStamp,
 >(deps: {
-  getPreferredTarget: () => Queue.TelegramQueueTarget | undefined;
+  getPreferredTarget: () => Queue.BaleQueueTarget | undefined;
   getFallbackChatId: () => number | undefined;
   getTransportStamp: () => TTransportStamp;
   isTransportStampActive: (stamp: TTransportStamp) => boolean;
@@ -12357,8 +12357,8 @@ export function createTelegramAssistantOutputAuthorityRuntime<
   getDirectEpoch: () => number | string | undefined;
   isFollowerRegistered: () => boolean;
   getFollowerGeneration: () => string | undefined;
-}): TelegramAssistantOutputAuthorityRuntime<TTransportStamp> {
-  const getCurrentTarget = (): Queue.TelegramQueueTarget | undefined => {
+}): BaleAssistantOutputAuthorityRuntime<TTransportStamp> {
+  const getCurrentTarget = (): Queue.BaleQueueTarget | undefined => {
     const preferred = deps.getPreferredTarget();
     if (preferred) return { ...preferred };
     const chatId = deps.getFallbackChatId();

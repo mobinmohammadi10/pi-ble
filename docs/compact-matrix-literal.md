@@ -1,6 +1,8 @@
+> Bale port: only the supported subset in [Bale compatibility](bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
 # Adaptive Button Literal
 
-> Status: Portable CML v4 button standard; `pi-telegram` also reuses its positional-cell mechanics for compact voice actions.
+> Status: Portable CML v4 button standard; `pi-bale` also reuses its positional-cell mechanics for compact voice actions.
 
 Adaptive Button Literal is one bounded-depth matrix grammar over a shared button AST. It accepts strict JSON button objects, positional Compact Matrix Literal (CML) cells, or both in the same matrix and row. Commas between completed matrix or row elements are optional, so producers can progressively compress representation without changing runtime meaning.
 
@@ -78,7 +80,7 @@ A four-atom cell adds disabled state:
 {Next|counter::next||0}
 ```
 
-The fourth atom accepts `1` or `true` (disabled), and `0` or `false` (enabled), with exact lowercase spelling; omitting the fourth position keeps the button enabled. The third atom may be empty in this form to retain the default selected style. Disabled cells may omit the prompt, label, and selected style: `{Next|||1}` is a label-only control and `{|||1}` is a blank disabled cell. Enabled CML cells still require a prompt. Telegram requires a `text` field, so its renderer sends a non-breaking space (`U+00A0`) for a blank disabled cell; the notation itself does not invent a label or action. Client rendering of blank cells requires live verification. JSON uses a boolean `disabled`; other value types are invalid. Disabled cells remain visible in their original row but register no action and carry no callback data.
+The fourth atom accepts `1` or `true` (disabled), and `0` or `false` (enabled), with exact lowercase spelling; omitting the fourth position keeps the button enabled. The third atom may be empty in this form to retain the default selected style. Disabled cells may omit the prompt, label, and selected style: `{Next|||1}` is a label-only control and `{|||1}` is a blank disabled cell. Enabled CML cells still require a prompt. Bale requires a `text` field, so its renderer sends a non-breaking space (`U+00A0`) for a blank disabled cell; the notation itself does not invent a label or action. Client rendering of blank cells requires live verification. JSON uses a boolean `disabled`; other value types are invalid. Disabled cells remain visible in their original row but register no action and carry no callback data.
 
 ## Adaptive Grammar
 
@@ -138,9 +140,9 @@ A conforming parser:
 
 Malformed JSON-looking input receives no generic recovery. It is accepted only if it independently forms a complete valid adaptive literal.
 
-## Telegram Profiles
+## Bale Profiles
 
-For `telegram_button` hidden comments and fenced blocks:
+For `bale_button` hidden comments and fenced blocks:
 
 - JSON `value` keeps its existing label/prompt fallback semantics.
 - Positional `{value}` is equivalent to JSON `{"value":"value"}`; a lone JSON `label` or `prompt` has the same both-fields shorthand semantics.
@@ -150,35 +152,35 @@ For `telegram_button` hidden comments and fenced blocks:
 - Positional `{label|prompt|selected_style|1}` is equivalent to JSON `{"label":"label","prompt":"prompt","selected_style":"selected_style","disabled":true}` with a valid selected style; `{|prompt||1}` is equivalent to `{"prompt":"prompt","disabled":true}`. Fourth-position `0` or `false` matches `disabled: false`; `true` is equivalent to `1`.
 - `{label|||1}` matches JSON `{"label":"label","disabled":true}`; `{|||1}` matches `{"disabled":true}`. Disabled cells require no prompt and do not retain action or selected-style semantics.
 - Disabled buttons serialize as `{ text, disabled: {} }`, without `callback_data`; they neither enqueue prompts nor invoke bound app methods. Enabled controls keep existing selection and callback behavior.
-- Top-level cells become full-width rows. Telegram button wrappers additionally accept adjacent complete JSON/CML cells and matrices, with optional commas between groups. Normalize each group independently and concatenate its rows in source order: `[{A|a}] [{B|b}]` and `{A|a} [{B|b}]` both equal `[{A|a}{B|b}]`. Horizontal rows remain nested inside a matrix: `[[{A|a}{B|b}]] [{C|c}]` equals `[[{A|a}{B|b}]{C|c}]`. This is a Telegram button wrapper extension, not a change to portable CML v4 or voice syntax.
+- Top-level cells become full-width rows. Bale button wrappers additionally accept adjacent complete JSON/CML cells and matrices, with optional commas between groups. Normalize each group independently and concatenate its rows in source order: `[{A|a}] [{B|b}]` and `{A|a} [{B|b}]` both equal `[{A|a}{B|b}]`. Horizontal rows remain nested inside a matrix: `[[{A|a}{B|b}]] [{C|c}]` equals `[[{A|a}{B|b}]{C|c}]`. This is a Bale button wrapper extension, not a change to portable CML v4 or voice syntax.
 - Nested rows become horizontal keyboard rows; horizontal intent still requires the explicit nested array.
 - Invalid payloads are stripped with their recognized action comment and register no callbacks.
 
-The wrapper selects placement without changing cell semantics. A hidden `telegram_button` HTML comment builds the footer keyboard. A standalone column-zero fenced block opened by exactly three backticks plus `telegram_button` renders rows between paragraphs in Native Rich Markdown. A singleton JSON/CML object needs no array in either wrapper. Fenced content must be one complete group sequence without trailing envelope text; any invalid group rejects the entire block before callback registration. Larger outer fences and ordinary code blocks remain literal examples; unclosed action fences are withheld. Native Rich rows support at most eight buttons and must fit one message chunk; these are renderer constraints, not grammar limits. HTML compatibility places fenced controls in the footer. See [Outbound](./outbound.md) for delivery and callback behavior.
+The wrapper selects placement without changing cell semantics. A hidden `bale_button` HTML comment builds the footer keyboard. A standalone column-zero fenced block opened by exactly three backticks plus `bale_button` renders rows between paragraphs in Native Rich Markdown. A singleton JSON/CML object needs no array in either wrapper. Fenced content must be one complete group sequence without trailing envelope text; any invalid group rejects the entire block before callback registration. Larger outer fences and ordinary code blocks remain literal examples; unclosed action fences are withheld. Native Rich rows support at most eight buttons and must fit one message chunk; these are renderer constraints, not grammar limits. HTML compatibility places fenced controls in the footer. See [Outbound](./outbound.md) for delivery and callback behavior.
 
 ````markdown
 Description.
 
-```telegram_button
+```bale_button
 {Details|Explain this section.}
 {"label":"More","prompt":"Show more context."}
 ```
 
 Horizontal peers remain explicit:
 
-```telegram_button
+```bale_button
 [[{Choose|Choose this option.}{Unavailable|||true}]]
 ```
 
 Next paragraph.
 ````
 
-For `telegram_voice`, one positional cell maps `{text}`, `{text|lang}`, or `{text|lang|rate}` to one voice artifact. JSON object cells remain available for named fields, escaping, and multiline text. Voice comments do not accept matrix or row composition.
+For `bale_voice`, one positional cell maps `{text}`, `{text|lang}`, or `{text|lang|rate}` to one voice artifact. JSON object cells remain available for named fields, escaping, and multiline text. Voice comments do not accept matrix or row composition.
 
 Example:
 
 ```html
-<!-- telegram_button [{⬆️ Up|/},[{⬅️|page-1}{➡️|page-3}],{"label":"📁 etc","prompt":"/etc"}] -->
+<!-- bale_button [{⬆️ Up|/},[{⬅️|page-1}{➡️|page-3}],{"label":"📁 etc","prompt":"/etc"}] -->
 ```
 
 The enclosing HTML-comment transport owns its own delimiter boundary. Content containing the comment terminator must use another supported representation.

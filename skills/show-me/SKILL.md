@@ -1,7 +1,9 @@
 ---
 name: show-me
-description: Explain completed work, proposed changes, system structure, or ideas through truthful contextual Markdown, concise diagrams, code-shape sketches, and focused HTML artifacts. Use when the user asks to show what happened, what changed, or how something works, especially on a phone-width Telegram surface.
+description: Explain completed work, proposed changes, system structure, or ideas through truthful contextual Markdown, concise diagrams, code-shape sketches, and focused HTML artifacts. Use when the user asks to show what happened, what changed, or how something works, especially on a phone-width Bale surface.
 ---
+
+> Bale port: only the supported subset in [Bale compatibility](../../docs/bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
 
 Help the user understand the current topic. Skip the preamble and keep prose brief. Pick the smallest view that makes the key point clear without making the underlying claim less true.
 
@@ -14,8 +16,8 @@ Help the user understand the current topic. Skip the preamble and keep prose bri
 
 ### Surface Routing
 
-- Infer whether the active surface is Telegram, a terminal, or another client. Keep the explanation portable and use surface-specific delivery only when the context or user request authorizes it.
-- For Telegram output, read [`references/telegram-surfaces.md`](./references/telegram-surfaces.md) before selecting Markdown or HTML. Keep the immediate reply useful even when an attached artifact is the deeper view.
+- Infer whether the active surface is Bale, a terminal, or another client. Keep the explanation portable and use surface-specific delivery only when the context or user request authorizes it.
+- For Bale output, read [`references/bale-surfaces.md`](./references/bale-surfaces.md) before selecting Markdown or HTML. Keep the immediate reply useful even when an attached artifact is the deeper view.
 - When asked what changed or happened in current work, inspect the retained diff, status, and validation evidence when available. Separate this task from pre-existing changes and distinguish repository state from released or live behavior.
 
 ### Truth And State
@@ -153,7 +155,7 @@ function expandSkill(command: string): string {
 
 - Adapt the view to the available width in both terminal and chat surfaces. Use shallow trees with `├─`, `└─`, and `│`, a space before labels, and a three-column nesting step for file hierarchy; use indentation for call trees and pseudocode.
 - Keep labels concise and in the user's language. Express status with words; use text glyphs with predictable monospace width for aligned diagram structure.
-- For changes, use a compact fenced `diff` block in Telegram or the terminal. Show the changed lines and only the surrounding context needed to understand them.
+- For changes, use a compact fenced `diff` block in Bale or the terminal. Show the changed lines and only the surrounding context needed to understand them.
 - In trees, place comments and explanations as child nodes one level below the item they describe. Keep the item's own line for its label.
 - Use prose lists for independent statuses and split larger views into meaningful sections.
 

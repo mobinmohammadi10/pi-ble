@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram multi-instance bus helpers
+ * Regression tests for Bale multi-instance bus helpers
  * Covers the serializable leader/follower IPC contract and live follower registry behavior
  */
 
@@ -20,63 +20,63 @@ import test from "node:test";
 import { Worker } from "node:worker_threads";
 
 import {
-  classifyTelegramBusTransportError,
-  getTelegramBusFollowerEndpoint,
-  getTelegramBusLeaderEndpoint,
-  getTelegramBusTransportKind,
-  getTelegramBusTransportRetryPolicy,
-  probeTelegramBusEndpoint,
+  classifyBaleBusTransportError,
+  getBaleBusFollowerEndpoint,
+  getBaleBusLeaderEndpoint,
+  getBaleBusTransportKind,
+  getBaleBusTransportRetryPolicy,
+  probeBaleBusEndpoint,
 } from "../lib/bus-transport.ts";
 import {
-  createCurrentTelegramBusProcessRuntime,
-  canUseTelegramBusInputCustodyReference,
-  createTelegramBusFollowerDeliveryIdentity,
-  createTelegramBusForwardOwnershipValidator,
-  createTelegramBusFollowerSourceReferenceDeliveryIdentity,
-  createTelegramBusFollowerRegistry,
-  type TelegramBusEnvelope,
-  createTelegramBusProtocolIdentity,
-  createTelegramBusLiveRebindController,
-  createTelegramBusForeignOwnedUpdateForwarder,
-  createTelegramFollowerApiCallAuthorizer,
-  createTelegramBusLocalServer,
-  createTelegramBusProcessRuntime,
-  createTelegramBusRequestId,
-  createTelegramBusRequestIdFactory,
-  encodeTelegramBusEnvelope,
-  getTelegramBusEnvelopeTrafficClass,
-  getTelegramBusFollowerSocketPath,
-  getTelegramBusProtocolCompatibility,
-  getTelegramInputCustodyPeerReadiness,
-  getTelegramBusSocketPath,
-  getTelegramFollowerTargetOwnership,
-  hasTelegramBusCapability,
-  isTelegramBusEnvelopeAuthorized,
-  isTelegramBusForwardOwnershipCurrent,
-  isTelegramFollowerApiCallAllowed,
-  isSameTelegramBusFollowerRegistration,
-  markTelegramBusCrossTargetDelivery,
-  parseTelegramBusEnvelope,
-  probeTelegramBusLeader,
-  proveTelegramBusLeaderUnresponsive,
-  rejectTelegramBusRequest,
-  resolveTelegramBusSocketPath,
-  stripTelegramBusApiMetadata,
-  sendTelegramBusLocalEnvelope,
-  TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-  TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE,
-  TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF,
-  TELEGRAM_BUS_CAPABILITY_QUEUE_STEER,
-  hasTelegramBusSteerQueueHandoffCapability,
-  TELEGRAM_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
-  TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
-  TELEGRAM_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
-  TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
+  createCurrentBaleBusProcessRuntime,
+  canUseBaleBusInputCustodyReference,
+  createBaleBusFollowerDeliveryIdentity,
+  createBaleBusForwardOwnershipValidator,
+  createBaleBusFollowerSourceReferenceDeliveryIdentity,
+  createBaleBusFollowerRegistry,
+  type BaleBusEnvelope,
+  createBaleBusProtocolIdentity,
+  createBaleBusLiveRebindController,
+  createBaleBusForeignOwnedUpdateForwarder,
+  createBaleFollowerApiCallAuthorizer,
+  createBaleBusLocalServer,
+  createBaleBusProcessRuntime,
+  createBaleBusRequestId,
+  createBaleBusRequestIdFactory,
+  encodeBaleBusEnvelope,
+  getBaleBusEnvelopeTrafficClass,
+  getBaleBusFollowerSocketPath,
+  getBaleBusProtocolCompatibility,
+  getBaleInputCustodyPeerReadiness,
+  getBaleBusSocketPath,
+  getBaleFollowerTargetOwnership,
+  hasBaleBusCapability,
+  isBaleBusEnvelopeAuthorized,
+  isBaleBusForwardOwnershipCurrent,
+  isBaleFollowerApiCallAllowed,
+  isSameBaleBusFollowerRegistration,
+  markBaleBusCrossTargetDelivery,
+  parseBaleBusEnvelope,
+  probeBaleBusLeader,
+  proveBaleBusLeaderUnresponsive,
+  rejectBaleBusRequest,
+  resolveBaleBusSocketPath,
+  stripBaleBusApiMetadata,
+  sendBaleBusLocalEnvelope,
+  BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+  BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE,
+  BALE_BUS_CAPABILITY_QUEUE_HANDOFF,
+  BALE_BUS_CAPABILITY_QUEUE_STEER,
+  hasBaleBusSteerQueueHandoffCapability,
+  BALE_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
+  BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
+  BALE_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
+  BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY,
 } from "../lib/bus.ts";
-import { getTelegramProcessBirthIdentityLiveness } from "../lib/process-identity.ts";
+import { getBaleProcessBirthIdentityLiveness } from "../lib/process-identity.ts";
 import {
-  getTelegramThreadOwnerFromProfileKey,
-  getTelegramThreadOwnerKey,
+  getBaleThreadOwnerFromProfileKey,
+  getBaleThreadOwnerKey,
 } from "../lib/threads.ts";
 
 function selectedCommandInputWire(kind: "leader.prepareLiveRebind" | "leader.applyLiveRebind" | "leader.settleLiveRebind", name = "status") {
@@ -94,7 +94,7 @@ for (const fault of ["current", "missing-old", "foreign-old", "source", "unknown
     if (fault === "missing-old") delete wire.oldTarget;
     if (fault === "foreign-old") wire.oldTarget = { chatId: 7, threadId: 0 };
     if (fault === "source") wire.sourceUpdateIds = [101];
-    const parsed = parseTelegramBusEnvelope(JSON.stringify(wire));
+    const parsed = parseBaleBusEnvelope(JSON.stringify(wire));
     assert.equal(!!parsed, fault === "current");
     if (parsed) {
       assert.equal(parsed.kind, "leader.settleLiveRebind");
@@ -121,7 +121,7 @@ for (const name of ["status", "abort"] as const) for (const kind of ["leader.pre
       if (mode === "thread-float") descriptor.target.threadId = 42.5;
       if (mode === "group") { if (kind === "leader.prepareLiveRebind") (wire.updates as unknown[]).push({ update_id: 101 }); else (wire.sourceUpdateIds as number[]).push(101); }
       if (mode === "raw-method") wire.method = "sendMessage";
-      const parsed = parseTelegramBusEnvelope(JSON.stringify(wire));
+      const parsed = parseBaleBusEnvelope(JSON.stringify(wire));
       if (["current", "legacy"].includes(mode)) assert.deepEqual(parsed, wire); else assert.equal(parsed, undefined);
     });
   }
@@ -136,7 +136,7 @@ for (const kind of ["leader.prepareLiveRebind", "leader.applyLiveRebind", "leade
     }
     if (legacy === "abort-kind") wire.selectedCommand = { kind: "abort", target: { chatId: 7, threadId: 42 } };
     if (legacy === "status-mode") wire.mode = "observe-status";
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify(wire)), undefined);
+    assert.equal(parseBaleBusEnvelope(JSON.stringify(wire)), undefined);
   });
 }
 
@@ -149,7 +149,7 @@ for (const kind of ["leader.applyLiveRebind", "leader.settleLiveRebind"] as cons
     if (mode === "hash") source.sourceSha256 = "not-a-digest";
     if (mode === "extra") source.completionSha256 = "a".repeat(64);
     if (mode === "unmarked") delete wire.selectedCommand;
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify(wire)), undefined);
+    assert.equal(parseBaleBusEnvelope(JSON.stringify(wire)), undefined);
   });
 }
 
@@ -161,17 +161,17 @@ for (const mode of ["current", "generic", "legacy-mode", "without-branch", "old-
     if (mode === "without-branch") { delete wire.selectedCommand; delete wire.preparedSource; }
     if (mode === "old-target") wire.oldTarget = { chatId: 7, threadId: 10 };
     if (mode === "proof-missing") delete wire.preparedSource;
-    assert.deepEqual(parseTelegramBusEnvelope(JSON.stringify(wire)), mode === "current" ? wire : undefined);
+    assert.deepEqual(parseBaleBusEnvelope(JSON.stringify(wire)), mode === "current" ? wire : undefined);
   });
 }
 
 for (const mode of ["completed", "unknown", "not-issued", "no-ack", "released", "wrong-source", "extra-source", "extra-result", "extra-recipient", "bad-command", "not-issued-ack", "wrong-key", "missing-proof", "lost-response"] as const) {
   test(`Status completion controller observes exact expected source without issuing work (${mode})`, async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pi-status-observe-")), socketPath = getTelegramBusSocketPath(dir, process.platform, "observe", "consolidated");
+    const dir = mkdtempSync(join(tmpdir(), "pi-status-observe-")), socketPath = getBaleBusSocketPath(dir, process.platform, "observe", "consolidated");
     const preparedSource = { journalBindingKey: "journal", updateId: 100, sourceSha256: "a".repeat(64) }, selectedCommand = { name: "status" as const, target: { chatId: 7, threadId: 42 } };
-    const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: ["live-thread-rebind-save-v1", "live-thread-rebind-apply-v1", "live-thread-rebind-settle-v1", "live-thread-rebind-command-set-v1", "selected-menu-delivery-v1"] });
+    const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: ["live-thread-rebind-save-v1", "live-thread-rebind-apply-v1", "live-thread-rebind-settle-v1", "live-thread-rebind-command-set-v1", "selected-menu-delivery-v1"] });
     let calls = 0;
-    const server = createTelegramBusLocalServer({ socketPath, handleEnvelope(envelope) {
+    const server = createBaleBusLocalServer({ socketPath, handleEnvelope(envelope) {
       calls++; assert.equal(envelope.kind, "leader.settleLiveRebind"); assert.equal(Reflect.get(envelope, "mode"), "observe-command");
       if (mode === "lost-response") return undefined;
       const result = { operationId: "live", recipient: { instanceId: "follower", sessionId: "session", generation: "registration", bindingKey: "journal", ...(mode === "extra-recipient" ? { receipt: "borrowed" } : {}) },
@@ -182,7 +182,7 @@ for (const mode of ["completed", "unknown", "not-issued", "no-ack", "released", 
         ...(mode === "extra-result" ? { deliverySucceeded: true } : {}) };
       return { kind: "bus.ack", requestId: envelope.requestId, ok: true, result };
     } });
-    const run = createTelegramBusLiveRebindController({ getFollower: () => ({ instanceId: "follower", sessionId: "session", registrationGeneration: "registration", pid: process.pid, processBirthId: `${process.pid}:observe`,
+    const run = createBaleBusLiveRebindController({ getFollower: () => ({ instanceId: "follower", sessionId: "session", registrationGeneration: "registration", pid: process.pid, processBirthId: `${process.pid}:observe`,
       cwd: dir, slot: "A", busSocketPath: socketPath, target: selectedCommand.target, protocol, connectedAtMs: 1, lastHeartbeatMs: 1 }), localProtocolIdentity: protocol, getAuthSecret: () => "secret", createRequestId: () => "observe",
       // Only the lost reply waits out its deadline; every answered mode uses the production window.
       ...(mode === "lost-response" ? { timeoutMs: 250 } : {}) });
@@ -200,21 +200,21 @@ for (const mode of ["completed", "unknown", "not-issued", "no-ack", "released", 
 for (const phase of ["save", "apply", "release"] as const) {
   for (const mode of ["current", "generic-ack", "wrong-target", "wrong-name", "extra-ack", "lost-ack", "missing-local", "missing-peer", "legacy-local", "legacy-peer", "delivery-missing", "target-mismatch", "late-protocol", "mutated-input", "missing-source", "source-key", "source-id", "source-hash", "source-extra", "input-source-bad"] as const) {
     test(`Selected status controller binds exact singleton branch across one IPC attempt (${phase}/${mode})`, async () => {
-      const dir = mkdtempSync(join(tmpdir(), "pi-status-input-wire-")), socketPath = getTelegramBusSocketPath(dir, process.platform, "status", "consolidated");
+      const dir = mkdtempSync(join(tmpdir(), "pi-status-input-wire-")), socketPath = getBaleBusSocketPath(dir, process.platform, "status", "consolidated");
       const caps = ["live-thread-rebind-save-v1", "live-thread-rebind-apply-v1", "live-thread-rebind-settle-v1", "selected-menu-delivery-v1", "live-thread-rebind-command-set-v1"];
-      const local = createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: mode === "missing-local" ? caps.slice(0, -1) : mode === "legacy-local" ? caps.map(cap => cap === "live-thread-rebind-command-set-v1" ? "live-thread-rebind-status-v1" : cap) : caps });
+      const local = createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: mode === "missing-local" ? caps.slice(0, -1) : mode === "legacy-local" ? caps.map(cap => cap === "live-thread-rebind-command-set-v1" ? "live-thread-rebind-status-v1" : cap) : caps });
       const follower = { instanceId: "follower", sessionId: "session", slot: "A", cwd: dir, pid: process.pid, processBirthId: `${process.pid}:status-wire`, sessionGeneration: 1,
-        registrationGeneration: "registration", busSocketPath: socketPath, connectedAtMs: 1, lastHeartbeatMs: 1, target: { chatId: 7, threadId: 10 }, protocol: createTelegramBusProtocolIdentity({ runtimeBuild: "fixture",
+        registrationGeneration: "registration", busSocketPath: socketPath, connectedAtMs: 1, lastHeartbeatMs: 1, target: { chatId: 7, threadId: 10 }, protocol: createBaleBusProtocolIdentity({ runtimeBuild: "fixture",
           capabilities: mode === "missing-peer" ? caps.slice(0, -1) : mode === "legacy-peer" ? caps.map(cap => cap === "live-thread-rebind-command-set-v1" ? "live-thread-rebind-held-command-v1" : cap) : mode === "delivery-missing" ? caps.filter(cap => cap !== "selected-menu-delivery-v1") : caps }) };
       let calls = 0;
       const preparedSource = { journalBindingKey: "journal", updateId: 100, sourceSha256: "a".repeat(64) };
       const descriptor = { name: "status" as const, target: { chatId: 7, threadId: mode === "target-mismatch" ? 99 : 42 } }, expectedDescriptor = structuredClone(descriptor);
-      const server = createTelegramBusLocalServer({ socketPath, handleEnvelope(envelope) {
+      const server = createBaleBusLocalServer({ socketPath, handleEnvelope(envelope) {
         calls++; assert.ok(["leader.prepareLiveRebind", "leader.applyLiveRebind", "leader.settleLiveRebind"].includes(envelope.kind));
         assert.deepEqual(Reflect.get(envelope, "selectedCommand"), expectedDescriptor);
         if (mode === "mutated-input") descriptor.target.threadId = 99;
         if (mode === "lost-ack") return undefined;
-        if (mode === "late-protocol") follower.protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "replacement", capabilities: caps });
+        if (mode === "late-protocol") follower.protocol = createBaleBusProtocolIdentity({ runtimeBuild: "replacement", capabilities: caps });
         const result = { operationId: "live", recipient: { instanceId: "follower", sessionId: "session", generation: "registration", bindingKey: "journal" }, sourceUpdateIds: [100],
           ...(mode === "missing-source" ? {} : { preparedSource: mode === "source-key" ? { ...preparedSource, journalBindingKey: "other" }
             : mode === "source-id" ? { ...preparedSource, updateId: 101 } : mode === "source-hash" ? { ...preparedSource, sourceSha256: "b".repeat(64) }
@@ -226,7 +226,7 @@ for (const phase of ["save", "apply", "release"] as const) {
       } });
       try {
         await server.start();
-        const run = createTelegramBusLiveRebindController({ getFollower: () => follower, localProtocolIdentity: local, getAuthSecret: () => "secret", createRequestId: () => "status", timeoutMs: 250 });
+        const run = createBaleBusLiveRebindController({ getFollower: () => follower, localProtocolIdentity: local, getAuthSecret: () => "secret", createRequestId: () => "status", timeoutMs: 250 });
         const task = run({ operationId: "live", instanceId: "follower", sessionId: "session", recipientBindingKey: "journal", isCurrent: () => true, selectedCommand: descriptor, preparedSource: mode === "input-source-bad" ? { ...preparedSource, sourceSha256: "bad" } : preparedSource,
           ...(phase === "save" ? { updates: [{ update_id: 100, message: { text: "/status" } }] } : { mode: phase, sourceUpdateIds: [100], slot: "A", target: { chatId: 7, threadId: 42 }, oldTarget: { chatId: 7, threadId: 10 } }) });
         let result: Awaited<typeof task>;
@@ -251,18 +251,18 @@ function selectedMenuWire(kind: "send-text" | "edit-text" = "send-text") {
 
 for (const kind of ["send-text", "edit-text"] as const) {
   test(`Selected follower menu wire is distinct closed copied evidence, not ordinary API admission (${kind})`, () => {
-    const wire = selectedMenuWire(kind), parsed = parseTelegramBusEnvelope(JSON.stringify(wire));
+    const wire = selectedMenuWire(kind), parsed = parseBaleBusEnvelope(JSON.stringify(wire));
     assert.equal(parsed?.kind, "follower.deliverSelectedMenu");
     assert.deepEqual(parsed, wire);
-    assert.equal(getTelegramBusEnvelopeTrafficClass(parsed!), "generation-fenced");
+    assert.equal(getBaleBusEnvelopeTrafficClass(parsed!), "generation-fenced");
     wire.recipient.target.threadId = 99; wire.effect.text = "changed"; wire.effect.replyMarkup.inline_keyboard[0]![0]!.callback_data = "changed";
     if (parsed?.kind !== "follower.deliverSelectedMenu") assert.fail("Wrong contract");
     assert.equal(parsed.recipient.target.threadId, 42); assert.equal(parsed.effect.text, "Status");
-    const local = createTelegramBusProtocolIdentity({ runtimeBuild: "candidate", capabilities: [TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY] });
-    const old = createTelegramBusProtocolIdentity({ runtimeBuild: "old", capabilities: [] });
-    assert.equal(hasTelegramBusCapability(local, TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY), true);
-    assert.equal(hasTelegramBusCapability(old, TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY), false);
-    assert.deepEqual(parseTelegramBusEnvelope(encodeTelegramBusEnvelope(parsed)), parsed);
+    const local = createBaleBusProtocolIdentity({ runtimeBuild: "candidate", capabilities: [BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY] });
+    const old = createBaleBusProtocolIdentity({ runtimeBuild: "old", capabilities: [] });
+    assert.equal(hasBaleBusCapability(local, BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY), true);
+    assert.equal(hasBaleBusCapability(old, BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY), false);
+    assert.deepEqual(parseBaleBusEnvelope(encodeBaleBusEnvelope(parsed)), parsed);
   });
 }
 
@@ -307,53 +307,53 @@ for (const fault of ["missing-generation", "missing-operation", "missing-session
     if (fault === "reply-url") button.url = "https://example.invalid";
     if (fault === "oversized-callback") button.callback_data = "я".repeat(33);
     if (fault === "empty-keyboard-row") markup.inline_keyboard = [[]];
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify(value)), undefined);
+    assert.equal(parseBaleBusEnvelope(JSON.stringify(value)), undefined);
   });
 }
 
 test("Selected menu wire decoding does not reinterpret ordinary follower API or mint callback authority", () => {
   const ordinary = { kind: "follower.callApi", requestId: "legacy", instanceId: "follower", registrationGeneration: "registration", method: "call",
     args: ["sendMessage", { chat_id: 7, text: "ordinary" }], sentAtMs: 1000 };
-  assert.deepEqual(parseTelegramBusEnvelope(JSON.stringify(ordinary)), ordinary);
-  const parsed = parseTelegramBusEnvelope(JSON.stringify(selectedMenuWire()));
+  assert.deepEqual(parseBaleBusEnvelope(JSON.stringify(ordinary)), ordinary);
+  const parsed = parseBaleBusEnvelope(JSON.stringify(selectedMenuWire()));
   assert.equal(parsed?.kind, "follower.deliverSelectedMenu");
   assert.equal("assertAuthority" in parsed!, false);
   assert.equal("method" in parsed!, false); assert.equal("args" in parsed!, false);
-  assert.equal(hasTelegramBusCapability(createTelegramBusProtocolIdentity({ runtimeBuild: "root-default" }), TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY), false);
+  assert.equal(hasBaleBusCapability(createBaleBusProtocolIdentity({ runtimeBuild: "root-default" }), BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY), false);
 });
 
 test("Bus envelope auth compares the exact secret in constant time", () => {
   const secret = "leader-minted-secret";
   assert.equal(
-    isTelegramBusEnvelopeAuthorized(
+    isBaleBusEnvelopeAuthorized(
       { kind: "bus.ack", requestId: "r", ok: true, auth: secret },
       secret,
     ),
     true,
   );
   assert.equal(
-    isTelegramBusEnvelopeAuthorized(
+    isBaleBusEnvelopeAuthorized(
       { kind: "bus.ack", requestId: "r", ok: true, auth: "00000000000000000000" },
       secret,
     ),
     false,
   );
   assert.equal(
-    isTelegramBusEnvelopeAuthorized(
+    isBaleBusEnvelopeAuthorized(
       { kind: "bus.ack", requestId: "r", ok: true, auth: "short" },
       secret,
     ),
     false,
   );
   assert.equal(
-    isTelegramBusEnvelopeAuthorized(
+    isBaleBusEnvelopeAuthorized(
       { kind: "bus.ack", requestId: "r", ok: true },
       secret,
     ),
     false,
   );
   assert.equal(
-    isTelegramBusEnvelopeAuthorized(
+    isBaleBusEnvelopeAuthorized(
       { kind: "bus.ack", requestId: "r", ok: true },
       undefined,
     ),
@@ -364,17 +364,17 @@ test("Bus envelope auth compares the exact secret in constant time", () => {
 test("Explicit connection recovery is a register-only true wire flag", () => {
   const registration = { instanceId: "follower", connectedAtMs: 1 };
   const envelope = { kind: "follower.register", requestId: "connect", registration, recoverConnection: true };
-  const parsed = parseTelegramBusEnvelope(JSON.stringify(envelope));
+  const parsed = parseBaleBusEnvelope(JSON.stringify(envelope));
   assert.equal(parsed?.kind === "follower.register" && parsed.recoverConnection, true);
   for (const recoverConnection of [false, "true", 1, null]) {
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify({ ...envelope, recoverConnection })), undefined);
+    assert.equal(parseBaleBusEnvelope(JSON.stringify({ ...envelope, recoverConnection })), undefined);
   }
-  assert.equal(parseTelegramBusEnvelope(JSON.stringify({ ...envelope, kind: "follower.restoreWorkspace" })), undefined);
+  assert.equal(parseBaleBusEnvelope(JSON.stringify({ ...envelope, kind: "follower.restoreWorkspace" })), undefined);
 });
 
 test("Bus envelopes classify bootstrap, fenced traffic, and responses", () => {
   assert.equal(
-    getTelegramBusEnvelopeTrafficClass({
+    getBaleBusEnvelopeTrafficClass({
       kind: "follower.register",
       requestId: "register:1",
       registration: { instanceId: "follower", connectedAtMs: 1 },
@@ -382,7 +382,7 @@ test("Bus envelopes classify bootstrap, fenced traffic, and responses", () => {
     "bootstrap",
   );
   assert.equal(
-    getTelegramBusEnvelopeTrafficClass({
+    getBaleBusEnvelopeTrafficClass({
       kind: "follower.heartbeat",
       requestId: "heartbeat:1",
       instanceId: "follower",
@@ -392,7 +392,7 @@ test("Bus envelopes classify bootstrap, fenced traffic, and responses", () => {
     "generation-fenced",
   );
   assert.equal(
-    getTelegramBusEnvelopeTrafficClass({
+    getBaleBusEnvelopeTrafficClass({
       kind: "bus.ack",
       requestId: "response:1",
       ok: true,
@@ -402,50 +402,50 @@ test("Bus envelopes classify bootstrap, fenced traffic, and responses", () => {
 });
 
 test("Steer wire capability requires independent base handoff support", () => {
-  for (const caps of [[], [TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF], [TELEGRAM_BUS_CAPABILITY_QUEUE_STEER],
-    [TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF, TELEGRAM_BUS_CAPABILITY_QUEUE_STEER]]) {
-    assert.equal(hasTelegramBusSteerQueueHandoffCapability(createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: caps })), caps.length === 2);
+  for (const caps of [[], [BALE_BUS_CAPABILITY_QUEUE_HANDOFF], [BALE_BUS_CAPABILITY_QUEUE_STEER],
+    [BALE_BUS_CAPABILITY_QUEUE_HANDOFF, BALE_BUS_CAPABILITY_QUEUE_STEER]]) {
+    assert.equal(hasBaleBusSteerQueueHandoffCapability(createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: caps })), caps.length === 2);
   }
-  assert.equal(hasTelegramBusSteerQueueHandoffCapability(undefined), false);
+  assert.equal(hasBaleBusSteerQueueHandoffCapability(undefined), false);
 });
 
 test("Bus protocol capabilities are explicit and independently negotiable", () => {
-  const identity = createTelegramBusProtocolIdentity({
+  const identity = createBaleBusProtocolIdentity({
     runtimeBuild: "0.28.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF],
+    capabilities: [BALE_BUS_CAPABILITY_QUEUE_HANDOFF],
   });
   assert.equal(
-    hasTelegramBusCapability(identity, TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF),
+    hasBaleBusCapability(identity, BALE_BUS_CAPABILITY_QUEUE_HANDOFF),
     true,
   );
   assert.equal(
-    hasTelegramBusCapability(
+    hasBaleBusCapability(
       identity,
-      TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+      BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
     ),
     false,
   );
   assert.equal(
-    hasTelegramBusCapability(undefined, TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF),
+    hasBaleBusCapability(undefined, BALE_BUS_CAPABILITY_QUEUE_HANDOFF),
     false,
   );
 });
 
 test("Bus protocol compatibility ignores build skew and enforces capabilities", () => {
-  const local = createTelegramBusProtocolIdentity({
+  const local = createBaleBusProtocolIdentity({
     runtimeBuild: "0.28.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
   });
-  const compatibleSkew = createTelegramBusProtocolIdentity({
+  const compatibleSkew = createBaleBusProtocolIdentity({
     runtimeBuild: "0.28.1",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
   });
   assert.deepEqual(
-    getTelegramBusProtocolCompatibility({ local, remote: compatibleSkew }),
+    getBaleBusProtocolCompatibility({ local, remote: compatibleSkew }),
     { compatible: true, missingCapabilities: [] },
   );
   assert.deepEqual(
-    getTelegramBusProtocolCompatibility({ local }),
+    getBaleBusProtocolCompatibility({ local }),
     {
       compatible: false,
       reason: "missing-identity",
@@ -453,26 +453,26 @@ test("Bus protocol compatibility ignores build skew and enforces capabilities", 
     },
   );
   assert.deepEqual(
-    getTelegramBusProtocolCompatibility({
+    getBaleBusProtocolCompatibility({
       local,
-      remote: createTelegramBusProtocolIdentity({ runtimeBuild: "0.28.2" }),
+      remote: createBaleBusProtocolIdentity({ runtimeBuild: "0.28.2" }),
     }),
     {
       compatible: false,
       reason: "missing-capability",
       missingCapabilities: [
-        TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+        BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
       ],
     },
   );
 });
 
 test("Bus custody peer readiness uses only live generation and protocol evidence", () => {
-  const ready = createTelegramBusProtocolIdentity({ runtimeBuild: "0.45.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-      TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
-  const legacy = createTelegramBusProtocolIdentity({ runtimeBuild: "0.44.0" });
-  assert.deepEqual(getTelegramInputCustodyPeerReadiness([
+  const ready = createBaleBusProtocolIdentity({ runtimeBuild: "0.45.0",
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+      BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
+  const legacy = createBaleBusProtocolIdentity({ runtimeBuild: "0.44.0" });
+  assert.deepEqual(getBaleInputCustodyPeerReadiness([
     { registrationGeneration: "g1", protocol: ready },
     { registrationGeneration: "g2", protocol: legacy },
     { registrationGeneration: "g3" },
@@ -481,33 +481,33 @@ test("Bus custody peer readiness uses only live generation and protocol evidence
 });
 
 test("Bus custody reference requires mutual capability and exact accepted handoff", () => {
-  const capable = createTelegramBusProtocolIdentity({ runtimeBuild: "0.45.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
-  const legacy = createTelegramBusProtocolIdentity({ runtimeBuild: "0.44.0" });
-  assert.equal(canUseTelegramBusInputCustodyReference({ local: capable, remote: capable }), true);
-  assert.equal(canUseTelegramBusInputCustodyReference({ local: capable, remote: legacy }), false);
-  assert.equal(canUseTelegramBusInputCustodyReference({ local: legacy, remote: capable }), false);
+  const capable = createBaleBusProtocolIdentity({ runtimeBuild: "0.45.0",
+    capabilities: [BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
+  const legacy = createBaleBusProtocolIdentity({ runtimeBuild: "0.44.0" });
+  assert.equal(canUseBaleBusInputCustodyReference({ local: capable, remote: capable }), true);
+  assert.equal(canUseBaleBusInputCustodyReference({ local: capable, remote: legacy }), false);
+  assert.equal(canUseBaleBusInputCustodyReference({ local: legacy, remote: capable }), false);
   const source = { updateId: 44, owner: { acquisitionId: "acquisition-44",
     handoffId: "input-handoff-44" } };
-  const delivery = createTelegramBusFollowerSourceReferenceDeliveryIdentity({
+  const delivery = createBaleBusFollowerSourceReferenceDeliveryIdentity({
     kind: "leader.wakeInputCustody", recipientBindingKey: "workspace:recipient",
     sourceRecoveryKey: "journal:source", source });
   assert.deepEqual(delivery.sourceClaim, { acquisitionId: "acquisition-44",
     handoffId: "input-handoff-44" });
   assert.equal(delivery.sourceRecoveryKey, "journal:source");
-  assert.throws(() => createTelegramBusFollowerSourceReferenceDeliveryIdentity({
+  assert.throws(() => createBaleBusFollowerSourceReferenceDeliveryIdentity({
     kind: "leader.wakeInputCustody", recipientBindingKey: "workspace:recipient",
     sourceRecoveryKey: "journal:source", source: { ...source, owner: {
       acquisitionId: "acquisition-44" } } }), /requires an accepted handoff/);
 });
 
 test("Follower delivery identity stays stable across registration replacement", () => {
-  const first = createTelegramBusFollowerDeliveryIdentity({
+  const first = createBaleBusFollowerDeliveryIdentity({
     kind: "leader.forwardMessage",
     recipientBindingKey: "manual:owner-a",
     sourceUpdateId: 44,
   });
-  const replacement = createTelegramBusFollowerDeliveryIdentity({
+  const replacement = createBaleBusFollowerDeliveryIdentity({
     kind: "leader.forwardMessage",
     recipientBindingKey: "manual:owner-a",
     sourceUpdateId: 44,
@@ -516,7 +516,7 @@ test("Follower delivery identity stays stable across registration replacement", 
 });
 
 test("Current bus process runtime owns process identity defaults", () => {
-  const runtime = createCurrentTelegramBusProcessRuntime({
+  const runtime = createCurrentBaleBusProcessRuntime({
     getActiveProfileName: () => undefined,
     pid: 42,
     parentPid: 7,
@@ -529,14 +529,14 @@ test("Current bus process runtime owns process identity defaults", () => {
 });
 
 test("Wrapped follower owner keys expose their raw process-birth identity", () => {
-  for (const telegramProfile of [undefined, "work"]) {
-    const key = getTelegramThreadOwnerKey({ kind: "manual-follower",
-      instanceId: "42:start:12345", ...(telegramProfile ? { telegramProfile } : {}) });
-    const owner = getTelegramThreadOwnerFromProfileKey(key);
+  for (const baleProfile of [undefined, "work"]) {
+    const key = getBaleThreadOwnerKey({ kind: "manual-follower",
+      instanceId: "42:start:12345", ...(baleProfile ? { baleProfile } : {}) });
+    const owner = getBaleThreadOwnerFromProfileKey(key);
     assert.equal(owner.kind, "manual-follower");
     if (owner.kind !== "manual-follower") continue;
     assert.equal(owner.instanceId, "42:start:12345");
-    assert.equal(getTelegramProcessBirthIdentityLiveness(owner.instanceId, {
+    assert.equal(getBaleProcessBirthIdentityLiveness(owner.instanceId, {
       platform: "linux", isProcessAlive: () => false,
     }), "dead");
   }
@@ -544,7 +544,7 @@ test("Wrapped follower owner keys expose their raw process-birth identity", () =
 
 test("Bus process runtime resolves live profile endpoints", () => {
   let profileName: string | undefined;
-  const runtime = createTelegramBusProcessRuntime({
+  const runtime = createBaleBusProcessRuntime({
     getActiveProfileName: () => profileName,
     pid: 42,
     parentPid: 7,
@@ -563,7 +563,7 @@ test("Bus process runtime resolves live profile endpoints", () => {
 });
 
 test("Bus process runtime falls back to pid without a parent pid", () => {
-  const runtime = createTelegramBusProcessRuntime({
+  const runtime = createBaleBusProcessRuntime({
     getActiveProfileName: () => undefined,
     pid: 42,
     parentPid: 0,
@@ -575,63 +575,63 @@ test("Bus process runtime falls back to pid without a parent pid", () => {
 
 test("Bus transport boundary derives socket and pipe endpoints", () => {
   assert.equal(
-    getTelegramBusLeaderEndpoint({ agentDir: "/agent", platform: "linux" }),
-    join("/agent", "tmp", "pi-telegram", "bus.sock"),
+    getBaleBusLeaderEndpoint({ agentDir: "/agent", platform: "linux" }),
+    join("/agent", "tmp", "pi-bale", "bus.sock"),
   );
   assert.equal(
-    getTelegramBusFollowerEndpoint({
+    getBaleBusFollowerEndpoint({
       agentDir: "/agent",
       platform: "linux",
       instanceId: "pid:123",
     }),
-    join("/agent", "tmp", "pi-telegram", "followers", "pid_123.sock"),
+    join("/agent", "tmp", "pi-bale", "followers", "pid_123.sock"),
   );
-  const pipe = getTelegramBusLeaderEndpoint({
+  const pipe = getBaleBusLeaderEndpoint({
     agentDir: "C:\\Users\\Admin\\.pi\\agent",
     platform: "win32",
   });
-  assert.match(pipe, /^\\\\\.\\pipe\\pi-telegram-.+-bus$/);
-  assert.equal(getTelegramBusTransportKind(pipe), "pipe");
-  assert.equal(getTelegramBusTransportKind("/tmp/bus.sock"), "socket");
+  assert.match(pipe, /^\\\\\.\\pipe\\pi-bale-.+-bus$/);
+  assert.equal(getBaleBusTransportKind(pipe), "pipe");
+  assert.equal(getBaleBusTransportKind("/tmp/bus.sock"), "socket");
   assert.equal(
-    getTelegramBusTransportKind(
-      resolveTelegramBusSocketPath("C:\\tmp\\legacy.sock", "win32"),
+    getBaleBusTransportKind(
+      resolveBaleBusSocketPath("C:\\tmp\\legacy.sock", "win32"),
     ),
     "pipe",
   );
-  const longMacEndpoint = resolveTelegramBusSocketPath(
+  const longMacEndpoint = resolveBaleBusSocketPath(
     `/var/folders/${"nested/".repeat(20)}bus.sock`,
     "darwin",
   );
-  assert.equal(getTelegramBusTransportKind(longMacEndpoint), "socket");
+  assert.equal(getBaleBusTransportKind(longMacEndpoint), "socket");
   assert.ok(Buffer.byteLength(longMacEndpoint) < 104);
   assert.equal(
-    resolveTelegramBusSocketPath(longMacEndpoint, "darwin"),
+    resolveBaleBusSocketPath(longMacEndpoint, "darwin"),
     longMacEndpoint,
   );
 });
 
 test("Bus transport retry policy is operation-aware", () => {
-  const pipe = getTelegramBusLeaderEndpoint({
+  const pipe = getBaleBusLeaderEndpoint({
     agentDir: "C:\\Users\\Admin\\.pi\\agent",
     platform: "win32",
   });
   assert.deepEqual(
-    getTelegramBusTransportRetryPolicy({
+    getBaleBusTransportRetryPolicy({
       endpoint: pipe,
       operation: "operation",
     }),
     { attempts: 3, delayMs: 100 },
   );
   assert.deepEqual(
-    getTelegramBusTransportRetryPolicy({
+    getBaleBusTransportRetryPolicy({
       endpoint: "/tmp/bus.sock",
       operation: "registration",
     }),
     { attempts: 10, delayMs: 150 },
   );
   assert.deepEqual(
-    getTelegramBusTransportRetryPolicy({
+    getBaleBusTransportRetryPolicy({
       endpoint: "/tmp/bus.sock",
       operation: "registration",
       overrides: { attempts: 2, delayMs: 5 },
@@ -639,7 +639,7 @@ test("Bus transport retry policy is operation-aware", () => {
     { attempts: 2, delayMs: 5 },
   );
   assert.equal(
-    getTelegramBusTransportRetryPolicy({
+    getBaleBusTransportRetryPolicy({
       endpoint: "/tmp/bus.sock",
       operation: "operation",
     }),
@@ -652,7 +652,7 @@ test("Bus transport error classifier marks transient IPC failures retryable", ()
     code: "ENOENT",
     syscall: "connect",
   });
-  assert.deepEqual(classifyTelegramBusTransportError(error), {
+  assert.deepEqual(classifyBaleBusTransportError(error), {
     message: "connect ENOENT",
     code: "ENOENT",
     syscall: "connect",
@@ -660,7 +660,7 @@ test("Bus transport error classifier marks transient IPC failures retryable", ()
     retryable: true,
   });
   assert.deepEqual(
-    classifyTelegramBusTransportError(
+    classifyBaleBusTransportError(
       Object.assign(new Error("operation expired"), { code: "ETIMEDOUT" }),
     ),
     {
@@ -678,51 +678,51 @@ test("Consolidated IPC uses short collision-resistant profile/recipient names an
   const agentDir = "/agent";
   const profiles = [undefined, "work", "WORK", "work/name", "work_name", "x".repeat(300)];
   for (const platform of ["linux", "win32"] as const) {
-    const leaders = profiles.map(profile => getTelegramBusSocketPath(agentDir, platform, profile, "consolidated"));
-    const followers = profiles.map(profile => getTelegramBusFollowerSocketPath("pid:123", agentDir, platform, profile, "consolidated"));
+    const leaders = profiles.map(profile => getBaleBusSocketPath(agentDir, platform, profile, "consolidated"));
+    const followers = profiles.map(profile => getBaleBusFollowerSocketPath("pid:123", agentDir, platform, profile, "consolidated"));
     assert.equal(new Set([...leaders, ...followers]).size, profiles.length * 2);
-    assert.equal(leaders[0], getTelegramBusSocketPath(agentDir, platform, "default", "consolidated"));
-    assert.notEqual(followers[1], getTelegramBusFollowerSocketPath("pid_123", agentDir, platform, "work", "consolidated"));
+    assert.equal(leaders[0], getBaleBusSocketPath(agentDir, platform, "default", "consolidated"));
+    assert.notEqual(followers[1], getBaleBusFollowerSocketPath("pid_123", agentDir, platform, "work", "consolidated"));
     for (const endpoint of [...leaders, ...followers]) {
-      if (platform === "linux") assert.match(endpoint, /^\/agent\/tmp\/pi-telegram\/runtime\/(?:bus|f)\.[a-f0-9]{16}\.sock$/u);
-      else assert.equal(getTelegramBusTransportKind(endpoint), "pipe");
-      assert.equal(resolveTelegramBusSocketPath(endpoint, platform), endpoint);
+      if (platform === "linux") assert.match(endpoint, /^\/agent\/tmp\/pi-bale\/runtime\/(?:bus|f)\.[a-f0-9]{16}\.sock$/u);
+      else assert.equal(getBaleBusTransportKind(endpoint), "pipe");
+      assert.equal(resolveBaleBusSocketPath(endpoint, platform), endpoint);
     }
   }
-  const longLogical = getTelegramBusSocketPath("/" + "long".repeat(30), "linux", "work", "consolidated");
-  assert.match(longLogical, /\/tmp\/pi-telegram\/runtime\/bus\.[a-f0-9]{16}\.sock$/u, "Logical identity stays in the runtime namespace");
-  assert.match(resolveTelegramBusSocketPath(longLogical, "linux"), /pi-telegram-[^/]+\/[a-f0-9]{16}\.sock$/u,
+  const longLogical = getBaleBusSocketPath("/" + "long".repeat(30), "linux", "work", "consolidated");
+  assert.match(longLogical, /\/tmp\/pi-bale\/runtime\/bus\.[a-f0-9]{16}\.sock$/u, "Logical identity stays in the runtime namespace");
+  assert.match(resolveBaleBusSocketPath(longLogical, "linux"), /pi-bale-[^/]+\/[a-f0-9]{16}\.sock$/u,
     "Only an over-capacity socket uses the bounded private fallback");
-  assert.throws(() => getTelegramBusFollowerSocketPath("pid:123", "relative-agent", "linux", "work", "consolidated"), /exact absolute runtime path/u);
+  assert.throws(() => getBaleBusFollowerSocketPath("pid:123", "relative-agent", "linux", "work", "consolidated"), /exact absolute runtime path/u);
 });
 
 test("Consolidated bus process runtime retains its layout and selector while resolving current profile values", () => {
   let profile: string | undefined = "work";
   const input = { pid: 42, parentPid: 1, createdAtMs: 1000, getActiveProfileName: () => profile, endpointLayout: "consolidated" as const };
-  const runtime = createTelegramBusProcessRuntime(input);
+  const runtime = createBaleBusProcessRuntime(input);
   input.getActiveProfileName = () => "replacement";
   input.endpointLayout = undefined as unknown as "consolidated";
-  assert.equal(runtime.getLeaderSocketPath(), getTelegramBusSocketPath(undefined, undefined, "work", "consolidated"));
-  assert.equal(runtime.getFollowerSocketPath(), getTelegramBusFollowerSocketPath(runtime.instanceId, undefined, undefined, "work", "consolidated"));
+  assert.equal(runtime.getLeaderSocketPath(), getBaleBusSocketPath(undefined, undefined, "work", "consolidated"));
+  assert.equal(runtime.getFollowerSocketPath(), getBaleBusFollowerSocketPath(runtime.instanceId, undefined, undefined, "work", "consolidated"));
   profile = "other";
-  assert.equal(runtime.getLeaderSocketPath(), getTelegramBusSocketPath(undefined, undefined, "other", "consolidated"));
+  assert.equal(runtime.getLeaderSocketPath(), getBaleBusSocketPath(undefined, undefined, "other", "consolidated"));
 });
 
 test("Consolidated native IPC request/ACK and profile restart keep every socket/staging artifact below runtime", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pi-ipc-"));
   let profile = "work";
-  const socketPath = () => getTelegramBusSocketPath(dir, process.platform, profile, "consolidated");
-  const server = createTelegramBusLocalServer({ socketPath,
+  const socketPath = () => getBaleBusSocketPath(dir, process.platform, profile, "consolidated");
+  const server = createBaleBusLocalServer({ socketPath,
     handleEnvelope: envelope => ({ kind: "bus.ack", requestId: envelope.requestId, ok: true }) });
   try {
     for (const next of ["work", "other"]) {
       profile = next;
       await server.start();
-      const response = await sendTelegramBusLocalEnvelope({ socketPath: socketPath(), envelope: {
+      const response = await sendBaleBusLocalEnvelope({ socketPath: socketPath(), envelope: {
         kind: "follower.heartbeat", requestId: next, instanceId: "follower-a", sentAtMs: 1000 } });
       assert.equal(response?.kind, "bus.ack");
       assert.equal(response?.requestId, next);
-      if (process.platform !== "win32") assert.deepEqual(readdirSync(join(dir, "tmp", "pi-telegram")), ["runtime"]);
+      if (process.platform !== "win32") assert.deepEqual(readdirSync(join(dir, "tmp", "pi-bale")), ["runtime"]);
       await server.stop();
     }
   } finally { await server.stop(); rmSync(dir, { recursive: true, force: true }); }
@@ -730,60 +730,60 @@ test("Consolidated native IPC request/ACK and profile restart keep every socket/
 
 test("Bus socket path is scoped under the agent temp directory", () => {
   assert.equal(
-    getTelegramBusSocketPath("/agent", "linux"),
-    join("/agent", "tmp", "pi-telegram", "bus.sock"),
+    getBaleBusSocketPath("/agent", "linux"),
+    join("/agent", "tmp", "pi-bale", "bus.sock"),
   );
   assert.equal(
-    getTelegramBusFollowerSocketPath("pid:123", "/agent", "linux"),
-    join("/agent", "tmp", "pi-telegram", "followers", "pid_123.sock"),
+    getBaleBusFollowerSocketPath("pid:123", "/agent", "linux"),
+    join("/agent", "tmp", "pi-bale", "followers", "pid_123.sock"),
   );
 });
 
 test("Bus socket paths isolate named profiles and preserve default Unix paths", () => {
   assert.equal(
-    getTelegramBusSocketPath("/agent", "linux", "work"),
-    join("/agent", "tmp", "pi-telegram", "bus.work.sock"),
+    getBaleBusSocketPath("/agent", "linux", "work"),
+    join("/agent", "tmp", "pi-bale", "bus.work.sock"),
   );
   assert.equal(
-    getTelegramBusFollowerSocketPath("pid:123", "/agent", "linux", "work"),
-    join("/agent", "tmp", "pi-telegram", "followers", "work", "pid_123.sock"),
+    getBaleBusFollowerSocketPath("pid:123", "/agent", "linux", "work"),
+    join("/agent", "tmp", "pi-bale", "followers", "work", "pid_123.sock"),
   );
   assert.notEqual(
-    getTelegramBusSocketPath("/agent", "linux", "work"),
-    getTelegramBusSocketPath("/agent", "linux", "personal"),
+    getBaleBusSocketPath("/agent", "linux", "work"),
+    getBaleBusSocketPath("/agent", "linux", "personal"),
   );
 });
 
 test("Bus socket path uses profile-scoped Windows named pipes on win32", () => {
   assert.match(
-    getTelegramBusSocketPath("C:\\Users\\me\\.pi\\agent", "win32"),
-    /^\\\\\.\\pipe\\pi-telegram-[A-Za-z0-9_-]{16}-bus$/,
+    getBaleBusSocketPath("C:\\Users\\me\\.pi\\agent", "win32"),
+    /^\\\\\.\\pipe\\pi-bale-[A-Za-z0-9_-]{16}-bus$/,
   );
   assert.match(
-    getTelegramBusFollowerSocketPath(
+    getBaleBusFollowerSocketPath(
       "pid:123/unsafe",
       "C:\\Users\\me\\.pi\\agent",
       "win32",
     ),
-    /^\\\\\.\\pipe\\pi-telegram-[A-Za-z0-9_-]{16}-follower-pid_123_unsafe$/,
+    /^\\\\\.\\pipe\\pi-bale-[A-Za-z0-9_-]{16}-follower-pid_123_unsafe$/,
   );
   assert.match(
-    getTelegramBusSocketPath("C:\\Users\\me\\.pi\\agent", "win32", "work"),
-    /^\\\\\.\\pipe\\pi-telegram-[A-Za-z0-9_-]{16}-bus-work$/,
+    getBaleBusSocketPath("C:\\Users\\me\\.pi\\agent", "win32", "work"),
+    /^\\\\\.\\pipe\\pi-bale-[A-Za-z0-9_-]{16}-bus-work$/,
   );
   assert.match(
-    getTelegramBusFollowerSocketPath(
+    getBaleBusFollowerSocketPath(
       "pid:123/unsafe",
       "C:\\Users\\me\\.pi\\agent",
       "win32",
       "work",
     ),
-    /^\\\\\.\\pipe\\pi-telegram-[A-Za-z0-9_-]{16}-follower-work-pid_123_unsafe$/,
+    /^\\\\\.\\pipe\\pi-bale-[A-Za-z0-9_-]{16}-follower-work-pid_123_unsafe$/,
   );
 });
 
 test("Bus request id factory owns one monotonic instance sequence", () => {
-  const createRequestId = createTelegramBusRequestIdFactory("inst-a");
+  const createRequestId = createBaleBusRequestIdFactory("inst-a");
 
   assert.equal(createRequestId(), "inst-a:1");
   assert.equal(createRequestId(), "inst-a:2");
@@ -793,7 +793,7 @@ test("Bus request id factory owns one monotonic instance sequence", () => {
 test("Bus contract encodes and parses follower registration envelopes", () => {
   const envelope = {
     kind: "follower.register" as const,
-    requestId: createTelegramBusRequestId({
+    requestId: createBaleBusRequestId({
       instanceId: "inst-a",
       sequence: 1,
     }),
@@ -807,7 +807,7 @@ test("Bus contract encodes and parses follower registration envelopes", () => {
       processBirthId: "123:start:abc",
       sessionGeneration: 4,
       target: { chatId: -1007, threadId: 42 },
-      protocol: createTelegramBusProtocolIdentity({
+      protocol: createBaleBusProtocolIdentity({
         runtimeBuild: "0.28.0",
       }),
       connectedAtMs: 1000,
@@ -815,7 +815,7 @@ test("Bus contract encodes and parses follower registration envelopes", () => {
   };
 
   assert.deepEqual(
-    parseTelegramBusEnvelope(encodeTelegramBusEnvelope(envelope).trimEnd()),
+    parseBaleBusEnvelope(encodeBaleBusEnvelope(envelope).trimEnd()),
     envelope,
   );
 });
@@ -825,7 +825,7 @@ test("Bus pre-execution API refusal requires a negative acknowledgement and exac
     kind: "bus.ack" as const, requestId: "refused", ok: false,
     error: { code: "follower-api-not-allowed" as const, method: "sendMessage" },
   };
-  const parsed = parseTelegramBusEnvelope(encodeTelegramBusEnvelope(refusal));
+  const parsed = parseBaleBusEnvelope(encodeBaleBusEnvelope(refusal));
   assert.equal(parsed?.kind, "bus.ack");
   if (parsed?.kind !== "bus.ack") throw new Error("Missing refusal acknowledgement");
   assert.deepEqual(parsed.error, refusal.error);
@@ -835,9 +835,9 @@ test("Bus pre-execution API refusal requires a negative acknowledgement and exac
     { code: "follower-api-not-allowed", method: "sendMessage trailing" },
     { code: "follower-api-not-allowed", method: "s".repeat(65) },
     { code: "follower-api-not-allowed", method: 1 },
-  ]) assert.equal(parseTelegramBusEnvelope(JSON.stringify({ ...refusal, error })), undefined);
+  ]) assert.equal(parseBaleBusEnvelope(JSON.stringify({ ...refusal, error })), undefined);
   for (const contradiction of [{ ok: true }, { result: true }, { result: null }])
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify({ ...refusal, ...contradiction })), undefined);
+    assert.equal(parseBaleBusEnvelope(JSON.stringify({ ...refusal, ...contradiction })), undefined);
 });
 
 test("Bus contract encodes and parses Workspace follower restore envelopes", () => {
@@ -848,10 +848,10 @@ test("Bus contract encodes and parses Workspace follower restore envelopes", () 
       instanceId: "inst-a",
       cwd: "/work/project",
       pid: 123,
-      protocol: createTelegramBusProtocolIdentity({
+      protocol: createBaleBusProtocolIdentity({
         runtimeBuild: "0.45.0",
         capabilities: [
-          TELEGRAM_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
+          BALE_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
         ],
       }),
       connectedAtMs: 1000,
@@ -859,12 +859,12 @@ test("Bus contract encodes and parses Workspace follower restore envelopes", () 
   };
 
   assert.deepEqual(
-    parseTelegramBusEnvelope(encodeTelegramBusEnvelope(envelope).trimEnd()),
+    parseBaleBusEnvelope(encodeBaleBusEnvelope(envelope).trimEnd()),
     envelope,
   );
-  assert.equal(getTelegramBusEnvelopeTrafficClass(envelope), "bootstrap");
+  assert.equal(getBaleBusEnvelopeTrafficClass(envelope), "bootstrap");
   assert.equal(
-    TELEGRAM_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
+    BALE_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT,
     "workspace-follower-auto-connect-v1",
   );
 });
@@ -879,7 +879,7 @@ test("Bus contract encodes and parses explicit follower disconnect envelopes", (
   };
 
   assert.deepEqual(
-    parseTelegramBusEnvelope(encodeTelegramBusEnvelope(envelope).trimEnd()),
+    parseBaleBusEnvelope(encodeBaleBusEnvelope(envelope).trimEnd()),
     envelope,
   );
 });
@@ -888,11 +888,11 @@ test("Bus contract validates exact-generation Thread display setting envelopes",
   for (const mode of ["letters", "names", "directory-snake", "directory-title"] as const) {
     const envelope = { kind: "follower.setThreadDisplayMode" as const,
       requestId: "one", instanceId: "follower", registrationGeneration: "generation", mode };
-    assert.deepEqual(parseTelegramBusEnvelope(encodeTelegramBusEnvelope(envelope).trimEnd()), envelope);
-    assert.equal(getTelegramBusEnvelopeTrafficClass(envelope), "generation-fenced");
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify({ ...envelope, mode: "directories" })), undefined);
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify({ ...envelope, mode: "invalid" })), undefined);
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify({ ...envelope, registrationGeneration: undefined })), undefined);
+    assert.deepEqual(parseBaleBusEnvelope(encodeBaleBusEnvelope(envelope).trimEnd()), envelope);
+    assert.equal(getBaleBusEnvelopeTrafficClass(envelope), "generation-fenced");
+    assert.equal(parseBaleBusEnvelope(JSON.stringify({ ...envelope, mode: "directories" })), undefined);
+    assert.equal(parseBaleBusEnvelope(JSON.stringify({ ...envelope, mode: "invalid" })), undefined);
+    assert.equal(parseBaleBusEnvelope(JSON.stringify({ ...envelope, registrationGeneration: undefined })), undefined);
   }
 });
 
@@ -908,11 +908,11 @@ test("Bus contract encodes and parses Workspace Thread rename envelopes", () => 
   };
 
   assert.deepEqual(
-    parseTelegramBusEnvelope(encodeTelegramBusEnvelope(envelope).trimEnd()),
+    parseBaleBusEnvelope(encodeBaleBusEnvelope(envelope).trimEnd()),
     envelope,
   );
   assert.equal(
-    TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
+    BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME,
     "workspace-thread-rename-v1",
   );
   const reset = {
@@ -924,10 +924,10 @@ test("Bus contract encodes and parses Workspace Thread rename envelopes", () => 
     sentAtMs: 2001,
   };
   assert.deepEqual(
-    parseTelegramBusEnvelope(encodeTelegramBusEnvelope(reset).trimEnd()),
+    parseBaleBusEnvelope(encodeBaleBusEnvelope(reset).trimEnd()),
     reset,
   );
-  assert.equal(getTelegramBusEnvelopeTrafficClass(reset), "generation-fenced");
+  assert.equal(getBaleBusEnvelopeTrafficClass(reset), "generation-fenced");
 });
 
 test("Bus contract parses exact follower session replacement envelopes and rejects malformed intents", () => {
@@ -945,31 +945,31 @@ test("Bus contract parses exact follower session replacement envelopes and rejec
     const envelope = { kind, requestId: "inst-a:5", instanceId: "inst-a",
       registrationGeneration: "inst-a:1", intent, sentAtMs: 2000 };
     assert.deepEqual(
-      parseTelegramBusEnvelope(encodeTelegramBusEnvelope(envelope).trimEnd()),
+      parseBaleBusEnvelope(encodeBaleBusEnvelope(envelope).trimEnd()),
       envelope,
     );
-    assert.equal(getTelegramBusEnvelopeTrafficClass(envelope), "generation-fenced");
+    assert.equal(getBaleBusEnvelopeTrafficClass(envelope), "generation-fenced");
     for (const malformed of [
       { ...intent, sourceInstanceId: "" },
       { ...intent, continuity: "classic-chat" },
       { ...intent, expiresAtMs: intent.createdAtMs },
       { ...intent, target: { chatId: "7", threadId: 42 } },
     ]) {
-      assert.equal(parseTelegramBusEnvelope(JSON.stringify({ ...envelope,
+      assert.equal(parseBaleBusEnvelope(JSON.stringify({ ...envelope,
         intent: malformed })), undefined);
     }
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify({ ...envelope,
+    assert.equal(parseBaleBusEnvelope(JSON.stringify({ ...envelope,
       registrationGeneration: undefined })), undefined);
   }
   assert.equal(
-    TELEGRAM_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
+    BALE_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT,
     "session-replacement-intent-v1",
   );
 });
 
 test("Bus contract rejects retired follower target replacement envelopes", () => {
   for (const generation of [undefined, "generation-b"]) {
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify({
+    assert.equal(parseBaleBusEnvelope(JSON.stringify({
       kind: "leader.replaceFollowerTarget", requestId: "leader:6",
       recipientInstanceId: "inst-b", recipientRegistrationGeneration: generation,
       target: { chatId: 7, threadId: 42 }, oldTarget: { chatId: 7, threadId: 10 },
@@ -1019,8 +1019,8 @@ test("Bus contract encodes and parses queue handoff envelopes", () => {
     sentAtMs: 2000,
   };
   assert.deepEqual(
-    parseTelegramBusEnvelope(
-      encodeTelegramBusEnvelope(leaderEnvelope).trimEnd(),
+    parseBaleBusEnvelope(
+      encodeBaleBusEnvelope(leaderEnvelope).trimEnd(),
     ),
     leaderEnvelope,
   );
@@ -1041,19 +1041,19 @@ test("Bus contract encodes and parses queue handoff envelopes", () => {
     sentAtMs: 2000,
   };
   assert.deepEqual(
-    parseTelegramBusEnvelope(
-      encodeTelegramBusEnvelope(followerEnvelope).trimEnd(),
+    parseBaleBusEnvelope(
+      encodeBaleBusEnvelope(followerEnvelope).trimEnd(),
     ),
     followerEnvelope,
   );
   assert.equal(
-    parseTelegramBusEnvelope(
+    parseBaleBusEnvelope(
       JSON.stringify({ ...leaderEnvelope, handoffToken: "short" }),
     ),
     undefined,
   );
   assert.equal(
-    parseTelegramBusEnvelope(
+    parseBaleBusEnvelope(
       JSON.stringify({
         ...leaderEnvelope,
         payload: { ...payload, admissionReceipts: [] },
@@ -1062,7 +1062,7 @@ test("Bus contract encodes and parses queue handoff envelopes", () => {
     undefined,
   );
   assert.equal(
-    parseTelegramBusEnvelope(
+    parseBaleBusEnvelope(
       JSON.stringify({
         ...leaderEnvelope,
         payload: { ...payload, reactionSuppressionEmoji: 1 },
@@ -1082,8 +1082,8 @@ test("Bus contract encodes and parses cross-instance agent message envelopes", (
     sentAtMs: 4000,
   };
   assert.deepEqual(
-    parseTelegramBusEnvelope(
-      encodeTelegramBusEnvelope(resolveEnvelope).trimEnd(),
+    parseBaleBusEnvelope(
+      encodeBaleBusEnvelope(resolveEnvelope).trimEnd(),
     ),
     resolveEnvelope,
   );
@@ -1100,13 +1100,13 @@ test("Bus contract encodes and parses cross-instance agent message envelopes", (
     sentAtMs: 5000,
   };
   assert.deepEqual(
-    parseTelegramBusEnvelope(
-      encodeTelegramBusEnvelope(routeEnvelope).trimEnd(),
+    parseBaleBusEnvelope(
+      encodeBaleBusEnvelope(routeEnvelope).trimEnd(),
     ),
     routeEnvelope,
   );
   assert.equal(
-    parseTelegramBusEnvelope(
+    parseBaleBusEnvelope(
       JSON.stringify({
         ...resolveEnvelope,
         selector: { threadId: 42, threadName: "Hazel" },
@@ -1130,8 +1130,8 @@ test("Bus contract encodes and parses follower API call envelopes", () => {
     },
   };
   assert.deepEqual(
-    parseTelegramBusEnvelope(
-      encodeTelegramBusEnvelope({
+    parseBaleBusEnvelope(
+      encodeBaleBusEnvelope({
         kind: "follower.callApi",
         requestId: "inst-a:4",
         instanceId: "inst-a",
@@ -1182,18 +1182,18 @@ test("Bus contract rejects forwarded updates without durable identity", () => {
       sentAtMs: 5000,
     },
   ]) {
-    assert.equal(parseTelegramBusEnvelope(JSON.stringify(envelope)), undefined);
+    assert.equal(parseBaleBusEnvelope(JSON.stringify(envelope)), undefined);
   }
 });
 
 test("Bus contract rejects malformed envelopes", () => {
-  assert.equal(parseTelegramBusEnvelope("not-json"), undefined);
+  assert.equal(parseBaleBusEnvelope("not-json"), undefined);
   assert.equal(
-    parseTelegramBusEnvelope(JSON.stringify({ kind: "unknown" })),
+    parseBaleBusEnvelope(JSON.stringify({ kind: "unknown" })),
     undefined,
   );
   assert.equal(
-    parseTelegramBusEnvelope(
+    parseBaleBusEnvelope(
       JSON.stringify({
         kind: "follower.register",
         requestId: "bad:1",
@@ -1205,7 +1205,7 @@ test("Bus contract rejects malformed envelopes", () => {
 });
 
 test("Bus follower registry registers, heartbeats, and prunes live instances", () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
 
   assert.deepEqual(
     registry.register({
@@ -1257,7 +1257,7 @@ test("Bus follower API authorizer delegates message ownership with follower iden
     lastHeartbeatMs: 2,
     target: { chatId: 7, threadId: 11 },
   };
-  const authorize = createTelegramFollowerApiCallAuthorizer({
+  const authorize = createBaleFollowerApiCallAuthorizer({
     isMessageOwned({ chatId, messageId, follower: owner }) {
       calls.push(`${owner.instanceId}:${chatId}:${messageId}`);
       return true;
@@ -1286,7 +1286,7 @@ test("Bus follower API allowlist permits scoped own-thread Rich media uploads", 
     target: { chatId: 10, threadId: 42 },
   };
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "callMultipart",
       args: [
@@ -1300,7 +1300,7 @@ test("Bus follower API allowlist permits scoped own-thread Rich media uploads", 
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "callMultipart",
       args: [
@@ -1314,7 +1314,7 @@ test("Bus follower API allowlist permits scoped own-thread Rich media uploads", 
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "callMultipart",
       args: [
@@ -1337,7 +1337,7 @@ test("Bus follower API allowlist permits scoped own-thread Rich media uploads", 
     ],
   });
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "callMultipart",
       args: [
@@ -1355,7 +1355,7 @@ test("Bus follower API allowlist permits scoped own-thread Rich media uploads", 
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "callMultipart",
       args: [
@@ -1373,7 +1373,7 @@ test("Bus follower API allowlist permits scoped own-thread Rich media uploads", 
     false,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "callMultipart",
       args: [
@@ -1396,7 +1396,7 @@ test("Bus follower API allowlist permits owned message markup/edit/delete operat
     target: { chatId: 100, threadId: 42 },
   };
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["editMessageText", { chat_id: 100, message_id: 9, text: "Next" }],
@@ -1405,7 +1405,7 @@ test("Bus follower API allowlist permits owned message markup/edit/delete operat
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: [
@@ -1421,7 +1421,7 @@ test("Bus follower API allowlist permits owned message markup/edit/delete operat
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["deleteMessage", { chat_id: "100", message_id: "9" }],
@@ -1430,7 +1430,7 @@ test("Bus follower API allowlist permits owned message markup/edit/delete operat
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["deleteMessage", { chat_id: 100, message_id: 10 }],
@@ -1439,7 +1439,7 @@ test("Bus follower API allowlist permits owned message markup/edit/delete operat
     false,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["deleteMessage", { chat_id: 101, message_id: 9 }],
@@ -1448,7 +1448,7 @@ test("Bus follower API allowlist permits owned message markup/edit/delete operat
     false,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["deleteMessage", { chat_id: 100 }],
@@ -1465,7 +1465,7 @@ test("Bus follower API allowlist permits bot command registration", () => {
     target: { chatId: 100, threadId: 42 },
   };
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: [
@@ -1476,7 +1476,7 @@ test("Bus follower API allowlist permits bot command registration", () => {
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["setMyCommands", { commands: [{ command: "start" }] }],
@@ -1493,7 +1493,7 @@ test("Bus follower API allowlist permits own-chat typing and safe identity reads
     target: { chatId: 100, threadId: 42 },
   };
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["getMe", {}],
@@ -1501,7 +1501,7 @@ test("Bus follower API allowlist permits own-chat typing and safe identity reads
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["sendChatAction", { chat_id: 100, action: "typing" }],
@@ -1509,7 +1509,7 @@ test("Bus follower API allowlist permits own-chat typing and safe identity reads
     false,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["sendChatAction", { chat_id: 101, action: "typing" }],
@@ -1525,9 +1525,9 @@ test("Bus follower API refuses All even with a retained aggregate marker", () =>
     lastHeartbeatMs: 1000,
     target: { chatId: 100, threadId: 42 },
   };
-  const marked = { chat_id: 100, text: "Aggregate", __piTelegramAggregateDelivery: true };
+  const marked = { chat_id: 100, text: "Aggregate", __piBaleAggregateDelivery: true };
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["sendMessage", marked],
@@ -1535,7 +1535,7 @@ test("Bus follower API refuses All even with a retained aggregate marker", () =>
     false,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["sendMessage", { chat_id: 100, text: "Unmarked" }],
@@ -1543,17 +1543,17 @@ test("Bus follower API refuses All even with a retained aggregate marker", () =>
     false,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: [
         "sendMessage",
-        { chat_id: 101, text: "Wrong chat", __piTelegramAggregateDelivery: true },
+        { chat_id: 101, text: "Wrong chat", __piBaleAggregateDelivery: true },
       ],
     }),
     false,
   );
-  assert.deepEqual(stripTelegramBusApiMetadata(marked), {
+  assert.deepEqual(stripBaleBusApiMetadata(marked), {
     chat_id: 100,
     text: "Aggregate",
   });
@@ -1566,13 +1566,13 @@ test("Bus follower API allowlist permits marked cross-target delivery only in th
     lastHeartbeatMs: 1000,
     target: { chatId: 100, threadId: 42 },
   };
-  const marked = markTelegramBusCrossTargetDelivery({
+  const marked = markBaleBusCrossTargetDelivery({
     chat_id: 100,
     message_thread_id: 99,
     rich_message: { markdown: "Cross-target" },
   });
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: ["sendRichMessage", marked],
@@ -1580,12 +1580,12 @@ test("Bus follower API allowlist permits marked cross-target delivery only in th
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: [
         "sendRichMessage",
-        markTelegramBusCrossTargetDelivery({
+        markBaleBusCrossTargetDelivery({
           chat_id: 100,
           message_thread_id: 42,
         }),
@@ -1594,12 +1594,12 @@ test("Bus follower API allowlist permits marked cross-target delivery only in th
     false,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: [
         "sendRichMessage",
-        markTelegramBusCrossTargetDelivery({
+        markBaleBusCrossTargetDelivery({
           chat_id: 101,
           message_thread_id: 99,
         }),
@@ -1608,7 +1608,7 @@ test("Bus follower API allowlist permits marked cross-target delivery only in th
     false,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: [
@@ -1618,7 +1618,7 @@ test("Bus follower API allowlist permits marked cross-target delivery only in th
     }),
     false,
   );
-  assert.deepEqual(stripTelegramBusApiMetadata(marked), {
+  assert.deepEqual(stripBaleBusApiMetadata(marked), {
     chat_id: 100,
     message_thread_id: 99,
     rich_message: { markdown: "Cross-target" },
@@ -1633,7 +1633,7 @@ test("Bus follower API allowlist permits scoped own-topic rename only", () => {
     target: { chatId: 100, threadId: 42 },
   };
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: [
@@ -1644,7 +1644,7 @@ test("Bus follower API allowlist permits scoped own-topic rename only", () => {
     true,
   );
   assert.equal(
-    isTelegramFollowerApiCallAllowed({
+    isBaleFollowerApiCallAllowed({
       follower,
       method: "call",
       args: [
@@ -1665,7 +1665,7 @@ test("Bus follower API allowlist permits scoped own-topic cleanup only", () => {
   };
   for (const methodName of ["closeForumTopic", "deleteForumTopic"]) {
     assert.equal(
-      isTelegramFollowerApiCallAllowed({
+      isBaleFollowerApiCallAllowed({
         follower,
         method: "call",
         args: [methodName, { chat_id: 100, message_thread_id: 42 }],
@@ -1673,7 +1673,7 @@ test("Bus follower API allowlist permits scoped own-topic cleanup only", () => {
       true,
     );
     assert.equal(
-      isTelegramFollowerApiCallAllowed({
+      isBaleFollowerApiCallAllowed({
         follower,
         method: "call",
         args: [methodName, { chat_id: 100, message_thread_id: 99 }],
@@ -1684,28 +1684,28 @@ test("Bus follower API allowlist permits scoped own-topic cleanup only", () => {
 });
 
 test("Bus transport probe reports reachable and unreachable endpoints", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-probe-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-probe-"));
   const socketPath = join(dir, "bus.sock");
-  const endpoint = resolveTelegramBusSocketPath(socketPath);
-  const server = createTelegramBusLocalServer({
+  const endpoint = resolveBaleBusSocketPath(socketPath);
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: () => ({ kind: "bus.ack", requestId: "probe", ok: true }),
   });
   try {
-    const missing = await probeTelegramBusEndpoint({
+    const missing = await probeBaleBusEndpoint({
       endpoint,
       timeoutMs: 50,
     });
     assert.equal(missing.reachable, false);
-    assert.equal(missing.transport, getTelegramBusTransportKind(endpoint));
+    assert.equal(missing.transport, getBaleBusTransportKind(endpoint));
     await server.start();
-    const reachable = await probeTelegramBusEndpoint({
+    const reachable = await probeBaleBusEndpoint({
       endpoint,
       timeoutMs: 50,
     });
     assert.deepEqual(reachable, {
       endpoint,
-      transport: getTelegramBusTransportKind(endpoint),
+      transport: getBaleBusTransportKind(endpoint),
       reachable: true,
     });
   } finally {
@@ -1715,10 +1715,10 @@ test("Bus transport probe reports reachable and unreachable endpoints", async ()
 });
 
 test("Leader probe classifies responsive, silent, refused and missing endpoints", { skip: process.platform === "win32" }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-leader-probe-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-leader-probe-"));
   const probe = (name: string, timeoutMs = 200) =>
-    probeTelegramBusLeader({ socketPath: join(dir, name), secret: "secret", timeoutMs });
-  const leader = createTelegramBusLocalServer({
+    probeBaleBusLeader({ socketPath: join(dir, name), secret: "secret", timeoutMs });
+  const leader = createBaleBusLocalServer({
     socketPath: join(dir, "leader.sock"),
     handleEnvelope: (envelope) => ({ kind: "bus.ack", requestId: envelope.requestId, ok: envelope.kind === "bus.probe" }),
   });
@@ -1758,7 +1758,7 @@ test("Leader unresponsiveness proof needs a silent window or a confirmed unreach
   const run = async (results: string[], sameOwner = () => true) => {
     const observed = [...results];
     const sleeps: number[] = [];
-    const proven = await proveTelegramBusLeaderUnresponsive({
+    const proven = await proveBaleBusLeaderUnresponsive({
       probe: async () => observed.shift() as never,
       isSameOwner: sameOwner,
       sleep: async (ms) => { sleeps.push(ms); },
@@ -1781,10 +1781,10 @@ test("Leader unresponsiveness proof needs a silent window or a confirmed unreach
 test("Bus local server roundtrips through a bounded long-path fallback", { skip: process.platform === "win32" }, async () => {
   const socketPath = join(
     tmpdir(),
-    "pi-telegram-very-long-endpoint-segment".repeat(4),
+    "pi-bale-very-long-endpoint-segment".repeat(4),
     "bus.sock",
   );
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (envelope) => ({
       kind: "bus.ack",
@@ -1794,7 +1794,7 @@ test("Bus local server roundtrips through a bounded long-path fallback", { skip:
   });
   try {
     await server.start();
-    const response = await sendTelegramBusLocalEnvelope({
+    const response = await sendBaleBusLocalEnvelope({
       socketPath,
       envelope: {
         kind: "follower.heartbeat",
@@ -1810,40 +1810,40 @@ test("Bus local server roundtrips through a bounded long-path fallback", { skip:
 });
 
 test("Bus local server resolves the active profile endpoint on each start", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-profile-switch-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-profile-switch-"));
   let profileName = "work";
   const getSocketPath = () =>
-    getTelegramBusSocketPath(dir, process.platform, profileName);
-  const server = createTelegramBusLocalServer({
+    getBaleBusSocketPath(dir, process.platform, profileName);
+  const server = createBaleBusLocalServer({
     socketPath: getSocketPath,
     handleEnvelope: () => ({ kind: "bus.ack", requestId: "profile", ok: true }),
   });
   const workSocketPath = getSocketPath();
-  const resolvedWorkSocketPath = resolveTelegramBusSocketPath(workSocketPath);
+  const resolvedWorkSocketPath = resolveBaleBusSocketPath(workSocketPath);
   try {
     await server.start();
     assert.equal(
-      (await probeTelegramBusEndpoint({ endpoint: resolvedWorkSocketPath })).reachable,
+      (await probeBaleBusEndpoint({ endpoint: resolvedWorkSocketPath })).reachable,
       true,
     );
     await server.stop();
     assert.equal(
-      (await probeTelegramBusEndpoint({ endpoint: resolvedWorkSocketPath })).reachable,
+      (await probeBaleBusEndpoint({ endpoint: resolvedWorkSocketPath })).reachable,
       false,
     );
 
     profileName = "personal";
     const personalSocketPath = getSocketPath();
     const resolvedPersonalSocketPath =
-      resolveTelegramBusSocketPath(personalSocketPath);
+      resolveBaleBusSocketPath(personalSocketPath);
     await server.start();
     assert.notEqual(personalSocketPath, workSocketPath);
     assert.equal(
-      (await probeTelegramBusEndpoint({ endpoint: resolvedPersonalSocketPath })).reachable,
+      (await probeBaleBusEndpoint({ endpoint: resolvedPersonalSocketPath })).reachable,
       true,
     );
     assert.equal(
-      (await probeTelegramBusEndpoint({ endpoint: resolvedWorkSocketPath })).reachable,
+      (await probeBaleBusEndpoint({ endpoint: resolvedWorkSocketPath })).reachable,
       false,
     );
   } finally {
@@ -1853,9 +1853,9 @@ test("Bus local server resolves the active profile endpoint on each start", asyn
 });
 
 test("Old bus server stop cannot invalidate a replacement endpoint generation", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-generation-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-generation-"));
   const socketPath = join(dir, "bus.sock");
-  const first = createTelegramBusLocalServer({
+  const first = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (envelope) => ({
       kind: "bus.ack",
@@ -1864,7 +1864,7 @@ test("Old bus server stop cannot invalidate a replacement endpoint generation", 
       message: "first",
     }),
   });
-  const replacement = createTelegramBusLocalServer({
+  const replacement = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (envelope) => ({
       kind: "bus.ack",
@@ -1880,14 +1880,14 @@ test("Old bus server stop cannot invalidate a replacement endpoint generation", 
 
     assert.equal(
       (
-        await probeTelegramBusEndpoint({
-          endpoint: resolveTelegramBusSocketPath(socketPath),
+        await probeBaleBusEndpoint({
+          endpoint: resolveBaleBusSocketPath(socketPath),
           timeoutMs: 50,
         })
       ).reachable,
       true,
     );
-    const response = await sendTelegramBusLocalEnvelope({
+    const response = await sendBaleBusLocalEnvelope({
       socketPath,
       envelope: {
         kind: "follower.heartbeat",
@@ -1910,7 +1910,7 @@ test("Old bus server stop cannot invalidate a replacement endpoint generation", 
 });
 
 test("Stale bus server cannot publish over a replacement endpoint generation", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-publish-fence-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-publish-fence-"));
   const socketPath = join(dir, "bus.sock");
   let releasePublication: (() => void) | undefined;
   let signalPublicationReady: (() => void) | undefined;
@@ -1920,7 +1920,7 @@ test("Stale bus server cannot publish over a replacement endpoint generation", a
   const publicationRelease = new Promise<void>((resolve) => {
     releasePublication = resolve;
   });
-  const stale = createTelegramBusLocalServer({
+  const stale = createBaleBusLocalServer({
     socketPath,
     beforeEndpointPublication: async () => {
       signalPublicationReady?.();
@@ -1929,7 +1929,7 @@ test("Stale bus server cannot publish over a replacement endpoint generation", a
     commitEndpointPublication: () => false,
     handleEnvelope: () => undefined,
   });
-  const replacement = createTelegramBusLocalServer({
+  const replacement = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (envelope) => ({
       kind: "bus.ack",
@@ -1945,7 +1945,7 @@ test("Stale bus server cannot publish over a replacement endpoint generation", a
     releasePublication?.();
     await assert.rejects(staleStart, /lost transport ownership/);
 
-    const response = await sendTelegramBusLocalEnvelope({
+    const response = await sendBaleBusLocalEnvelope({
       socketPath,
       envelope: {
         kind: "follower.heartbeat",
@@ -1969,17 +1969,17 @@ test("Stale bus server cannot publish over a replacement endpoint generation", a
 });
 
 test("Bus local server rebinds an externally unlinked Unix endpoint", { skip: process.platform === "win32" }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-rebind-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-rebind-"));
   const socketPath = join(dir, "bus.sock");
   const phases: string[] = [];
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: () => ({ kind: "bus.ack", requestId: "rebind", ok: true }),
     recordTransportEvent: (phase) => phases.push(phase),
   });
   try {
     await server.start();
-    const resolvedSocketPath = resolveTelegramBusSocketPath(socketPath);
+    const resolvedSocketPath = resolveBaleBusSocketPath(socketPath);
     unlinkSync(resolvedSocketPath);
     assert.equal(existsSync(resolvedSocketPath), false);
 
@@ -1992,7 +1992,7 @@ test("Bus local server rebinds an externally unlinked Unix endpoint", { skip: pr
     );
     assert.equal(
       (
-        await probeTelegramBusEndpoint({
+        await probeBaleBusEndpoint({
           endpoint: resolvedSocketPath,
           timeoutMs: 50,
         })
@@ -2006,12 +2006,12 @@ test("Bus local server rebinds an externally unlinked Unix endpoint", { skip: pr
 });
 
 test("Bus local client transport events include request diagnostics", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-client-events-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-client-events-"));
   const socketPath = join(dir, "missing.sock");
   const events: Array<{ phase: string; details: Record<string, unknown> }> = [];
   try {
     await assert.rejects(
-      sendTelegramBusLocalEnvelope({
+      sendBaleBusLocalEnvelope({
         socketPath,
         envelope: {
           kind: "follower.heartbeat",
@@ -2029,7 +2029,7 @@ test("Bus local client transport events include request diagnostics", async () =
     assert.equal(events[0].details.requestId, "inst-a:events");
     assert.equal(
       events[0].details.transport,
-      getTelegramBusTransportKind(resolveTelegramBusSocketPath(socketPath)),
+      getBaleBusTransportKind(resolveBaleBusSocketPath(socketPath)),
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -2037,21 +2037,21 @@ test("Bus local client transport events include request diagnostics", async () =
 });
 
 test("Bus local client logs the first failure and the outcome, not every retry attempt", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-client-retry-log-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-client-retry-log-"));
   const socketPath = join(dir, "bus.sock");
   const envelope = { kind: "follower.heartbeat" as const, requestId: "inst-a:retry-log", instanceId: "inst-a", sentAtMs: 2000 };
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (request) => ({ kind: "bus.ack", requestId: request.requestId, ok: true }),
   });
   try {
     const failed: string[] = [];
-    await assert.rejects(sendTelegramBusLocalEnvelope({ socketPath, envelope, retry: { attempts: 6, delayMs: 1 },
+    await assert.rejects(sendBaleBusLocalEnvelope({ socketPath, envelope, retry: { attempts: 6, delayMs: 1 },
       recordTransportEvent: (phase, details) => failed.push(`${phase}:${details.attempt}`) }));
     assert.deepEqual(failed, ["client-failed:1", "client-retry:1", "client-failed:6"]);
     const recovered: string[] = [];
     setTimeout(() => void server.start(), 30);
-    await sendTelegramBusLocalEnvelope({ socketPath, envelope, retry: { attempts: 200, delayMs: 5 },
+    await sendBaleBusLocalEnvelope({ socketPath, envelope, retry: { attempts: 200, delayMs: 5 },
       recordTransportEvent: (phase, details) => recovered.push(`${phase}:${details.attempt}`) });
     assert.deepEqual(recovered.slice(0, 2), ["client-failed:1", "client-retry:1"]);
     assert.equal(recovered.length, 3);
@@ -2063,17 +2063,17 @@ test("Bus local client logs the first failure and the outcome, not every retry a
 });
 
 test("Bus local client classifies response timeouts as transport timeouts", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-client-timeout-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-client-timeout-"));
   const socketPath = join(dir, "bus.sock");
   const events: Array<{ phase: string; details: Record<string, unknown> }> = [];
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: () => undefined,
   });
   try {
     await server.start();
     await assert.rejects(
-      sendTelegramBusLocalEnvelope({
+      sendBaleBusLocalEnvelope({
         socketPath,
         timeoutMs: 5,
         envelope: {
@@ -2098,14 +2098,14 @@ test("Bus local client classifies response timeouts as transport timeouts", asyn
 });
 
 test("Bus local client accepts a buffered response after its event loop resumes past the deadline", { timeout: 2_000 }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-client-stall-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-client-stall-"));
   const socketPath = process.platform === "win32"
-    ? getTelegramBusFollowerEndpoint({
+    ? getBaleBusFollowerEndpoint({
         agentDir: dir,
         platform: process.platform,
         instanceId: "stall-test",
       })
-    : resolveTelegramBusSocketPath(join(dir, "bus.sock"));
+    : resolveBaleBusSocketPath(join(dir, "bus.sock"));
   const worker = new Worker(
     `
       import { createServer } from "node:net";
@@ -2147,7 +2147,7 @@ test("Bus local client accepts a buffered response after its event loop resumes 
     const received = new Promise<void>((resolve) => {
       worker.once("message", () => resolve());
     });
-    const responsePromise = sendTelegramBusLocalEnvelope({
+    const responsePromise = sendBaleBusLocalEnvelope({
       socketPath,
       timeoutMs: 100,
       envelope: {
@@ -2172,14 +2172,14 @@ test("Bus local client accepts a buffered response after its event loop resumes 
 });
 
 test("Bus local server memoizes completed and in-flight request results", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-ledger-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-ledger-"));
   const socketPath = join(dir, "bus.sock");
   let executions = 0;
   let release: (() => void) | undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     async handleEnvelope(envelope) {
       executions += 1;
@@ -2200,8 +2200,8 @@ test("Bus local server memoizes completed and in-flight request results", async 
       instanceId: "follower-a",
       sentAtMs: 1000,
     };
-    const first = sendTelegramBusLocalEnvelope({ socketPath, envelope });
-    const duplicate = sendTelegramBusLocalEnvelope({ socketPath, envelope });
+    const first = sendBaleBusLocalEnvelope({ socketPath, envelope });
+    const duplicate = sendBaleBusLocalEnvelope({ socketPath, envelope });
     const deadline = Date.now() + 1000;
     while (executions === 0 && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -2209,7 +2209,7 @@ test("Bus local server memoizes completed and in-flight request results", async 
     assert.equal(executions, 1);
     release?.();
     const [firstResult, duplicateResult] = await Promise.all([first, duplicate]);
-    const replayResult = await sendTelegramBusLocalEnvelope({
+    const replayResult = await sendBaleBusLocalEnvelope({
       socketPath,
       envelope,
     });
@@ -2224,11 +2224,11 @@ test("Bus local server memoizes completed and in-flight request results", async 
 });
 
 test("Bus retry returns the memoized result after the first acknowledgement is lost", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-ledger-ack-loss-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-ledger-ack-loss-"));
   const socketPath = join(dir, "bus.sock");
   let executions = 0;
   let dropped = false;
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope(envelope) {
       executions += 1;
@@ -2247,7 +2247,7 @@ test("Bus retry returns the memoized result after the first acknowledgement is l
   });
   try {
     await server.start();
-    const response = await sendTelegramBusLocalEnvelope({
+    const response = await sendBaleBusLocalEnvelope({
       socketPath,
       timeoutMs: 10,
       retry: { attempts: 2, delayMs: 0 },
@@ -2275,10 +2275,10 @@ test("Bus retry returns the memoized result after the first acknowledgement is l
 });
 
 test("Bus local server rejects request-id reuse with a changed payload", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-ledger-collision-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-ledger-collision-"));
   const socketPath = join(dir, "bus.sock");
   let executions = 0;
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope(envelope) {
       executions += 1;
@@ -2297,8 +2297,8 @@ test("Bus local server rejects request-id reuse with a changed payload", async (
       instanceId: "follower-a",
       sentAtMs: 1000,
     };
-    await sendTelegramBusLocalEnvelope({ socketPath, envelope: first });
-    const collision = await sendTelegramBusLocalEnvelope({
+    await sendBaleBusLocalEnvelope({ socketPath, envelope: first });
+    const collision = await sendBaleBusLocalEnvelope({
       socketPath,
       envelope: { ...first, sentAtMs: 1001 },
     });
@@ -2307,7 +2307,7 @@ test("Bus local server rejects request-id reuse with a changed payload", async (
       kind: "bus.ack",
       requestId: first.requestId,
       ok: false,
-      message: "Telegram bus request id was reused with a different payload.",
+      message: "Bale bus request id was reused with a different payload.",
       error: { code: "request-id-collision" },
     });
   } finally {
@@ -2317,10 +2317,10 @@ test("Bus local server rejects request-id reuse with a changed payload", async (
 });
 
 test("Bus local IPC server reports handler failures as protocol acks", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-handler-failure-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-handler-failure-"));
   const socketPath = join(dir, "bus.sock");
   const events: Array<{ phase: string; details: Record<string, unknown> }> = [];
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: () => {
       throw new Error("boom");
@@ -2329,7 +2329,7 @@ test("Bus local IPC server reports handler failures as protocol acks", async () 
   });
   try {
     await server.start();
-    const response = await sendTelegramBusLocalEnvelope({
+    const response = await sendBaleBusLocalEnvelope({
       socketPath,
       envelope: {
         kind: "follower.heartbeat",
@@ -2342,7 +2342,7 @@ test("Bus local IPC server reports handler failures as protocol acks", async () 
       kind: "bus.ack",
       requestId: "inst-a:failed-handler",
       ok: false,
-      message: "Telegram bus handler failed.",
+      message: "Bale bus handler failed.",
     });
     const failure = events.find(
       (event) => event.phase === "server-handler-failed",
@@ -2351,7 +2351,7 @@ test("Bus local IPC server reports handler failures as protocol acks", async () 
     assert.equal(failure?.details.requestId, "inst-a:failed-handler");
     assert.equal(
       failure?.details.transport,
-      getTelegramBusTransportKind(resolveTelegramBusSocketPath(socketPath)),
+      getBaleBusTransportKind(resolveBaleBusSocketPath(socketPath)),
     );
   } finally {
     await server.stop();
@@ -2360,10 +2360,10 @@ test("Bus local IPC server reports handler failures as protocol acks", async () 
 });
 
 test("Bus local IPC server handles request/response envelopes over a private Unix socket", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-"));
   const socketPath = join(dir, "bus.sock");
   const received: string[] = [];
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (envelope) => {
       received.push(envelope.kind);
@@ -2376,7 +2376,7 @@ test("Bus local IPC server handles request/response envelopes over a private Uni
       assert.equal(statSync(dir).mode & 0o777, 0o700);
       assert.equal(statSync(socketPath).mode & 0o777, 0o600);
     }
-    const response = await sendTelegramBusLocalEnvelope({
+    const response = await sendBaleBusLocalEnvelope({
       socketPath,
       envelope: {
         kind: "follower.heartbeat",
@@ -2402,12 +2402,12 @@ test(
   "Bus local IPC server roundtrips over a Windows named pipe",
   { skip: process.platform !== "win32" },
   async () => {
-    const socketPath = getTelegramBusSocketPath(
-      join(tmpdir(), `pi-telegram-bus-win-${process.pid}`),
+    const socketPath = getBaleBusSocketPath(
+      join(tmpdir(), `pi-bale-bus-win-${process.pid}`),
       "win32",
     );
     const received: string[] = [];
-    const server = createTelegramBusLocalServer({
+    const server = createBaleBusLocalServer({
       socketPath,
       handleEnvelope: (envelope) => {
         received.push(envelope.kind);
@@ -2416,7 +2416,7 @@ test(
     });
     try {
       await server.start();
-      const response = await sendTelegramBusLocalEnvelope({
+      const response = await sendBaleBusLocalEnvelope({
         socketPath,
         envelope: {
           kind: "follower.heartbeat",
@@ -2439,10 +2439,10 @@ test(
 );
 
 test("Bus foreign-owned update forwarder sends routed update envelopes", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-forwarder-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-forwarder-"));
   const socketPath = join(dir, "bus.sock");
   const received: unknown[] = [];
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (envelope) => {
       received.push(envelope);
@@ -2462,12 +2462,12 @@ test("Bus foreign-owned update forwarder sends routed update envelopes", async (
     },
   });
   let sequence = 0;
-  const forwarder = createTelegramBusForeignOwnedUpdateForwarder({
+  const forwarder = createBaleBusForeignOwnedUpdateForwarder({
     socketPath,
     createRequestId: () => `leader:${++sequence}`,
     getNowMs: () => 9000,
   });
-  const expectedDelivery = createTelegramBusFollowerDeliveryIdentity({
+  const expectedDelivery = createBaleBusFollowerDeliveryIdentity({
     kind: "leader.forwardMessage",
     recipientBindingKey: "manual:owner-b",
     sourceUpdateId: 44,
@@ -2483,7 +2483,7 @@ test("Bus foreign-owned update forwarder sends routed update envelopes", async (
       {
         status: "terminal-rejected",
         failureClass: "source-update-identity-missing",
-        message: "Forwarded Telegram update has no durable source identity.",
+        message: "Forwarded Bale update has no durable source identity.",
       },
     );
     assert.deepEqual(
@@ -2495,18 +2495,18 @@ test("Bus foreign-owned update forwarder sends routed update envelopes", async (
       {
         status: "terminal-rejected",
         failureClass: "source-update-identity-missing",
-        message: "Forwarded Telegram update has no durable source identity.",
+        message: "Forwarded Bale update has no durable source identity.",
       },
     );
     const generationlessDelivery =
-      createTelegramBusFollowerDeliveryIdentity({
+      createBaleBusFollowerDeliveryIdentity({
         kind: "leader.forwardMessage",
         recipientBindingKey: "manual:owner-b",
         sourceUpdateId: 43,
       });
     assert.deepEqual(
       await forwarder.forwardMessage({
-        message: { message_id: 7, pi_telegram_source_update_id: 43 },
+        message: { message_id: 7, pi_bale_source_update_id: 43 },
         ownership: {
           instanceId: "inst-b",
           recipientBindingKey: "manual:owner-b",
@@ -2516,13 +2516,13 @@ test("Bus foreign-owned update forwarder sends routed update envelopes", async (
       {
         status: "retryable",
         failureClass: "recipient-generation-missing",
-        message: "Forwarded Telegram update has no live recipient generation.",
+        message: "Forwarded Bale update has no live recipient generation.",
         delivery: generationlessDelivery,
       },
     );
     assert.deepEqual(
       await forwarder.forwardMessage({
-        message: { message_id: 7, pi_telegram_source_update_id: 43 },
+        message: { message_id: 7, pi_bale_source_update_id: 43 },
         ownership: {
           instanceId: "inst-b",
           ownerGeneration: "registration-b",
@@ -2532,7 +2532,7 @@ test("Bus foreign-owned update forwarder sends routed update envelopes", async (
       {
         status: "terminal-rejected",
         failureClass: "recipient-binding-missing",
-        message: "Forwarded Telegram update has no stable recipient binding.",
+        message: "Forwarded Bale update has no stable recipient binding.",
         sourceUpdateId: 43,
       },
     );
@@ -2540,7 +2540,7 @@ test("Bus foreign-owned update forwarder sends routed update envelopes", async (
       await forwarder.forwardMessage({
         message: {
           message_id: 8,
-          pi_telegram_source_update_id: 44,
+          pi_bale_source_update_id: 44,
         },
         ownership: {
           instanceId: "inst-b",
@@ -2560,7 +2560,7 @@ test("Bus foreign-owned update forwarder sends routed update envelopes", async (
       {
         status: "terminal-rejected",
         failureClass: "source-update-identity-missing",
-        message: "Forwarded Telegram update has no durable source identity.",
+        message: "Forwarded Bale update has no durable source identity.",
       },
     );
     assert.deepEqual(received, [
@@ -2572,7 +2572,7 @@ test("Bus foreign-owned update forwarder sends routed update envelopes", async (
         delivery: expectedDelivery,
         message: {
           message_id: 8,
-          pi_telegram_source_update_id: 44,
+          pi_bale_source_update_id: 44,
         },
         sentAtMs: 9000,
       },
@@ -2586,13 +2586,13 @@ test("Bus foreign-owned update forwarder sends routed update envelopes", async (
 for (const mode of ["current", "source-ended-initial", "source-ended-before-connect", "source-ended-before-write",
   "recipient-ended-before-connect", "source-ended-after-write", "recipient-ended-after-write", "connection-refused"] as const) {
   test(`Guarded foreign forward fences native IPC issuance and ACK (${mode})`, async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pi-telegram-forward-guard-"));
-    const socketPath = getTelegramBusFollowerSocketPath("guarded", dir);
+    const dir = mkdtempSync(join(tmpdir(), "pi-bale-forward-guard-"));
+    const socketPath = getBaleBusFollowerSocketPath("guarded", dir);
     const ownership = { instanceId: "guarded", ownerGeneration: "g1", recipientBindingKey: "manual:guarded" };
     let sourceCurrent = mode !== "source-ended-initial", ownershipCurrent = true;
     let guardCalls = 0, ownershipReads = 0;
-    const received: TelegramBusEnvelope[] = [];
-    const server = createTelegramBusLocalServer({ socketPath, handleEnvelope(envelope) {
+    const received: BaleBusEnvelope[] = [];
+    const server = createBaleBusLocalServer({ socketPath, handleEnvelope(envelope) {
       received.push(envelope);
       assert.equal(envelope.kind, "leader.forwardMessage");
       if (envelope.kind !== "leader.forwardMessage") throw new Error("Unexpected probe request");
@@ -2603,9 +2603,9 @@ for (const mode of ["current", "source-ended-initial", "source-ended-before-conn
       return { kind: "bus.ack", requestId: envelope.requestId, ok: true,
         result: { deliveryId: envelope.delivery.deliveryId, sourceUpdateId: envelope.delivery.sourceUpdateId } };
     } });
-    const message = { message_id: 1000, pi_telegram_source_update_id: 51,
+    const message = { message_id: 1000, pi_bale_source_update_id: 51,
       get text() { if (mode === "source-ended-before-write") sourceCurrent = false; return "held source"; } };
-    const forwarder = createTelegramBusForeignOwnedUpdateForwarder({ socketPath,
+    const forwarder = createBaleBusForeignOwnedUpdateForwarder({ socketPath,
       createRequestId: () => "guarded:request", getAuthSecret: () => "guard-secret",
       validateForwardOwnership() { ownershipReads++; return ownershipCurrent; },
     });
@@ -2638,29 +2638,29 @@ for (const mode of ["current", "source-ended-initial", "source-ended-before-conn
 }
 
 test("Bus forwarder selects payload-free custody wake only for capable peers", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-custody-forwarder-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-custody-forwarder-"));
   const socketPath = join(dir, "bus.sock");
-  const received: TelegramBusEnvelope[] = [];
-  const server = createTelegramBusLocalServer({ socketPath, handleEnvelope(envelope) {
+  const received: BaleBusEnvelope[] = [];
+  const server = createBaleBusLocalServer({ socketPath, handleEnvelope(envelope) {
     received.push(envelope);
     return { kind: "bus.ack", requestId: envelope.requestId, ok: true,
       ...(envelope.kind === "leader.wakeInputCustody" ? { result: {
         deliveryId: envelope.delivery.deliveryId,
         sourceUpdateId: envelope.delivery.sourceUpdateId } } : {}) };
   } });
-  const capable = createTelegramBusProtocolIdentity({ runtimeBuild: "0.45.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
+  const capable = createBaleBusProtocolIdentity({ runtimeBuild: "0.45.0",
+    capabilities: [BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
   const expectedOwnership = { instanceId: "inst-b", ownerGeneration: "g1",
     recipientBindingKey: "workspace:recipient", protocolIdentity: capable };
   let currentOwnership = expectedOwnership;
-  const forwarder = createTelegramBusForeignOwnedUpdateForwarder({ socketPath,
+  const forwarder = createBaleBusForeignOwnedUpdateForwarder({ socketPath,
     createRequestId: () => "leader:custody", getNowMs: () => 9_000,
     localProtocolIdentity: capable,
     validateForwardOwnership: ownership =>
-      isTelegramBusForwardOwnershipCurrent(ownership, currentOwnership),
+      isBaleBusForwardOwnershipCurrent(ownership, currentOwnership),
     resolveInputCustodyReference: ({ sourceUpdateId }) => {
       if (sourceUpdateId === 46) currentOwnership = { ...expectedOwnership,
-        ownerGeneration: "g2", protocolIdentity: createTelegramBusProtocolIdentity({
+        ownerGeneration: "g2", protocolIdentity: createBaleBusProtocolIdentity({
           runtimeBuild: "0.44.0" }) };
       return sourceUpdateId === 44 || sourceUpdateId === 46 ? {
         sourceRecoveryKey: "journal:source", source: { updateId: sourceUpdateId,
@@ -2671,28 +2671,28 @@ test("Bus forwarder selects payload-free custody wake only for capable peers", a
   try {
     await server.start();
     const missing = await forwarder.forwardMessage({ message: {
-      message_id: 7, pi_telegram_source_update_id: 45 }, ownership: {
+      message_id: 7, pi_bale_source_update_id: 45 }, ownership: {
       instanceId: "inst-b", ownerGeneration: "g1", recipientBindingKey: "workspace:recipient",
       protocolIdentity: capable }, ctx: "ctx" });
     assert.equal(missing.status, "retryable");
     assert.equal("failureClass" in missing && missing.failureClass, "source-reference-missing");
     const accepted = await forwarder.forwardMessage({ message: {
-      message_id: 8, text: "must-not-cross", pi_telegram_source_update_id: 44 },
+      message_id: 8, text: "must-not-cross", pi_bale_source_update_id: 44 },
       ownership: expectedOwnership, ctx: "ctx" });
     assert.equal(accepted.status, "accepted");
     assert.equal(received.length, 1);
     assert.deepEqual(received[0], { kind: "leader.wakeInputCustody", requestId: "leader:custody",
       recipientInstanceId: "inst-b", recipientRegistrationGeneration: "g1",
-      delivery: createTelegramBusFollowerSourceReferenceDeliveryIdentity({
+      delivery: createBaleBusFollowerSourceReferenceDeliveryIdentity({
         kind: "leader.wakeInputCustody", recipientBindingKey: "workspace:recipient",
         sourceRecoveryKey: "journal:source", source: { updateId: 44,
           owner: { acquisitionId: "acquisition-44", handoffId: "handoff-44" } } }),
       sentAtMs: 9_000 });
     assert.doesNotMatch(JSON.stringify(received), /must-not-cross|message_id/);
     currentOwnership = { ...expectedOwnership, ownerGeneration: "g2",
-      protocolIdentity: createTelegramBusProtocolIdentity({ runtimeBuild: "0.44.0" }) };
+      protocolIdentity: createBaleBusProtocolIdentity({ runtimeBuild: "0.44.0" }) };
     const postAcceptRetry = await forwarder.forwardMessage({ message: {
-      message_id: 8, text: "must-not-cross", pi_telegram_source_update_id: 44 },
+      message_id: 8, text: "must-not-cross", pi_bale_source_update_id: 44 },
       ownership: expectedOwnership, ctx: "ctx" });
     assert.equal(postAcceptRetry.status, "retryable");
     assert.equal("failureClass" in postAcceptRetry && postAcceptRetry.failureClass,
@@ -2700,7 +2700,7 @@ test("Bus forwarder selects payload-free custody wake only for capable peers", a
     assert.equal(received.length, 1);
     currentOwnership = expectedOwnership;
     const stale = await forwarder.forwardMessage({ message: {
-      message_id: 9, pi_telegram_source_update_id: 46 },
+      message_id: 9, pi_bale_source_update_id: 46 },
       ownership: expectedOwnership, ctx: "ctx" });
     assert.equal(stale.status, "retryable");
     assert.equal("failureClass" in stale && stale.failureClass, "recipient-ownership-stale");
@@ -2709,9 +2709,9 @@ test("Bus forwarder selects payload-free custody wake only for capable peers", a
 });
 
 test("Bus durable follower forwarding rejects an ACK without the exact receipt", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-missing-receipt-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-missing-receipt-"));
   const socketPath = join(dir, "bus.sock");
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (envelope) => ({
       kind: "bus.ack",
@@ -2719,20 +2719,20 @@ test("Bus durable follower forwarding rejects an ACK without the exact receipt",
       ok: true,
     }),
   });
-  const forwarder = createTelegramBusForeignOwnedUpdateForwarder({
+  const forwarder = createBaleBusForeignOwnedUpdateForwarder({
     socketPath,
     createRequestId: () => "leader:missing-receipt",
   });
   try {
     await server.start();
-    const delivery = createTelegramBusFollowerDeliveryIdentity({
+    const delivery = createBaleBusFollowerDeliveryIdentity({
       kind: "leader.forwardMessage",
       recipientBindingKey: "manual:owner-b",
       sourceUpdateId: 44,
     });
     assert.deepEqual(
       await forwarder.forwardMessage({
-        message: { message_id: 8, pi_telegram_source_update_id: 44 },
+        message: { message_id: 8, pi_bale_source_update_id: 44 },
         ownership: {
           instanceId: "inst-b",
           ownerGeneration: "registration-b",
@@ -2754,22 +2754,22 @@ test("Bus durable follower forwarding rejects an ACK without the exact receipt",
 });
 
 test("Bus durable follower forwarding classifies negative ACKs as retryable", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-negative-ack-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-negative-ack-"));
   const socketPath = join(dir, "bus.sock");
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (envelope) => ({
       kind: "bus.ack",
       requestId: envelope.requestId,
       ok: false,
-      message: "Stale Telegram bus follower registration generation.",
+      message: "Stale Bale bus follower registration generation.",
     }),
   });
-  const forwarder = createTelegramBusForeignOwnedUpdateForwarder({
+  const forwarder = createBaleBusForeignOwnedUpdateForwarder({
     socketPath,
     createRequestId: () => "leader:negative-ack",
   });
-  const delivery = createTelegramBusFollowerDeliveryIdentity({
+  const delivery = createBaleBusFollowerDeliveryIdentity({
     kind: "leader.forwardMessage",
     recipientBindingKey: "manual:owner-b",
     sourceUpdateId: 44,
@@ -2778,7 +2778,7 @@ test("Bus durable follower forwarding classifies negative ACKs as retryable", as
     await server.start();
     assert.deepEqual(
       await forwarder.forwardMessage({
-        message: { message_id: 8, pi_telegram_source_update_id: 44 },
+        message: { message_id: 8, pi_bale_source_update_id: 44 },
         ownership: {
           instanceId: "inst-b",
           ownerGeneration: "registration-b",
@@ -2789,7 +2789,7 @@ test("Bus durable follower forwarding classifies negative ACKs as retryable", as
       {
         status: "retryable",
         failureClass: "acknowledgement-rejected",
-        message: "Stale Telegram bus follower registration generation.",
+        message: "Stale Bale bus follower registration generation.",
         delivery,
       },
     );
@@ -2800,9 +2800,9 @@ test("Bus durable follower forwarding classifies negative ACKs as retryable", as
 });
 
 test("Bus durable follower forwarding rejects a mismatched receipt", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-mismatched-receipt-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-mismatched-receipt-"));
   const socketPath = join(dir, "bus.sock");
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope: (envelope) => ({
       kind: "bus.ack",
@@ -2811,11 +2811,11 @@ test("Bus durable follower forwarding rejects a mismatched receipt", async () =>
       result: { deliveryId: "wrong-delivery", sourceUpdateId: 44 },
     }),
   });
-  const forwarder = createTelegramBusForeignOwnedUpdateForwarder({
+  const forwarder = createBaleBusForeignOwnedUpdateForwarder({
     socketPath,
     createRequestId: () => "leader:mismatched-receipt",
   });
-  const delivery = createTelegramBusFollowerDeliveryIdentity({
+  const delivery = createBaleBusFollowerDeliveryIdentity({
     kind: "leader.forwardMessage",
     recipientBindingKey: "manual:owner-b",
     sourceUpdateId: 44,
@@ -2824,7 +2824,7 @@ test("Bus durable follower forwarding rejects a mismatched receipt", async () =>
     await server.start();
     assert.deepEqual(
       await forwarder.forwardMessage({
-        message: { message_id: 8, pi_telegram_source_update_id: 44 },
+        message: { message_id: 8, pi_bale_source_update_id: 44 },
         ownership: {
           instanceId: "inst-b",
           ownerGeneration: "registration-b",
@@ -2846,11 +2846,11 @@ test("Bus durable follower forwarding rejects a mismatched receipt", async () =>
 });
 
 test("Bus lost ACK replay keeps delivery identity and follower admission idempotent", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-lost-ack-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-lost-ack-"));
   const socketPath = join(dir, "bus.sock");
   const admitted = new Set<number>();
   const journalAppends: number[] = [];
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     handleEnvelope(envelope) {
       if (!("delivery" in envelope) || !envelope.delivery) return undefined;
@@ -2871,19 +2871,19 @@ test("Bus lost ACK replay keeps delivery identity and follower admission idempot
     shouldDropResponse: (request) => request.requestId === "leader:1",
   });
   let sequence = 0;
-  const forwarder = createTelegramBusForeignOwnedUpdateForwarder({
+  const forwarder = createBaleBusForeignOwnedUpdateForwarder({
     socketPath,
     createRequestId: () => `leader:${++sequence}`,
     timeoutMs: 20,
   });
-  const delivery = createTelegramBusFollowerDeliveryIdentity({
+  const delivery = createBaleBusFollowerDeliveryIdentity({
     kind: "leader.forwardMessage",
     recipientBindingKey: "manual:owner-b",
     sourceUpdateId: 44,
   });
   const forward = () =>
     forwarder.forwardMessage({
-      message: { message_id: 8, pi_telegram_source_update_id: 44 },
+      message: { message_id: 8, pi_bale_source_update_id: 44 },
       ownership: {
         instanceId: "inst-b",
         ownerGeneration: "registration-b",
@@ -2912,9 +2912,9 @@ test("Bus lost ACK replay keeps delivery identity and follower admission idempot
 });
 
 test("Bus foreign-owned update forwarder supports tolerant timeouts", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-bus-forwarder-slow-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-bus-forwarder-slow-"));
   const socketPath = join(dir, "bus.sock");
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath,
     async handleEnvelope(envelope) {
       await new Promise((resolve) => setTimeout(resolve, 40));
@@ -2932,21 +2932,21 @@ test("Bus foreign-owned update forwarder supports tolerant timeouts", async () =
       };
     },
   });
-  const forwarder = createTelegramBusForeignOwnedUpdateForwarder({
+  const forwarder = createBaleBusForeignOwnedUpdateForwarder({
     socketPath,
     createRequestId: () => "leader:slow",
     timeoutMs: 120,
   });
   try {
     await server.start();
-    const delivery = createTelegramBusFollowerDeliveryIdentity({
+    const delivery = createBaleBusFollowerDeliveryIdentity({
       kind: "leader.forwardMessage",
       recipientBindingKey: "manual:owner-b",
       sourceUpdateId: 44,
     });
     assert.deepEqual(
       await forwarder.forwardMessage({
-        message: { message_id: 8, pi_telegram_source_update_id: 44 },
+        message: { message_id: 8, pi_bale_source_update_id: 44 },
         ownership: {
           instanceId: "inst-b",
           ownerGeneration: "registration-b",
@@ -2963,7 +2963,7 @@ test("Bus foreign-owned update forwarder supports tolerant timeouts", async () =
 });
 
 test("Bus follower registry resolves followers by target", () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "private",
     target: { chatId: 1 },
@@ -2984,7 +2984,7 @@ test("Bus follower registry resolves followers by target", () => {
 });
 
 test("Bus follower registry replaces stale registrations by profile and target", () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   registry.register({
     instanceId: "follower:old",
     profileKey: "manual:follower",
@@ -3010,29 +3010,29 @@ test("Bus follower registry replaces stale registrations by profile and target",
 });
 
 test("Bus forward ownership validator follows live registry replacement", () => {
-  const registry = createTelegramBusFollowerRegistry();
-  const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "0.45.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-      TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
+  const registry = createBaleBusFollowerRegistry();
+  const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "0.45.0",
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+      BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
   registry.register({ instanceId: "follower", profileKey: "workspace:recipient",
     registrationGeneration: "g1", protocol, connectedAtMs: 1 });
-  const validate = createTelegramBusForwardOwnershipValidator(registry);
+  const validate = createBaleBusForwardOwnershipValidator(registry);
   const ownership = { instanceId: "follower", ownerGeneration: "g1",
     recipientBindingKey: "workspace:recipient", protocolIdentity: protocol };
   assert.equal(validate(ownership), true);
   registry.register({ instanceId: "follower", profileKey: "workspace:recipient",
-    registrationGeneration: "g1", protocol: createTelegramBusProtocolIdentity({
-      runtimeBuild: "0.44.0", capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }),
+    registrationGeneration: "g1", protocol: createBaleBusProtocolIdentity({
+      runtimeBuild: "0.44.0", capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }),
     connectedAtMs: 2 });
   assert.equal(validate(ownership), false);
   registry.remove("follower");
   assert.equal(validate(ownership), false);
   registry.register({ instanceId: "follower", profileKey: "workspace:recipient",
-    registrationGeneration: "g2", protocol: createTelegramBusProtocolIdentity({
-      runtimeBuild: "0.44.0", capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }),
+    registrationGeneration: "g2", protocol: createBaleBusProtocolIdentity({
+      runtimeBuild: "0.44.0", capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }),
     connectedAtMs: 2 });
   assert.equal(validate(ownership), false);
-  const current = getTelegramFollowerTargetOwnership({ target: { chatId: 1, threadId: 2 },
+  const current = getBaleFollowerTargetOwnership({ target: { chatId: 1, threadId: 2 },
     followers: [{ ...registry.get("follower")!, target: { chatId: 1, threadId: 2 } }] });
   assert.ok(current);
   assert.equal(validate(current), true);
@@ -3040,7 +3040,7 @@ test("Bus forward ownership validator follows live registry replacement", () => 
 
 test("Bus follower target ownership carries the live registration generation", () => {
   assert.deepEqual(
-    getTelegramFollowerTargetOwnership({
+    getBaleFollowerTargetOwnership({
       target: { chatId: 1, threadId: 2 },
       followers: [
         {
@@ -3048,10 +3048,10 @@ test("Bus follower target ownership carries the live registration generation", (
           profileKey: "manual:owner-live",
           target: { chatId: 1, threadId: 2 },
           registrationGeneration: "registration-2",
-          protocol: createTelegramBusProtocolIdentity({
+          protocol: createBaleBusProtocolIdentity({
             runtimeBuild: "0.28.0",
             capabilities: [
-              TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+              BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
             ],
           }),
           connectedAtMs: 2000,
@@ -3063,8 +3063,8 @@ test("Bus follower target ownership carries the live registration generation", (
       instanceId: "follower-live",
       ownerGeneration: "registration-2",
       recipientBindingKey: "manual:owner-live",
-      protocolIdentity: createTelegramBusProtocolIdentity({ runtimeBuild: "0.28.0",
-        capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }),
+      protocolIdentity: createBaleBusProtocolIdentity({ runtimeBuild: "0.28.0",
+        capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }),
     },
   );
 });
@@ -3077,24 +3077,24 @@ test("Bus follower target ownership requires negotiated routing capabilities", (
     connectedAtMs: 1,
     lastHeartbeatMs: 2,
     registrationGeneration: "registration-2",
-    protocol: createTelegramBusProtocolIdentity({
+    protocol: createBaleBusProtocolIdentity({
       runtimeBuild: "0.28.0",
       capabilities: [],
     }),
   };
   assert.equal(
-    getTelegramFollowerTargetOwnership({
+    getBaleFollowerTargetOwnership({
       target: { chatId: 1, threadId: 2 },
       followers: [follower],
     }),
     undefined,
   );
-  follower.protocol = createTelegramBusProtocolIdentity({
+  follower.protocol = createBaleBusProtocolIdentity({
     runtimeBuild: "0.28.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
   });
   assert.deepEqual(
-    getTelegramFollowerTargetOwnership({
+    getBaleFollowerTargetOwnership({
       target: { chatId: 1, threadId: 2 },
       followers: [follower],
     }),
@@ -3105,27 +3105,27 @@ test("Bus follower target ownership requires negotiated routing capabilities", (
       protocolIdentity: follower.protocol,
     },
   );
-  const local = createTelegramBusProtocolIdentity({ runtimeBuild: "0.45.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
-  assert.equal(canUseTelegramBusInputCustodyReference({ local,
-    remote: getTelegramFollowerTargetOwnership({ target: { chatId: 1, threadId: 2 },
+  const local = createBaleBusProtocolIdentity({ runtimeBuild: "0.45.0",
+    capabilities: [BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
+  assert.equal(canUseBaleBusInputCustodyReference({ local,
+    remote: getBaleFollowerTargetOwnership({ target: { chatId: 1, threadId: 2 },
       followers: [follower] })?.protocolIdentity }), false);
-  follower.protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "0.45.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-      TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
-  assert.equal(canUseTelegramBusInputCustodyReference({ local,
-    remote: getTelegramFollowerTargetOwnership({ target: { chatId: 1, threadId: 2 },
+  follower.protocol = createBaleBusProtocolIdentity({ runtimeBuild: "0.45.0",
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+      BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
+  assert.equal(canUseBaleBusInputCustodyReference({ local,
+    remote: getBaleFollowerTargetOwnership({ target: { chatId: 1, threadId: 2 },
       followers: [follower] })?.protocolIdentity }), true);
-  follower.protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "0.44.0",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] });
-  assert.equal(canUseTelegramBusInputCustodyReference({ local,
-    remote: getTelegramFollowerTargetOwnership({ target: { chatId: 1, threadId: 2 },
+  follower.protocol = createBaleBusProtocolIdentity({ runtimeBuild: "0.44.0",
+    capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] });
+  assert.equal(canUseBaleBusInputCustodyReference({ local,
+    remote: getBaleFollowerTargetOwnership({ target: { chatId: 1, threadId: 2 },
       followers: [follower] })?.protocolIdentity }), false);
 });
 
 test("Bus follower target ownership never treats persisted bindings as live authority", () => {
   assert.equal(
-    getTelegramFollowerTargetOwnership({
+    getBaleFollowerTargetOwnership({
       target: { chatId: 1, threadId: 2 },
       followers: [],
       currentInstanceId: "leader",
@@ -3142,7 +3142,7 @@ test("Bus follower target ownership never treats persisted bindings as live auth
     undefined,
   );
   assert.equal(
-    getTelegramFollowerTargetOwnership({
+    getBaleFollowerTargetOwnership({
       target: { chatId: 1, threadId: 2 },
       followers: [],
       currentInstanceId: "leader-b",
@@ -3159,7 +3159,7 @@ test("Bus follower target ownership never treats persisted bindings as live auth
     undefined,
   );
   assert.equal(
-    getTelegramFollowerTargetOwnership({
+    getBaleFollowerTargetOwnership({
       target: { chatId: 1, threadId: 2 },
       followers: [],
       currentInstanceId: "leader",
@@ -3179,7 +3179,7 @@ test("Bus follower target ownership never treats persisted bindings as live auth
 
 test("Unregistered follower observations are non-routing and invalidate on replacement even after removal", () => {
   for (const change of ["instance", "profile", "target", "unrelated", "clear", "release"] as const) {
-    const registry = createTelegramBusFollowerRegistry();
+    const registry = createBaleBusFollowerRegistry();
     const old = { instanceId: "old", profileKey: "owner", target: { chatId: 7, threadId: 11 },
       connectedAtMs: 0, pid: 42, registrationGeneration: "old:1" };
     registry.register(old);
@@ -3210,13 +3210,13 @@ test("Unregistered follower observations are non-routing and invalidate on repla
 });
 
 test("Bus follower registry returns defensive copies", () => {
-  const registry = createTelegramBusFollowerRegistry();
+  const registry = createBaleBusFollowerRegistry();
   const registered = registry.register({
     instanceId: "inst-a",
     target: { chatId: 1, threadId: 2 },
-    protocol: createTelegramBusProtocolIdentity({
+    protocol: createBaleBusProtocolIdentity({
       runtimeBuild: "0.28.0",
-      capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
+      capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
     }),
     connectedAtMs: 1000,
   });
@@ -3225,7 +3225,7 @@ test("Bus follower registry returns defensive copies", () => {
 
   assert.deepEqual(registry.get("inst-a")?.target, { chatId: 1, threadId: 2 });
   assert.deepEqual(registry.get("inst-a")?.protocol?.capabilities, [
-    TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+    BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
   ]);
   const byTarget = registry.getByTarget({ chatId: 1, threadId: 2 });
   if (byTarget) byTarget.target = { chatId: 99 };
@@ -3236,19 +3236,19 @@ test("Bus follower registry returns defensive copies", () => {
 });
 
 test("Bus follower registration identity ignores liveness and target but not process, endpoint or protocol", () => {
-  const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [] });
+  const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [] });
   const captured = { instanceId: "follower", profileKey: "work", sessionId: "session", registrationGeneration: "generation",
     pid: 42, processBirthId: "42:birth", sessionGeneration: 3, cwd: "/workspace", slot: "B", busSocketPath: "/tmp/follower.sock",
     protocol, connectedAtMs: 1, target: { chatId: 7, threadId: 10 } };
-  assert.equal(isSameTelegramBusFollowerRegistration(
+  assert.equal(isSameBaleBusFollowerRegistration(
     { ...captured, connectedAtMs: 99, target: { chatId: 7, threadId: 11 }, protocol: structuredClone(protocol) }, captured), true);
   for (const change of [{ registrationGeneration: "next" }, { processBirthId: "42:other" }, { busSocketPath: "/tmp/other.sock" },
-    { slot: "C" }, { protocol: createTelegramBusProtocolIdentity({ runtimeBuild: "other", capabilities: [] }) }]) {
-    assert.equal(isSameTelegramBusFollowerRegistration({ ...captured, ...change }, captured), false, JSON.stringify(change));
+    { slot: "C" }, { protocol: createBaleBusProtocolIdentity({ runtimeBuild: "other", capabilities: [] }) }]) {
+    assert.equal(isSameBaleBusFollowerRegistration({ ...captured, ...change }, captured), false, JSON.stringify(change));
   }
 });
 
 test("Bus rejection acknowledgements carry only the request and diagnostic", () => {
-  assert.deepEqual(rejectTelegramBusRequest("request", "Refused."),
+  assert.deepEqual(rejectBaleBusRequest("request", "Refused."),
     { kind: "bus.ack", requestId: "request", ok: false, message: "Refused." });
 });

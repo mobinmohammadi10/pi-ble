@@ -1,5 +1,5 @@
 /**
- * Regression tests for the Telegram outbound attachments domain
+ * Regression tests for the Bale outbound attachments domain
  * Covers outbound attachment queueing and delivery behavior in one domain-level suite
  */
 
@@ -10,38 +10,38 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
-  createTelegramQueuedOutboundAttachmentSender,
-  createTelegramRichOutboundAttachmentSender,
-  deliverTelegramGuestCachedAttachment,
-  getTelegramOutboundAttachmentByteLimitFromEnv,
-  planTelegramRichOutboundAttachment,
-  queueTelegramOutboundAttachments,
-  registerTelegramOutboundAttachmentTool,
-  registerTelegramOutboundMessageTool,
-  sendQueuedTelegramOutboundAttachments,
-  sendTelegramOutboundFiles,
-  sendTelegramOutboundMessage,
-  TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES,
-  type TelegramOutboundAttachmentQueueTargetView,
-  type TelegramQueuedOutboundAttachmentTurnView,
+  createBaleQueuedOutboundAttachmentSender,
+  createBaleRichOutboundAttachmentSender,
+  deliverBaleGuestCachedAttachment,
+  getBaleOutboundAttachmentByteLimitFromEnv,
+  planBaleRichOutboundAttachment,
+  queueBaleOutboundAttachments,
+  registerBaleOutboundAttachmentTool,
+  registerBaleOutboundMessageTool,
+  sendQueuedBaleOutboundAttachments,
+  sendBaleOutboundFiles,
+  sendBaleOutboundMessage,
+  BALE_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES,
+  type BaleOutboundAttachmentQueueTargetView,
+  type BaleQueuedOutboundAttachmentTurnView,
 } from "../lib/outbound-attachments.ts";
-import { TelegramChannelPostValidationError } from "../lib/channel-posts.ts";
+import { BaleChannelPostValidationError } from "../lib/channel-posts.ts";
 import type { ExtensionAPI } from "../lib/pi.ts";
-import { createTelegramThreadTarget } from "../lib/target.ts";
-import { TelegramApiCommitUnknownError } from "../lib/telegram-api.ts";
-import { resetTransportReplyDedup, sendTelegramNativeMarkdownReply } from "../lib/replies.ts";
+import { createBaleThreadTarget } from "../lib/target.ts";
+import { BaleApiCommitUnknownError } from "../lib/bale-api.ts";
+import { resetTransportReplyDedup, sendBaleNativeMarkdownReply } from "../lib/replies.ts";
 
 test.beforeEach(resetTransportReplyDedup);
 
 function createAttachmentQueueTarget(
-  queuedAttachments: TelegramOutboundAttachmentQueueTargetView["queuedAttachments"] = [],
-): TelegramOutboundAttachmentQueueTargetView {
+  queuedAttachments: BaleOutboundAttachmentQueueTargetView["queuedAttachments"] = [],
+): BaleOutboundAttachmentQueueTargetView {
   return { queuedAttachments };
 }
 
 function createAttachmentTurn(
   queuedAttachments = [{ path: "/tmp/a.png", fileName: "a.png" }],
-): TelegramQueuedOutboundAttachmentTurnView {
+): BaleQueuedOutboundAttachmentTurnView {
   return { chatId: 1, replyToMessageId: 2, queuedAttachments };
 }
 
@@ -69,7 +69,7 @@ type RegisteredAnyTool = {
 for (const fails of [false, true]) {
   test(`Rich media ${fails ? "rejection preserves" : "success consumes"} the turn's first reply anchor`, async () => {
     const turn = createAttachmentTurn();
-    const sender = createTelegramRichOutboundAttachmentSender({
+    const sender = createBaleRichOutboundAttachmentSender({
       getRenderingMode: () => "rich",
       sendMultipart: async (_method, fields) => {
         assert.equal(JSON.parse(fields.reply_parameters!).message_id, 2);
@@ -80,7 +80,7 @@ for (const fails of [false, true]) {
     assert.equal(await sender(turn, "Report"), !fails);
     const anchors: Array<number | undefined> = [];
     for (const text of ["Following text", "Final text"]) {
-      await sendTelegramNativeMarkdownReply(1, 2, text, {
+      await sendBaleNativeMarkdownReply(1, 2, text, {
         sendRichMessage: async (body) => { anchors.push(body.reply_parameters?.message_id); return { message_id: 101 }; },
       });
     }
@@ -89,8 +89,8 @@ for (const fails of [false, true]) {
 }
 
 test("Rich media following a commentary does not repeat the prompt anchor", async () => {
-  await sendTelegramNativeMarkdownReply(1, 2, "Commentary", { sendRichMessage: async () => ({ message_id: 100 }) });
-  const sender = createTelegramRichOutboundAttachmentSender({
+  await sendBaleNativeMarkdownReply(1, 2, "Commentary", { sendRichMessage: async () => ({ message_id: 100 }) });
+  const sender = createBaleRichOutboundAttachmentSender({
     getRenderingMode: () => "rich",
     sendMultipart: async (_method, fields) => {
       assert.equal(fields.reply_parameters, undefined); return { message_id: 101 };
@@ -101,10 +101,10 @@ test("Rich media following a commentary does not repeat the prompt anchor", asyn
 
 test("Rejected ordinary attachment leaves its failure notice anchored", async () => {
   let anchor: number | undefined;
-  await sendQueuedTelegramOutboundAttachments(createAttachmentTurn(), {
+  await sendQueuedBaleOutboundAttachments(createAttachmentTurn(), {
     sendMultipart: async () => { throw new Error("Rejected file"); },
     sendTextReply: async (chat, reply, text) => {
-      await sendTelegramNativeMarkdownReply(chat, reply, text, {
+      await sendBaleNativeMarkdownReply(chat, reply, text, {
         sendRichMessage: async (body) => { anchor = body.reply_parameters?.message_id; return { message_id: 100 }; },
       });
     },
@@ -117,11 +117,11 @@ test("Rich outbound attachment planner builds one target-scoped media result", (
     ...createAttachmentTurn([
       { path: "/tmp/report.png", fileName: "report.png" },
     ]),
-    target: createTelegramThreadTarget(1, 42),
+    target: createBaleThreadTarget(1, 42),
   };
   const replyMarkup = { inline_keyboard: [[{ text: "Open", callback_data: "x" }]] };
   assert.deepEqual(
-    planTelegramRichOutboundAttachment({
+    planBaleRichOutboundAttachment({
       turn,
       markdown: "> quoted report",
       renderingMode: "rich",
@@ -158,7 +158,7 @@ test("Rich outbound attachment planner classifies probe-confirmed video and audi
     { path: "/tmp/demo.mp4", type: "video" },
     { path: "/tmp/demo.mp3", type: "audio" },
   ]) {
-    const plan = planTelegramRichOutboundAttachment({
+    const plan = planBaleRichOutboundAttachment({
       turn: createAttachmentTurn([
         { path: fixture.path, fileName: fixture.path.split("/").at(-1)! },
       ]),
@@ -175,7 +175,7 @@ test("Rich outbound attachment planner classifies probe-confirmed video and audi
 test("Rich outbound attachment planner preserves compatibility paths", () => {
   const base = createAttachmentTurn();
   assert.equal(
-    planTelegramRichOutboundAttachment({
+    planBaleRichOutboundAttachment({
       turn: base,
       markdown: "report",
       renderingMode: "html",
@@ -183,7 +183,7 @@ test("Rich outbound attachment planner preserves compatibility paths", () => {
     undefined,
   );
   assert.equal(
-    planTelegramRichOutboundAttachment({
+    planBaleRichOutboundAttachment({
       turn: createAttachmentTurn([
         { path: "/tmp/a.png", fileName: "a.png" },
         { path: "/tmp/b.png", fileName: "b.png" },
@@ -194,7 +194,7 @@ test("Rich outbound attachment planner preserves compatibility paths", () => {
     undefined,
   );
   assert.equal(
-    planTelegramRichOutboundAttachment({
+    planBaleRichOutboundAttachment({
       turn: createAttachmentTurn([
         { path: "/tmp/voice.ogg", fileName: "voice.ogg" },
       ]),
@@ -207,7 +207,7 @@ test("Rich outbound attachment planner preserves compatibility paths", () => {
 
 test("Rich outbound attachment sender records exact message ownership", async () => {
   const ownership: unknown[] = [];
-  const sender = createTelegramRichOutboundAttachmentSender({
+  const sender = createBaleRichOutboundAttachmentSender({
     getRenderingMode: () => "rich",
     sendMultipart: async () => ({ message_id: 91 }),
     recordOwnership: (input) => ownership.push(input),
@@ -216,7 +216,7 @@ test("Rich outbound attachment sender records exact message ownership", async ()
     ...createAttachmentTurn([
       { path: "/tmp/report.png", fileName: "report.png" },
     ]),
-    target: createTelegramThreadTarget(1, 42),
+    target: createBaleThreadTarget(1, 42),
   };
   assert.equal(await sender(turn, "report"), true);
   assert.deepEqual(ownership, [
@@ -226,7 +226,7 @@ test("Rich outbound attachment sender records exact message ownership", async ()
 
 test("Rich outbound attachment sender falls back only after known failure", async () => {
   const events: unknown[] = [];
-  const knownFailureSender = createTelegramRichOutboundAttachmentSender({
+  const knownFailureSender = createBaleRichOutboundAttachmentSender({
     getRenderingMode: () => "rich",
     sendMultipart: async () => {
       throw new Error("known rejection");
@@ -242,10 +242,10 @@ test("Rich outbound attachment sender falls back only after known failure", asyn
     ["known rejection", "rich-media-known-failure"],
   ]);
 
-  const ambiguousSender = createTelegramRichOutboundAttachmentSender({
+  const ambiguousSender = createBaleRichOutboundAttachmentSender({
     getRenderingMode: () => "rich",
     sendMultipart: async () => {
-      throw new TelegramApiCommitUnknownError(
+      throw new BaleApiCommitUnknownError(
         "sendRichMessage",
         new Error("ack lost"),
       );
@@ -253,32 +253,32 @@ test("Rich outbound attachment sender falls back only after known failure", asyn
   });
   await assert.rejects(
     ambiguousSender(createAttachmentTurn(), "report"),
-    TelegramApiCommitUnknownError,
+    BaleApiCommitUnknownError,
   );
 });
 
 test("Outbound attachment byte-limit helpers own the outbound file default", () => {
   assert.equal(
-    TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES,
+    BALE_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES,
     50 * 1024 * 1024,
   );
   assert.equal(
-    getTelegramOutboundAttachmentByteLimitFromEnv(
-      { PI_TELEGRAM_OUTBOUND_ATTACHMENT_MAX_BYTES: "12345" },
-      ["PI_TELEGRAM_OUTBOUND_ATTACHMENT_MAX_BYTES"],
+    getBaleOutboundAttachmentByteLimitFromEnv(
+      { PI_BALE_OUTBOUND_ATTACHMENT_MAX_BYTES: "12345" },
+      ["PI_BALE_OUTBOUND_ATTACHMENT_MAX_BYTES"],
       99,
     ),
     12345,
   );
   assert.equal(
-    getTelegramOutboundAttachmentByteLimitFromEnv(
+    getBaleOutboundAttachmentByteLimitFromEnv(
       {
-        PI_TELEGRAM_OUTBOUND_ATTACHMENT_MAX_BYTES: "0",
-        TELEGRAM_MAX_ATTACHMENT_SIZE_BYTES: "bad",
+        PI_BALE_OUTBOUND_ATTACHMENT_MAX_BYTES: "0",
+        BALE_MAX_ATTACHMENT_SIZE_BYTES: "bad",
       },
       [
-        "PI_TELEGRAM_OUTBOUND_ATTACHMENT_MAX_BYTES",
-        "TELEGRAM_MAX_ATTACHMENT_SIZE_BYTES",
+        "PI_BALE_OUTBOUND_ATTACHMENT_MAX_BYTES",
+        "BALE_MAX_ATTACHMENT_SIZE_BYTES",
       ],
       99,
     ),
@@ -294,12 +294,12 @@ test("Outbound attachment tool registration delegates queueing", async () => {
     },
   } as unknown as ExtensionAPI;
   const activeTurn = createAttachmentQueueTarget();
-  registerTelegramOutboundAttachmentTool(api, {
+  registerBaleOutboundAttachmentTool(api, {
     maxAttachmentsPerTurn: 2,
     getActiveTurn: () => activeTurn,
     statPath: async () => ({ isFile: () => true }),
   });
-  assert.equal(tool?.name, "telegram_attach");
+  assert.equal(tool?.name, "bale_attach");
   assert.ok(tool);
   const result = await tool.execute("tool-call", { paths: ["/tmp/report.md"] });
   assert.deepEqual(activeTurn.queuedAttachments, [
@@ -308,7 +308,7 @@ test("Outbound attachment tool registration delegates queueing", async () => {
   assert.deepEqual(result.details.paths, ["/tmp/report.md"]);
 });
 
-test("Outbound attachment tool sends immediately when no Telegram turn is active", async () => {
+test("Outbound attachment tool sends immediately when no Bale turn is active", async () => {
   let tool: RegisteredAttachmentTool | undefined;
   const sent: string[] = [];
   const api = {
@@ -316,7 +316,7 @@ test("Outbound attachment tool sends immediately when no Telegram turn is active
       tool = definition;
     },
   } as unknown as ExtensionAPI;
-  registerTelegramOutboundAttachmentTool(api, {
+  registerBaleOutboundAttachmentTool(api, {
     maxAttachmentsPerTurn: 2,
     getActiveTurn: () => undefined,
     getDefaultChatId: () => 77,
@@ -344,11 +344,11 @@ test("Outbound attachment tool sends to assigned thread target by default", asyn
       tool = definition;
     },
   } as unknown as ExtensionAPI;
-  registerTelegramOutboundAttachmentTool(api, {
+  registerBaleOutboundAttachmentTool(api, {
     maxAttachmentsPerTurn: 2,
     getActiveTurn: () => undefined,
     getDefaultChatId: () => 7,
-    getDefaultTarget: () => createTelegramThreadTarget(-1007, 42),
+    getDefaultTarget: () => createBaleThreadTarget(-1007, 42),
     canSendDirect: () => true,
     sendMultipart: async (_method, fields) => {
       sent.push({ chatId: fields.chat_id, threadId: fields.message_thread_id });
@@ -367,7 +367,7 @@ test("Outbound attachment tool sends explicit thread target immediately", async 
       tool = definition;
     },
   } as unknown as ExtensionAPI;
-  registerTelegramOutboundAttachmentTool(api, {
+  registerBaleOutboundAttachmentTool(api, {
     maxAttachmentsPerTurn: 2,
     getActiveTurn: () => undefined,
     canSendDirect: () => true,
@@ -384,7 +384,7 @@ test("Outbound attachment tool sends explicit thread target immediately", async 
   assert.deepEqual(sent, ["-1007:42"]);
 });
 
-test("Outbound message tool sends direct Telegram markdown with parsed buttons", async () => {
+test("Outbound message tool sends direct Bale markdown with parsed buttons", async () => {
   const tools = new Map<string, RegisteredAnyTool>();
   const sent: Array<{
     chatId: number;
@@ -397,12 +397,12 @@ test("Outbound message tool sends direct Telegram markdown with parsed buttons",
       if (definition.name) tools.set(definition.name, definition);
     },
   } as unknown as ExtensionAPI;
-  registerTelegramOutboundMessageTool(api, {
+  registerBaleOutboundMessageTool(api, {
     getDefaultChatId: () => 7,
     canSendDirect: () => true,
     planMessage: (markdown) => ({
       markdown: markdown
-        .replace(/<!-- telegram_button \{"value":"Continue"\} -->/, "")
+        .replace(/<!-- bale_button \{"value":"Continue"\} -->/, "")
         .trim(),
       replyMarkup: {
         inline_keyboard: [[{ text: "Continue", callback_data: "button:1" }]],
@@ -418,8 +418,8 @@ test("Outbound message tool sends direct Telegram markdown with parsed buttons",
       return 9;
     },
   });
-  await tools.get("telegram_message")?.execute("tool-call", {
-    text: '**hello**\n\n<!-- telegram_button {"value":"Continue"} -->',
+  await tools.get("bale_message")?.execute("tool-call", {
+    text: '**hello**\n\n<!-- bale_button {"value":"Continue"} -->',
   });
   assert.deepEqual(sent, [
     {
@@ -440,7 +440,7 @@ test("Outbound message tool sends a public @channel username through direct lead
   const api = { registerTool: (definition: RegisteredAnyTool) => {
     if (definition.name) tools.set(definition.name, definition);
   } } as unknown as ExtensionAPI;
-  registerTelegramOutboundMessageTool(api, {
+  registerBaleOutboundMessageTool(api, {
     getDefaultChatId: () => 7,
     canSendDirect: () => true,
     planMessage: (markdown) => ({ markdown, replyMarkup: { inline_keyboard: [] } }),
@@ -454,7 +454,7 @@ test("Outbound message tool sends a public @channel username through direct lead
       if (error instanceof Error) recordedErrors.push(error);
     },
   });
-  const tool = tools.get("telegram_message")!;
+  const tool = tools.get("bale_message")!;
   await tool.execute("tool-call", { text: "Channel post", chat_id: "@public_channel" });
   assert.deepEqual(sent, [{ channel: "@public_channel", markdown: "Channel post",
     replyMarkup: { inline_keyboard: [] } }]);
@@ -463,7 +463,7 @@ test("Outbound message tool sends a public @channel username through direct lead
     replyMarkup: { inline_keyboard: [] } });
   await assert.rejects(tool.execute("tool-call", {
     text: "Invalid", chat_id: "@public_channel", thread_id: 2,
-  }), /Telegram channel publication failed/u);
+  }), /Bale channel publication failed/u);
   await assert.rejects(tool.execute("secret-call", {
     text: "SECRET", chat_id: "@public_channel",
   }), error => error instanceof Error && !error.message.includes("SECRET") &&
@@ -479,7 +479,7 @@ test("Outbound message tool routes one local channel media upload to the media p
   const api = { registerTool: (definition: RegisteredAnyTool) => {
     if (definition.name) tools.set(definition.name, definition);
   } } as unknown as ExtensionAPI;
-  registerTelegramOutboundMessageTool(api, {
+  registerBaleOutboundMessageTool(api, {
     getDefaultChatId: () => 7,
     canSendDirect: () => true,
     planMessage: () => ({ markdown: "**Caption**",
@@ -491,7 +491,7 @@ test("Outbound message tool routes one local channel media upload to the media p
       return 92;
     },
   });
-  const tool = tools.get("telegram_message")!;
+  const tool = tools.get("bale_message")!;
   const result = await tool.execute("media-call", { text: "Caption",
     media: "/tmp/photo.jpg", chat_id: "@public_channel" }) as {
       details: { chatId: number | string; messageId?: number } };
@@ -505,17 +505,17 @@ test("Outbound message tool rejects media without channel delivery and reports s
   const api = { registerTool: (definition: RegisteredAnyTool) => {
     if (definition.name) tools.set(definition.name, definition);
   } } as unknown as ExtensionAPI;
-  registerTelegramOutboundMessageTool(api, {
+  registerBaleOutboundMessageTool(api, {
     getDefaultChatId: () => 7,
     canSendDirect: () => true,
     planMessage: (markdown) => ({ markdown }),
     sendMarkdownMessage: async () => 9,
     sendChannelMediaMessage: async () => {
-      throw new TelegramChannelPostValidationError(
+      throw new BaleChannelPostValidationError(
         "Unsupported channel media type. Supported single files: .jpg, .jpeg, .png, .webp photos and .mp4 videos; albums are not supported.");
     },
   });
-  const tool = tools.get("telegram_message")!;
+  const tool = tools.get("bale_message")!;
   await assert.rejects(tool.execute("local-media", { text: "Caption", media: "/tmp/clip.mov" }),
     /media uploads require channel delivery/u);
   await assert.rejects(tool.execute("channel-media", { text: "Caption", media: "/tmp/clip.mov",
@@ -529,7 +529,7 @@ test("Outbound message tool errors start on a visually separated line", async ()
       if (definition.name) tools.set(definition.name, definition);
     },
   } as unknown as ExtensionAPI;
-  registerTelegramOutboundMessageTool(api, {
+  registerBaleOutboundMessageTool(api, {
     getDefaultChatId: () => 7,
     getActiveTurn: () => ({ chatId: 7 }),
     canSendDirect: () => true,
@@ -537,13 +537,13 @@ test("Outbound message tool errors start on a visually separated line", async ()
     sendMarkdownMessage: async () => 9,
   });
 
-  const tool = tools.get("telegram_message");
+  const tool = tools.get("bale_message");
   assert.ok(tool);
   await assert.rejects(
     tool.execute("tool-call", { text: "hello" }),
     (error: unknown) =>
       error instanceof Error &&
-      /^\ntelegram_message cannot send directly/u.test(error.message),
+      /^\nbale_message cannot send directly/u.test(error.message),
   );
 });
 
@@ -555,7 +555,7 @@ test("Outbound message tool sends explicit thread target", async () => {
       if (definition.name) tools.set(definition.name, definition);
     },
   } as unknown as ExtensionAPI;
-  registerTelegramOutboundMessageTool(api, {
+  registerBaleOutboundMessageTool(api, {
     getDefaultChatId: () => 7,
     canSendDirect: () => true,
     planMessage: (markdown) => ({ markdown }),
@@ -564,7 +564,7 @@ test("Outbound message tool sends explicit thread target", async () => {
       return 9;
     },
   });
-  await tools.get("telegram_message")?.execute("tool-call", {
+  await tools.get("bale_message")?.execute("tool-call", {
     text: "hello",
     chat_id: -1007,
     thread_id: 42,
@@ -575,9 +575,9 @@ test("Outbound message tool sends explicit thread target", async () => {
 });
 
 test("Direct outbound message carries internal thread target", async () => {
-  const target = createTelegramThreadTarget(-1007, 42);
+  const target = createBaleThreadTarget(-1007, 42);
   const sent: Array<{ chatId: number; target?: unknown }> = [];
-  await sendTelegramOutboundMessage({
+  await sendBaleOutboundMessage({
     text: "hello",
     chatId: -1007,
     target,
@@ -592,9 +592,9 @@ test("Direct outbound message carries internal thread target", async () => {
 });
 
 test("Direct outbound message defaults to assigned thread target", async () => {
-  const target = createTelegramThreadTarget(-1007, 42);
+  const target = createBaleThreadTarget(-1007, 42);
   const sent: Array<{ chatId: number; target?: unknown }> = [];
-  await sendTelegramOutboundMessage({
+  await sendBaleOutboundMessage({
     text: "hello",
     getDefaultChatId: () => 7,
     getDefaultTarget: () => target,
@@ -609,7 +609,7 @@ test("Direct outbound message defaults to assigned thread target", async () => {
 });
 
 test("Direct outbound message rejects the active turn default target", async () => {
-  const activeTarget = createTelegramThreadTarget(-1007, 42);
+  const activeTarget = createBaleThreadTarget(-1007, 42);
   const baseOptions = {
     text: "duplicate",
     getDefaultChatId: () => -1007,
@@ -619,28 +619,28 @@ test("Direct outbound message rejects the active turn default target", async () 
     planMessage: (markdown: string) => ({ markdown }),
     sendMarkdownMessage: async () => 1,
   };
-  await assert.rejects(sendTelegramOutboundMessage(baseOptions), {
-    message: /active Telegram turn target/,
+  await assert.rejects(sendBaleOutboundMessage(baseOptions), {
+    message: /active Bale turn target/,
   });
   await assert.rejects(
-    sendTelegramOutboundMessage({
+    sendBaleOutboundMessage({
       ...baseOptions,
       chatId: -1007,
       threadId: 42,
     }),
-    { message: /active Telegram turn target/ },
+    { message: /active Bale turn target/ },
   );
 });
 
 test("Direct outbound message allows an explicit different thread", async () => {
   const sent: Array<{ chatId: number; target?: unknown }> = [];
-  await sendTelegramOutboundMessage({
+  await sendBaleOutboundMessage({
     text: "cross-thread notice",
     chatId: -1007,
     threadId: 99,
     getActiveTurn: () => ({
       chatId: -1007,
-      target: createTelegramThreadTarget(-1007, 42),
+      target: createBaleThreadTarget(-1007, 42),
     }),
     canSendDirect: () => true,
     planMessage: (markdown) => ({ markdown }),
@@ -656,12 +656,12 @@ test("Direct outbound message allows an explicit different thread", async () => 
 
 test("Direct outbound message routes a named live thread into its agent turn", async () => {
   const events: unknown[] = [];
-  const result = await sendTelegramOutboundMessage({
+  const result = await sendBaleOutboundMessage({
     text: "Review the release",
     agentThread: "Hazel",
     getActiveTurn: () => ({
       chatId: 7,
-      target: createTelegramThreadTarget(7, 42),
+      target: createBaleThreadTarget(7, 42),
     }),
     resolveAgentTarget: async (selector) => {
       events.push(["resolve", selector]);
@@ -692,14 +692,14 @@ test("Direct outbound message routes a named live thread into its agent turn", a
   assert.equal(result.details.messageId, 101);
 });
 
-test("Direct outbound message fails live-target preflight before Telegram send", async () => {
+test("Direct outbound message fails live-target preflight before Bale send", async () => {
   let sent = false;
   await assert.rejects(
-    sendTelegramOutboundMessage({
+    sendBaleOutboundMessage({
       text: "Review the release",
       agentThread: "Missing",
       resolveAgentTarget: async () => {
-        throw new Error("Telegram agent target is unavailable.");
+        throw new Error("Bale agent target is unavailable.");
       },
       routeAgentMessage: async () => {},
       canSendDirect: () => true,
@@ -716,10 +716,10 @@ test("Direct outbound message fails live-target preflight before Telegram send",
 
 test("Direct outbound files carry internal thread target", async () => {
   const sentFields: Array<Record<string, string>> = [];
-  await sendTelegramOutboundFiles({
+  await sendBaleOutboundFiles({
     paths: ["/tmp/report.md"],
     chatId: -1007,
-    target: createTelegramThreadTarget(-1007, 42),
+    target: createBaleThreadTarget(-1007, 42),
     maxAttachmentsPerTurn: 1,
     canSendDirect: () => true,
     statPath: async () => ({ isFile: () => true, size: 1 }),
@@ -732,7 +732,7 @@ test("Direct outbound files carry internal thread target", async () => {
 
 test("Direct outbound files accept explicit tool thread target", async () => {
   const sentFields: Array<Record<string, string>> = [];
-  await sendTelegramOutboundFiles({
+  await sendBaleOutboundFiles({
     paths: ["/tmp/report.md"],
     chatId: -1007,
     threadId: 42,
@@ -746,10 +746,10 @@ test("Direct outbound files accept explicit tool thread target", async () => {
   assert.equal(sentFields[0]?.message_thread_id, "42");
 });
 
-test("Direct Telegram tools require local polling lock ownership", async () => {
+test("Direct Bale tools require local polling lock ownership", async () => {
   await assert.rejects(
     () =>
-      queueTelegramOutboundAttachments({
+      queueBaleOutboundAttachments({
         activeTurn: undefined,
         paths: ["/tmp/report.md"],
         maxAttachmentsPerTurn: 2,
@@ -760,12 +760,12 @@ test("Direct Telegram tools require local polling lock ownership", async () => {
       }),
     {
       message:
-        /requires this Pi instance to own \/telegram-connect or be registered/,
+        /requires this Pi instance to own \/bale-connect or be registered/,
     },
   );
   await assert.rejects(() => toolsMessageWithoutOwnership(), {
     message:
-      /requires this Pi instance to own \/telegram-connect or be registered/,
+      /requires this Pi instance to own \/bale-connect or be registered/,
   });
 });
 
@@ -776,7 +776,7 @@ async function toolsMessageWithoutOwnership(): Promise<unknown> {
       tool = definition;
     },
   } as unknown as ExtensionAPI;
-  registerTelegramOutboundMessageTool(api, {
+  registerBaleOutboundMessageTool(api, {
     getDefaultChatId: () => 7,
     canSendDirect: () => false,
     planMessage: (markdown) => ({ markdown }),
@@ -785,9 +785,9 @@ async function toolsMessageWithoutOwnership(): Promise<unknown> {
   return tool?.execute("tool-call", { text: "hello" });
 }
 
-test("Outbound attachment queueing adds files to the active Telegram turn", async () => {
+test("Outbound attachment queueing adds files to the active Bale turn", async () => {
   const activeTurn = createAttachmentQueueTarget();
-  const result = await queueTelegramOutboundAttachments({
+  const result = await queueBaleOutboundAttachments({
     activeTurn,
     paths: ["/tmp/demo.txt"],
     maxAttachmentsPerTurn: 2,
@@ -797,7 +797,7 @@ test("Outbound attachment queueing adds files to the active Telegram turn", asyn
     { path: "/tmp/demo.txt", fileName: "demo.txt" },
   ]);
   assert.deepEqual(result.details.paths, ["/tmp/demo.txt"]);
-  assert.equal(result.content[0]?.text, "\nQueued 1 Telegram attachment(s).");
+  assert.equal(result.content[0]?.text, "\nQueued 1 Bale attachment(s).");
 });
 
 test("Outbound attachment queueing admits exactly one Guest Mode file", async () => {
@@ -805,7 +805,7 @@ test("Outbound attachment queueing admits exactly one Guest Mode file", async ()
     ...createAttachmentQueueTarget(),
     guestQueryId: "guest-query",
   };
-  await queueTelegramOutboundAttachments({
+  await queueBaleOutboundAttachments({
     activeTurn,
     paths: ["/tmp/demo.txt"],
     maxAttachmentsPerTurn: 2,
@@ -818,7 +818,7 @@ test("Outbound attachment queueing admits exactly one Guest Mode file", async ()
   let statCalled = false;
   await assert.rejects(
     () =>
-      queueTelegramOutboundAttachments({
+      queueBaleOutboundAttachments({
         activeTurn,
         paths: ["/tmp/second.txt"],
         maxAttachmentsPerTurn: 2,
@@ -829,7 +829,7 @@ test("Outbound attachment queueing admits exactly one Guest Mode file", async ()
       }),
     {
       message:
-        "Telegram Guest Mode supports one attachment per reply; no attachment was queued",
+        "Bale Guest Mode supports one attachment per reply; no attachment was queued",
     },
   );
   assert.equal(statCalled, false);
@@ -894,7 +894,7 @@ test("Guest attachment staging builds cached media results and always deletes st
 
   for (const item of cases) {
     const events: unknown[] = [];
-    await deliverTelegramGuestCachedAttachment({
+    await deliverBaleGuestCachedAttachment({
       guestQueryId: "guest-1",
       stagingChatId: 42,
       attachment: { path: item.path, fileName: item.path.split("/").at(-1)! },
@@ -930,7 +930,7 @@ for (const item of [
 ] as const) {
   test(`Guest ACK attachment replaces the exact inline placeholder with cached ${item.type}`, async () => {
     const events: unknown[] = [];
-    await deliverTelegramGuestCachedAttachment({
+    await deliverBaleGuestCachedAttachment({
       guestQueryId: "already-answered", guestInlineMessageId: "inline-1",
       stagingChatId: 42, stagingTarget: { chatId: 42, threadId: 8 },
       attachment: { path: item.path, fileName: item.path }, caption: "caption",
@@ -953,7 +953,7 @@ for (const item of [
 for (const extension of ["ogg", "opus"]) {
   test(`Guest ACK rejects ${extension} voice before queue mutation`, async () => {
     const turn = { queuedAttachments: [], guestQueryId: "guest", guestInlineMessageId: "inline" };
-    await assert.rejects(queueTelegramOutboundAttachments({
+    await assert.rejects(queueBaleOutboundAttachments({
       activeTurn: turn, paths: [`/tmp/voice.${extension}`], maxAttachmentsPerTurn: 10,
       statPath: async () => ({ isFile: () => true }),
     }), /cannot replace.*voice note/);
@@ -965,7 +965,7 @@ for (const phase of ["upload", "extract", "edit", "retired-upload", "retired-edi
   test(`Guest ACK attachment handles ${phase} without a second answer or stale effects`, async () => {
     const events: string[] = [];
     let active = true;
-    const operation = deliverTelegramGuestCachedAttachment({
+    const operation = deliverBaleGuestCachedAttachment({
       guestQueryId: "answered", guestInlineMessageId: "inline", stagingChatId: 42,
       attachment: { path: "photo.png", fileName: "photo.png" },
       isDeliveryActive: () => active,
@@ -979,7 +979,7 @@ for (const phase of ["upload", "extract", "edit", "retired-upload", "retired-edi
         if (phase === "retired-edit") active = false;
         options?.assertAuthority?.();
         events.push("edit");
-        if (phase === "edit") throw new TelegramApiCommitUnknownError("editMessageMedia", new Error("lost response"));
+        if (phase === "edit") throw new BaleApiCommitUnknownError("editMessageMedia", new Error("lost response"));
       },
       answerGuestQuery: async () => assert.fail("Query already answered"),
       answerGuestText: async () => assert.fail("No second answer on failure"),
@@ -990,7 +990,7 @@ for (const phase of ["upload", "extract", "edit", "retired-upload", "retired-edi
       await operation;
       assert.deepEqual(events, ["upload"]);
     } else {
-      await assert.rejects(operation, phase === "edit" ? TelegramApiCommitUnknownError : Error);
+      await assert.rejects(operation, phase === "edit" ? BaleApiCommitUnknownError : Error);
       assert.deepEqual(events, phase === "upload" ? ["upload"]
         : phase === "extract" ? ["upload", "delete"] : ["upload", "edit", "delete"]);
     }
@@ -1002,7 +1002,7 @@ test("Guest attachment staging cleans up extraction and answer failures", async 
     const events: string[] = [];
     await assert.rejects(
       () =>
-        deliverTelegramGuestCachedAttachment({
+        deliverBaleGuestCachedAttachment({
           guestQueryId: "guest-1",
           stagingChatId: 42,
           attachment: { path: "/tmp/report.txt", fileName: "report.txt" },
@@ -1026,7 +1026,7 @@ test("Guest attachment staging cleans up extraction and answer failures", async 
 
 test("Guest attachment staging falls back to one text answer before media answer", async () => {
   const events: string[] = [];
-  await deliverTelegramGuestCachedAttachment({
+  await deliverBaleGuestCachedAttachment({
     guestQueryId: "guest-1",
     stagingChatId: 42,
     attachment: { path: "/tmp/report.txt", fileName: "report.txt" },
@@ -1047,7 +1047,7 @@ test("Guest attachment staging falls back to one text answer before media answer
 
 test("Guest attachment staging records cleanup failure without retrying the answer", async () => {
   const events: string[] = [];
-  await deliverTelegramGuestCachedAttachment({
+  await deliverBaleGuestCachedAttachment({
     guestQueryId: "guest-1",
     stagingChatId: 42,
     attachment: { path: "/tmp/report.txt", fileName: "report.txt" },
@@ -1075,12 +1075,12 @@ test("Guest attachment staging records cleanup failure without retrying the answ
 
 test("Outbound attachment queueing uses the domain stat fallback", async () => {
   const tempDir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-attachment-queue-"),
+    join(tmpdir(), "pi-bale-attachment-queue-"),
   );
   const filePath = join(tempDir, "demo.txt");
   await writeFile(filePath, "demo", "utf8");
   const activeTurn = createAttachmentQueueTarget();
-  const result = await queueTelegramOutboundAttachments({
+  const result = await queueBaleOutboundAttachments({
     activeTurn,
     paths: [filePath],
     maxAttachmentsPerTurn: 1,
@@ -1091,7 +1091,7 @@ test("Outbound attachment queueing uses the domain stat fallback", async () => {
 test("Outbound attachment queueing rejects oversized files", async () => {
   await assert.rejects(
     () =>
-      queueTelegramOutboundAttachments({
+      queueBaleOutboundAttachments({
         activeTurn: createAttachmentQueueTarget(),
         paths: ["/tmp/large.bin"],
         maxAttachmentsPerTurn: 1,
@@ -1109,7 +1109,7 @@ test("Outbound attachment queueing stays atomic when a later file is rejected", 
   const activeTurn = createAttachmentQueueTarget();
   await assert.rejects(
     () =>
-      queueTelegramOutboundAttachments({
+      queueBaleOutboundAttachments({
         activeTurn,
         paths: ["/tmp/ok.txt", "/tmp/large.bin"],
         maxAttachmentsPerTurn: 2,
@@ -1130,17 +1130,17 @@ test("Outbound attachment queueing stays atomic when a later file is rejected", 
 test("Outbound attachment queueing rejects missing turns, non-files, and full queues", async () => {
   await assert.rejects(
     () =>
-      queueTelegramOutboundAttachments({
+      queueBaleOutboundAttachments({
         activeTurn: undefined,
         paths: ["/tmp/demo.txt"],
         maxAttachmentsPerTurn: 1,
         statPath: async () => ({ isFile: () => true }),
       }),
-    { message: /active Telegram turn/ },
+    { message: /active Bale turn/ },
   );
   await assert.rejects(
     () =>
-      queueTelegramOutboundAttachments({
+      queueBaleOutboundAttachments({
         activeTurn: createAttachmentQueueTarget(),
         paths: ["/tmp/demo.txt"],
         maxAttachmentsPerTurn: 1,
@@ -1150,7 +1150,7 @@ test("Outbound attachment queueing rejects missing turns, non-files, and full qu
   );
   await assert.rejects(
     () =>
-      queueTelegramOutboundAttachments({
+      queueBaleOutboundAttachments({
         activeTurn: createAttachmentQueueTarget([
           { path: "/tmp/a.txt", fileName: "a.txt" },
         ]),
@@ -1164,7 +1164,7 @@ test("Outbound attachment queueing rejects missing turns, non-files, and full qu
 
 test("Outbound attachment delivery includes reply parameters for uploads", async () => {
   const sentFields: Array<Record<string, string>> = [];
-  await sendQueuedTelegramOutboundAttachments(createAttachmentTurn(), {
+  await sendQueuedBaleOutboundAttachments(createAttachmentTurn(), {
     sendMultipart: async (_method, fields) => {
       sentFields.push(fields);
     },
@@ -1183,10 +1183,10 @@ test("Outbound attachment delivery includes reply parameters for uploads", async
 
 test("Outbound attachment delivery includes thread target for uploads", async () => {
   const sentFields: Array<Record<string, string>> = [];
-  await sendQueuedTelegramOutboundAttachments(
+  await sendQueuedBaleOutboundAttachments(
     {
       ...createAttachmentTurn(),
-      target: createTelegramThreadTarget(1, 42),
+      target: createBaleThreadTarget(1, 42),
     },
     {
       sendMultipart: async (_method, fields) => {
@@ -1200,7 +1200,7 @@ test("Outbound attachment delivery includes thread target for uploads", async ()
 
 test("Outbound attachment delivery chooses photo vs document methods from file paths", async () => {
   const sent: Array<string> = [];
-  await sendQueuedTelegramOutboundAttachments(
+  await sendQueuedBaleOutboundAttachments(
     createAttachmentTurn([
       { path: "/tmp/a.png", fileName: "a.png" },
       { path: "/tmp/b.txt", fileName: "b.txt" },
@@ -1225,11 +1225,11 @@ test("Outbound attachment delivery chooses photo vs document methods from file p
 });
 
 test("Outbound attachment delivery uses the domain stat fallback for size checks", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-attachment-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-attachment-"));
   const filePath = join(tempDir, "large.txt");
   await writeFile(filePath, "too large", "utf8");
   const replies: string[] = [];
-  await sendQueuedTelegramOutboundAttachments(
+  await sendQueuedBaleOutboundAttachments(
     createAttachmentTurn([{ path: filePath, fileName: "large.txt" }]),
     {
       sendMultipart: async () => {
@@ -1249,7 +1249,7 @@ test("Outbound attachment delivery uses the domain stat fallback for size checks
 test("Outbound attachment delivery checks attachment sizes before upload", async () => {
   const replies: string[] = [];
   const sent: string[] = [];
-  await sendQueuedTelegramOutboundAttachments(createAttachmentTurn(), {
+  await sendQueuedBaleOutboundAttachments(createAttachmentTurn(), {
     maxAttachmentSizeBytes: 10,
     statPath: async () => ({ size: 11 }),
     sendMultipart: async () => {
@@ -1269,8 +1269,8 @@ test("Outbound attachment delivery checks attachment sizes before upload", async
 test("Outbound attachment delivery reports per-file failures via text replies", async () => {
   const replies: Array<{ text: string; target?: unknown }> = [];
   const runtimeEvents: string[] = [];
-  const target = createTelegramThreadTarget(1, 42);
-  await sendQueuedTelegramOutboundAttachments(
+  const target = createBaleThreadTarget(1, 42);
+  await sendQueuedBaleOutboundAttachments(
     { ...createAttachmentTurn(), target },
     {
       sendMultipart: async () => {
@@ -1294,7 +1294,7 @@ test("Outbound attachment delivery reports per-file failures via text replies", 
 
 test("Outbound attachment sender runtime binds delivery ports", async () => {
   const sent: string[] = [];
-  const sendQueuedAttachments = createTelegramQueuedOutboundAttachmentSender({
+  const sendQueuedAttachments = createBaleQueuedOutboundAttachmentSender({
     sendMultipart: async (method, _fields, fileField, _filePath, fileName) => {
       sent.push(`${method}:${fileField}:${fileName}`);
     },
@@ -1307,7 +1307,7 @@ test("Outbound attachment sender runtime binds delivery ports", async () => {
 
 test("Outbound attachment sender runtime applies the default outbound size limit", async () => {
   const replies: string[] = [];
-  const sendQueuedAttachments = createTelegramQueuedOutboundAttachmentSender({
+  const sendQueuedAttachments = createBaleQueuedOutboundAttachmentSender({
     sendMultipart: async () => {
       throw new Error("unexpected upload");
     },
@@ -1315,11 +1315,11 @@ test("Outbound attachment sender runtime applies the default outbound size limit
       replies.push(text);
     },
     statPath: async () => ({
-      size: TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES + 1,
+      size: BALE_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES + 1,
     }),
   });
   await sendQueuedAttachments(createAttachmentTurn());
   assert.deepEqual(replies, [
-    `Failed to send attachment a.png: Attachment exceeds size limit (${TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES + 1} bytes > ${TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES} bytes)`,
+    `Failed to send attachment a.png: Attachment exceeds size limit (${BALE_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES + 1} bytes > ${BALE_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES} bytes)`,
   ]);
 });

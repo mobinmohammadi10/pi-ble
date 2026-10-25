@@ -1,6 +1,6 @@
 /**
  * Cross-process queued-receipt ownership and transport-lock probe
- * Zones: telegram inbound tests, filesystem authority, process fencing
+ * Zones: bale inbound tests, filesystem authority, process fencing
  * Invoked only by integration.test.ts as a replacement transport process.
  */
 
@@ -8,30 +8,30 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 
 import {
-  createTelegramBusFollowerRegistry,
-  createTelegramBusLocalServer,
-  createTelegramBusProtocolIdentity,
-  sendTelegramBusLocalEnvelope,
-  TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF,
+  createBaleBusFollowerRegistry,
+  createBaleBusLocalServer,
+  createBaleBusProtocolIdentity,
+  sendBaleBusLocalEnvelope,
+  BALE_BUS_CAPABILITY_QUEUE_HANDOFF,
 } from "../../lib/bus.ts";
-import { createTelegramBusLeaderEnvelopeHandler } from "../../lib/bus-leader.ts";
+import { createBaleBusLeaderEnvelopeHandler } from "../../lib/bus-leader.ts";
 import {
-  createTelegramUpdateJournalBindingKey,
-  createTelegramUpdateJournalBotIdentity,
-  createTelegramUpdateJournalStore,
-  TelegramUpdateJournalError,
+  createBaleUpdateJournalBindingKey,
+  createBaleUpdateJournalBotIdentity,
+  createBaleUpdateJournalStore,
+  BaleUpdateJournalError,
 } from "../../lib/journal.ts";
-import { createTelegramLockRuntime } from "../../lib/locks.ts";
-import { getTelegramProcessBirthIdentity, isProcessAlive } from "../../lib/process-identity.ts";
+import { createBaleLockRuntime } from "../../lib/locks.ts";
+import { getBaleProcessBirthIdentity, isProcessAlive } from "../../lib/process-identity.ts";
 import {
-  createTelegramQueueHandoffStagingRuntime,
-  createTelegramQueueStore,
-  type TelegramQueueHandoffStageResult,
+  createBaleQueueHandoffStagingRuntime,
+  createBaleQueueStore,
+  type BaleQueueHandoffStageResult,
 } from "../../lib/queue.ts";
 import {
-  createTelegramQueueHandoffRecipientRuntime,
-  createTelegramUpdateAdmissionLifecycleRuntime,
-  createTelegramUpdateWorkerRuntime,
+  createBaleQueueHandoffRecipientRuntime,
+  createBaleUpdateAdmissionLifecycleRuntime,
+  createBaleUpdateWorkerRuntime,
 } from "../../lib/updates.ts";
 
 interface TransportHandoffInput {
@@ -68,7 +68,7 @@ async function waitForFile(path: string): Promise<void> {
 async function runRegistrationRecoveryRace(
   input: RegistrationRecoveryRaceInput,
 ): Promise<void> {
-  const processBirthId = getTelegramProcessBirthIdentity(
+  const processBirthId = getBaleProcessBirthIdentity(
     process.pid,
     input.instanceId,
   );
@@ -89,9 +89,9 @@ async function runRegistrationRecoveryRace(
     acquiredAtMs: staleOwner.acquiredAtMs,
   };
   await writeFile(input.journalPath, JSON.stringify(staleEntry), "utf8");
-  const journal = createTelegramUpdateJournalStore({
+  const journal = createBaleUpdateJournalStore({
     path: input.journalPath,
-    botIdentity: createTelegramUpdateJournalBotIdentity({
+    botIdentity: createBaleUpdateJournalBotIdentity({
       botToken: "123:queue-owner-worker",
     }),
     queueRuntimeIdentity: ownerIdentity,
@@ -103,14 +103,14 @@ async function runRegistrationRecoveryRace(
         : "dead";
     },
   });
-  const registry = createTelegramBusFollowerRegistry();
-  const protocol = createTelegramBusProtocolIdentity({
+  const registry = createBaleBusFollowerRegistry();
+  const protocol = createBaleBusProtocolIdentity({
     runtimeBuild: "fixture",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF],
+    capabilities: [BALE_BUS_CAPABILITY_QUEUE_HANDOFF],
   });
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath: input.socketPath,
-    handleEnvelope: createTelegramBusLeaderEnvelopeHandler({
+    handleEnvelope: createBaleBusLeaderEnvelopeHandler({
       followerRegistry: registry,
       protocolIdentity: protocol,
       provisionFollowerTarget: (registration) => registration.target,
@@ -123,7 +123,7 @@ async function runRegistrationRecoveryRace(
   await waitForFile(input.startPath);
   const [registration, recovery] = await Promise.all([
     Promise.resolve().then(() => {
-      return sendTelegramBusLocalEnvelope({
+      return sendBaleBusLocalEnvelope({
         socketPath: input.socketPath,
         envelope: {
           kind: "follower.register",
@@ -155,7 +155,7 @@ async function runRegistrationRecoveryRace(
           recoveryOwner: ownerIdentity,
         }).status;
       } catch (error) {
-        return error instanceof TelegramUpdateJournalError
+        return error instanceof BaleUpdateJournalError
           ? error.code
           : "unexpected";
       }
@@ -178,7 +178,7 @@ async function runRegistrationRecoveryRace(
 }
 
 async function runTransportHandoff(input: TransportHandoffInput): Promise<void> {
-  const processBirthId = getTelegramProcessBirthIdentity(
+  const processBirthId = getBaleProcessBirthIdentity(
     process.pid,
     input.recipientInstanceId,
   );
@@ -188,19 +188,19 @@ async function runTransportHandoff(input: TransportHandoffInput): Promise<void> 
     processBirthId,
     sessionGeneration: 1,
   };
-  const botIdentity = createTelegramUpdateJournalBotIdentity({
+  const botIdentity = createBaleUpdateJournalBotIdentity({
     botToken: "123:queue-owner-worker",
   });
-  const recipientJournalBindingKey = createTelegramUpdateJournalBindingKey({
+  const recipientJournalBindingKey = createBaleUpdateJournalBindingKey({
     path: input.recipientJournalPath,
     botIdentity,
   });
-  const recipientJournal = createTelegramUpdateJournalStore({
+  const recipientJournal = createBaleUpdateJournalStore({
     path: input.recipientJournalPath,
     botIdentity,
     queueRuntimeIdentity: recipientOwner,
   });
-  const lifecycle = createTelegramUpdateAdmissionLifecycleRuntime<string>({
+  const lifecycle = createBaleUpdateAdmissionLifecycleRuntime<string>({
     resolveBinding: () => ({
       runtimeKey: input.recipientJournalPath,
       recoveryKey: recipientJournalBindingKey,
@@ -208,7 +208,7 @@ async function runTransportHandoff(input: TransportHandoffInput): Promise<void> 
     }),
     getQueueOwnerIdentity: () => recipientOwner,
     createWorker(journal) {
-      return createTelegramUpdateWorkerRuntime({
+      return createBaleUpdateWorkerRuntime({
         journal,
         hasAuthority: () => true,
         getJournalBindingKey: () => recipientJournalBindingKey,
@@ -217,16 +217,16 @@ async function runTransportHandoff(input: TransportHandoffInput): Promise<void> 
       });
     },
   });
-  const liveStore = createTelegramQueueStore<string>();
+  const liveStore = createBaleQueueStore<string>();
   const controlExecutions: string[] = [];
-  const staging = createTelegramQueueHandoffStagingRuntime({
+  const staging = createBaleQueueHandoffStagingRuntime({
     liveStore,
     createControlExecution: (payload) => async () => {
       controlExecutions.push(payload.controlType);
     },
   });
   let handoffCount = 0;
-  const acceptQueueHandoff = createTelegramQueueHandoffRecipientRuntime({
+  const acceptQueueHandoff = createBaleQueueHandoffRecipientRuntime({
     staging,
     getRecipientOwner: () => recipientOwner,
     getLifecycleForBinding(binding) {
@@ -240,7 +240,7 @@ async function runTransportHandoff(input: TransportHandoffInput): Promise<void> 
     handoffCount += 1;
     return result;
   };
-  const lock = createTelegramLockRuntime<{ cwd: string }>({
+  const lock = createBaleLockRuntime<{ cwd: string }>({
     locksPath: input.ownersPath,
     instanceId: input.recipientInstanceId,
   });
@@ -254,10 +254,10 @@ async function runTransportHandoff(input: TransportHandoffInput): Promise<void> 
   );
   if (!acquired.ok) throw new Error("replacement transport acquisition failed");
 
-  const registry = createTelegramBusFollowerRegistry();
-  const protocol = createTelegramBusProtocolIdentity({
+  const registry = createBaleBusFollowerRegistry();
+  const protocol = createBaleBusProtocolIdentity({
     runtimeBuild: "fixture",
-    capabilities: [TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF],
+    capabilities: [BALE_BUS_CAPABILITY_QUEUE_HANDOFF],
   });
   registry.register({
     instanceId: input.recipientInstanceId,
@@ -271,7 +271,7 @@ async function runTransportHandoff(input: TransportHandoffInput): Promise<void> 
     sessionGeneration: 1,
     connectedAtMs: Date.now(),
   });
-  const handleLeaderEnvelope = createTelegramBusLeaderEnvelopeHandler({
+  const handleLeaderEnvelope = createBaleBusLeaderEnvelopeHandler({
     followerRegistry: registry,
     authSecret: input.authSecret,
     protocolIdentity: protocol,
@@ -292,11 +292,11 @@ async function runTransportHandoff(input: TransportHandoffInput): Promise<void> 
         kind: "bus.ack" as const,
         requestId: envelope.requestId,
         ok: false,
-        message: "Unauthorized or stale Telegram queue handoff envelope.",
+        message: "Unauthorized or stale Bale queue handoff envelope.",
       };
     }
     try {
-      const result: TelegramQueueHandoffStageResult =
+      const result: BaleQueueHandoffStageResult =
         await handleQueueHandoff(envelope, "recipient-context");
       return {
         kind: "bus.ack" as const,
@@ -314,7 +314,7 @@ async function runTransportHandoff(input: TransportHandoffInput): Promise<void> 
     }
   };
   let droppedHandoffAck = false;
-  const server = createTelegramBusLocalServer({
+  const server = createBaleBusLocalServer({
     socketPath: input.socketPath,
     handleEnvelope,
     shouldDropResponse(request, response) {
@@ -330,13 +330,13 @@ async function runTransportHandoff(input: TransportHandoffInput): Promise<void> 
   });
   await server.start();
 
-  const replacementJournal = createTelegramUpdateJournalStore({
+  const replacementJournal = createBaleUpdateJournalStore({
     path: input.journalPath,
     botIdentity,
     queueRuntimeIdentity: recipientOwner,
   });
   let executionCount = 0;
-  const replacementWorker = createTelegramUpdateWorkerRuntime({
+  const replacementWorker = createBaleUpdateWorkerRuntime({
     journal: replacementJournal,
     hasAuthority: () => lock.owns({ cwd: input.donorCwd }),
     getQueueOwnerIdentity: () => recipientOwner,
@@ -410,7 +410,7 @@ if (mode === "transport-handoff") {
   );
 } else {
   if (!path) throw new Error("queue owner worker requires a journal path");
-  const processBirthId = getTelegramProcessBirthIdentity(
+  const processBirthId = getBaleProcessBirthIdentity(
     process.pid,
     "fixture-replacement",
   );
@@ -420,9 +420,9 @@ if (mode === "transport-handoff") {
     processBirthId,
     sessionGeneration: 1,
   };
-  const journal = createTelegramUpdateJournalStore({
+  const journal = createBaleUpdateJournalStore({
     path,
-    botIdentity: createTelegramUpdateJournalBotIdentity({
+    botIdentity: createBaleUpdateJournalBotIdentity({
       botToken: "123:queue-owner-worker",
     }),
     queueRuntimeIdentity: {
@@ -437,7 +437,7 @@ if (mode === "transport-handoff") {
     receiptId: "process-a-receipt",
     sourceUpdateIds: [1],
   };
-  const worker = createTelegramUpdateWorkerRuntime({
+  const worker = createBaleUpdateWorkerRuntime({
     journal,
     hasAuthority: () => true,
     getQueueOwnerIdentity: () => queueOwnerIdentity,
@@ -467,7 +467,7 @@ if (mode === "transport-handoff") {
     ]);
   } catch (error) {
     directCompletionError =
-      error instanceof TelegramUpdateJournalError ? error.code : "unexpected";
+      error instanceof BaleUpdateJournalError ? error.code : "unexpected";
   }
   let recoveryStatus: string | undefined;
   if (mode === "recover") {

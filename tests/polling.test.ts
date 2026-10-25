@@ -1,5 +1,5 @@
 /**
- * Regression tests for the Telegram polling runtime domain
+ * Regression tests for the Bale polling runtime domain
  * Covers polling request helpers, stop conditions, and the long-poll loop runtime in one suite
  */
 
@@ -7,46 +7,46 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  admitTelegramPollingUpdateBatch,
-  applyTelegramThreadCapability,
-  buildTelegramInitialSyncRequest,
-  buildTelegramLongPollRequest,
-  canProbeTelegramThreadCapability,
-  createTelegramDurablePollingRuntimeAssembly,
-  createTelegramPollingActivityReader,
-  createTelegramPollingAdmissionRuntime,
-  createTelegramPollingController,
-  createTelegramPollingControllerRuntime,
-  createTelegramPollingControllerState,
-  createTelegramPollingStateReader,
-  createTelegramPollLoopRunner,
-  createTelegramThreadAwarePollingPorts,
-  createTelegramThreadCapabilityMonitor,
-  createTelegramThreadCapabilityOrchestration,
-  createTelegramThreadCapabilityStateRuntime,
-  type TelegramThreadCapabilityState,
-  createTelegramThreadTargetObservationBinding,
-  cutOverTelegramPollingCursor,
-  getLatestTelegramUpdateId,
-  getTelegramGetUpdatesRequestBudgetMs,
-  getTelegramPollingRetryDelayMs,
-  isTelegramGetUpdatesConflictError,
-  isTelegramPollingControllerActive,
-  runTelegramPollLoop,
-  shouldStartTelegramPolling,
-  shouldStopTelegramPolling,
-  sleepTelegramPollingRetry,
-  startTelegramPollingRuntime,
-  stopTelegramPollingRuntime,
-  TELEGRAM_ALLOWED_UPDATES,
-  TELEGRAM_GET_UPDATES_CONFLICT_STOP_LIMIT,
-  TelegramPersistentGetUpdatesConflictError,
-  TelegramGetUpdatesTimeoutError,
-  TelegramPollingBatchValidationError,
-  TelegramPollingCursorBootstrapError,
+  admitBalePollingUpdateBatch,
+  applyBaleThreadCapability,
+  buildBaleInitialSyncRequest,
+  buildBaleLongPollRequest,
+  canProbeBaleThreadCapability,
+  createBaleDurablePollingRuntimeAssembly,
+  createBalePollingActivityReader,
+  createBalePollingAdmissionRuntime,
+  createBalePollingController,
+  createBalePollingControllerRuntime,
+  createBalePollingControllerState,
+  createBalePollingStateReader,
+  createBalePollLoopRunner,
+  createBaleThreadAwarePollingPorts,
+  createBaleThreadCapabilityMonitor,
+  createBaleThreadCapabilityOrchestration,
+  createBaleThreadCapabilityStateRuntime,
+  type BaleThreadCapabilityState,
+  createBaleThreadTargetObservationBinding,
+  cutOverBalePollingCursor,
+  getLatestBaleUpdateId,
+  getBaleGetUpdatesRequestBudgetMs,
+  getBalePollingRetryDelayMs,
+  isBaleGetUpdatesConflictError,
+  isBalePollingControllerActive,
+  runBalePollLoop,
+  shouldStartBalePolling,
+  shouldStopBalePolling,
+  sleepBalePollingRetry,
+  startBalePollingRuntime,
+  stopBalePollingRuntime,
+  BALE_ALLOWED_UPDATES,
+  BALE_GET_UPDATES_CONFLICT_STOP_LIMIT,
+  BalePersistentGetUpdatesConflictError,
+  BaleGetUpdatesTimeoutError,
+  BalePollingBatchValidationError,
+  BalePollingCursorBootstrapError,
 } from "../lib/polling.ts";
 import { createPassthroughFailureLog } from "./fixtures/failure-log.ts";
-import { createTelegramFailureRunLog } from "../lib/logging.ts";
+import { createBaleFailureRunLog } from "../lib/logging.ts";
 
 const TEST_CONTEXT = "ctx";
 const NOOP_JOURNAL_ADMISSION = {
@@ -68,7 +68,7 @@ async function waitForPollingCondition(
 }
 
 test("Polling helpers build the initial sync request", () => {
-  assert.deepEqual(buildTelegramInitialSyncRequest(), {
+  assert.deepEqual(buildBaleInitialSyncRequest(), {
     offset: -1,
     limit: 1,
     timeout: 0,
@@ -76,36 +76,36 @@ test("Polling helpers build the initial sync request", () => {
 });
 
 test("Polling helpers build long-poll requests with and without lastUpdateId", () => {
-  assert.deepEqual(buildTelegramLongPollRequest(), {
+  assert.deepEqual(buildBaleLongPollRequest(), {
     offset: undefined,
     limit: 10,
     timeout: 30,
-    allowed_updates: TELEGRAM_ALLOWED_UPDATES,
+    allowed_updates: BALE_ALLOWED_UPDATES,
   });
-  assert.deepEqual(buildTelegramLongPollRequest(41), {
+  assert.deepEqual(buildBaleLongPollRequest(41), {
     offset: 42,
     limit: 10,
     timeout: 30,
-    allowed_updates: TELEGRAM_ALLOWED_UPDATES,
+    allowed_updates: BALE_ALLOWED_UPDATES,
   });
 });
 
 test("Polling getUpdates budgets derive from the declared long-poll timeout", () => {
   assert.equal(
-    getTelegramGetUpdatesRequestBudgetMs(buildTelegramInitialSyncRequest()),
+    getBaleGetUpdatesRequestBudgetMs(buildBaleInitialSyncRequest()),
     10_000,
   );
   assert.equal(
-    getTelegramGetUpdatesRequestBudgetMs(buildTelegramLongPollRequest()),
+    getBaleGetUpdatesRequestBudgetMs(buildBaleLongPollRequest()),
     40_000,
   );
-  assert.equal(getTelegramGetUpdatesRequestBudgetMs({ timeout: 2 }, 500), 2_500);
+  assert.equal(getBaleGetUpdatesRequestBudgetMs({ timeout: 2 }, 500), 2_500);
 });
 
 test("Polling helpers extract the latest update id", () => {
-  assert.equal(getLatestTelegramUpdateId([]), undefined);
+  assert.equal(getLatestBaleUpdateId([]), undefined);
   assert.equal(
-    getLatestTelegramUpdateId([{ update_id: 1 }, { update_id: 7 }]),
+    getLatestBaleUpdateId([{ update_id: 1 }, { update_id: 7 }]),
     7,
   );
 });
@@ -117,7 +117,7 @@ test("Polling cursor cutover is journal-first, idempotent, and preserves existin
   const events: string[] = [];
   let failRemoval = true;
   const cutOver = () =>
-    cutOverTelegramPollingCursor({
+    cutOverBalePollingCursor({
       getLegacyCursor: () => legacyCursor,
       readJournal: () => ({
         ...(journalCursor !== undefined
@@ -155,7 +155,7 @@ test("Polling cursor cutover is journal-first, idempotent, and preserves existin
 test("Polling cursor cutover never removes config authority when journal publication fails", async () => {
   let removeCalls = 0;
   await assert.rejects(
-    cutOverTelegramPollingCursor({
+    cutOverBalePollingCursor({
       getLegacyCursor: () => 5,
       readJournal: () => ({ entries: [] }),
       publishJournalCursor() {
@@ -174,7 +174,7 @@ test("Polling batch admission journals one latest cursor before worker signal", 
   const config = { botToken: "123:abc", lastUpdateId: 999 };
   let acceptedThroughUpdateId = 5;
   const events: string[] = [];
-  const result = await admitTelegramPollingUpdateBatch({
+  const result = await admitBalePollingUpdateBatch({
     updates: [{ update_id: 6 }, { update_id: 7 }],
     config,
     getAcceptedThroughUpdateId: () => acceptedThroughUpdateId,
@@ -209,7 +209,7 @@ test("Polling batch admission leaves offset and worker untouched when journal ap
   let persistCalls = 0;
   let signalCalls = 0;
   await assert.rejects(
-    admitTelegramPollingUpdateBatch({
+    admitBalePollingUpdateBatch({
       updates: [{ update_id: 6 }, { update_id: 7 }],
       config,
       appendBatch() {
@@ -234,7 +234,7 @@ test("Polling batch admission leaves cursor and worker untouched when atomic jou
   let acceptedThroughUpdateId = 5;
   let signalCalls = 0;
   await assert.rejects(
-    admitTelegramPollingUpdateBatch({
+    admitBalePollingUpdateBatch({
       updates: [{ update_id: 6 }],
       config,
       getAcceptedThroughUpdateId: () => acceptedThroughUpdateId,
@@ -258,7 +258,7 @@ test("Polling batch admission leaves cursor and worker untouched when atomic jou
 test("Polling batch admission fails closed on non-monotonic ids", async () => {
   let appendCalls = 0;
   await assert.rejects(
-    admitTelegramPollingUpdateBatch({
+    admitBalePollingUpdateBatch({
       updates: [{ update_id: 7 }, { update_id: 6 }],
       config: { botToken: "123:abc" },
       getAcceptedThroughUpdateId: () => 5,
@@ -268,7 +268,7 @@ test("Polling batch admission fails closed on non-monotonic ids", async () => {
       async persistConfig() {},
       signalWorker() {},
     }),
-    TelegramPollingBatchValidationError,
+    BalePollingBatchValidationError,
   );
   assert.equal(appendCalls, 0);
 });
@@ -277,7 +277,7 @@ test("Polling restart replays journal authority after offset commit but before w
   const config = { botToken: "123:abc", lastUpdateId: 999 };
   let acceptedThroughUpdateId = 5;
   const journal = new Set<number>();
-  await admitTelegramPollingUpdateBatch({
+  await admitBalePollingUpdateBatch({
     updates: [{ update_id: 6 }],
     config,
     getAcceptedThroughUpdateId: () => acceptedThroughUpdateId,
@@ -310,7 +310,7 @@ test("Polling batch admission contains worker signal failures after durable offs
     error: unknown;
     details?: Record<string, unknown>;
   }> = [];
-  await admitTelegramPollingUpdateBatch({
+  await admitBalePollingUpdateBatch({
     updates: [{ update_id: 6 }],
     config,
     getAcceptedThroughUpdateId: () => acceptedThroughUpdateId,
@@ -339,9 +339,9 @@ test("Polling batch admission contains worker signal failures after durable offs
 });
 
 test("Polling activity reports lifecycle ownership without inventing health", () => {
-  const state = createTelegramPollingControllerState();
-  const isActive = createTelegramPollingActivityReader(state);
-  const readState = createTelegramPollingStateReader(state);
+  const state = createBalePollingControllerState();
+  const isActive = createBalePollingActivityReader(state);
+  const readState = createBalePollingStateReader(state);
 
   assert.equal(isActive(), false);
   assert.deepEqual(readState(), {
@@ -368,21 +368,21 @@ test("Polling activity reports lifecycle ownership without inventing health", ()
 
 test("Thread capability probes require direct or registered follower authority", () => {
   assert.equal(
-    canProbeTelegramThreadCapability(TEST_CONTEXT, {
+    canProbeBaleThreadCapability(TEST_CONTEXT, {
       ownsLock: () => false,
       isFollowerRegistered: () => false,
     }),
     false,
   );
   assert.equal(
-    canProbeTelegramThreadCapability(TEST_CONTEXT, {
+    canProbeBaleThreadCapability(TEST_CONTEXT, {
       ownsLock: () => true,
       isFollowerRegistered: () => false,
     }),
     true,
   );
   assert.equal(
-    canProbeTelegramThreadCapability(TEST_CONTEXT, {
+    canProbeBaleThreadCapability(TEST_CONTEXT, {
       ownsLock: () => false,
       isFollowerRegistered: () => true,
     }),
@@ -392,7 +392,7 @@ test("Thread capability probes require direct or registered follower authority",
 
 test("Thread capability monitor stays passive before transport authorization", async () => {
   let calls = 0;
-  const monitor = createTelegramThreadCapabilityMonitor({
+  const monitor = createBaleThreadCapabilityMonitor({
     failureLog: createPassthroughFailureLog(),
     getAllowedUserId: () => 7,
     callApi: async <TResponse>() => {
@@ -407,8 +407,8 @@ test("Thread capability monitor stays passive before transport authorization", a
     },
     ownsLock: () => false,
     isFollowerRegistered: () => false,
-    getPollingStartedWithTelegramBus: () => false,
-    setPollingStartedWithTelegramBus: () => {},
+    getPollingStartedWithBaleBus: () => false,
+    setPollingStartedWithBaleBus: () => {},
     setTopicModeUnavailable: () => {},
     stopFollowerRegistration: () => {},
     startClassicPolling: () => {},
@@ -441,7 +441,7 @@ test("Thread capability monitor stops after synchronous stale-context preflight"
     ownershipReads += 1;
     throw new Error("This extension ctx is stale after session replacement or reload.");
   } };
-  const monitor = createTelegramThreadCapabilityMonitor({
+  const monitor = createBaleThreadCapabilityMonitor({
     failureLog: createPassthroughFailureLog((error) => recordEvent("bus", error)),
     getAllowedUserId: () => 7,
     callApi: async <TResponse>() => { apiCalls += 1; return {} as TResponse; },
@@ -449,8 +449,8 @@ test("Thread capability monitor stops after synchronous stale-context preflight"
       getBotState: () => ({}), setBotState: () => {} },
     ownsLock: (ctx: typeof staleContext) => ctx.cwd === "/project",
     isFollowerRegistered: () => false,
-    getPollingStartedWithTelegramBus: () => false,
-    setPollingStartedWithTelegramBus: () => {}, setTopicModeUnavailable: () => {},
+    getPollingStartedWithBaleBus: () => false,
+    setPollingStartedWithBaleBus: () => {}, setTopicModeUnavailable: () => {},
     stopFollowerRegistration: () => {}, startClassicPolling: () => {},
     stopClassicPolling: () => {}, startBusPolling: () => {}, stopBusPolling: () => {},
     startLeaderHealth: () => {}, stopLeaderHealth: () => {}, updateStatus: () => {},
@@ -469,8 +469,8 @@ test("Thread capability monitor collapses a sustained probe failure and reports 
   const events: Array<{ details?: Record<string, unknown> }> = [];
   let failing = true;
   let probes = 0;
-  const monitor = createTelegramThreadCapabilityMonitor({
-    failureLog: createTelegramFailureRunLog({
+  const monitor = createBaleThreadCapabilityMonitor({
+    failureLog: createBaleFailureRunLog({
       category: "bus",
       failurePhase: "capability-monitor",
       outcomePhase: "capability-monitor-recovered",
@@ -487,8 +487,8 @@ test("Thread capability monitor collapses a sustained probe failure and reports 
       getBotState: () => ({}), setBotState: () => {} },
     ownsLock: () => true,
     isFollowerRegistered: () => false,
-    getPollingStartedWithTelegramBus: () => false,
-    setPollingStartedWithTelegramBus: () => {}, setTopicModeUnavailable: () => {},
+    getPollingStartedWithBaleBus: () => false,
+    setPollingStartedWithBaleBus: () => {}, setTopicModeUnavailable: () => {},
     stopFollowerRegistration: () => {}, startClassicPolling: () => {},
     stopClassicPolling: () => {}, startBusPolling: () => {}, stopBusPolling: () => {},
     startLeaderHealth: () => {}, stopLeaderHealth: () => {}, updateStatus: () => {},
@@ -521,7 +521,7 @@ test("Thread capability monitor invalidates a replaced session before reading it
   let records = 0;
   const oldContext = { session: "old" as const };
   const currentContext = { session: "current" as const };
-  const monitor = createTelegramThreadCapabilityMonitor({
+  const monitor = createBaleThreadCapabilityMonitor({
     failureLog: createPassthroughFailureLog(),
     getAllowedUserId: () => 7, callApi: async <TResponse>() => ({} as TResponse),
     topicTargetStore: { load: async () => {}, persist: async () => {},
@@ -531,8 +531,8 @@ test("Thread capability monitor invalidates a replaced session before reading it
       if (ctx.session === "old") throw new Error("old context was read");
       return false;
     },
-    isFollowerRegistered: () => false, getPollingStartedWithTelegramBus: () => false,
-    setPollingStartedWithTelegramBus: () => {}, setTopicModeUnavailable: () => {},
+    isFollowerRegistered: () => false, getPollingStartedWithBaleBus: () => false,
+    setPollingStartedWithBaleBus: () => {}, setTopicModeUnavailable: () => {},
     stopFollowerRegistration: () => {}, startClassicPolling: () => {},
     stopClassicPolling: () => {}, startBusPolling: () => {}, stopBusPolling: () => {},
     startLeaderHealth: () => {}, stopLeaderHealth: () => {}, updateStatus: () => {},
@@ -551,7 +551,7 @@ test("Thread capability monitor serializes probes across lifecycle generations",
   let calls = 0;
   let state: { threadMode?: "enabled" | "disabled" | "unknown" } = {};
   const releases: Array<(value: unknown) => void> = [];
-  const monitor = createTelegramThreadCapabilityMonitor({
+  const monitor = createBaleThreadCapabilityMonitor({
     failureLog: createPassthroughFailureLog(),
     getAllowedUserId: () => 7,
     callApi: <TResponse>() =>
@@ -569,8 +569,8 @@ test("Thread capability monitor serializes probes across lifecycle generations",
     },
     ownsLock: () => true,
     isFollowerRegistered: () => false,
-    getPollingStartedWithTelegramBus: () => false,
-    setPollingStartedWithTelegramBus: () => {},
+    getPollingStartedWithBaleBus: () => false,
+    setPollingStartedWithBaleBus: () => {},
     setTopicModeUnavailable: () => {},
     stopFollowerRegistration: () => {},
     startClassicPolling: () => {},
@@ -603,7 +603,7 @@ test("Thread capability monitor serializes probes across lifecycle generations",
 
 test("Thread target observation binding supports late runtime composition", async () => {
   const events: string[] = [];
-  const binding = createTelegramThreadTargetObservationBinding<string>();
+  const binding = createBaleThreadTargetObservationBinding<string>();
 
   await binding.handle("before");
   binding.set(async (ctx) => {
@@ -615,7 +615,7 @@ test("Thread target observation binding supports late runtime composition", asyn
 });
 
 test("Thread capability state runtime owns transition flags", () => {
-  const state = createTelegramThreadCapabilityStateRuntime();
+  const state = createBaleThreadCapabilityStateRuntime();
 
   assert.equal(state.isBusPollingStarted(), false);
   assert.equal(state.isTopicModeUnavailable(), false);
@@ -635,16 +635,16 @@ test("Thread capability state runtime owns transition flags", () => {
 
 function createCapabilityLifecycleFixture(hooks: {
   getMe: () => Promise<boolean | undefined>;
-  initialBot?: TelegramThreadCapabilityState;
+  initialBot?: BaleThreadCapabilityState;
   ownsLock?: () => boolean;
   isFollowerRegistered?: () => boolean;
   persist?: () => Promise<void>;
   startBus?: () => Promise<void>;
 }) {
-  const state = createTelegramThreadCapabilityStateRuntime();
-  let bot: TelegramThreadCapabilityState = hooks.initialBot ?? {};
+  const state = createBaleThreadCapabilityStateRuntime();
+  let bot: BaleThreadCapabilityState = hooks.initialBot ?? {};
   const calls: string[] = [];
-  const runtime = createTelegramThreadCapabilityOrchestration<string, unknown>({
+  const runtime = createBaleThreadCapabilityOrchestration<string, unknown>({
     failureLog: createPassthroughFailureLog(),
     state, getAllowedUserId: () => 1,
     callApi: async <TResponse,>() => ({ has_topics_enabled: await hooks.getMe() }) as TResponse,
@@ -835,14 +835,14 @@ test("Thread-aware polling returns disabled mode to classic takeover despite ret
       ];
     },
   };
-  const ports = createTelegramThreadAwarePollingPorts({
+  const ports = createBaleThreadAwarePollingPorts({
     getAllowedUserId: () => 42,
     callApi,
     topicTargetStore: store,
     isBusRuntimeEnabled: () => false,
     isTopicModeUnavailableError: () => false,
-    getPollingStartedWithTelegramBus: () => false,
-    setPollingStartedWithTelegramBus() {},
+    getPollingStartedWithBaleBus: () => false,
+    setPollingStartedWithBaleBus() {},
     setForceFreshLeaderThreadOnNextStart() {},
     setTopicModeUnavailable() {},
     startClassicPolling() {},
@@ -879,14 +879,14 @@ test("Thread-aware polling refreshes owner-published enabled mode over stale loc
       return [];
     },
   };
-  const ports = createTelegramThreadAwarePollingPorts({
+  const ports = createBaleThreadAwarePollingPorts({
     getAllowedUserId: () => 42,
     callApi: async <TResponse,>(): Promise<TResponse> => ({}) as TResponse,
     topicTargetStore: store,
     isBusRuntimeEnabled: () => false,
     isTopicModeUnavailableError: () => false,
-    getPollingStartedWithTelegramBus: () => false,
-    setPollingStartedWithTelegramBus() {},
+    getPollingStartedWithBaleBus: () => false,
+    setPollingStartedWithBaleBus() {},
     setForceFreshLeaderThreadOnNextStart() {},
     setTopicModeUnavailable() {},
     startClassicPolling() {},
@@ -927,14 +927,14 @@ test("Thread-aware polling auto-restores followers only for remembered Workspace
       return [];
     },
   };
-  const ports = createTelegramThreadAwarePollingPorts({
+  const ports = createBaleThreadAwarePollingPorts({
     getAllowedUserId: () => 42,
     callApi: async <TResponse,>(): Promise<TResponse> => ({}) as TResponse,
     topicTargetStore: store,
     isBusRuntimeEnabled: () => false,
     isTopicModeUnavailableError: () => false,
-    getPollingStartedWithTelegramBus: () => false,
-    setPollingStartedWithTelegramBus() {},
+    getPollingStartedWithBaleBus: () => false,
+    setPollingStartedWithBaleBus() {},
     setForceFreshLeaderThreadOnNextStart() {},
     setTopicModeUnavailable() {},
     startClassicPolling() {},
@@ -1011,8 +1011,8 @@ test("Thread capability downgrade retries classic restore after failure", async 
     callApi: async <TResponse,>(): Promise<TResponse> => ({}) as TResponse,
     topicTargetStore: store,
     ownsLock: () => true,
-    getPollingStartedWithTelegramBus: () => pollingStartedWithBus,
-    setPollingStartedWithTelegramBus(started: boolean) {
+    getPollingStartedWithBaleBus: () => pollingStartedWithBus,
+    setPollingStartedWithBaleBus(started: boolean) {
       pollingStartedWithBus = started;
     },
     setTopicModeUnavailable() {},
@@ -1037,7 +1037,7 @@ test("Thread capability downgrade retries classic restore after failure", async 
     },
   };
 
-  await applyTelegramThreadCapability(
+  await applyBaleThreadCapability(
     TEST_CONTEXT,
     false,
     "capability-monitor-disabled-confirmed",
@@ -1051,7 +1051,7 @@ test("Thread capability downgrade retries classic restore after failure", async 
   assert.equal(pollingStartedWithBus, false);
   assert.equal(suspendedTargets, 1);
 
-  await applyTelegramThreadCapability(
+  await applyBaleThreadCapability(
     TEST_CONTEXT,
     false,
     "capability-monitor-disabled-confirmed",
@@ -1077,14 +1077,14 @@ test("Thread-aware polling still allows classic takeover path without thread bin
       return [];
     },
   };
-  const ports = createTelegramThreadAwarePollingPorts({
+  const ports = createBaleThreadAwarePollingPorts({
     getAllowedUserId: () => 42,
     callApi,
     topicTargetStore: store,
     isBusRuntimeEnabled: () => false,
     isTopicModeUnavailableError: () => false,
-    getPollingStartedWithTelegramBus: () => false,
-    setPollingStartedWithTelegramBus() {},
+    getPollingStartedWithBaleBus: () => false,
+    setPollingStartedWithBaleBus() {},
     setForceFreshLeaderThreadOnNextStart() {},
     setTopicModeUnavailable() {},
     startClassicPolling() {},
@@ -1106,21 +1106,21 @@ test("Thread-aware polling still allows classic takeover path without thread bin
 
 test("Polling helpers start only when a bot token exists and polling is idle", () => {
   assert.equal(
-    shouldStartTelegramPolling({
+    shouldStartBalePolling({
       hasBotToken: true,
       hasPollingPromise: false,
     }),
     true,
   );
   assert.equal(
-    shouldStartTelegramPolling({
+    shouldStartBalePolling({
       hasBotToken: false,
       hasPollingPromise: false,
     }),
     false,
   );
   assert.equal(
-    shouldStartTelegramPolling({
+    shouldStartBalePolling({
       hasBotToken: true,
       hasPollingPromise: true,
     }),
@@ -1164,10 +1164,10 @@ test("Polling runtime starts and stops polling through state ports", async () =>
       events.push("polling:stopped");
     },
   };
-  startTelegramPollingRuntime("ctx", deps);
+  startBalePollingRuntime("ctx", deps);
   assert.equal(!!pollingPromise, true);
   assert.equal(!!pollingController, true);
-  const stopPromise = stopTelegramPollingRuntime(deps);
+  const stopPromise = stopBalePollingRuntime(deps);
   assert.equal(pollingController?.signal.aborted, true);
   assert.equal(!!pollingController, true);
   finishPollLoop?.();
@@ -1226,8 +1226,8 @@ test("Polling runtime still aborts and settles when typing cleanup fails", async
       );
     },
   };
-  startTelegramPollingRuntime("ctx", deps);
-  const stopPromise = stopTelegramPollingRuntime(deps);
+  startBalePollingRuntime("ctx", deps);
+  const stopPromise = stopBalePollingRuntime(deps);
   assert.equal(pollingController?.signal.aborted, true);
   finishPollLoop?.();
   await stopPromise;
@@ -1272,7 +1272,7 @@ test("Polling runtime ignores stale-context status failures during cleanup", asy
       runtimeEvents.push(`${category}:${message}:${details?.phase}`);
     },
   };
-  startTelegramPollingRuntime("ctx", deps);
+  startBalePollingRuntime("ctx", deps);
   await pollingPromise;
   assert.equal(statusCalls, 2);
   assert.equal(pollingPromise, undefined);
@@ -1309,7 +1309,7 @@ test("Polling runtime ignores stale-context status failures during start", () =>
     },
   };
 
-  assert.doesNotThrow(() => startTelegramPollingRuntime("ctx", deps));
+  assert.doesNotThrow(() => startBalePollingRuntime("ctx", deps));
   assert.equal(!!pollingPromise, true);
   assert.equal(!!pollingController, true);
   assert.deepEqual(runtimeEvents, ["polling:stale ctx:status-update"]);
@@ -1320,7 +1320,7 @@ test("Polling admission starts the session-owned worker before transport polling
   let failPollingStart = false;
   let failValidation = false;
   let failPreparation = false;
-  const runtime = createTelegramPollingAdmissionRuntime<string>({
+  const runtime = createBalePollingAdmissionRuntime<string>({
     prepareStart: () => {
       events.push("prepare");
       if (failPreparation) throw new Error("cutover failed");
@@ -1381,9 +1381,9 @@ test("Polling admission starts the session-owned worker before transport polling
 test("Polling controller owns polling promise and abort-controller state", async () => {
   const events: string[] = [];
   let finishPollLoop: (() => void) | undefined;
-  const state = createTelegramPollingControllerState();
-  const isPollingActive = createTelegramPollingActivityReader(state);
-  const controller = createTelegramPollingController({
+  const state = createBalePollingControllerState();
+  const isPollingActive = createBalePollingActivityReader(state);
+  const controller = createBalePollingController({
     state,
     hasBotToken: () => true,
     stopTypingLoop: () => {
@@ -1401,14 +1401,14 @@ test("Polling controller owns polling promise and abort-controller state", async
   });
   controller.start("ctx");
   assert.equal(controller.isActive(), true);
-  assert.equal(isTelegramPollingControllerActive(state), true);
+  assert.equal(isBalePollingControllerActive(state), true);
   assert.equal(isPollingActive(), true);
   controller.start("ctx");
   const stopPromise = controller.stop();
   finishPollLoop?.();
   await stopPromise;
   assert.equal(controller.isActive(), false);
-  assert.equal(isTelegramPollingControllerActive(state), false);
+  assert.equal(isBalePollingControllerActive(state), false);
   assert.equal(isPollingActive(), false);
   assert.deepEqual(events, [
     "run:false",
@@ -1419,9 +1419,9 @@ test("Polling controller owns polling promise and abort-controller state", async
 });
 
 test("Polling controller settles unexpected runner failures into diagnostics", async () => {
-  const state = createTelegramPollingControllerState();
+  const state = createBalePollingControllerState();
   const runtimeEvents: string[] = [];
-  const controller = createTelegramPollingController({
+  const controller = createBalePollingController({
     state,
     getNowMs: () => 2_000,
     hasBotToken: () => true,
@@ -1455,7 +1455,7 @@ test("Durable polling assembly owns journal ports and cursor bootstrap validatio
   let bootstrapEntryCount = 1;
   let workerStarts = 0;
   const events: string[] = [];
-  const assembly = createTelegramDurablePollingRuntimeAssembly<
+  const assembly = createBaleDurablePollingRuntimeAssembly<
     { update_id: number },
     string
   >({
@@ -1484,7 +1484,7 @@ test("Durable polling assembly owns journal ports and cursor bootstrap validatio
 
   await assert.rejects(
     () => assembly.admission.start("blocked"),
-    TelegramPollingCursorBootstrapError,
+    BalePollingCursorBootstrapError,
   );
   assert.equal(workerStarts, 0);
   bootstrapEntryCount = 0;
@@ -1507,7 +1507,7 @@ test("Durable polling prepares only admitted non-excluded runs before any microt
     let finished!: () => void;
     const received = new Promise<void>((resolve) => { finished = resolve; });
     const included = scenario === "excluded" ? [] : scenario === "barrier" ? [1, 3] : [1, 2, 3];
-    const assembly = createTelegramDurablePollingRuntimeAssembly<{ update_id: number }, string>({
+    const assembly = createBaleDurablePollingRuntimeAssembly<{ update_id: number }, string>({
       getConfig: () => ({ botToken: "fixture" }), hasBotToken: () => true,
       deleteWebhook: async () => {}, persistConfig: async () => {},
       getUpdates: async () => {
@@ -1558,8 +1558,8 @@ test("Durable polling prepares only admitted non-excluded runs before any microt
 
 test("Polling controller runtime binds loop runner and controller state", async () => {
   const events: string[] = [];
-  const state = createTelegramPollingControllerState();
-  const controller = createTelegramPollingControllerRuntime({
+  const state = createBalePollingControllerState();
+  const controller = createBalePollingControllerRuntime({
     state,
     getConfig: () => ({ botToken: "123:abc" }),
     hasBotToken: () => true,
@@ -1598,8 +1598,8 @@ test("Polling controller exposes exact phases and retained response evidence", a
   let acceptedThroughUpdateId = 5;
   let releaseAppend: (() => void) | undefined;
   let secondPollSignal: AbortSignal | undefined;
-  const state = createTelegramPollingControllerState();
-  const controller = createTelegramPollingControllerRuntime({
+  const state = createBalePollingControllerState();
+  const controller = createBalePollingControllerRuntime({
     state,
     getNowMs: () => nowMs,
     getConfig: () => ({ botToken: "123:abc", lastUpdateId: 5 }),
@@ -1658,12 +1658,12 @@ test("Polling controller exposes exact phases and retained response evidence", a
 });
 
 test("Polling helpers stop only for abort conditions", () => {
-  assert.equal(shouldStopTelegramPolling(true, new Error("ignored")), true);
+  assert.equal(shouldStopBalePolling(true, new Error("ignored")), true);
   assert.equal(
-    shouldStopTelegramPolling(false, new DOMException("aborted", "AbortError")),
+    shouldStopBalePolling(false, new DOMException("aborted", "AbortError")),
     true,
   );
-  assert.equal(shouldStopTelegramPolling(false, new Error("network")), false);
+  assert.equal(shouldStopBalePolling(false, new Error("network")), false);
 });
 
 test("Poll loop cancels stalled getUpdates at its owner-derived budget", async () => {
@@ -1676,7 +1676,7 @@ test("Poll loop cancels stalled getUpdates at its owner-derived budget", async (
   }> = [];
   let requestSignal: AbortSignal | undefined;
 
-  await runTelegramPollLoop({
+  await runBalePollLoop({
     ctx: TEST_CONTEXT,
     signal: controller.signal,
     config: { botToken: "123:abc" },
@@ -1711,13 +1711,13 @@ test("Poll loop cancels stalled getUpdates at its owner-derived budget", async (
   });
 
   assert.equal(requestSignal?.aborted, true);
-  assert.ok(requestSignal?.reason instanceof TelegramGetUpdatesTimeoutError);
+  assert.ok(requestSignal?.reason instanceof BaleGetUpdatesTimeoutError);
   assert.deepEqual(phases, ["long-poll:none", "retrying:none"]);
   assert.deepEqual(statusMessages, [
-    "Telegram getUpdates timed out after 5 ms.",
+    "Bale getUpdates timed out after 5 ms.",
   ]);
   assert.equal(runtimeEvents.length, 1);
-  assert.ok(runtimeEvents[0]?.error instanceof TelegramGetUpdatesTimeoutError);
+  assert.ok(runtimeEvents[0]?.error instanceof BaleGetUpdatesTimeoutError);
   assert.deepEqual(runtimeEvents[0]?.details, {
     phase: "long-poll",
     timeoutMs: 5,
@@ -1732,7 +1732,7 @@ test("Poll loop runner binds config, status, and transport ports", async () => {
   const events: string[] = [];
   let acceptedThroughUpdateId = 5;
   let calls = 0;
-  const runPollLoop = createTelegramPollLoopRunner({
+  const runPollLoop = createBalePollLoopRunner({
     getConfig: () => config,
     deleteWebhook: async () => {
       events.push("deleteWebhook");
@@ -1786,7 +1786,7 @@ test("Poll loop runner ignores stale-context status failures while retrying", as
   const events: string[] = [];
   const runtimeEvents: string[] = [];
   let calls = 0;
-  const runPollLoop = createTelegramPollLoopRunner({
+  const runPollLoop = createBalePollLoopRunner({
     getConfig: () => config,
     deleteWebhook: async () => {},
     getUpdates: async () => {
@@ -1825,7 +1825,7 @@ test("Journal-first poll loop advances before unresolved worker execution", asyn
   let getUpdatesCalls = 0;
   let unresolvedWorker: Promise<void> | undefined;
 
-  await runTelegramPollLoop({
+  await runBalePollLoop({
     ctx: TEST_CONTEXT,
     signal: controller.signal,
     config,
@@ -1873,7 +1873,7 @@ test("Journal-first poll loop advances before unresolved worker execution", asyn
 test("Journal-first poll loop rejects a missing cursor with retained authority", async () => {
   let getUpdatesCalls = 0;
   await assert.rejects(
-    runTelegramPollLoop({
+    runBalePollLoop({
       ctx: TEST_CONTEXT,
       signal: new AbortController().signal,
       config: { botToken: "123:abc" },
@@ -1890,7 +1890,7 @@ test("Journal-first poll loop rejects a missing cursor with retained authority",
       onStatusReset: () => {},
       sleep: async () => {},
     }),
-    TelegramPollingCursorBootstrapError,
+    BalePollingCursorBootstrapError,
   );
   assert.equal(getUpdatesCalls, 0);
 });
@@ -1902,7 +1902,7 @@ test("Poll loop bootstraps once and journals each response batch", async () => {
   };
   let getUpdatesCalls = 0;
   let acceptedThroughUpdateId: number | undefined;
-  await runTelegramPollLoop({
+  await runBalePollLoop({
     ctx: TEST_CONTEXT,
     signal: new AbortController().signal,
     config,
@@ -1942,7 +1942,7 @@ test("Poll loop bootstraps once and journals each response batch", async () => {
 test("Polling retry sleep resolves immediately when aborted", async () => {
   const controller = new AbortController();
   controller.abort();
-  await sleepTelegramPollingRetry(3000, controller.signal);
+  await sleepBalePollingRetry(3000, controller.signal);
 });
 
 test("Poll loop stops without status reset when aborted during retry sleep", async () => {
@@ -1950,7 +1950,7 @@ test("Poll loop stops without status reset when aborted during retry sleep", asy
   const controller = new AbortController();
   const statusMessages: string[] = [];
   let calls = 0;
-  await runTelegramPollLoop({
+  await runBalePollLoop({
     ctx: TEST_CONTEXT,
     signal: controller.signal,
     config,
@@ -1981,7 +1981,7 @@ test("Poll loop suppresses getUpdates conflicts while another long poll drains",
   const statusMessages: string[] = [];
   const runtimeEvents: string[] = [];
   let calls = 0;
-  await runTelegramPollLoop({
+  await runBalePollLoop({
     ctx: TEST_CONTEXT,
     signal: new AbortController().signal,
     config,
@@ -1991,7 +1991,7 @@ test("Poll loop suppresses getUpdates conflicts while another long poll drains",
       calls += 1;
       if (calls <= 4) {
         throw new Error(
-          "Telegram API getUpdates failed: HTTP 409: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+          "Bale API getUpdates failed: HTTP 409: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
         );
       }
       throw new DOMException("stop", "AbortError");
@@ -2012,7 +2012,7 @@ test("Poll loop suppresses getUpdates conflicts while another long poll drains",
     },
   });
   assert.equal(
-    isTelegramGetUpdatesConflictError(
+    isBaleGetUpdatesConflictError(
       new Error("HTTP 409: Conflict: terminated by other getUpdates request"),
     ),
     true,
@@ -2027,7 +2027,7 @@ test("Poll loop suppresses getUpdates conflicts while another long poll drains",
 });
 
 test("Poll loop bounds consecutive conflicts, including bootstrap, and resets on other outcomes", async () => {
-  const limit = TELEGRAM_GET_UPDATES_CONFLICT_STOP_LIMIT;
+  const limit = BALE_GET_UPDATES_CONFLICT_STOP_LIMIT;
   for (const cursor of [undefined, 1]) {
     for (const reset of [undefined, "success", "network"] as const) {
       const outcomes = [
@@ -2036,7 +2036,7 @@ test("Poll loop bounds consecutive conflicts, including bootstrap, and resets on
       ];
       let calls = 0;
       let sleeps = 0;
-      await assert.rejects(runTelegramPollLoop({
+      await assert.rejects(runBalePollLoop({
         ctx: TEST_CONTEXT, signal: new AbortController().signal,
         config: { botToken: "test-token" }, ...NOOP_JOURNAL_ADMISSION,
         getAcceptedThroughUpdateId: () => cursor,
@@ -2050,7 +2050,7 @@ test("Poll loop bounds consecutive conflicts, including bootstrap, and resets on
         },
         onErrorStatus: () => {}, onStatusReset: () => {},
         sleep: async () => { sleeps++; },
-      }), (error: unknown) => error instanceof TelegramPersistentGetUpdatesConflictError && error.count === limit);
+      }), (error: unknown) => error instanceof BalePersistentGetUpdatesConflictError && error.count === limit);
       assert.equal(calls, outcomes.length, `${cursor}/${reset}`);
       assert.equal(sleeps, (limit - 1) * (reset ? 2 : 1) + (reset === "network" ? 1 : 0));
     }
@@ -2058,13 +2058,13 @@ test("Poll loop bounds consecutive conflicts, including bootstrap, and resets on
 });
 
 test("Persistent conflict detaches the poller before awaited outer teardown", async () => {
-  const state = createTelegramPollingControllerState();
+  const state = createBalePollingControllerState();
   let notifications = 0;
   let typingStops = 0;
-  const controller = createTelegramPollingController({
+  const controller = createBalePollingController({
     state, hasBotToken: () => true, updateStatus: () => {},
     stopTypingLoop: () => { typingStops++; },
-    runPollLoop: async () => { throw new TelegramPersistentGetUpdatesConflictError(10); },
+    runPollLoop: async () => { throw new BalePersistentGetUpdatesConflictError(10); },
     async onPersistentConflict(ctx, count): Promise<void> {
       assert.equal(ctx, TEST_CONTEXT);
       assert.equal(count, 10);
@@ -2089,7 +2089,7 @@ test("Rejected stale admission leaves the current pending startup intact", async
     const started = new Promise<void>((resolve) => { entered = resolve; });
     const pause = async () => { entered(); await pending; };
     const starts: string[] = [];
-    const runtime = createTelegramPollingAdmissionRuntime({
+    const runtime = createBalePollingAdmissionRuntime({
       canStart: (ctx) => ctx === "current",
       prepareStart: () => boundary === "prepare" ? pause() : undefined,
       worker: { onSessionStart: async () => { if (boundary === "worker") await pause(); } },
@@ -2113,7 +2113,7 @@ test("Admission startup cannot resurrect a stopped or unauthorized poller after 
     const pending = new Promise<void>((resolve) => { release = resolve; });
     let starts = 0;
     let allowed = true;
-    const runtime = createTelegramPollingAdmissionRuntime({
+    const runtime = createBalePollingAdmissionRuntime({
       canStart: () => allowed,
       prepareStart: () => boundary === "prepare" ? pending : undefined,
       worker: { onSessionStart: async () => { if (boundary === "worker") await pending; } },
@@ -2139,7 +2139,7 @@ test("Poll loop reports retryable errors and sleeps before retrying", async () =
   const statusMessages: string[] = [];
   const runtimeEvents: string[] = [];
   let calls = 0;
-  await runTelegramPollLoop({
+  await runBalePollLoop({
     ctx: TEST_CONTEXT,
     signal: new AbortController().signal,
     config,
@@ -2179,7 +2179,7 @@ test("Poll loop caps retry delay but recovers after a prolonged outage without r
   const sleeps: number[] = [];
   const responses: number[] = [];
   let calls = 0;
-  await runTelegramPollLoop({
+  await runBalePollLoop({
     ctx: TEST_CONTEXT,
     signal: new AbortController().signal,
     config: { botToken: "123:abc" },
@@ -2206,7 +2206,7 @@ test("Poll loop resets backoff after successful durable admission", async () => 
   const config = { botToken: "123:abc", lastUpdateId: 1 };
   const sleeps: number[] = [];
   let calls = 0;
-  await runTelegramPollLoop({
+  await runBalePollLoop({
     ctx: TEST_CONTEXT,
     signal: new AbortController().signal,
     config,
@@ -2229,17 +2229,17 @@ test("Poll loop resets backoff after successful durable admission", async () => 
 });
 
 test("Polling retry delay saturates and never becomes non-finite", () => {
-  assert.equal(getTelegramPollingRetryDelayMs(1), 1_000);
-  assert.equal(getTelegramPollingRetryDelayMs(5), 16_000);
-  assert.equal(getTelegramPollingRetryDelayMs(6), 30_000);
-  assert.equal(getTelegramPollingRetryDelayMs(1_000), 30_000);
+  assert.equal(getBalePollingRetryDelayMs(1), 1_000);
+  assert.equal(getBalePollingRetryDelayMs(5), 16_000);
+  assert.equal(getBalePollingRetryDelayMs(6), 30_000);
+  assert.equal(getBalePollingRetryDelayMs(1_000), 30_000);
 });
 
 test("Successful HTTP responses do not reset backoff while durable admission fails", async () => {
   const sleeps: number[] = [];
   let calls = 0;
   let admissions = 0;
-  await runTelegramPollLoop({
+  await runBalePollLoop({
     ctx: TEST_CONTEXT,
     signal: new AbortController().signal,
     config: { botToken: "123:abc" },

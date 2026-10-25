@@ -1,14 +1,14 @@
 /**
- * Telegram outbound attachment helpers
- * Zones: telegram outbound, pi agent tool, filesystem
- * Owns telegram_attach registration, outbound attachment queueing, and delivery so Telegram file output stays in one domain module
+ * Bale outbound attachment helpers
+ * Zones: bale outbound, pi agent tool, filesystem
+ * Owns bale_attach registration, outbound attachment queueing, and delivery so Bale file output stays in one domain module
  */
-import type { TelegramBusAgentMessage, TelegramBusAgentTargetSelector } from "./bus.ts";
+import type { BaleBusAgentMessage, BaleBusAgentTargetSelector } from "./bus.ts";
 import type { ExtensionAPI } from "./pi.ts";
-import { type TelegramTarget } from "./target.ts";
-export declare const TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES: number;
-export declare function getTelegramOutboundAttachmentByteLimitFromEnv(env: NodeJS.ProcessEnv, names: string[], defaultValue?: number): number;
-export interface TelegramOutboundAttachmentToolResult {
+import { type BaleTarget } from "./target.ts";
+export declare const BALE_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES: number;
+export declare function getBaleOutboundAttachmentByteLimitFromEnv(env: NodeJS.ProcessEnv, names: string[], defaultValue?: number): number;
+export interface BaleOutboundAttachmentToolResult {
     content: Array<{
         type: "text";
         text: string;
@@ -17,42 +17,42 @@ export interface TelegramOutboundAttachmentToolResult {
         paths: string[];
     };
 }
-export interface TelegramOutboundAttachmentRuntimeEventRecorderPort {
+export interface BaleOutboundAttachmentRuntimeEventRecorderPort {
     recordRuntimeEvent?: (category: string, error: unknown, details?: Record<string, unknown>) => void;
 }
-export interface TelegramOutboundAttachmentToolRegistrationDeps extends TelegramOutboundAttachmentRuntimeEventRecorderPort {
+export interface BaleOutboundAttachmentToolRegistrationDeps extends BaleOutboundAttachmentRuntimeEventRecorderPort {
     maxAttachmentsPerTurn?: number;
     maxAttachmentSizeBytes?: number;
-    getActiveTurn: () => TelegramOutboundAttachmentQueueTargetView | undefined;
+    getActiveTurn: () => BaleOutboundAttachmentQueueTargetView | undefined;
     getDefaultChatId?: () => number | undefined;
-    getDefaultTarget?: () => TelegramTarget | undefined;
+    getDefaultTarget?: () => BaleTarget | undefined;
     canSendDirect?: () => boolean;
-    sendMultipart?: TelegramQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
+    sendMultipart?: BaleQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
     statPath?: (path: string) => Promise<{
         isFile(): boolean;
         size?: number;
     }>;
 }
-export interface TelegramOutboundMessagePlan {
+export interface BaleOutboundMessagePlan {
     markdown: string;
     replyMarkup?: unknown;
 }
-export interface TelegramOutboundMessageDeliveryPorts {
+export interface BaleOutboundMessageDeliveryPorts {
     getDefaultChatId?: () => number | undefined;
-    getDefaultTarget?: () => TelegramTarget | undefined;
+    getDefaultTarget?: () => BaleTarget | undefined;
     getActiveTurn?: () => {
         chatId: number;
-        target?: TelegramTarget;
+        target?: BaleTarget;
     } | undefined;
-    resolveAgentTarget?: (selector: TelegramBusAgentTargetSelector) => Promise<TelegramTarget & {
+    resolveAgentTarget?: (selector: BaleBusAgentTargetSelector) => Promise<BaleTarget & {
         threadId: number;
     }>;
-    routeAgentMessage?: (message: TelegramBusAgentMessage) => Promise<void>;
+    routeAgentMessage?: (message: BaleBusAgentMessage) => Promise<void>;
     canSendDirect: () => boolean;
-    planMessage: (markdown: string) => TelegramOutboundMessagePlan;
+    planMessage: (markdown: string) => BaleOutboundMessagePlan;
     sendMarkdownMessage: (chatId: number, markdown: string, options?: {
         replyMarkup?: unknown;
-        target?: TelegramTarget;
+        target?: BaleTarget;
     }) => Promise<number | undefined>;
     sendChannelMarkdownMessage?: (channel: number | string, markdown: string, options: {
         operationId: string;
@@ -63,50 +63,50 @@ export interface TelegramOutboundMessageDeliveryPorts {
         replyMarkup?: unknown;
     }) => Promise<number | undefined>;
 }
-export interface TelegramOutboundMessageToolRegistrationDeps extends TelegramOutboundMessageDeliveryPorts, TelegramOutboundAttachmentRuntimeEventRecorderPort {
+export interface BaleOutboundMessageToolRegistrationDeps extends BaleOutboundMessageDeliveryPorts, BaleOutboundAttachmentRuntimeEventRecorderPort {
     getDefaultChatId: () => number | undefined;
 }
-export interface TelegramQueuedOutboundAttachmentView {
+export interface BaleQueuedOutboundAttachmentView {
     path: string;
     fileName: string;
 }
-export interface TelegramOutboundAttachmentQueueTargetView {
-    queuedAttachments: TelegramQueuedOutboundAttachmentView[];
+export interface BaleOutboundAttachmentQueueTargetView {
+    queuedAttachments: BaleQueuedOutboundAttachmentView[];
     guestQueryId?: string;
     guestInlineMessageId?: string;
 }
-export interface TelegramQueuedOutboundAttachmentTurnView extends TelegramOutboundAttachmentQueueTargetView {
+export interface BaleQueuedOutboundAttachmentTurnView extends BaleOutboundAttachmentQueueTargetView {
     chatId: number;
     replyToMessageId: number;
-    target?: TelegramTarget;
+    target?: BaleTarget;
 }
-export interface TelegramRichOutboundAttachmentPlan {
+export interface BaleRichOutboundAttachmentPlan {
     method: "sendRichMessage";
     fields: Record<string, string>;
     fileField: "rich_media_upload";
     filePath: string;
     fileName: string;
 }
-export interface TelegramRichOutboundAttachmentSenderDeps extends TelegramOutboundAttachmentRuntimeEventRecorderPort {
-    sendMultipart: TelegramQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
+export interface BaleRichOutboundAttachmentSenderDeps extends BaleOutboundAttachmentRuntimeEventRecorderPort {
+    sendMultipart: BaleQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
     getRenderingMode: () => "rich" | "html";
     recordOwnership?: (input: {
         chatId: number;
         messageId: number;
-        target?: TelegramTarget;
+        target?: BaleTarget;
     }) => void;
 }
-export declare function planTelegramRichOutboundAttachment(options: {
-    turn: TelegramQueuedOutboundAttachmentTurnView;
+export declare function planBaleRichOutboundAttachment(options: {
+    turn: BaleQueuedOutboundAttachmentTurnView;
     markdown: string;
     renderingMode: "rich" | "html";
     replyMarkup?: unknown;
-}): TelegramRichOutboundAttachmentPlan | undefined;
-export declare function createTelegramRichOutboundAttachmentSender(deps: TelegramRichOutboundAttachmentSenderDeps): (turn: TelegramQueuedOutboundAttachmentTurnView, markdown: string, options?: {
+}): BaleRichOutboundAttachmentPlan | undefined;
+export declare function createBaleRichOutboundAttachmentSender(deps: BaleRichOutboundAttachmentSenderDeps): (turn: BaleQueuedOutboundAttachmentTurnView, markdown: string, options?: {
     replyMarkup?: unknown;
     isDeliveryActive?: () => boolean;
 }) => Promise<boolean>;
-export type TelegramGuestCachedAttachmentResult = {
+export type BaleGuestCachedAttachmentResult = {
     type: "document";
     id: string;
     title: string;
@@ -129,12 +129,12 @@ export type TelegramGuestCachedAttachmentResult = {
     title: string;
     caption?: string;
 };
-export declare function registerTelegramOutboundAttachmentTool(pi: ExtensionAPI, deps: TelegramOutboundAttachmentToolRegistrationDeps): void;
-export declare function registerTelegramOutboundMessageTool(pi: ExtensionAPI, deps: TelegramOutboundMessageToolRegistrationDeps): void;
-export interface TelegramQueuedOutboundAttachmentDeliveryDeps {
+export declare function registerBaleOutboundAttachmentTool(pi: ExtensionAPI, deps: BaleOutboundAttachmentToolRegistrationDeps): void;
+export declare function registerBaleOutboundMessageTool(pi: ExtensionAPI, deps: BaleOutboundMessageToolRegistrationDeps): void;
+export interface BaleQueuedOutboundAttachmentDeliveryDeps {
     sendMultipart: (method: string, fields: Record<string, string>, fileField: string, filePath: string, fileName: string) => Promise<unknown>;
     sendTextReply: (chatId: number, replyToMessageId: number, text: string, options?: {
-        target?: TelegramTarget;
+        target?: BaleTarget;
     }) => Promise<unknown>;
     recordRuntimeEvent?: (category: string, error: unknown, details?: Record<string, unknown>) => void;
     statPath?: (path: string) => Promise<{
@@ -143,24 +143,24 @@ export interface TelegramQueuedOutboundAttachmentDeliveryDeps {
     maxAttachmentSizeBytes?: number;
     isDeliveryActive?: () => boolean;
 }
-export declare function queueTelegramOutboundAttachments(options: {
-    activeTurn: TelegramOutboundAttachmentQueueTargetView | undefined;
+export declare function queueBaleOutboundAttachments(options: {
+    activeTurn: BaleOutboundAttachmentQueueTargetView | undefined;
     paths: string[];
     chatId?: number;
     threadId?: number;
     caption?: string;
     maxAttachmentsPerTurn: number;
     maxAttachmentSizeBytes?: number;
-    sendMultipart?: TelegramQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
+    sendMultipart?: BaleQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
     getDefaultChatId?: () => number | undefined;
-    getDefaultTarget?: () => TelegramTarget | undefined;
+    getDefaultTarget?: () => BaleTarget | undefined;
     canSendDirect?: () => boolean;
     statPath?: (path: string) => Promise<{
         isFile(): boolean;
         size?: number;
     }>;
-}): Promise<TelegramOutboundAttachmentToolResult>;
-export declare function deliverTelegramGuestCachedAttachment(options: {
+}): Promise<BaleOutboundAttachmentToolResult>;
+export declare function deliverBaleGuestCachedAttachment(options: {
     guestQueryId: string;
     guestInlineMessageId?: string;
     editGuestInlineMessage?: (inlineMessageId: string, content: {
@@ -174,17 +174,17 @@ export declare function deliverTelegramGuestCachedAttachment(options: {
     }) => Promise<void>;
     isDeliveryActive?: () => boolean;
     stagingChatId: number;
-    stagingTarget?: TelegramTarget;
-    attachment: TelegramQueuedOutboundAttachmentView;
+    stagingTarget?: BaleTarget;
+    attachment: BaleQueuedOutboundAttachmentView;
     caption?: string;
-    sendMultipart: TelegramQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
-    answerGuestQuery: (guestQueryId: string, result: TelegramGuestCachedAttachmentResult) => Promise<void>;
+    sendMultipart: BaleQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
+    answerGuestQuery: (guestQueryId: string, result: BaleGuestCachedAttachmentResult) => Promise<void>;
     answerGuestText?: (guestQueryId: string, text: string) => Promise<void>;
     fallbackText?: string;
     deleteMessage: (chatId: number, messageId: number) => Promise<void>;
-    recordRuntimeEvent?: TelegramOutboundAttachmentRuntimeEventRecorderPort["recordRuntimeEvent"];
+    recordRuntimeEvent?: BaleOutboundAttachmentRuntimeEventRecorderPort["recordRuntimeEvent"];
 }): Promise<void>;
-export declare function sendTelegramOutboundMessage(options: TelegramOutboundMessageDeliveryPorts & {
+export declare function sendBaleOutboundMessage(options: BaleOutboundMessageDeliveryPorts & {
     text: string;
     media?: string;
     operationId?: string;
@@ -192,7 +192,7 @@ export declare function sendTelegramOutboundMessage(options: TelegramOutboundMes
     chatId?: number | string;
     threadId?: number;
     agentThread?: string | number;
-    target?: TelegramTarget;
+    target?: BaleTarget;
 }): Promise<{
     content: Array<{
         type: "text";
@@ -203,29 +203,29 @@ export declare function sendTelegramOutboundMessage(options: TelegramOutboundMes
         messageId?: number;
     };
 }>;
-export declare function sendTelegramOutboundFiles(options: {
+export declare function sendBaleOutboundFiles(options: {
     paths: string[];
     chatId?: number;
     threadId?: number;
-    target?: TelegramTarget;
+    target?: BaleTarget;
     caption?: string;
     maxAttachmentsPerTurn: number;
     maxAttachmentSizeBytes?: number;
-    sendMultipart: TelegramQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
+    sendMultipart: BaleQueuedOutboundAttachmentDeliveryDeps["sendMultipart"];
     getDefaultChatId?: () => number | undefined;
-    getDefaultTarget?: () => TelegramTarget | undefined;
+    getDefaultTarget?: () => BaleTarget | undefined;
     canSendDirect?: () => boolean;
     statPath?: (path: string) => Promise<{
         isFile(): boolean;
         size?: number;
     }>;
-}): Promise<TelegramOutboundAttachmentToolResult & {
+}): Promise<BaleOutboundAttachmentToolResult & {
     details: {
         paths: string[];
         chatId: number;
     };
 }>;
-export declare function createTelegramQueuedOutboundAttachmentSender(deps: TelegramQueuedOutboundAttachmentDeliveryDeps): (turn: TelegramQueuedOutboundAttachmentTurnView, options?: {
+export declare function createBaleQueuedOutboundAttachmentSender(deps: BaleQueuedOutboundAttachmentDeliveryDeps): (turn: BaleQueuedOutboundAttachmentTurnView, options?: {
     isDeliveryActive?: () => boolean;
 }) => Promise<void>;
-export declare function sendQueuedTelegramOutboundAttachments(turn: TelegramQueuedOutboundAttachmentTurnView, deps: TelegramQueuedOutboundAttachmentDeliveryDeps): Promise<void>;
+export declare function sendQueuedBaleOutboundAttachments(turn: BaleQueuedOutboundAttachmentTurnView, deps: BaleQueuedOutboundAttachmentDeliveryDeps): Promise<void>;

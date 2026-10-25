@@ -32,59 +32,59 @@ test("Public package subpaths expose the stable extension API", async () => {
     voice,
     keyboard,
   ] = await Promise.all([
-    import("@llblab/pi-telegram"),
-    import("@llblab/pi-telegram/inbound"),
-    import("@llblab/pi-telegram/outbound"),
-    import("@llblab/pi-telegram/delivery"),
-    import("@llblab/pi-telegram/activity"),
-    import("@llblab/pi-telegram/updates"),
-    import("@llblab/pi-telegram/commands"),
-    import("@llblab/pi-telegram/sections"),
-    import("@llblab/pi-telegram/status"),
-    import("@llblab/pi-telegram/voice"),
-    import("@llblab/pi-telegram/keyboard"),
+    import("@llblab/pi-bale"),
+    import("@llblab/pi-bale/inbound"),
+    import("@llblab/pi-bale/outbound"),
+    import("@llblab/pi-bale/delivery"),
+    import("@llblab/pi-bale/activity"),
+    import("@llblab/pi-bale/updates"),
+    import("@llblab/pi-bale/commands"),
+    import("@llblab/pi-bale/sections"),
+    import("@llblab/pi-bale/status"),
+    import("@llblab/pi-bale/voice"),
+    import("@llblab/pi-bale/keyboard"),
   ]);
 
   assert.deepEqual(Object.keys(root), ["default"]);
   assert.deepEqual(Object.keys(inbound).sort(), [
-    "registerTelegramInboundHandler",
+    "registerBaleInboundHandler",
   ]);
   assert.deepEqual(Object.keys(outbound).sort(), [
-    "recordTelegramRuntimeEvent",
-    "registerTelegramOutboundHandler",
+    "recordBaleRuntimeEvent",
+    "registerBaleOutboundHandler",
   ]);
   assert.deepEqual(Object.keys(delivery).sort(), [
-    "deleteTelegramView",
-    "editTelegramView",
-    "sendTelegramChatAction",
-    "sendTelegramView",
+    "deleteBaleView",
+    "editBaleView",
+    "sendBaleChatAction",
+    "sendBaleView",
   ]);
   assert.deepEqual(Object.keys(activity).sort(), [
-    "registerTelegramActivityHandler",
+    "registerBaleActivityHandler",
   ]);
   assert.deepEqual(Object.keys(updates).sort(), [
-    "assertTelegramUpdateExecutionCurrent",
-    "carryTelegramUpdateExecutionFence",
-    "createTelegramUpdateExecutionFenceGuard",
-    "getTelegramUpdateExecutionFence",
-    "registerTelegramUpdateHandler",
+    "assertBaleUpdateExecutionCurrent",
+    "carryBaleUpdateExecutionFence",
+    "createBaleUpdateExecutionFenceGuard",
+    "getBaleUpdateExecutionFence",
+    "registerBaleUpdateHandler",
   ]);
-  assert.deepEqual(Object.keys(commands).sort(), ["registerTelegramCommand"]);
+  assert.deepEqual(Object.keys(commands).sort(), ["registerBaleCommand"]);
   assert.deepEqual(Object.keys(sections).sort(), [
-    "getTelegramSectionDiagnostics",
-    "registerTelegramSection",
+    "getBaleSectionDiagnostics",
+    "registerBaleSection",
   ]);
   assert.deepEqual(Object.keys(status).sort(), [
-    "registerTelegramStatusLineProvider",
+    "registerBaleStatusLineProvider",
   ]);
   assert.deepEqual(Object.keys(voice).sort(), [
-    "TELEGRAM_VOICE_REPLY_MODES",
+    "BALE_VOICE_REPLY_MODES",
     "computeVoicePromptContribution",
     "computeVoiceTurnFlags",
-    "getTelegramVoiceReplyMode",
+    "getBaleVoiceReplyMode",
     "isVoiceTurn",
-    "registerTelegramVoiceSynthesisProvider",
-    "registerTelegramVoiceTranscriptionProvider",
+    "registerBaleVoiceSynthesisProvider",
+    "registerBaleVoiceTranscriptionProvider",
     "shouldSuppressPreviewForVoice",
   ]);
   assert.deepEqual(Object.keys(keyboard), []);
@@ -109,7 +109,7 @@ test("Activity API declares the Pi lifecycle compatibility floor", async () => {
 });
 
 test("Package-private lib implementation paths are not exported", async () => {
-  await assertPackagePathNotExported("@llblab/pi-telegram/lib/updates.ts");
-  await assertPackagePathNotExported("@llblab/pi-telegram/lib/sections.ts");
-  await assertPackagePathNotExported("@llblab/pi-telegram/api/updates.ts");
+  await assertPackagePathNotExported("@llblab/pi-bale/lib/updates.ts");
+  await assertPackagePathNotExported("@llblab/pi-bale/lib/sections.ts");
+  await assertPackagePathNotExported("@llblab/pi-bale/api/updates.ts");
 });

@@ -1,6 +1,6 @@
 /**
- * Telegram thread binding tests
- * Zones: multi-instance bus, Telegram UI threads, extension state
+ * Bale thread binding tests
+ * Zones: multi-instance bus, Bale UI threads, extension state
  * Covers current owner-key thread target reuse and Bot API topic provisioning seams
  */
 
@@ -12,73 +12,73 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { withTelegramFileTransaction, readTelegramRuntimeState, mutateTelegramRuntimeStateSection,
-  createTelegramLockRuntime as createSessionGrantLock, createTelegramOwnedStateAuthorityCapture } from "../lib/locks.ts";
-import { createTelegramSessionContextStore } from "../lib/lifecycle.ts";
+import { withBaleFileTransaction, readBaleRuntimeState, mutateBaleRuntimeStateSection,
+  createBaleLockRuntime as createSessionGrantLock, createBaleOwnedStateAuthorityCapture } from "../lib/locks.ts";
+import { createBaleSessionContextStore } from "../lib/lifecycle.ts";
 
 import {
-  commitTelegramWorkspaceProvisionBinding,
-  createTelegramCleanupTargetProtection,
-  createTelegramCurrentInstanceThreadRuntime,
-  createTelegramCurrentThreadAssembly,
-  createTelegramLeaderThreadStateRuntime,
-  createTelegramThreadStatusProjectionRuntime,
-  createTelegramTopicTargetProvisioner,
-  resetTelegramConnectionProvisioning,
-  createTelegramTopicTargetRenamer,
-  createTelegramWorkspaceBindingIdentity,
-  createTelegramWorkspaceRestoreResolver,
-  createTelegramWorkspaceThreadRenameRecipient,
-  createTelegramWorkspaceThreadResetRecipient,
-  type TelegramWorkspaceThreadRenameAuthority,
-  createTelegramTopicTargetStore,
-  createTelegramConsolidatedWorkspaceStorage,
-  parseTelegramWorkspaceStateSection,
-  resolveTelegramWorkspaceProvisionRecoveryPath,
-  isTelegramTemporaryThreadFullyResolved,
-  getTelegramWorkspaceRestoreSourceCompletionSha256,
-  getTelegramTemporaryThreadInputs,
-  findCurrentTelegramInstanceThreadRecord,
-  getTelegramThreadOwnerFromProfileKey,
-  getTelegramThreadOwnerKey,
-  getTelegramLeaderSessionHandoff,
-  setTelegramLeaderSessionHandoff,
+  commitBaleWorkspaceProvisionBinding,
+  createBaleCleanupTargetProtection,
+  createBaleCurrentInstanceThreadRuntime,
+  createBaleCurrentThreadAssembly,
+  createBaleLeaderThreadStateRuntime,
+  createBaleThreadStatusProjectionRuntime,
+  createBaleTopicTargetProvisioner,
+  resetBaleConnectionProvisioning,
+  createBaleTopicTargetRenamer,
+  createBaleWorkspaceBindingIdentity,
+  createBaleWorkspaceRestoreResolver,
+  createBaleWorkspaceThreadRenameRecipient,
+  createBaleWorkspaceThreadResetRecipient,
+  type BaleWorkspaceThreadRenameAuthority,
+  createBaleTopicTargetStore,
+  createBaleConsolidatedWorkspaceStorage,
+  parseBaleWorkspaceStateSection,
+  resolveBaleWorkspaceProvisionRecoveryPath,
+  isBaleTemporaryThreadFullyResolved,
+  getBaleWorkspaceRestoreSourceCompletionSha256,
+  getBaleTemporaryThreadInputs,
+  findCurrentBaleInstanceThreadRecord,
+  getBaleThreadOwnerFromProfileKey,
+  getBaleThreadOwnerKey,
+  getBaleLeaderSessionHandoff,
+  setBaleLeaderSessionHandoff,
   provisionOwnBusTopic,
-  resolveTelegramInstanceThreadIdentity,
-  listTelegramThreadStatusFollowers,
-  listTelegramThreadStatusTargets,
-  listTelegramThreadStatusReservations,
-  listTelegramThreadStatusObservations,
-  getTelegramTargetFromApiBody,
-  isTelegramTopicModeUnavailableError,
-  isTelegramTopicTargetStaleError,
-  type TelegramWorkspaceRestoreIntent,
-  type TelegramWorkspaceLiveRebindIntent,
-  type TelegramWorkspaceRestoreSourceAcceptance,
+  resolveBaleInstanceThreadIdentity,
+  listBaleThreadStatusFollowers,
+  listBaleThreadStatusTargets,
+  listBaleThreadStatusReservations,
+  listBaleThreadStatusObservations,
+  getBaleTargetFromApiBody,
+  isBaleTopicModeUnavailableError,
+  isBaleTopicTargetStaleError,
+  type BaleWorkspaceRestoreIntent,
+  type BaleWorkspaceLiveRebindIntent,
+  type BaleWorkspaceRestoreSourceAcceptance,
 } from "../lib/threads.ts";
-import { createTelegramLockRuntime } from "../lib/locks.ts";
-import { createTelegramWorkspaceAdmissionLedger } from "../lib/workspace-admission.ts";
+import { createBaleLockRuntime } from "../lib/locks.ts";
+import { createBaleWorkspaceAdmissionLedger } from "../lib/workspace-admission.ts";
 import {
-  isTelegramApiCommitUnknownError,
-  TelegramApiCommitUnknownError,
-  createTelegramApiClient,
-  createTelegramBridgeApiRuntime,
-  type TelegramApiCallOptions,
-} from "../lib/telegram-api.ts";
+  isBaleApiCommitUnknownError,
+  BaleApiCommitUnknownError,
+  createBaleApiClient,
+  createBaleBridgeApiRuntime,
+  type BaleApiCallOptions,
+} from "../lib/bale-api.ts";
 
 import { withWorkspaceRelocationFixture, withWorkspaceRestoreFixture as fixture, restoreFixtureRecipient as recipient } from "./fixtures/workspace.ts";
-import { createTelegramUpdateJournalStore, createTelegramUpdateJournalBotIdentity, createTelegramUpdateJournalBindingKey, createTelegramUpdateJournalEntryDigest } from "../lib/journal.ts";
-import { createTelegramUpdateWorkerRuntime } from "../lib/updates.ts";
-import { createTelegramBusFollowerDeliveryIdentity } from "../lib/bus.ts";
+import { createBaleUpdateJournalStore, createBaleUpdateJournalBotIdentity, createBaleUpdateJournalBindingKey, createBaleUpdateJournalEntryDigest } from "../lib/journal.ts";
+import { createBaleUpdateWorkerRuntime } from "../lib/updates.ts";
+import { createBaleBusFollowerDeliveryIdentity } from "../lib/bus.ts";
 
 async function withConsolidatedWorkspaceFixture(run: (f: {
   rootPath: string;
   dir: string;
   scope: { path: string; profile: string; generation: number };
-  owner: ReturnType<typeof createTelegramLockRuntime>;
+  owner: ReturnType<typeof createBaleLockRuntime>;
   workspace: Record<string, unknown>;
-  storage: ReturnType<typeof createTelegramConsolidatedWorkspaceStorage>;
-  consolidated: NonNullable<Parameters<typeof createTelegramTopicTargetStore>[0]["consolidated"]>;
+  storage: ReturnType<typeof createBaleConsolidatedWorkspaceStorage>;
+  consolidated: NonNullable<Parameters<typeof createBaleTopicTargetStore>[0]["consolidated"]>;
 }) => Promise<void>, role: "leader" | "follower" = "leader"): Promise<void> {
   await fixture(async f => {
     const committed = await f.store.commit(f.request, f.auth);
@@ -88,7 +88,7 @@ async function withConsolidatedWorkspaceFixture(run: (f: {
     const workspace = JSON.parse(await readFile(f.path, "utf8")) as Record<string, unknown>;
     const rootPath = join(dirname(f.path), "consolidated.json");
     const scope = { path: rootPath, profile: "default", generation: 1 };
-    const owner = createTelegramLockRuntime({ statePath: rootPath, key: () => scope.profile, pid: 10,
+    const owner = createBaleLockRuntime({ statePath: rootPath, key: () => scope.profile, pid: 10,
       instanceId: "owner", runtimeGeneration: 1, isProcessAlive: () => true });
     const consolidated = {
       captureAuthority() {
@@ -97,23 +97,23 @@ async function withConsolidatedWorkspaceFixture(run: (f: {
       },
       publishIfOwned: owner.publishStateSectionIfOwned!,
     };
-    const storage = createTelegramConsolidatedWorkspaceStorage({ getPath: () => scope.path, getProfile: () => scope.profile, ...consolidated });
+    const storage = createBaleConsolidatedWorkspaceStorage({ getPath: () => scope.path, getProfile: () => scope.profile, ...consolidated });
     await run({ rootPath, dir: dirname(rootPath), scope, owner, workspace, storage, consolidated });
   }, role);
 }
 
 test("Provision recovery owner selector keeps exact legacy/consolidated layout and raw profile hashes", () => {
   const path = join("/agent", "state.json");
-  assert.equal(resolveTelegramWorkspaceProvisionRecoveryPath(path, "work"), `${path}.provision-recovery.json`);
+  assert.equal(resolveBaleWorkspaceProvisionRecoveryPath(path, "work"), `${path}.provision-recovery.json`);
   const hash = createHash("sha256").update("work").digest("hex").slice(0, 16);
-  assert.equal(resolveTelegramWorkspaceProvisionRecoveryPath(path, "work", "consolidated"), join("/agent", "runtime", `state.json.provision-recovery.${hash}.json`));
-  assert.notEqual(resolveTelegramWorkspaceProvisionRecoveryPath(path, "work", "consolidated"), resolveTelegramWorkspaceProvisionRecoveryPath(path, "Work", "consolidated"));
-  assert.throws(() => resolveTelegramWorkspaceProvisionRecoveryPath(path, "work", "legacy" as any), /Invalid Workspace provisioning recovery layout/u);
+  assert.equal(resolveBaleWorkspaceProvisionRecoveryPath(path, "work", "consolidated"), join("/agent", "runtime", `state.json.provision-recovery.${hash}.json`));
+  assert.notEqual(resolveBaleWorkspaceProvisionRecoveryPath(path, "work", "consolidated"), resolveBaleWorkspaceProvisionRecoveryPath(path, "Work", "consolidated"));
+  assert.throws(() => resolveBaleWorkspaceProvisionRecoveryPath(path, "work", "legacy" as any), /Invalid Workspace provisioning recovery layout/u);
 });
 
 test("Consolidated Workspace decoder preserves native relocation and issued recipient facts without creating state", async () => {
   await withConsolidatedWorkspaceFixture(async f => {
-    const parsed = parseTelegramWorkspaceStateSection(f.workspace, "default")!;
+    const parsed = parseBaleWorkspaceStateSection(f.workspace, "default")!;
     assert.equal(parsed.workspaceRestore?.operations[0]?.phase, "recipient-issued");
     assert.equal(parsed.workspaceBindings?.[0]?.target.threadId, 42);
     assert.equal(f.storage.read(), undefined);
@@ -177,8 +177,8 @@ test("Consolidated Workspace updates compare the current section and preserve tr
     publish(() => ({ value: f.workspace, result: true }));
     for (const [profile, section, value] of [["default", "admission", { leases: ["busy"], deletionIssued: true }],
       ["default", "runtime", { snapshot: true }], ["other", "workspace", f.workspace]] as const)
-      mutateTelegramRuntimeStateSection(f.rootPath, profile, section, () => ({ value, result: true }), { isCurrent: () => true });
-    const before = readTelegramRuntimeState(f.rootPath);
+      mutateBaleRuntimeStateSection(f.rootPath, profile, section, () => ({ value, result: true }), { isCurrent: () => true });
+    const before = readBaleRuntimeState(f.rootPath);
     const changed = structuredClone(f.workspace) as Record<string, any>;
     changed.bot.threadMode = "future-mode";
     assert.throws(() => publish(() => ({ value: changed, result: true })), "Unknown normalized enum cannot clear existing facts");
@@ -187,7 +187,7 @@ test("Consolidated Workspace updates compare the current section and preserve tr
       assert.deepEqual(current, f.workspace);
       return { value: changed, result: true };
     });
-    const after = readTelegramRuntimeState(f.rootPath);
+    const after = readBaleRuntimeState(f.rootPath);
     for (const section of ["transport", "admission", "runtime"] as const) assert.deepEqual(after.profiles.default?.[section], before.profiles.default?.[section]);
     assert.deepEqual(after.profiles.other, before.profiles.other);
     assert.equal(f.storage.read()?.bot.threadMode, "enabled");
@@ -198,7 +198,7 @@ test("Consolidated Workspace inspection rejects corrupt canonical state without 
   await withConsolidatedWorkspaceFixture(async f => {
     f.owner.acquire({ cwd: "/repo" });
     f.storage.capturePublication()!(() => ({ value: f.workspace, result: true }));
-    mutateTelegramRuntimeStateSection(f.rootPath, "default", "workspace", current => {
+    mutateBaleRuntimeStateSection(f.rootPath, "default", "workspace", current => {
       const corrupted = current as Record<string, unknown>;
       corrupted.futureIssuedEffect = true;
       return { value: corrupted, result: true };
@@ -216,7 +216,7 @@ test("Consolidated Workspace inspection rejects corrupt canonical state without 
 test("Consolidated Workspace refuses a publisher bound to another profile and authority lost inside the reducer", async () => {
   await withConsolidatedWorkspaceFixture(async f => {
     f.owner.acquire({ cwd: "/repo" });
-    const wrong = createTelegramConsolidatedWorkspaceStorage({ getPath: () => f.rootPath, getProfile: () => "other",
+    const wrong = createBaleConsolidatedWorkspaceStorage({ getPath: () => f.rootPath, getProfile: () => "other",
       captureAuthority: () => () => true, publishIfOwned: f.owner.publishStateSectionIfOwned! });
     const before = await readFile(f.rootPath, "utf8");
     let called = false;
@@ -225,7 +225,7 @@ test("Consolidated Workspace refuses a publisher bound to another profile and au
     const publish = f.storage.capturePublication()!;
     assert.throws(() => publish(() => { f.scope.generation++; return { value: f.workspace, result: true }; }), /authority changed/);
     assert.equal(await readFile(f.rootPath, "utf8"), before);
-    assert.equal(readTelegramRuntimeState(f.rootPath).profiles.other, undefined);
+    assert.equal(readBaleRuntimeState(f.rootPath).profiles.other, undefined);
   });
 });
 
@@ -239,7 +239,7 @@ for (const boundary of ["after-write-before-rename", "after-rename"] as const) {
         if (at === boundary) throw new Error("lost publication reply");
       } }));
       if (boundary === "after-rename") {
-        assert.deepEqual(f.storage.read()?.workspaceRestore, parseTelegramWorkspaceStateSection(f.workspace, "default")?.workspaceRestore);
+        assert.deepEqual(f.storage.read()?.workspaceRestore, parseBaleWorkspaceStateSection(f.workspace, "default")?.workspaceRestore);
         assert.deepEqual(publish(current => ({ value: current, result: "observed" })), { committed: true, result: "observed" });
       } else assert.equal(await readFile(f.rootPath, "utf8"), before);
     });
@@ -260,7 +260,7 @@ for (const role of ["leader", "follower"] as const) {
       const bytes = await readFile(f.path, "utf8"), wire = JSON.parse(bytes);
       assert.equal(Object.hasOwn(wire.workspaceRestore.operations[0].request.owner, "threadName"), false);
       assert.deepEqual(f.open().list(), [issued]);
-      assert.doesNotThrow(() => parseTelegramWorkspaceStateSection(wire, "default"), "Unnamed source owner stays a lossless current-format fact");
+      assert.doesNotThrow(() => parseBaleWorkspaceStateSection(wire, "default"), "Unnamed source owner stays a lossless current-format fact");
       assert.equal(f.open().issueRecipient(issued, recipient(role), f.auth), undefined);
       assert.equal(await readFile(f.path, "utf8"), bytes);
     }, role);
@@ -269,11 +269,11 @@ for (const role of ["leader", "follower"] as const) {
 
 type WorkspaceRestoreFixture = Parameters<Parameters<typeof fixture>[0]>[0];
 async function withLiveRebindSnapshot(role: "leader" | "follower", run: (f: WorkspaceRestoreFixture,
-  live: TelegramWorkspaceLiveRebindIntent, wire: Record<string, unknown>) => Promise<void>) {
+  live: BaleWorkspaceLiveRebindIntent, wire: Record<string, unknown>) => Promise<void>) {
   await fixture(async f => {
     const committed = (await f.store.commit(f.request, f.auth))!;
     assert.ok(committed);
-    const live: TelegramWorkspaceLiveRebindIntent = { kind: "live-rebind", request: structuredClone(committed.request),
+    const live: BaleWorkspaceLiveRebindIntent = { kind: "live-rebind", request: structuredClone(committed.request),
       operatorUserId: committed.operatorUserId, executor: structuredClone(committed.executor), recipient: recipient(role),
       revision: 0, createdAtMs: 1000, updatedAtMs: 1000, phase: "rebound" };
     const wire: Record<string, unknown> = JSON.parse(await readFile(f.path, "utf8"));
@@ -296,14 +296,14 @@ for (const role of ["leader", "follower"] as const) {
         const value = { ...live, ...progress };
         (wire.workspaceRestore as Record<string, unknown>).liveRebindings = [value];
         const bytes = JSON.stringify(wire); await writeFile(f.path, bytes);
-        const decoded = parseTelegramWorkspaceStateSection(wire, "default")!;
+        const decoded = parseBaleWorkspaceStateSection(wire, "default")!;
         assert.deepEqual(decoded.workspaceRestore?.liveRebindings, [value]);
         assert.deepEqual(decoded.workspaceRestore?.operations, []);
-        const cold = createTelegramTopicTargetStore({ path: f.path });
+        const cold = createBaleTopicTargetStore({ path: f.path });
         await cold.load();
         const store = cold.workspaceRestore({ profileName: "default", tokenSha256: "a".repeat(64) });
         assert.deepEqual(store.list(), [], "Live metadata never becomes a legacy Restore grant");
-        assert.equal(store.issueCleanup(value as unknown as TelegramWorkspaceRestoreIntent, f.auth), undefined);
+        assert.equal(store.issueCleanup(value as unknown as BaleWorkspaceRestoreIntent, f.auth), undefined);
         cold.renameByTarget(f.request.target, "Still same session"); await cold.persist();
         const after = JSON.parse(await readFile(f.path, "utf8"));
         assert.deepEqual(after.workspaceRestore.liveRebindings, [value], "Ordinary publication preserves the new metadata");
@@ -338,8 +338,8 @@ for (const [damage, mutate] of Object.entries(invalidLiveRebinding)) {
       const value = structuredClone(live); mutate(value);
       (wire.workspaceRestore as Record<string, unknown>).liveRebindings = [value];
       const bytes = JSON.stringify(wire); await writeFile(f.path, bytes);
-      assert.throws(() => parseTelegramWorkspaceStateSection(wire, "default"), /Invalid Workspace Restore evidence/);
-      await assert.rejects(() => createTelegramTopicTargetStore({ path: f.path }).load(), /Invalid Workspace Restore evidence/);
+      assert.throws(() => parseBaleWorkspaceStateSection(wire, "default"), /Invalid Workspace Restore evidence/);
+      await assert.rejects(() => createBaleTopicTargetStore({ path: f.path }).load(), /Invalid Workspace Restore evidence/);
       assert.equal(await readFile(f.path, "utf8"), bytes, "Invalid metadata is not repaired or erased");
     });
   });
@@ -360,7 +360,7 @@ for (const conflict of ["empty", "capacity", "clock", "live-id", "live-binding",
         operatorUserId: live.operatorUserId, executor: live.executor, revision: 0, createdAtMs: 1000,
         updatedAtMs: 1000, committedAtMs: 1000, phase: "relocated" }];
       const bytes = JSON.stringify(wire); await writeFile(f.path, bytes);
-      assert.throws(() => parseTelegramWorkspaceStateSection(wire, "default"), /Workspace (?:Restore|live rebinding) evidence/);
+      assert.throws(() => parseBaleWorkspaceStateSection(wire, "default"), /Workspace (?:Restore|live rebinding) evidence/);
       assert.equal(await readFile(f.path, "utf8"), bytes);
     });
   });
@@ -372,14 +372,14 @@ test("Live rebinding terminal metadata does not conflict with another live attem
     finished.request.operationId = "finished";
     const section = wire.workspaceRestore as Record<string, unknown>;
     section.liveRebindings = [live, finished];
-    assert.doesNotThrow(() => parseTelegramWorkspaceStateSection(wire, "default"));
+    assert.doesNotThrow(() => parseBaleWorkspaceStateSection(wire, "default"));
     section.liveRebindings = [finished];
     const legacy = { request: live.request, operatorUserId: live.operatorUserId, executor: live.executor,
       revision: 0, createdAtMs: 1000, updatedAtMs: 1000, committedAtMs: 1000, phase: "relocated" };
     section.operations = [legacy];
     const bytes = JSON.stringify(wire); await writeFile(f.path, bytes);
     assert.deepEqual(f.open().list(), [legacy], "A separate terminal row neither replaces nor loosens legacy evidence");
-    assert.deepEqual(parseTelegramWorkspaceStateSection(wire, "default")?.workspaceRestore?.liveRebindings, [finished]);
+    assert.deepEqual(parseBaleWorkspaceStateSection(wire, "default")?.workspaceRestore?.liveRebindings, [finished]);
     assert.equal(await readFile(f.path, "utf8"), bytes);
   });
 });
@@ -389,17 +389,17 @@ async function withLiveRebindStoreFixture(role: "leader" | "follower", layout: "
   await fixture(async f => {
     if (layout === "standalone") return run(f);
     const path = join(dirname(f.path), "live-consolidated.json");
-    const owner = createTelegramLockRuntime({ statePath: path, key: () => "default", pid: 10,
+    const owner = createBaleLockRuntime({ statePath: path, key: () => "default", pid: 10,
       instanceId: "leader", runtimeGeneration: 1, isProcessAlive: () => true });
     owner.acquire({ cwd: "/repo" });
     const consolidated = { captureAuthority() {
       const epoch = owner.getOwnedLeaderEpoch();
       return epoch === undefined ? undefined : () => owner.owns() && owner.getOwnedLeaderEpoch() === epoch;
     }, publishIfOwned: owner.publishStateSectionIfOwned! };
-    const storage = createTelegramConsolidatedWorkspaceStorage({ getPath: () => path, getProfile: () => "default", ...consolidated });
+    const storage = createBaleConsolidatedWorkspaceStorage({ getPath: () => path, getProfile: () => "default", ...consolidated });
     const initial = JSON.parse(await readFile(f.path, "utf8"));
     storage.capturePublication()!(() => ({ value: initial, result: true }));
-    const threads = createTelegramTopicTargetStore({ path, telegramProfile: "default", consolidated, getNowMs: () => 1000 });
+    const threads = createBaleTopicTargetStore({ path, baleProfile: "default", consolidated, getNowMs: () => 1000 });
     await threads.load();
     const open: WorkspaceRestoreFixture["open"] = (overrides = {}) => {
       const { threadStore = threads, ...options } = overrides;
@@ -473,7 +473,7 @@ for (const fault of ["clear", "unreleased", "issued", "wrong-target", "dirty-bin
       const old = f.request.binding.target;
       // Native corruption injection represents refused/unknown ownership, not a new publication permission.
       const injectCanonical = (mutate: (file: { workspaceBindings: unknown[]; threads: unknown[]; reservations?: unknown[]; pendingProvisions?: unknown[] }) => void) => {
-        withTelegramFileTransaction(`${f.path}.transaction`, () => {
+        withBaleFileTransaction(`${f.path}.transaction`, () => {
           const root = JSON.parse(readFileSync(f.path, "utf8"));
           mutate(layout === "consolidated" ? root.profiles.default.workspace : root);
           writeFileSync(f.path, JSON.stringify(root), { mode: 0o600 });
@@ -481,10 +481,10 @@ for (const fault of ["clear", "unreleased", "issued", "wrong-target", "dirty-bin
       };
       if (fault === "dirty-binding") f.threads.upsertWorkspaceBinding({ ...f.threads.listWorkspaceBindings()[0]!, target: old });
       if (fault === "binding" || fault === "canonical-only") {
-        const identity = createTelegramWorkspaceBindingIdentity("/other", 0, "other-session")!;
+        const identity = createBaleWorkspaceBindingIdentity("/other", 0, "other-session")!;
         injectCanonical(file => file.workspaceBindings.push({ ...f.request.binding, ...identity, slot: "B", target: old }));
         if (fault === "canonical-only") {
-          const cold = createTelegramTopicTargetStore({ path: f.path, telegramProfile: "default", getNowMs: () => 1000 });
+          const cold = createBaleTopicTargetStore({ path: f.path, baleProfile: "default", getNowMs: () => 1000 });
           assert.equal(cold.isWorkspaceLiveRebindCleanupTargetProtected(expected), true, "An uninitialized local claim projection cannot certify absence");
         }
       }
@@ -581,7 +581,7 @@ for (const role of ["leader", "follower"] as const) {
   for (const layout of ["standalone", "consolidated"] as const) {
     test(`Live rebinding store commits one binding and operation, then finishes without proof or rollback (${role}, ${layout})`, async () => {
       await withLiveRebindStoreFixture(role, layout, async f => {
-        const beforeRoot = layout === "consolidated" ? readTelegramRuntimeState(f.path) : undefined;
+        const beforeRoot = layout === "consolidated" ? readBaleRuntimeState(f.path) : undefined;
         const intent = (await f.store.commitLiveRebind(f.request, recipient(role), f.auth))!;
         assert.ok(intent); assert.equal(intent.phase, "rebound");
         assert.deepEqual(f.store.list(), [], "New operations do not enter legacy proof issuance");
@@ -612,7 +612,7 @@ for (const role of ["leader", "follower"] as const) {
         assert.ok(next, "Terminal failure is not a permanent rebinding blocker");
         assert.deepEqual(f.store.listLiveRebindings(), [next], "Only terminal live metadata is pruned on the next attempt");
         if (beforeRoot) {
-          const afterRoot = readTelegramRuntimeState(f.path);
+          const afterRoot = readBaleRuntimeState(f.path);
           assert.deepEqual(afterRoot.profiles.default?.transport, beforeRoot.profiles.default?.transport);
         }
       });
@@ -709,12 +709,12 @@ for (const layout of ["standalone", "consolidated"] as const) {
         row = f.store.advanceLiveRebind(issued, "accept-input", f.auth)!;
         assert.equal(row.inputRelease, "accepted");
         assert.deepEqual(f.open().listLiveRebindings(), [row]);
-        const cold = createTelegramTopicTargetStore({ path: f.path, telegramProfile: "default",
+        const cold = createBaleTopicTargetStore({ path: f.path, baleProfile: "default",
           ...(layout === "consolidated" ? { consolidated: { captureAuthority: () => undefined, publishIfOwned: () => ({ committed: false as const }) } } : {}) });
         const protectedTargets = cleanup === "unknown" ? [f.request.binding.target] : [];
         assert.deepEqual(cold.listProtectedLiveRebindTargets(), protectedTargets, "Protection reads canonical state without warm loading");
         assert.equal(cold.hasPreDispatchRebindEvidence(), true);
-        const protect = createTelegramCleanupTargetProtection(cold);
+        const protect = createBaleCleanupTargetProtection(cold);
         const action = { kind: "close-delete-unbound-topic", target: f.request.binding.target } as Parameters<typeof protect>[1];
         assert.equal(protect(f.request.binding.target, action), cleanup === "unknown");
         assert.equal(protect(f.request.target, action), false, "Old-target uncertainty does not block the confirmed new target");
@@ -739,9 +739,9 @@ for (const layout of ["standalone", "consolidated"] as const) {
       assert.equal(f.store.issueTemporaryThreadCleanup(entry, f.auth), undefined,
         "A confirmed live cleanup cannot stand in for the temporary tab's own exact cancellation evidence");
       assert.equal(f.store.recordTemporaryThreadInputCancellation(entry, input, f.auth, id => ({ journalBindingKey: input.journalBindingKey,
-        updateId: id, operatorAuthorityId: "telegram-owner:8" })), undefined, "Foreign operator evidence still refuses");
+        updateId: id, operatorAuthorityId: "bale-owner:8" })), undefined, "Foreign operator evidence still refuses");
       entry = f.store.recordTemporaryThreadInputCancellation(entry, input, f.auth, id => ({ journalBindingKey: input.journalBindingKey,
-        updateId: id, operatorAuthorityId: "telegram-owner:7" }))!;
+        updateId: id, operatorAuthorityId: "bale-owner:7" }))!;
       const issued = f.store.issueTemporaryThreadCleanup(entry, f.auth)!;
       assert.equal(issued.issued, true);
       assert.equal(f.store.issueTemporaryThreadCleanup(issued.entry, f.auth), undefined, "The strict grant stays one-shot");
@@ -754,10 +754,10 @@ for (const layout of ["standalone", "consolidated"] as const) {
 test("Live rebinding store consumes only target chooser metadata and preserves every saved input", async () => {
   await fixture(async f => {
     const path = join(dirname(f.path), "saved-input.json");
-    const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "live-store-fixture" });
-    const journal = createTelegramUpdateJournalStore({ path, profileName: "default", botIdentity });
+    const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "live-store-fixture" });
+    const journal = createBaleUpdateJournalStore({ path, profileName: "default", botIdentity });
     journal.appendBatch([{ update_id: 100 }, { update_id: 101 }, { update_id: 102 }]);
-    const journalBindingKey = createTelegramUpdateJournalBindingKey({ path, profileName: "default", botIdentity });
+    const journalBindingKey = createBaleUpdateJournalBindingKey({ path, profileName: "default", botIdentity });
     const request = { ...f.request, source: { journalBindingKey, updateIds: [100] } };
     let entry = f.store.registerImplicitTemporaryThread(request.source, request.target, "a".repeat(32), f.auth)!;
     assert.ok(entry);
@@ -816,7 +816,7 @@ for (const layout of ["standalone", "consolidated"] as const) {
         let current = true;
         let armed = false;
         const path = layout === "consolidated" ? f.rootPath : join(f.dir, "guarded-state.json");
-        const store = createTelegramTopicTargetStore({ path, telegramProfile: "default",
+        const store = createBaleTopicTargetStore({ path, baleProfile: "default",
           ...(layout === "consolidated" ? { consolidated: {
             captureAuthority: f.consolidated.captureAuthority,
             publishIfOwned: <T>(...args: Parameters<typeof f.consolidated.publishIfOwned<T>>) => {
@@ -846,7 +846,7 @@ for (const layout of ["standalone", "consolidated"] as const) {
         if (boundary === "queued" || boundary === "before-publication") assert.equal(after, before);
         else assert.notEqual(after, before);
         // A lost post-publication result is not permission to roll back or reissue.
-        const reopened = createTelegramTopicTargetStore({ path, telegramProfile: "default",
+        const reopened = createBaleTopicTargetStore({ path, baleProfile: "default",
           ...(layout === "consolidated" ? { consolidated: f.consolidated } : {}),
         });
         await reopened.load();
@@ -893,7 +893,7 @@ for (const action of ["rename", "reset"] as const) for (const layout of ["standa
             store.setBotState({ threadMode: "enabled" });
           }
         };
-        const store = createTelegramTopicTargetStore({ path, telegramProfile: "default", getNowMs: () => 3,
+        const store = createBaleTopicTargetStore({ path, baleProfile: "default", getNowMs: () => 3,
           ...(layout === "consolidated" ? { consolidated: {
             captureAuthority: f.consolidated.captureAuthority,
             publishIfOwned: <T>(...args: Parameters<typeof f.consolidated.publishIfOwned<T>>) => {
@@ -916,7 +916,7 @@ for (const action of ["rename", "reset"] as const) for (const layout of ["standa
           if (sessionId === "first") store.upsert({ owner: { kind: "leader", cwd: "/repo", instanceId: sessionId }, profileKey: sessionId,
             instanceId: sessionId, target: { chatId: 7, threadId }, slot, threadName: name,
             status: "active", createdAtMs: 1, updatedAtMs: 1 });
-          store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", slot === "A" ? 0 : 1, sessionId)!,
+          store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", slot === "A" ? 0 : 1, sessionId)!,
             target: { chatId: 7, threadId }, slot, threadName: name, displayTitle: name, updatedAtMs: 1 });
         }
         if (action === "reset") store.renameByTarget(target, "Retained");
@@ -941,7 +941,7 @@ for (const action of ["rename", "reset"] as const) for (const layout of ["standa
         const canonicalName = committed ? committedName : boundary === "canonical-name" ? "Canonical"
           : action === "reset" ? "Retained" : undefined;
         if (!committed && boundary !== "canonical-name") assert.equal(await readFile(path, "utf8"), before);
-        const reopen = () => createTelegramTopicTargetStore({ path, telegramProfile: "default",
+        const reopen = () => createBaleTopicTargetStore({ path, baleProfile: "default",
           ...(layout === "consolidated" ? { consolidated: f.consolidated } : {}) });
         const canonical = reopen(); await canonical.load();
         assert.equal(canonical.getWorkspaceBindingByTarget({ chatId: 7, threadId: 41 }, "first")?.manualThreadName,
@@ -981,13 +981,13 @@ for (const layout of ["standalone", "consolidated"] as const) {
     await withConsolidatedWorkspaceFixture(async f => {
       f.owner.acquire({ cwd: "/repo" });
       const path = layout === "consolidated" ? f.rootPath : join(f.dir, "reset-entry.json");
-      const store = createTelegramTopicTargetStore({ path, telegramProfile: "default",
+      const store = createBaleTopicTargetStore({ path, baleProfile: "default",
         ...(layout === "consolidated" ? { consolidated: f.consolidated } : {}) });
       await store.load();
       const target = { chatId: 7, threadId: 41 };
       store.upsert({ owner: { kind: "leader", cwd: "/repo", instanceId: "first" }, profileKey: "first",
         instanceId: "first", target, slot: "A", threadName: "Anchor", status: "active", createdAtMs: 1, updatedAtMs: 1 });
-      store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", 0, "first")!,
+      store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", 0, "first")!,
         target, slot: "A", threadName: "Anchor", updatedAtMs: 1 });
       store.renameByTarget(target, "Retained");
       await store.persist();
@@ -1015,15 +1015,15 @@ for (const layout of ["standalone", "consolidated"] as const) {
       await withConsolidatedWorkspaceFixture(async f => {
         f.owner.acquire({ cwd: "/repo" });
         const scope = { path: layout === "consolidated" ? f.rootPath : join(f.dir, `${action}-observation.json`), profile: "default" };
-        const store = createTelegramTopicTargetStore({ path: () => scope.path, telegramProfile: () => scope.profile,
+        const store = createBaleTopicTargetStore({ path: () => scope.path, baleProfile: () => scope.profile,
           ...(layout === "consolidated" ? { consolidated: f.consolidated } : {}), getNowMs: () => 3 });
         await store.load();
         const target = { chatId: 7, threadId: 41 };
-        store.upsert({ owner: { kind: "leader", cwd: "/repo", instanceId: "first", telegramProfile: "default" }, profileKey: "first", instanceId: "first",
+        store.upsert({ owner: { kind: "leader", cwd: "/repo", instanceId: "first", baleProfile: "default" }, profileKey: "first", instanceId: "first",
           target, slot: "A", threadName: "Anchor", status: "active", createdAtMs: 1, updatedAtMs: 1 });
-        store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session-first")!,
+        store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", 0, "session-first")!,
           target, slot: "A", threadName: "Anchor", updatedAtMs: 1 });
-        store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", 1, "session-other")!,
+        store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", 1, "session-other")!,
           target: { chatId: 7, threadId: 42 }, slot: "B", threadName: "Beacon", updatedAtMs: 1 });
         if (action === "reset") store.renameByTarget(target, "Retained");
         await store.persist();
@@ -1103,7 +1103,7 @@ for (const layout of ["standalone", "consolidated"] as const) {
             if (boundary === "local") {
               const originalBinding = local.bindings[0]!, originalOwner = local.records[0]!;
               store.upsertWorkspaceBinding({ ...originalBinding,
-                ...(field === "session" ? createTelegramWorkspaceBindingIdentity("/repo", 0, "replacement")! : {}),
+                ...(field === "session" ? createBaleWorkspaceBindingIdentity("/repo", 0, "replacement")! : {}),
                 ...(field === "slot" ? { slot: "C" } : {}),
                 ...(field === "target" ? { target: { chatId: 7, threadId: 99 } } : {}),
                 ...(field === "inactive" ? { inactiveSinceMs: 2 } : {}) });
@@ -1112,7 +1112,7 @@ for (const layout of ["standalone", "consolidated"] as const) {
               if (field === "duplicate") store.upsertWorkspaceBinding({ ...neighbor, target });
             } else await writeCanonical(file => {
               const b = file.workspaceBindings[0], r = file.threads[0];
-              if (field === "session") Object.assign(b, createTelegramWorkspaceBindingIdentity("/repo", 0, "replacement")!);
+              if (field === "session") Object.assign(b, createBaleWorkspaceBindingIdentity("/repo", 0, "replacement")!);
               if (field === "slot") b.slot = "C";
               if (field === "target") b.target.threadId = 99;
               if (field === "inactive") b.inactiveSinceMs = 2;
@@ -1209,7 +1209,7 @@ for (const operation of ["rename", "reset"] as const) {
       test(`Thread name recipient refuses post-observation loss (${operation}, ${boundary}, ${loss})`, async () => {
         await withWorkspaceRelocationFixture("leader", async (store, path) => {
           const target = { chatId: 7, threadId: 10 }, context = {};
-          const authority: TelegramWorkspaceThreadRenameAuthority = {
+          const authority: BaleWorkspaceThreadRenameAuthority = {
             context, sessionId: "session", sessionGeneration: 1, cwd: "/repo", profileName: "default",
             botToken: "123:fixture", operatorUserId: 7, leaderEpoch: "epoch", ownsDirectDelivery: true,
             followerRegistered: false, localTarget: target, localSlot: "A",
@@ -1254,7 +1254,7 @@ for (const operation of ["rename", "reset"] as const) {
               return value;
             } };
           const prepare = () => operation === "rename"
-            ? createTelegramWorkspaceThreadRenameRecipient(deps) : createTelegramWorkspaceThreadResetRecipient(deps);
+            ? createBaleWorkspaceThreadRenameRecipient(deps) : createBaleWorkspaceThreadResetRecipient(deps);
           const originalBytes = await readFile(path, "utf8");
           if (boundary === "capture-observation") {
             armed = true;
@@ -1284,7 +1284,7 @@ for (const operation of ["rename", "reset"] as const) {
 }
 
 function openConsolidatedTopicStore(f: Parameters<Parameters<typeof withConsolidatedWorkspaceFixture>[0]>[0]) {
-  return createTelegramTopicTargetStore({ path: () => f.scope.path, telegramProfile: () => f.scope.profile,
+  return createBaleTopicTargetStore({ path: () => f.scope.path, baleProfile: () => f.scope.profile,
     consolidated: f.consolidated, getNowMs: () => 1000, canPersist: () => f.owner.owns() });
 }
 
@@ -1296,10 +1296,10 @@ test("Consolidated Thread store loads and publishes real Workspace data without 
     await store.load();
     assert.equal(store.listWorkspaceBindings()[0]?.target.threadId, 42);
     assert.equal(store.workspaceRestore({ profileName: "default", tokenSha256: "a".repeat(64) }).list()[0]?.phase, "recipient-issued");
-    const before = readTelegramRuntimeState(f.rootPath);
+    const before = readBaleRuntimeState(f.rootPath);
     store.setBotState({ threadMode: "enabled" });
     await store.persist();
-    assert.deepEqual(readTelegramRuntimeState(f.rootPath).profiles.default?.transport, before.profiles.default?.transport);
+    assert.deepEqual(readBaleRuntimeState(f.rootPath).profiles.default?.transport, before.profiles.default?.transport);
     assert.equal(f.storage.read()?.bot.threadMode, "enabled");
     const bytes = await readFile(f.rootPath, "utf8"), inode = (await stat(f.rootPath)).ino;
     await store.persist();
@@ -1308,7 +1308,7 @@ test("Consolidated Thread store loads and publishes real Workspace data without 
     store.setStatusSnapshot({ runtime: { pollingActive: true }, liveRoster: { busFollowers: [] }, diagnostics: { recentRuntimeEvents: [{ event: "logged" }] } });
     await store.persistStatus();
     assert.equal(existsSync(join(f.dir, "consolidated.json.status")), false);
-    assert.equal((readTelegramRuntimeState(f.rootPath).profiles.default?.runtime as any).diagnostics.recentRuntimeEvents, undefined);
+    assert.equal((readBaleRuntimeState(f.rootPath).profiles.default?.runtime as any).diagnostics.recentRuntimeEvents, undefined);
   });
 });
 
@@ -1317,12 +1317,12 @@ for (const replacement of ["new-session", "same-context-restart"] as const) {
     const dir = await mkdtemp(join(tmpdir(), "pt-session-grant-")), path = join(dir, "state.json");
     try {
       const lock = createSessionGrantLock<{ cwd: string }>({ statePath: path, instanceId: "session-grant", isProcessAlive: () => true });
-      const sessions = createTelegramSessionContextStore<{ cwd: string }>(), ctx = { cwd: "/repo" };
+      const sessions = createBaleSessionContextStore<{ cwd: string }>(), ctx = { cwd: "/repo" };
       sessions.set(ctx);
       assert.equal(lock.acquire(ctx).ok, true);
       const epoch = lock.getOwnedLeaderEpoch();
-      const store = createTelegramTopicTargetStore({ path, canPersist: lock.owns, consolidated: {
-        captureAuthority: createTelegramOwnedStateAuthorityCapture(lock, sessions), publishIfOwned: lock.publishStateSectionIfOwned! } });
+      const store = createBaleTopicTargetStore({ path, canPersist: lock.owns, consolidated: {
+        captureAuthority: createBaleOwnedStateAuthorityCapture(lock, sessions), publishIfOwned: lock.publishStateSectionIfOwned! } });
       await store.load();
       store.setBotState({ threadMode: "enabled" });
       await store.persist();
@@ -1338,7 +1338,7 @@ for (const replacement of ["new-session", "same-context-restart"] as const) {
       assert.equal(store.getBotState().threadMode, "enabled");
       store.setBotState({ threadMode: "disabled" });
       await store.persist();
-      assert.equal(readTelegramRuntimeState(path).profiles.default?.workspace !== undefined, true);
+      assert.equal(readBaleRuntimeState(path).profiles.default?.workspace !== undefined, true);
       await store.refresh!();
       assert.equal(store.getBotState().threadMode, "disabled", "The successor session publishes with its own fresh grant");
     } finally { await rm(dir, { recursive: true, force: true }); }
@@ -1451,7 +1451,7 @@ test("Consolidated temporary cleanup preserves exact cancellation and one-shot i
     assert.ok(entry);
     assert.deepEqual(threads.listTemporaryThreadTargets(), [{ chatId: 7, threadId: 55 }]);
     entry = view.recordTemporaryThreadInputCancellation(entry, input, auth, id => ({ journalBindingKey: input.journalBindingKey,
-      updateId: id, operatorAuthorityId: "telegram-owner:7" }))!;
+      updateId: id, operatorAuthorityId: "bale-owner:7" }))!;
     const issued = view.issueTemporaryThreadCleanup(entry, auth)!;
     assert.equal(issued.issued, true);
     const freshThreads = openConsolidatedTopicStore(f);
@@ -1468,7 +1468,7 @@ test("Consolidated temporary cleanup preserves exact cancellation and one-shot i
 });
 
 test("Consolidated Thread store refuses mixed publication backends", () => {
-  assert.throws(() => createTelegramTopicTargetStore({ path: "/unused/state.json", commitPersist: () => true,
+  assert.throws(() => createBaleTopicTargetStore({ path: "/unused/state.json", commitPersist: () => true,
     consolidated: { captureAuthority: () => () => true, publishIfOwned: () => ({ committed: false }) } }), /one publication backend/);
 });
 
@@ -1504,19 +1504,19 @@ test("Consolidated Restore relocates, publishes exact one-shot grants and observ
   });
 });
 
-const restoreStorage = (store: ReturnType<typeof createTelegramTopicTargetStore>) =>
+const restoreStorage = (store: ReturnType<typeof createBaleTopicTargetStore>) =>
   store.workspaceRestore({ profileName: "default", tokenSha256: "a".repeat(64), getNowMs: () => 1000 });
-const restorations = (store: ReturnType<typeof createTelegramTopicTargetStore>) => restoreStorage(store).list();
-function relocate(store: ReturnType<typeof createTelegramTopicTargetStore>, operationId: string,
-  binding: TelegramWorkspaceRestoreIntent["request"]["binding"], owner: TelegramWorkspaceRestoreIntent["request"]["owner"],
-  target: TelegramWorkspaceRestoreIntent["request"]["target"], isCurrent: () => boolean) {
+const restorations = (store: ReturnType<typeof createBaleTopicTargetStore>) => restoreStorage(store).list();
+function relocate(store: ReturnType<typeof createBaleTopicTargetStore>, operationId: string,
+  binding: BaleWorkspaceRestoreIntent["request"]["binding"], owner: BaleWorkspaceRestoreIntent["request"]["owner"],
+  target: BaleWorkspaceRestoreIntent["request"]["target"], isCurrent: () => boolean) {
   if (!isCurrent()) return Promise.resolve(false);
   return restoreStorage(store).commit({ operationId, binding, owner, target,
     source: { journalBindingKey: "fixture-journal", updateIds: [100] } }, {
     executor: { instanceId: "leader", leaderEpoch: "epoch" }, operatorUserId: 7, isCurrent }).then(Boolean);
 }
 /** Unit evidence for legitimate terminal transitions; native journal ACKs have separate integration coverage. */
-function settleStoredRestore(store: ReturnType<typeof createTelegramTopicTargetStore>) {
+function settleStoredRestore(store: ReturnType<typeof createBaleTopicTargetStore>) {
   const view = restoreStorage(store), operation = view.list()[0]!;
   const authority = { executor: { instanceId: "leader", leaderEpoch: "epoch" }, operatorUserId: 7, isCurrent: () => true };
   const recipient = { kind: operation.request.owner.owner?.kind === "leader" ? "leader" as const : "follower" as const,
@@ -1527,7 +1527,7 @@ function settleStoredRestore(store: ReturnType<typeof createTelegramTopicTargetS
   const settled = view.recordSourceSettlement(routing, { ...operation.request.source, kind: "completed" }, authority)!;
   return view.recordCleanup(settled, { target: operation.request.binding.target, kind: "not-issued" }, authority)!;
 }
-function removeStoredRestore(store: ReturnType<typeof createTelegramTopicTargetStore>, expected: TelegramWorkspaceRestoreIntent, isCurrent: () => boolean) {
+function removeStoredRestore(store: ReturnType<typeof createBaleTopicTargetStore>, expected: BaleWorkspaceRestoreIntent, isCurrent: () => boolean) {
   if (!isCurrent()) return false;
   return !!restoreStorage(store).retire(expected, { executor: { instanceId: "leader", leaderEpoch: "epoch" }, operatorUserId: 7, isCurrent });
 }
@@ -1536,7 +1536,7 @@ for (const role of ["leader", "follower"] as const) {
   test(`Workspace relocation preserves the exact session and slot at full capacity (${role})`, async () => {
     await withWorkspaceRelocationFixture(role, async (store, path) => {
       for (const [index, slot] of Array.from("BCDEFGHIJKLMNOPQRSTUVWXYZ").entries()) {
-        store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity(`/other/${index}`, 0, "other")!,
+        store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity(`/other/${index}`, 0, "other")!,
           target: { chatId: 7, threadId: 100 + index }, slot, updatedAtMs: 1 });
       }
       await store.persist();
@@ -1551,7 +1551,7 @@ for (const role of ["leader", "follower"] as const) {
       binding.journalBindingKeys!.push("caller-mutation");
       owner.target.threadId = 999;
       assert.equal(await moving, true);
-      const cold = createTelegramTopicTargetStore({ path });
+      const cold = createBaleTopicTargetStore({ path });
       await cold.load();
       const relocated = cold.getWorkspaceBinding("/repo", "a", "session")!;
       const { displayTitle: _oldTitle, ...expectedBinding } = binding;
@@ -1573,7 +1573,7 @@ for (const role of ["leader", "follower"] as const) {
       assert.equal(cold.list()[0]?.lastSyncError, undefined);
       assert.equal(cold.list()[0]?.lastSyncObservedAtMs, undefined);
       assert.equal(cold.list()[0]?.syncStatus, "unknown");
-      assert.deepEqual(cold.listSyncObservations(), [], "moving is not proof that Telegram deleted either target");
+      assert.deepEqual(cold.listSyncObservations(), [], "moving is not proof that Bale deleted either target");
       assert.equal(await relocate(cold, "restore", binding, owner, { chatId: 7, threadId: 42 }, () => true), false);
     });
   });
@@ -1645,7 +1645,7 @@ for (const conflict of ["legacy", "inactive", "binding-drift", "owner-drift", "d
       const owner = store.list()[0]!;
       const target = { chatId: 7, threadId: 42 };
       if (conflict === "legacy") {
-        store.upsertWorkspaceBinding({ ...binding, ...createTelegramWorkspaceBindingIdentity("/repo")!,
+        store.upsertWorkspaceBinding({ ...binding, ...createBaleWorkspaceBindingIdentity("/repo")!,
           sessionId: undefined, sessionKey: undefined });
         binding = store.listWorkspaceBindings()[0]!;
       }
@@ -1656,7 +1656,7 @@ for (const conflict of ["legacy", "inactive", "binding-drift", "owner-drift", "d
       if (conflict === "binding-drift") store.upsertWorkspaceBinding({ ...binding, manualThreadName: "Changed" });
       if (conflict === "owner-drift") store.upsert({ ...owner, updatedAtMs: 2 });
       if (conflict === "destination-binding") store.upsertWorkspaceBinding({
-        ...createTelegramWorkspaceBindingIdentity("/other", 0, "other")!, target, slot: "B", updatedAtMs: 1 });
+        ...createBaleWorkspaceBindingIdentity("/other", 0, "other")!, target, slot: "B", updatedAtMs: 1 });
       if (conflict === "destination-owner" || conflict === "slot-conflict") store.upsert({
         ...owner, profileKey: "manual:other", owner: { kind: "manual-follower", instanceId: "other" },
         instanceId: "other", target: conflict === "slot-conflict" ? { chatId: 7, threadId: 77 } : target,
@@ -1697,7 +1697,7 @@ test("Atomic Restore records are detached and retire only through exact terminal
     const binding = store.listWorkspaceBindings()[0]!;
     const owner = store.list()[0]!;
     assert.equal(await relocate(store, "restore", binding, owner, { chatId: 7, threadId: 42 }, () => true), true);
-    const cold = createTelegramTopicTargetStore({ path });
+    const cold = createBaleTopicTargetStore({ path });
     await cold.load();
     assert.equal(removeStoredRestore(cold, restorations(cold)[0]!, () => true), false, "raw removal is not an exposed operation");
     const receipt = structuredClone(settleStoredRestore(cold));
@@ -1757,7 +1757,7 @@ for (const fault of ["none", "authority", "ownership", "publication", "ack", "ch
       assert.equal(disk.workspaceRestore.operations.length, ["none", "ack"].includes(fault) ? 0 : 1);
       assert.deepEqual(disk.workspaceBindings, before.workspaceBindings);
       assert.deepEqual(disk.threads, before.threads);
-      const cold = createTelegramTopicTargetStore({ path });
+      const cold = createBaleTopicTargetStore({ path });
       await cold.load();
       assert.deepEqual(restorations(cold), disk.workspaceRestore.operations);
     }, { commitPersist(commit) {
@@ -1791,7 +1791,7 @@ for (const fault of ["malformed", "duplicate", "slot-mismatch", "unknown-field",
       await assert.rejects(store.persist());
       assert.equal(await readFile(path, "utf8").catch(() => undefined), bytes);
       if (fault !== "missing" && fault !== "removed") {
-        const cold = createTelegramTopicTargetStore({ path });
+        const cold = createBaleTopicTargetStore({ path });
         await assert.rejects(cold.load());
       }
     });
@@ -1801,7 +1801,7 @@ for (const fault of ["malformed", "duplicate", "slot-mismatch", "unknown-field",
 for (const observed of [false, true]) {
   test(`Stale snapshot writers cannot erase atomic Restore even after reading its view (${observed})`, async () => {
     await withWorkspaceRelocationFixture("leader", async (publisher, path) => {
-      const stale = createTelegramTopicTargetStore({ path });
+      const stale = createBaleTopicTargetStore({ path });
       await stale.load();
       stale.upsert({ ...stale.list()[0]!, updatedAtMs: 2000 });
       assert.equal(await relocate(publisher, "restore", publisher.listWorkspaceBindings()[0]!, publisher.list()[0]!, { chatId: 7, threadId: 42 }, () => true), true);
@@ -1815,7 +1815,7 @@ for (const observed of [false, true]) {
 
 test("Removing the final Restore record cannot reopen the empty-operation ABA window", async () => {
   await withWorkspaceRelocationFixture("leader", async (publisher, path) => {
-    const stale = createTelegramTopicTargetStore({ path });
+    const stale = createBaleTopicTargetStore({ path });
     await stale.load();
     stale.upsert({ ...stale.list()[0]!, updatedAtMs: 2000 });
     assert.equal(await relocate(publisher, "restore", publisher.listWorkspaceBindings()[0]!,
@@ -1860,7 +1860,7 @@ test("Restore revision exhaustion retains the exact operation without wrapping",
     const file = JSON.parse(await readFile(path, "utf8"));
     file.workspaceRestore.revision = Number.MAX_SAFE_INTEGER;
     await writeFile(path, JSON.stringify(file));
-    const cold = createTelegramTopicTargetStore({ path });
+    const cold = createBaleTopicTargetStore({ path });
     await cold.load();
     const before = await readFile(path, "utf8");
     assert.throws(() => removeStoredRestore(cold, restorations(cold)[0]!, () => true), /revision exhausted/);
@@ -1876,7 +1876,7 @@ for (const collision of ["id", "destination", "source"] as const) {
         store.list()[0]!, { chatId: 7, threadId: 42 }, () => true), true);
       const before = await readFile(path, "utf8");
       const source = { chatId: 7, threadId: collision === "source" ? 10 : 99 };
-      store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/other", 0, "other")!,
+      store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/other", 0, "other")!,
         target: source, slot: "B", updatedAtMs: 1 });
       store.upsert({ profileKey: "manual:other", owner: { kind: "manual-follower", instanceId: "other" },
         instanceId: "other", target: source, slot: "B", status: "active", createdAtMs: 1, updatedAtMs: 1 });
@@ -1905,11 +1905,11 @@ for (const mutation of ["binding-target", "owner-target", "slot-reuse", "old-tar
       else if (mutation === "owner-target") threads.upsert({ ...owner, target: request.binding.target });
       else if (mutation === "slot-reuse") threads.upsert({ ...owner, profileKey: "manual:other",
         owner: { kind: "manual-follower", instanceId: "other" }, instanceId: "other", target: { chatId: 7, threadId: 99 } });
-      else threads.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/other", 0, "other")!,
+      else threads.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/other", 0, "other")!,
         target: mutation === "old-target-reuse" ? request.binding.target : request.target, slot: "B", updatedAtMs: 1000 });
       await assert.rejects(() => threads.persist(), /Protected Workspace Restore/);
       assert.equal(await readFile(path, "utf8"), before, "refused publication leaves the canonical bytes intact");
-      const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+      const cold = createBaleTopicTargetStore({ path }); await cold.load();
       assert.deepEqual(cold.listWorkspaceBindings()[0], binding);
       assert.deepEqual(store.list()[0]?.request, request);
     });
@@ -1925,7 +1925,7 @@ test("Exact session-address metadata CAS preserves retained Restore snapshot ref
     const current = threads.listWorkspaceBindings()[0]!;
     assert.ok(threads.commitWorkspaceJournalEvidence(current, [], true, [newSource]));
     await threads.persist();
-    const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+    const cold = createBaleTopicTargetStore({ path }); await cold.load();
     assert.deepEqual(cold.listWorkspaceBindings()[0]!.journalSources, [newSource]);
     assert.deepEqual(restorations(cold)[0]!.request.binding.journalSources, [oldSource, newSource]);
     assert.deepEqual(store.list()[0], intent, "Metadata CAS cannot erase a separate consumer's retained snapshot");
@@ -1958,7 +1958,7 @@ test("Restore publication permits metadata, same-session successor and non-destr
     const observed = { ...recipient("leader"), instanceId: "successor", generation: "next" };
     assert.deepEqual(store.confirmInspectedReady(adopted, observed, auth)?.readyRecipient, observed);
     assert.equal(await threads.detachTargetOwner(threads.list()[0]!, () => true), true);
-    const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+    const cold = createBaleTopicTargetStore({ path }); await cold.load();
     assert.deepEqual(cold.listWorkspaceBindings()[0]?.target, request.target);
     assert.equal(cold.listWorkspaceBindings()[0]?.slot, "A");
     assert.equal(cold.listWorkspaceBindings()[0]?.threadName, "Atlas");
@@ -2008,8 +2008,8 @@ test("Live registration publication holds the canonical transaction through the 
   await fixture(async ({ store, threads, request, auth, path }) => {
     let publications = 0;
     const publish = () => {
-      assert.throws(() => withTelegramFileTransaction(`${path}.transaction`, () => assert.fail("competing publication entered"),
-        { attempts: 1, retryDelayMs: 0 }), /Timed out acquiring Telegram lock transaction/);
+      assert.throws(() => withBaleFileTransaction(`${path}.transaction`, () => assert.fail("competing publication entered"),
+        { attempts: 1, retryDelayMs: 0 }), /Timed out acquiring Bale lock transaction/);
       publications += 1;
     };
     threads.commitWorkspaceRestoreRegistration({ target: request.binding.target }, publish);
@@ -2020,7 +2020,7 @@ test("Live registration publication holds the canonical transaction through the 
     assert.throws(() => threads.commitWorkspaceRestoreRegistration({ ...candidate, target: request.binding.target }, publish), /Protected Workspace Restore registration/);
     assert.equal(publications, 2);
     assert.throws(() => threads.commitWorkspaceRestoreRegistration(candidate, () => { throw new Error("publication stopped"); }), /publication stopped/);
-    withTelegramFileTransaction(`${path}.transaction`, () => {}, { attempts: 1, retryDelayMs: 0 });
+    withBaleFileTransaction(`${path}.transaction`, () => {}, { attempts: 1, retryDelayMs: 0 });
   });
 });
 
@@ -2147,7 +2147,7 @@ for (const evidence of ["old", "new", "contradictory", "invalid", "foreign", "va
         workspaceBindingKey: "other-binding", slot: "B", startedAtMs: 1000,
         ...(evidence === "contradictory" ? { target: { chatId: 7, threadId: 99 } } : {}) };
       threads.upsertPendingProvision(pending); await threads.persist();
-      const reader = cold ? createTelegramTopicTargetStore({ path, getNowMs: () => 1000 }) : threads;
+      const reader = cold ? createBaleTopicTargetStore({ path, getNowMs: () => 1000 }) : threads;
       const before = { bindings: reader.listWorkspaceBindings(), records: reader.list(), pending: reader.listPendingProvisions() };
       const snapshot = JSON.parse(await readFile(path, "utf8"));
       snapshot.workspaceBindings[0].manualThreadName = "Disk-only metadata";
@@ -2234,7 +2234,7 @@ for (const role of ["leader", "follower"] as const) for (const mode of ["reuse",
       }
       const before = await readFile(path, "utf8");
       const calls: string[] = [];
-      const provision = createTelegramTopicTargetProvisioner({ store: threads, topicChatId: 7,
+      const provision = createBaleTopicTargetProvisioner({ store: threads, topicChatId: 7,
         claimPendingTargets: false, getNowMs: () => 1000,
         async callApi<TResponse>(method: string) { calls.push(method); return { message_thread_id: 999 } as TResponse; } });
       if (mode !== "legacy-create") assert.ok(threads.claimWorkspaceIdentity(request.binding.cwd, "successor", request.owner.instanceId,
@@ -2276,14 +2276,14 @@ test("Matching Workspace targets alone cannot acknowledge an unknown relocation"
 
 test("Stale-target invalidation fences the durable commit and preserves a replacement binding", async () => {
   for (const race of ["none", "generation", "binding", "ownership"] as const) {
-    const root = await mkdtemp(join(tmpdir(), "telegram-invalidation-"));
+    const root = await mkdtemp(join(tmpdir(), "bale-invalidation-"));
     const path = join(root, "state.json");
     let generation = 1;
     let atCommit: (() => void) | undefined;
     let owns = true;
     const target = { chatId: 100, threadId: 42 };
     const record = { profileKey: "cwd:/repo", owner: { kind: "leader" as const, cwd: "/repo", instanceId: "a" }, instanceId: "a", target, status: "active" as const, createdAtMs: 1, updatedAtMs: 1 };
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => 1000,
       commitPersist: (commit) => {
@@ -2295,7 +2295,7 @@ test("Stale-target invalidation fences the durable commit and preserves a replac
     });
     try {
       store.upsert(record);
-      store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo")!,
+      store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo")!,
         target, slot: "A", updatedAtMs: 1 });
       await store.persist();
       atCommit = () => {
@@ -2327,14 +2327,14 @@ test("Stale-target invalidation fences the durable commit and preserves a replac
 
 test("Owner detachment publishes inactivity only with an exact fenced durable commit", async () => {
   for (const race of ["none", "generation", "replacement", "ownership", "publication", "ack"] as const) {
-    const root = await mkdtemp(join(tmpdir(), "telegram-owner-detachment-"));
+    const root = await mkdtemp(join(tmpdir(), "bale-owner-detachment-"));
     const path = join(root, "state.json");
     let current = true;
     let atCommit: (() => void) | undefined;
     let owns = true;
     let nowMs = 1000;
     const target = { chatId: 7, threadId: 42 };
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => nowMs,
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => nowMs,
       commitPersist(commit) {
         atCommit?.();
         if (!owns) return false;
@@ -2345,7 +2345,7 @@ test("Owner detachment publishes inactivity only with an exact fenced durable co
     try {
       store.upsert({ profileKey: "manual:old", instanceId: "old", target,
         status: "active", slot: "A", createdAtMs: 1, updatedAtMs: 1 });
-      store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session")!,
+      store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", 0, "session")!,
         target, slot: "A", displayTitle: "Retained", journalBindingKeys: ["manual:old"],
         journalBindingsComplete: true, updatedAtMs: 1 });
       await store.persist();
@@ -2395,22 +2395,22 @@ test("Owner detachment publishes inactivity only with an exact fenced durable co
 
 test("Owner detachment never frees a slot without an unambiguous retained Workspace binding", async () => {
   for (const bindingState of ["missing", "slot-conflict", "duplicate", "duplicate-owner"] as const) {
-    const root = await mkdtemp(join(tmpdir(), "telegram-detachment-binding-"));
+    const root = await mkdtemp(join(tmpdir(), "bale-detachment-binding-"));
     const path = join(root, "state.json");
     const target = { chatId: 7, threadId: 42 };
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     try {
       store.upsert({ profileKey: "manual:old", instanceId: "old", target,
         status: "active", slot: "A", createdAtMs: 1, updatedAtMs: 1 });
       if (bindingState !== "missing") store.upsertWorkspaceBinding({
-        ...createTelegramWorkspaceBindingIdentity("/one")!, target,
+        ...createBaleWorkspaceBindingIdentity("/one")!, target,
         slot: bindingState === "slot-conflict" ? "B" : "A", updatedAtMs: 1,
       });
       await store.persist();
       if (bindingState === "duplicate" || bindingState === "duplicate-owner") {
         const file = JSON.parse(await readFile(path, "utf8"));
         if (bindingState === "duplicate") {
-          file.workspaceBindings.push({ ...createTelegramWorkspaceBindingIdentity("/two")!,
+          file.workspaceBindings.push({ ...createBaleWorkspaceBindingIdentity("/two")!,
             target, slot: "A", updatedAtMs: 1 });
         } else {
           file.threads.push({ ...file.threads[0], instanceId: "another-runtime",
@@ -2432,19 +2432,19 @@ test("Owner detachment never frees a slot without an unambiguous retained Worksp
 });
 
 test("Owner detachment reconciles memory even when the desired snapshot is already on disk", async () => {
-  const root = await mkdtemp(join(tmpdir(), "telegram-detachment-equality-"));
+  const root = await mkdtemp(join(tmpdir(), "bale-detachment-equality-"));
   const path = join(root, "state.json");
   const target = { chatId: 7, threadId: 42 };
-  const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+  const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
   try {
     store.upsert({ profileKey: "manual:old", instanceId: "old", target,
       status: "active", slot: "A", createdAtMs: 1, updatedAtMs: 1 });
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo")!,
       target, slot: "A", updatedAtMs: 1 });
     await store.persist();
     await store.load();
     const expected = store.list()[0]!;
-    const publisher = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+    const publisher = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
     await publisher.load();
     assert.equal(await publisher.detachTargetOwner(expected, () => true), true);
     store.upsert(expected);
@@ -2457,8 +2457,8 @@ test("Owner detachment reconciles memory even when the desired snapshot is alrea
 });
 
 test("An in-flight snapshot load cannot erase a newly admitted cleanup intent", async () => {
-  const root = await mkdtemp(join(tmpdir(), "telegram-load-race-"));
-  const store = createTelegramTopicTargetStore({ path: join(root, "state.json") });
+  const root = await mkdtemp(join(tmpdir(), "bale-load-race-"));
+  const store = createBaleTopicTargetStore({ path: join(root, "state.json") });
   try {
     await store.persist();
     const loading = store.load();
@@ -2474,9 +2474,9 @@ test("An in-flight snapshot load cannot erase a newly admitted cleanup intent", 
   }
 });
 
-test("Thread owner keys isolate named Telegram profiles without changing default keys", () => {
+test("Thread owner keys isolate named Bale profiles without changing default keys", () => {
   assert.equal(
-    getTelegramThreadOwnerKey({
+    getBaleThreadOwnerKey({
       kind: "leader",
       cwd: "/repo",
       instanceId: "a",
@@ -2484,25 +2484,25 @@ test("Thread owner keys isolate named Telegram profiles without changing default
     "cwd:/repo",
   );
   assert.equal(
-    getTelegramThreadOwnerKey({
+    getBaleThreadOwnerKey({
       kind: "leader",
       cwd: "/repo",
       instanceId: "a",
-      telegramProfile: "omp",
+      baleProfile: "omp",
     }),
     "profile:omp:cwd:/repo",
   );
   assert.deepEqual(
-    getTelegramThreadOwnerFromProfileKey("profile:omp:manual:worker-a"),
-    { kind: "manual-follower", instanceId: "worker-a", telegramProfile: "omp" },
+    getBaleThreadOwnerFromProfileKey("profile:omp:manual:worker-a"),
+    { kind: "manual-follower", instanceId: "worker-a", baleProfile: "omp" },
   );
 });
 
 test("Thread store restores named-profile owner scope across persistence", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-profile-owner-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-profile-owner-"));
   const path = join(dir, "state.omp.json");
   try {
-    const legacyStore = createTelegramTopicTargetStore({ path });
+    const legacyStore = createBaleTopicTargetStore({ path });
     legacyStore.upsert({
       profileKey: "cwd:/repo",
       owner: {
@@ -2520,9 +2520,9 @@ test("Thread store restores named-profile owner scope across persistence", async
     });
     await legacyStore.persist();
 
-    const restored = createTelegramTopicTargetStore({
+    const restored = createBaleTopicTargetStore({
       path,
-      telegramProfile: "omp",
+      baleProfile: "omp",
     });
     await restored.load();
     assert.deepEqual(
@@ -2531,7 +2531,7 @@ test("Thread store restores named-profile owner scope across persistence", async
         kind: "leader",
         cwd: "/repo",
         instanceId: "leader-a",
-        telegramProfile: "omp",
+        baleProfile: "omp",
       },
     );
     assert.equal(restored.getByProfileKey("cwd:/repo"), undefined);
@@ -2550,15 +2550,15 @@ test("Thread store restores named-profile owner scope across persistence", async
 });
 
 test("Thread store persists dormant workspace bindings with exact cwd", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspaces-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspaces-"));
   const path = join(dir, "state.json");
-  const identity = createTelegramWorkspaceBindingIdentity(
+  const identity = createBaleWorkspaceBindingIdentity(
     "/home/llb/.pi/agent/extensions",
     1,
   );
   assert.ok(identity);
   try {
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     assert.deepEqual(
       store.upsertWorkspaceBinding({
         ...identity,
@@ -2587,7 +2587,7 @@ test("Thread store persists dormant workspace bindings with exact cwd", async ()
       },
     ]);
 
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.deepEqual(
       restored.getWorkspaceBinding("/home/llb/.pi/agent/extensions/", "b"),
@@ -2605,12 +2605,12 @@ test("Thread store persists dormant workspace bindings with exact cwd", async ()
 });
 
 test("Thread store persists distinct same-cwd session bindings without legacy aliasing", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-session-workspaces-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-session-workspaces-"));
   const path = join(dir, "state.json");
-  const first = createTelegramWorkspaceBindingIdentity("/repo", 0, "session-a")!;
-  const second = createTelegramWorkspaceBindingIdentity("/repo", 0, "session-b")!;
+  const first = createBaleWorkspaceBindingIdentity("/repo", 0, "session-a")!;
+  const second = createBaleWorkspaceBindingIdentity("/repo", 0, "session-b")!;
   try {
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     assert.ok(store.upsertWorkspaceBinding({ ...first,
       target: { chatId: 7, threadId: 41 }, slot: "A", updatedAtMs: 1 }));
     assert.equal(store.hasWorkspaceBinding("/repo"), false);
@@ -2620,7 +2620,7 @@ test("Thread store persists distinct same-cwd session bindings without legacy al
     assert.equal(store.hasWorkspaceBinding("/repo", "session-b"), true);
     assert.equal(store.hasWorkspaceBinding("/repo", "session-c"), false);
     await store.persist();
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.equal(restored.getWorkspaceBinding("/repo", "a"), undefined);
     assert.equal(
@@ -2634,7 +2634,7 @@ test("Thread store persists distinct same-cwd session bindings without legacy al
     const malformed = JSON.parse(await readFile(path, "utf8"));
     malformed.workspaceBindings[0].sessionKey = "f".repeat(64);
     await writeFile(path, JSON.stringify(malformed));
-    const rejected = createTelegramTopicTargetStore({ path });
+    const rejected = createBaleTopicTargetStore({ path });
     await rejected.load();
     assert.equal(
       rejected.getWorkspaceBinding("/repo", "a", "session-a"),
@@ -2650,18 +2650,18 @@ test("Thread store persists distinct same-cwd session bindings without legacy al
 });
 
 test("Acknowledged display titles persist separately and cannot cross target replacement", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-title-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-title-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const identity = createTelegramWorkspaceBindingIdentity("/repo")!;
+    const store = createBaleTopicTargetStore({ path });
+    const identity = createBaleWorkspaceBindingIdentity("/repo")!;
     const binding = { ...identity, target: { chatId: 7, threadId: 41 },
       slot: "A", threadName: "Anchor", updatedAtMs: 1 };
     store.upsertWorkspaceBinding(binding);
     assert.equal(store.setWorkspaceDisplayTitle(binding, "repo_a"), true);
     store.upsertWorkspaceBinding(binding);
     await store.persist();
-    const reopened = createTelegramTopicTargetStore({ path });
+    const reopened = createBaleTopicTargetStore({ path });
     await reopened.load();
     const retained = reopened.getWorkspaceBinding("/repo")!;
     assert.equal(retained.displayTitle, "repo_a");
@@ -2676,12 +2676,12 @@ test("Acknowledged display titles persist separately and cannot cross target rep
 });
 
 test("Workspace inactivity persists its first proof, survives stale upserts, and clears only on active ownership or replacement", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-inactivity-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-inactivity-"));
   const path = join(dir, "state.json");
   let nowMs = 1000;
   try {
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => nowMs });
-    const identity = createTelegramWorkspaceBindingIdentity("/repo")!;
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => nowMs });
+    const identity = createBaleWorkspaceBindingIdentity("/repo")!;
     const binding = { ...identity, target: { chatId: 7, threadId: 41 },
       slot: "A", threadName: "Anchor", updatedAtMs: 1 };
     store.upsertWorkspaceBinding(binding);
@@ -2691,13 +2691,13 @@ test("Workspace inactivity persists its first proof, survives stale upserts, and
     store.upsertWorkspaceBinding(binding);
     assert.equal(store.getWorkspaceBinding("/repo")?.inactiveSinceMs, 1000);
     await store.persist();
-    const reopened = createTelegramTopicTargetStore({ path });
+    const reopened = createBaleTopicTargetStore({ path });
     await reopened.load();
     assert.equal(reopened.getWorkspaceBinding("/repo")?.inactiveSinceMs, 1000);
     const malformedSnapshot = JSON.parse(await readFile(path, "utf8"));
     malformedSnapshot.workspaceBindings[0].inactiveSinceMs = "legacy-unknown";
     await writeFile(path, JSON.stringify(malformedSnapshot));
-    const conservative = createTelegramTopicTargetStore({ path });
+    const conservative = createBaleTopicTargetStore({ path });
     await conservative.load();
     assert.equal(conservative.getWorkspaceBinding("/repo")?.threadName, "Anchor");
     assert.equal(conservative.getWorkspaceBinding("/repo")?.inactiveSinceMs, undefined);
@@ -2715,15 +2715,15 @@ test("Workspace inactivity persists its first proof, survives stale upserts, and
 });
 
 test("Only exact confirmed absence starts Workspace inactivity, including binding-only recovery", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-absence-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-absence-"));
   const path = join(dir, "state.json");
   let nowMs = 1000;
   try {
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => nowMs });
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => nowMs });
     const target = { chatId: 7, threadId: 41 };
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo")!,
       target, slot: "A", updatedAtMs: 1 });
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/other")!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/other")!,
       target: { chatId: 8, threadId: 41 }, slot: "B", updatedAtMs: 1 });
     store.upsert({ profileKey: "cwd:/repo", instanceId: "leader", target,
       status: "active", createdAtMs: 1, updatedAtMs: 1 });
@@ -2736,7 +2736,7 @@ test("Only exact confirmed absence starts Workspace inactivity, including bindin
     nowMs = 2000;
     assert.equal(store.markStaleByTarget(target, "deleted"), false);
     await store.persist();
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.equal(restored.getWorkspaceBinding("/repo")?.inactiveSinceMs, 1000);
     assert.equal(restored.getWorkspaceBinding("/other")?.inactiveSinceMs, undefined);
@@ -2745,11 +2745,11 @@ test("Only exact confirmed absence starts Workspace inactivity, including bindin
 });
 
 test("Inactive Workspace cleanup commit removes only one exact unprotected binding", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-cleanup-commit-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-cleanup-commit-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/cleanup")!,
+    const store = createBaleTopicTargetStore({ path });
+    const binding = { ...createBaleWorkspaceBindingIdentity("/cleanup")!,
       target: { chatId: 7, threadId: 41 }, slot: "A", threadName: "Anchor",
       inactiveSinceMs: 10, updatedAtMs: 20 };
     store.upsertWorkspaceBinding(binding);
@@ -2762,17 +2762,17 @@ test("Inactive Workspace cleanup commit removes only one exact unprotected bindi
       bindingUpdatedAtMs: 21 }, () => true), false);
     assert.equal(await store.commitInactiveWorkspaceCleanup(cleanupSnapshot, () => true), true);
     assert.equal(await store.commitInactiveWorkspaceCleanup(cleanupSnapshot, () => true), true);
-    const reopened = createTelegramTopicTargetStore({ path });
+    const reopened = createBaleTopicTargetStore({ path });
     await reopened.load();
     assert.equal(reopened.getWorkspaceBinding("/cleanup"), undefined);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Slotless cleanup commits require explicit absence, exact identity and current authority", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-slotless-commit-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-slotless-commit-"));
   try {
-    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/cleanup")!,
+    const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+    const binding = { ...createBaleWorkspaceBindingIdentity("/cleanup")!,
       target: { chatId: 7, threadId: 41 }, threadName: "Anchor", inactiveSinceMs: 10, updatedAtMs: 20 };
     store.upsertWorkspaceBinding(binding);
     await store.persist();
@@ -2788,13 +2788,13 @@ test("Slotless cleanup commits require explicit absence, exact identity and curr
 });
 
 test("Inactive Workspace cleanup cannot cross same-cwd session identity", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-session-cleanup-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-session-cleanup-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const first = { ...createTelegramWorkspaceBindingIdentity("/cleanup", 0, "session-a")!,
+    const store = createBaleTopicTargetStore({ path });
+    const first = { ...createBaleWorkspaceBindingIdentity("/cleanup", 0, "session-a")!,
       target: { chatId: 7, threadId: 41 }, slot: "A", inactiveSinceMs: 10, updatedAtMs: 20 };
-    const second = { ...createTelegramWorkspaceBindingIdentity("/cleanup", 0, "session-b")!,
+    const second = { ...createBaleWorkspaceBindingIdentity("/cleanup", 0, "session-b")!,
       target: { chatId: 7, threadId: 42 }, slot: "B", inactiveSinceMs: 11, updatedAtMs: 21 };
     store.upsertWorkspaceBinding(first);
     store.upsertWorkspaceBinding(second);
@@ -2813,9 +2813,9 @@ test("Inactive Workspace cleanup cannot cross same-cwd session identity", async 
 });
 
 test("Inactive Workspace cleanup recovers binding publication before and after rename", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-cleanup-prefix-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-cleanup-prefix-"));
   try {
-    const makeBinding = () => ({ ...createTelegramWorkspaceBindingIdentity("/cleanup-prefix")!,
+    const makeBinding = () => ({ ...createBaleWorkspaceBindingIdentity("/cleanup-prefix")!,
       target: { chatId: 7, threadId: 41 }, slot: "A", threadName: "Anchor",
       inactiveSinceMs: 10, updatedAtMs: 20 });
     const snapshot = (binding: ReturnType<typeof makeBinding>) => ({ cwd: binding.cwd,
@@ -2825,7 +2825,7 @@ test("Inactive Workspace cleanup recovers binding publication before and after r
 
     let boundary: "normal" | "before" | "after" = "normal";
     const path = join(dir, "before.json");
-    const store = createTelegramTopicTargetStore({ path, commitPersist(commit) {
+    const store = createBaleTopicTargetStore({ path, commitPersist(commit) {
       if (boundary === "before") return false;
       commit();
       if (boundary === "after") throw new Error("lost binding commit acknowledgement");
@@ -2842,7 +2842,7 @@ test("Inactive Workspace cleanup recovers binding publication before and after r
 
     const afterPath = join(dir, "after.json");
     boundary = "normal";
-    const after = createTelegramTopicTargetStore({ path: afterPath, commitPersist(commit) {
+    const after = createBaleTopicTargetStore({ path: afterPath, commitPersist(commit) {
       commit();
       if (boundary === "after") throw new Error("lost binding commit acknowledgement");
       return true;
@@ -2853,25 +2853,25 @@ test("Inactive Workspace cleanup recovers binding publication before and after r
     boundary = "after";
     assert.equal(await after.commitInactiveWorkspaceCleanup(snapshot(afterBinding), () => true), true);
     assert.equal(after.getWorkspaceBinding("/cleanup-prefix"), undefined);
-    const reopened = createTelegramTopicTargetStore({ path: afterPath });
+    const reopened = createBaleTopicTargetStore({ path: afterPath });
     await reopened.load();
     assert.equal(reopened.getWorkspaceBinding("/cleanup-prefix"), undefined);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Workspace journal keys accumulate while legacy completeness cannot be invented by registration", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-journal-keys-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-journal-keys-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const current = { ...createTelegramWorkspaceBindingIdentity("/current")!,
+    const store = createBaleTopicTargetStore({ path });
+    const current = { ...createBaleWorkspaceBindingIdentity("/current")!,
       target: { chatId: 7, threadId: 41 }, slot: "A", threadName: "Anchor",
       journalBindingKeys: [] as string[], journalBindingsComplete: true as const, updatedAtMs: 1 };
     store.upsertWorkspaceBinding(current);
     store.upsertWorkspaceBinding({ ...current, journalBindingKeys: ["manual:first"], updatedAtMs: 2 });
     store.upsertWorkspaceBinding({ ...current, journalBindingKeys: ["manual:second", "manual:first"],
       journalBindingsComplete: undefined, updatedAtMs: 3 });
-    const legacy = { ...createTelegramWorkspaceBindingIdentity("/legacy")!,
+    const legacy = { ...createBaleWorkspaceBindingIdentity("/legacy")!,
       target: { chatId: 7, threadId: 42 }, slot: "B", threadName: "Briar", updatedAtMs: 1 };
     store.upsertWorkspaceBinding(legacy);
     store.upsertWorkspaceBinding({ ...legacy, journalBindingKeys: ["manual:current"],
@@ -2879,15 +2879,15 @@ test("Workspace journal keys accumulate while legacy completeness cannot be inve
     for (const complete of [undefined, true] as const) {
       const cwd = complete ? "/known-rekey" : "/unknown-rekey";
       const target = { chatId: 7, threadId: complete ? 43 : 44 }, slot = complete ? "C" : "D";
-      store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity(cwd, 0, "before")!, target, slot,
+      store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity(cwd, 0, "before")!, target, slot,
         journalBindingKeys: ["manual:retained"], journalBindingsComplete: complete, updatedAtMs: 1,
         journalSources: [{ sessionId: "before", recipientBindingKey: "manual:retained" }] });
-      assert.ok(store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity(cwd, 0, "after")!, target, slot,
+      assert.ok(store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity(cwd, 0, "after")!, target, slot,
         journalBindingKeys: ["manual:retained", "manual:new"], journalBindingsComplete: true, updatedAtMs: 2,
         journalSources: [{ sessionId: "after", recipientBindingKey: "manual:new" }] }));
     }
     await store.persist();
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.deepEqual(restored.getWorkspaceBinding("/current")?.journalBindingKeys,
       ["manual:first", "manual:second"]);
@@ -2910,11 +2910,11 @@ test("Workspace journal keys accumulate while legacy completeness cannot be inve
 });
 
 test("Workspace session journal evidence accumulates exact tuples and survives detached reads and cold load", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-journal-sources-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-journal-sources-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session-b")!,
+    const store = createBaleTopicTargetStore({ path });
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo", 0, "session-b")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", updatedAtMs: 1 };
     const oldSource = { sessionId: "session-a", recipientBindingKey: "manual:same-process" };
     const newSource = { sessionId: "session-b", recipientBindingKey: "manual:same-process" };
@@ -2927,12 +2927,12 @@ test("Workspace session journal evidence accumulates exact tuples and survives d
     assert.deepEqual(current.journalSources, [oldSource, newSource]);
     assert.ok(store.commitWorkspaceJournalEvidence(current, [], false));
     await store.persist();
-    const cold = createTelegramTopicTargetStore({ path });
+    const cold = createBaleTopicTargetStore({ path });
     await cold.load();
     assert.deepEqual(cold.listWorkspaceBindings()[0]?.journalSources, [oldSource, newSource],
       "Legacy-key pruning cannot erase exact session addresses");
     const successor = cold.upsertWorkspaceBinding({ ...binding,
-      ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session-c")!,
+      ...createBaleWorkspaceBindingIdentity("/repo", 0, "session-c")!,
       journalSources: [{ sessionId: "session-c", recipientBindingKey: "manual:same-process" }] });
     assert.deepEqual(successor?.journalSources, [oldSource, newSource,
       { sessionId: "session-c", recipientBindingKey: "manual:same-process" }],
@@ -2941,11 +2941,11 @@ test("Workspace session journal evidence accumulates exact tuples and survives d
 });
 
 test("Malformed or over-capacity session journal evidence cannot erase a retained Workspace", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-journal-invalid-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-journal-invalid-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const binding = { ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session")!,
+    const store = createBaleTopicTargetStore({ path });
+    const binding = { ...createBaleWorkspaceBindingIdentity("/repo", 0, "session")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", updatedAtMs: 1 };
     const sources = Array.from({ length: 256 }, (_, index) => ({ sessionId: `session-${index}`, recipientBindingKey: "manual:recipient" }));
     const retained = store.upsertWorkspaceBinding({ ...binding, journalSources: sources })!;
@@ -2963,7 +2963,7 @@ test("Malformed or over-capacity session journal evidence cannot erase a retaine
       const corrupt = JSON.parse(original);
       corrupt.workspaceBindings[0].journalSources = evidence;
       await writeFile(path, JSON.stringify(corrupt));
-      const cold = createTelegramTopicTargetStore({ path });
+      const cold = createBaleTopicTargetStore({ path });
       await assert.rejects(cold.load(), /Invalid Workspace session journal evidence/);
       assert.equal(JSON.parse(await readFile(path, "utf8")).workspaceBindings.length, 1,
         "Cold refusal does not rewrite malformed evidence into an empty Workspace");
@@ -2972,7 +2972,7 @@ test("Malformed or over-capacity session journal evidence cannot erase a retaine
 });
 
 test("Workspace occupancy snapshot fails closed across local operations and external work authority", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json", getNowMs: () => 1000 });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json", getNowMs: () => 1000 });
   for (const [cwd, slot, threadId, inactiveSinceMs] of [
     ["/eligible", "A", 41, 100], ["/live", "B", 42, 100],
     ["/claimed", "C", 43, 100], ["/provisioning", "D", 44, 100],
@@ -2981,7 +2981,7 @@ test("Workspace occupancy snapshot fails closed across local operations and exte
     ["/reserved", "I", 49, 100], ["/future-proof", "J", 50, 1100],
     ["/external-live", "K", 51, 100],
   ] as const) {
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity(cwd)!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity(cwd)!,
       target: { chatId: 7, threadId }, slot, threadName: "Anchor",
       ...(inactiveSinceMs !== undefined ? { inactiveSinceMs } : {}), updatedAtMs: 1 });
   }
@@ -3013,10 +3013,10 @@ test("Workspace occupancy snapshot fails closed across local operations and exte
 });
 
 test("Workspace claims report only proven global slot exhaustion as capacity failure", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   for (const [index, slot] of Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").entries()) {
     store.upsertWorkspaceBinding({
-      ...createTelegramWorkspaceBindingIdentity(`/repo/${index}`)!,
+      ...createBaleWorkspaceBindingIdentity(`/repo/${index}`)!,
       target: { chatId: 7, threadId: 100 + index }, slot,
       inactiveSinceMs: index + 1, updatedAtMs: index + 1,
     });
@@ -3037,11 +3037,11 @@ test("Workspace claims report only proven global slot exhaustion as capacity fai
 });
 
 test("Workspace retirement intents persist an exact binding and protect it until exact removal", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-retirement-intent-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-retirement-intent-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const binding = { ...createTelegramWorkspaceBindingIdentity(
+    const store = createBaleTopicTargetStore({ path });
+    const binding = { ...createBaleWorkspaceBindingIdentity(
       "/repo", 0, "session-a",
     )!, target: { chatId: 7, threadId: 41 }, slot: "A", threadName: "Anchor",
       inactiveSinceMs: 100, updatedAtMs: 200 };
@@ -3052,7 +3052,7 @@ test("Workspace retirement intents persist an exact binding and protect it until
     assert.equal(store.upsertWorkspaceRetirementIntent(structuredClone(intent)), true);
     assert.equal(store.upsertWorkspaceRetirementIntent({ ...intent, id: "retire:other" }), false);
     await store.persist();
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.deepEqual(restored.listWorkspaceRetirementIntents(), [intent]);
     assert.equal(restored.claimWorkspaceIdentity("/repo", "returning", undefined,
@@ -3089,12 +3089,12 @@ test("Workspace retirement intents persist an exact binding and protect it until
 });
 
 test("Workspace suffix exposure persists after multiplicity, stale upserts, and sibling retirement", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-display-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-display-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const first = createTelegramWorkspaceBindingIdentity("/repo");
-    const second = createTelegramWorkspaceBindingIdentity("/repo", 1);
+    const store = createBaleTopicTargetStore({ path });
+    const first = createBaleWorkspaceBindingIdentity("/repo");
+    const second = createBaleWorkspaceBindingIdentity("/repo", 1);
     assert.ok(first);
     assert.ok(second);
     const firstBinding = { ...first, target: { chatId: 7, threadId: 41 },
@@ -3112,7 +3112,7 @@ test("Workspace suffix exposure persists after multiplicity, stale upserts, and 
       (binding: { bindingKey: string }) => binding.bindingKey === first.bindingKey,
     );
     await writeFile(path, JSON.stringify(snapshot));
-    const reopened = createTelegramTopicTargetStore({ path });
+    const reopened = createBaleTopicTargetStore({ path });
     await reopened.load();
     assert.equal(reopened.listWorkspaceBindings().length, 1);
     assert.equal(reopened.getWorkspaceBinding("/repo")?.showSlotSuffix, true);
@@ -3123,9 +3123,9 @@ test("Workspace suffix exposure persists after multiplicity, stale upserts, and 
 });
 
 test("Thread store rejects readable-key collisions across exact cwd values", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
-  const first = createTelegramWorkspaceBindingIdentity("/repo/a-b");
-  const colliding = createTelegramWorkspaceBindingIdentity("/repo/a/b");
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
+  const first = createBaleWorkspaceBindingIdentity("/repo/a-b");
+  const colliding = createBaleWorkspaceBindingIdentity("/repo/a/b");
   assert.ok(first);
   assert.ok(colliding);
   assert.equal(first.workspaceKey, colliding.workspaceKey);
@@ -3147,7 +3147,7 @@ test("Thread store rejects readable-key collisions across exact cwd values", () 
 });
 
 test("Workspace claims allocate deterministic concurrent slots and release them", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   const cwd = "/home/llb/.pi/agent/extensions";
   assert.equal(store.claimWorkspaceIdentity(cwd, "instance-a")?.bindingKey,
     "--home-llb-.pi-agent-extensions--");
@@ -3166,7 +3166,7 @@ test("Workspace claims allocate deterministic concurrent slots and release them"
 });
 
 test("Workspace claims transfer an exact previous runtime claim during reload", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   const previous = store.claimWorkspaceIdentity("/repo", "instance-old");
   assert.ok(previous);
   assert.deepEqual(
@@ -3189,7 +3189,7 @@ test("Workspace claims transfer an exact previous runtime claim during reload", 
 });
 
 test("Workspace claims keep same-cwd sessions stable and independently slotted", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   const first = store.claimWorkspaceIdentity("/repo", "instance-a", undefined,
     { sessionId: "session-a" });
   const repeated = store.claimWorkspaceIdentity("/repo", "instance-a", undefined,
@@ -3218,7 +3218,7 @@ test("Workspace claims keep same-cwd sessions stable and independently slotted",
 });
 
 test("Session replacement intent persists exactly once and clears only by exact CAS", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-session-replacement-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-session-replacement-"));
   const path = join(dir, "state.json");
   const intent = {
     continuity: "workspace-thread" as const,
@@ -3227,34 +3227,34 @@ test("Session replacement intent persists exactly once and clears only by exact 
     slot: "A", threadName: "Anchor", createdAtMs: 1000, expiresAtMs: 31_000,
   };
   try {
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
     assert.equal(await store.commitSessionReplacementIntent(intent, () => true), true);
     assert.equal(await store.commitSessionReplacementIntent(
       { ...intent, sourceUpdateId: 42 }, () => true,
     ), false);
-    const reopened = createTelegramTopicTargetStore({ path, getNowMs: () => 2000 });
+    const reopened = createBaleTopicTargetStore({ path, getNowMs: () => 2000 });
     await reopened.load();
     assert.deepEqual(reopened.getSessionReplacementIntent(), intent);
     assert.equal(await reopened.removeSessionReplacementIntent(
       { ...intent, messageId: 100 }, () => true,
     ), false);
     assert.equal(await reopened.removeSessionReplacementIntent(intent, () => true), true);
-    const cleared = createTelegramTopicTargetStore({ path });
+    const cleared = createBaleTopicTargetStore({ path });
     await cleared.load();
     assert.equal(cleared.getSessionReplacementIntent(), undefined);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Classic session replacement intent persists without mutating Workspace bindings", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-classic-session-replacement-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-classic-session-replacement-"));
   const path = join(dir, "state.json");
   const intent = { continuity: "classic-chat" as const, cwd: "/repo",
     profileName: "default", sourceSessionId: "session-old", sourceUpdateId: 41,
     target: { chatId: 7 }, messageId: 99, createdAtMs: 1000, expiresAtMs: 31_000 };
   try {
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
     assert.equal(await store.commitSessionReplacementIntent(intent, () => true), true);
-    const reopened = createTelegramTopicTargetStore({ path, getNowMs: () => 2000 });
+    const reopened = createBaleTopicTargetStore({ path, getNowMs: () => 2000 });
     await reopened.load();
     assert.deepEqual(reopened.getSessionReplacementIntent(), intent);
     assert.equal(reopened.claimWorkspaceIdentity("/repo", "new", undefined,
@@ -3264,27 +3264,27 @@ test("Classic session replacement intent persists without mutating Workspace bin
 });
 
 test("Session replacement intent re-keys the exact Workspace binding for a successor process", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-session-rekey-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-session-rekey-"));
   const path = join(dir, "state.json");
   try {
-    const seed = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
-    const oldIdentity = createTelegramWorkspaceBindingIdentity("/repo", 0, "session-old")!;
+    const seed = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
+    const oldIdentity = createBaleWorkspaceBindingIdentity("/repo", 0, "session-old")!;
     const target = { chatId: 7, threadId: 42 };
     seed.upsertWorkspaceBinding({ ...oldIdentity, target, slot: "C", threadName: "Cedar",
       journalSources: [{ sessionId: "session-old", recipientBindingKey: "manual:same-process" }], updatedAtMs: 1 });
-    seed.upsert({ profileKey: "profile:default:cwd:/repo", owner: { kind: "leader", cwd: "/repo", instanceId: "old", telegramProfile: "default" }, instanceId: "old", target, status: "active", createdAtMs: 1, updatedAtMs: 1, slot: "C", threadName: "Cedar" });
+    seed.upsert({ profileKey: "profile:default:cwd:/repo", owner: { kind: "leader", cwd: "/repo", instanceId: "old", baleProfile: "default" }, instanceId: "old", target, status: "active", createdAtMs: 1, updatedAtMs: 1, slot: "C", threadName: "Cedar" });
     await seed.persist();
     const intent = { continuity: "workspace-thread" as const, cwd: "/repo", profileName: "default", sourceSessionId: "session-old", sourceUpdateId: 41, target, messageId: 99, slot: "C", threadName: "Cedar", createdAtMs: 1000, expiresAtMs: 31_000 };
     assert.equal(await seed.commitSessionReplacementIntent(intent, () => true), true);
 
-    const successor = createTelegramTopicTargetStore({ path, getNowMs: () => 2000 });
+    const successor = createBaleTopicTargetStore({ path, getNowMs: () => 2000 });
     await successor.load();
     const claimed = successor.claimWorkspaceIdentity("/repo", "new", undefined, { sessionId: "session-new", existingBindingOnly: true });
     assert.equal(claimed?.slot, "C");
     assert.equal(successor.getWorkspaceBinding("/repo", "a", "session-old"), undefined);
     assert.deepEqual(successor.getWorkspaceBinding("/repo", "a", "session-new")?.target, target);
     await successor.persist();
-    const reopened = createTelegramTopicTargetStore({ path });
+    const reopened = createBaleTopicTargetStore({ path });
     await reopened.load();
     assert.deepEqual(reopened.getWorkspaceBinding("/repo", "a", "session-new")?.target, target);
     assert.deepEqual(reopened.getWorkspaceBinding("/repo", "a", "session-new")?.journalSources,
@@ -3294,11 +3294,11 @@ test("Session replacement intent re-keys the exact Workspace binding for a succe
 });
 
 test("Follower-published replacement intent re-keys only for its exact source instance lineage", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-follower-session-rekey-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-follower-session-rekey-"));
   const path = join(dir, "state.json");
   try {
-    const seed = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
-    const oldIdentity = createTelegramWorkspaceBindingIdentity("/repo", 0, "session-old")!;
+    const seed = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
+    const oldIdentity = createBaleWorkspaceBindingIdentity("/repo", 0, "session-old")!;
     const target = { chatId: 7, threadId: 42 };
     seed.upsertWorkspaceBinding({ ...oldIdentity, target, slot: "C", threadName: "Cedar", updatedAtMs: 1 });
     await seed.persist();
@@ -3310,7 +3310,7 @@ test("Follower-published replacement intent re-keys only for its exact source in
       { ...intent, sourceInstanceId: "" }, () => true), false);
     assert.equal(await seed.commitSessionReplacementIntent(intent, () => true), true);
 
-    const successor = createTelegramTopicTargetStore({ path, getNowMs: () => 2000 });
+    const successor = createBaleTopicTargetStore({ path, getNowMs: () => 2000 });
     await successor.load();
     assert.deepEqual(successor.getSessionReplacementIntent(), intent);
     assert.equal(successor.claimWorkspaceIdentity("/repo", "intruder", undefined,
@@ -3327,7 +3327,7 @@ test("Follower-published replacement intent re-keys only for its exact source in
 });
 
 test("Workspace binding moves an existing Thread and slot to a replacement session", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   const previous = store.claimWorkspaceIdentity("/repo", "instance-old", undefined, {
     sessionId: "session-old",
   });
@@ -3365,7 +3365,7 @@ test("Workspace binding moves an existing Thread and slot to a replacement sessi
 });
 
 test("Workspace claims reserve global letters across directories and fence slot commits", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   const first = store.claimWorkspaceIdentity("/one", "first");
   const second = store.claimWorkspaceIdentity("/two", "second");
   assert.ok(first);
@@ -3386,44 +3386,44 @@ test("Workspace claims reserve global letters across directories and fence slot 
 });
 
 test("Global Workspace slots survive reload without rekeying legacy directory identities", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-global-workspace-slots-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-global-workspace-slots-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     for (const [cwd, slot, threadId] of [["/one", "A", 41], ["/two", "C", 42]] as const) {
-      const identity = createTelegramWorkspaceBindingIdentity(cwd);
+      const identity = createBaleWorkspaceBindingIdentity(cwd);
       assert.ok(identity);
       store.upsertWorkspaceBinding({
         ...identity, slot, target: { chatId: 7, threadId }, updatedAtMs: 1,
       });
     }
     await store.persist();
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     const before = restored.listWorkspaceBindings();
     assert.equal(restored.claimWorkspaceIdentity("/fresh", "fresh")?.slot, "B");
     assert.equal(restored.claimWorkspaceIdentity("/two", "returning")?.slot, "C");
     assert.deepEqual(restored.listWorkspaceBindings(), before);
     assert.equal(restored.getWorkspaceBinding("/two")?.bindingKey,
-      createTelegramWorkspaceBindingIdentity("/two")?.bindingKey);
+      createBaleWorkspaceBindingIdentity("/two")?.bindingKey);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
 
 test("Legacy missing global slots migrate only through an exact claim commit", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-legacy-missing-slot-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-legacy-missing-slot-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    const occupied = createTelegramWorkspaceBindingIdentity("/occupied")!;
-    const missing = createTelegramWorkspaceBindingIdentity("/missing")!;
+    const store = createBaleTopicTargetStore({ path });
+    const occupied = createBaleWorkspaceBindingIdentity("/occupied")!;
+    const missing = createBaleWorkspaceBindingIdentity("/missing")!;
     store.upsertWorkspaceBinding({ ...occupied, target: { chatId: 7, threadId: 41 },
       slot: "A", threadName: "Anchor", updatedAtMs: 1 });
     store.upsertWorkspaceBinding({ ...missing, target: { chatId: 7, threadId: 42 },
       threadName: "Briar", updatedAtMs: 1 });
     await store.persist();
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     const firstClaim = restored.claimWorkspaceIdentity("/missing/", "first", undefined,
       { existingBindingOnly: true });
@@ -3438,7 +3438,7 @@ test("Legacy missing global slots migrate only through an exact claim commit", a
       target: { chatId: 7, threadId: 42 }, threadName: "Briar", updatedAtMs: 2,
     }, "retry"));
     await restored.persist();
-    const committed = createTelegramTopicTargetStore({ path });
+    const committed = createBaleTopicTargetStore({ path });
     await committed.load();
     assert.equal(committed.getWorkspaceBinding("/missing")?.slot, "B");
     assert.equal(committed.getWorkspaceBinding("/missing")?.instanceSlot, "a");
@@ -3450,24 +3450,24 @@ test("Legacy missing global slots migrate only through an exact claim commit", a
 });
 
 test("Legacy duplicate global slots migrate only the exact claimed binding", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-legacy-duplicate-slot-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-legacy-duplicate-slot-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/one")!,
+    const store = createBaleTopicTargetStore({ path });
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/one")!,
       target: { chatId: 7, threadId: 41 }, slot: "A", threadName: "Anchor", updatedAtMs: 1 });
     assert.equal(store.upsertWorkspaceBinding({
-      ...createTelegramWorkspaceBindingIdentity("/two")!,
+      ...createBaleWorkspaceBindingIdentity("/two")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", threadName: "Briar", updatedAtMs: 1,
     }), undefined);
     await store.persist();
     const legacySnapshot = JSON.parse(await readFile(path, "utf8"));
     legacySnapshot.workspaceBindings.push({
-      ...createTelegramWorkspaceBindingIdentity("/two")!,
+      ...createBaleWorkspaceBindingIdentity("/two")!,
       target: { chatId: 7, threadId: 42 }, slot: "A", threadName: "Briar", updatedAtMs: 1,
     });
     await writeFile(path, JSON.stringify(legacySnapshot));
-    const restored = createTelegramTopicTargetStore({ path });
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     const before = restored.listWorkspaceBindings();
     assert.equal(restored.claimWorkspaceIdentity("/fresh", "fresh"), undefined);
@@ -3493,7 +3493,7 @@ test("Legacy duplicate global slots migrate only the exact claimed binding", asy
 });
 
 test("Workspace capacity protects all 26 live claims instead of extending or evicting", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   for (let index = 0; index < 26; index++) {
     assert.equal(store.claimWorkspaceIdentity(`/repo/${index}`, `instance-${index}`)?.slot,
       String.fromCharCode(65 + index));
@@ -3505,7 +3505,7 @@ test("Workspace capacity protects all 26 live claims instead of extending or evi
 });
 
 test("Workspace restore-only claims reuse bindings without allocating new identities", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
 
   assert.equal(
     store.claimWorkspaceIdentity("/fresh", "fresh", undefined, {
@@ -3540,7 +3540,7 @@ test("Workspace restore-only claims reuse bindings without allocating new identi
   );
   assert.equal(store.listWorkspaceBindings().length, 1);
 
-  const legacyStore = createTelegramTopicTargetStore({
+  const legacyStore = createBaleTopicTargetStore({
     path: "/unused/legacy-state.json",
   });
   legacyStore.upsert({
@@ -3569,8 +3569,8 @@ test("Workspace restore-only claims reuse bindings without allocating new identi
 });
 
 test("Session claim treats the legacy cwd-only binding as a distinct identity", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
-  const legacy = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
+  const legacy = { ...createBaleWorkspaceBindingIdentity("/repo")!,
     target: { chatId: 7, threadId: 41 }, slot: "C", threadName: "Cedar",
     updatedAtMs: 1 };
   store.upsertWorkspaceBinding(legacy);
@@ -3590,18 +3590,18 @@ test("Session claim treats the legacy cwd-only binding as a distinct identity", 
 });
 
 test("Legacy and session bindings coexist across reload and stale snapshot persistence", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-session-adoption-reload-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-session-adoption-reload-"));
   const path = join(dir, "state.json");
   try {
-    const seed = createTelegramTopicTargetStore({ path });
-    const legacy = { ...createTelegramWorkspaceBindingIdentity("/repo")!,
+    const seed = createBaleTopicTargetStore({ path });
+    const legacy = { ...createBaleWorkspaceBindingIdentity("/repo")!,
       target: { chatId: 7, threadId: 41 }, slot: "C", threadName: "Cedar",
       updatedAtMs: 1 };
     seed.upsertWorkspaceBinding(legacy);
     await seed.persist();
 
-    const stale = createTelegramTopicTargetStore({ path });
-    const adopter = createTelegramTopicTargetStore({ path });
+    const stale = createBaleTopicTargetStore({ path });
+    const adopter = createBaleTopicTargetStore({ path });
     await stale.load();
     await adopter.load();
     const identity = adopter.claimWorkspaceIdentity("/repo", "resume", undefined,
@@ -3612,7 +3612,7 @@ test("Legacy and session bindings coexist across reload and stale snapshot persi
 
     stale.setStatusSnapshot({ runtime: { busRole: "follower" } });
     await stale.persist();
-    const reopened = createTelegramTopicTargetStore({ path });
+    const reopened = createBaleTopicTargetStore({ path });
     await reopened.load();
     assert.equal(reopened.listWorkspaceBindings().length, 2);
     assert.equal(reopened.getWorkspaceBinding("/repo")?.slot, "C");
@@ -3635,7 +3635,7 @@ test("Legacy and session bindings coexist across reload and stale snapshot persi
 });
 
 test("Explicit same-cwd claims skip a live leader binding without migrating its target", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   const leaderIdentity = store.claimWorkspaceIdentity("/repo", "leader");
   assert.ok(leaderIdentity);
   store.upsertWorkspaceBinding({
@@ -3669,9 +3669,9 @@ test("Explicit same-cwd claims skip a live leader binding without migrating its 
 });
 
 test("Retained Workspace admission fences reserve slots across allocation paths", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-fence-slots-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-fence-slots-"));
   try {
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "admission.json"),
       profileKey: "default",
       owner: {
@@ -3690,7 +3690,7 @@ test("Retained Workspace admission fences reserve slots across allocation paths"
       retirementRequestedAtMs: 1,
     });
     assert.equal(fence.kind, "acquired");
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path: join(dir, "state.json"),
       getExternalReservedSlots: admission.listReservedSlots,
     });
@@ -3720,7 +3720,7 @@ test("Unverifiable external slot reservations fail allocation closed", () => {
     },
   ]) {
     let capacityUnavailable = false;
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path: "/unused/state.json",
       getExternalReservedSlots,
     });
@@ -3743,7 +3743,7 @@ test("Unverifiable external slot reservations fail allocation closed", () => {
 });
 
 test("Generic allocation cannot reuse a transient Workspace claim slot", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   assert.equal(store.claimWorkspaceIdentity("/claimed", "claim-owner")?.slot, "A");
   assert.equal(store.allocateSlot("manual:other"), "B");
   store.releaseWorkspaceClaim("claim-owner");
@@ -3751,7 +3751,7 @@ test("Generic allocation cannot reuse a transient Workspace claim slot", () => {
 });
 
 test("Workspace claims preserve live bindings and disambiguate readable-key collisions", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   const first = store.claimWorkspaceIdentity("/repo/a-b", "instance-a");
   const colliding = store.claimWorkspaceIdentity("/repo/a/b", "instance-b");
   assert.ok(first);
@@ -3782,7 +3782,7 @@ test("Workspace claims preserve live bindings and disambiguate readable-key coll
 });
 
 test("Workspace claims migrate legacy cwd and concurrent manual bindings", () => {
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: "/unused/state.json",
     getNowMs: () => 2000,
   });
@@ -3852,7 +3852,7 @@ test("Workspace claims migrate legacy cwd and concurrent manual bindings", () =>
 });
 
 test("Workspace binding commit is fenced by its exact transient claim", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
   const identity = store.claimWorkspaceIdentity("/repo", "instance-a");
   assert.ok(identity);
   const binding = {
@@ -3878,10 +3878,10 @@ test("Workspace binding commit is fenced by its exact transient claim", () => {
 });
 
 test("Thread store persists explicit owner target mappings privately", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-threads-"));
-  const path = join(dir, "telegram-targets.json");
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-threads-"));
+  const path = join(dir, "bale-targets.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     store.upsert({
       profileKey: "cwd:/repo",
       target: { chatId: -1001, threadId: 42 },
@@ -3899,7 +3899,7 @@ test("Thread store persists explicit owner target mappings privately", async () 
       assert.equal(mode, 0o600);
     }
 
-    const reloaded = createTelegramTopicTargetStore({ path });
+    const reloaded = createBaleTopicTargetStore({ path });
     await reloaded.load();
     const file = JSON.parse(await readFile(path, "utf8")) as {
       source?: string;
@@ -3932,10 +3932,10 @@ test("Thread store persists explicit owner target mappings privately", async () 
 });
 
 test("Thread store persists status snapshot sections separately from threads", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     store.setStatusSnapshot({
       runtime: { busRole: "leader", instanceSlot: "B" },
       liveRoster: { busFollowers: [], reservations: [{ slot: "A" }] },
@@ -3983,10 +3983,10 @@ test("Thread store persists status snapshot sections separately from threads", a
 });
 
 test("Thread store status snapshot persist preserves unloaded thread records", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-"));
   const path = join(dir, "state.json");
   try {
-    const seeded = createTelegramTopicTargetStore({
+    const seeded = createBaleTopicTargetStore({
       path,
       getNowMs: () => 1000,
     });
@@ -4009,7 +4009,7 @@ test("Thread store status snapshot persist preserves unloaded thread records", a
     });
     await seeded.persist();
 
-    const statusOnly = createTelegramTopicTargetStore({
+    const statusOnly = createBaleTopicTargetStore({
       path,
       getNowMs: () => 2000,
     });
@@ -4020,7 +4020,7 @@ test("Thread store status snapshot persist preserves unloaded thread records", a
     await statusOnly.persistStatus();
     assert.equal(await readFile(path, "utf8"), canonicalBytes, "a status write never rewrites canonical state");
 
-    const reloaded = createTelegramTopicTargetStore({
+    const reloaded = createBaleTopicTargetStore({
       path,
       getNowMs: () => 2000,
     });
@@ -4038,10 +4038,10 @@ test("Thread store status snapshot persist preserves unloaded thread records", a
 });
 
 test("Thread store stale status writer refreshes current bindings before persist", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-"));
   const path = join(dir, "state.json");
   try {
-    const leader = createTelegramTopicTargetStore({ path });
+    const leader = createBaleTopicTargetStore({ path });
     leader.upsert({
       profileKey: "cwd:/leader",
       target: { chatId: 7, threadId: 42 },
@@ -4053,7 +4053,7 @@ test("Thread store stale status writer refreshes current bindings before persist
     });
     await leader.persist();
 
-    const staleStatusWriter = createTelegramTopicTargetStore({ path });
+    const staleStatusWriter = createBaleTopicTargetStore({ path });
     await staleStatusWriter.load();
     leader.upsert({
       profileKey: "manual:follower-b",
@@ -4072,7 +4072,7 @@ test("Thread store stale status writer refreshes current bindings before persist
     });
     await staleStatusWriter.persistStatus();
 
-    const reloaded = createTelegramTopicTargetStore({ path });
+    const reloaded = createBaleTopicTargetStore({ path });
     await reloaded.load();
     assert.equal(
       reloaded.getByProfileKey("manual:follower-b")?.target.threadId,
@@ -4089,10 +4089,10 @@ test("Thread store stale status writer refreshes current bindings before persist
 });
 
 test("Thread store denies follower writes until transport ownership promotes", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-"));
   const path = join(dir, "state.json");
   try {
-    const leader = createTelegramTopicTargetStore({ path });
+    const leader = createBaleTopicTargetStore({ path });
     leader.upsert({
       profileKey: "cwd:/leader",
       target: { chatId: 7, threadId: 42 },
@@ -4105,7 +4105,7 @@ test("Thread store denies follower writes until transport ownership promotes", a
     await leader.persist();
 
     let ownsTransport = false;
-    const follower = createTelegramTopicTargetStore({
+    const follower = createBaleTopicTargetStore({
       path,
       canPersist: () => ownsTransport,
     });
@@ -4122,7 +4122,7 @@ test("Thread store denies follower writes until transport ownership promotes", a
     });
     await follower.persist();
 
-    let reloaded = createTelegramTopicTargetStore({ path });
+    let reloaded = createBaleTopicTargetStore({ path });
     await reloaded.load();
     assert.equal(reloaded.getByProfileKey("manual:follower-e"), undefined);
     assert.equal(follower.getByProfileKey("manual:follower-e"), undefined);
@@ -4140,7 +4140,7 @@ test("Thread store denies follower writes until transport ownership promotes", a
     });
     await follower.persist();
 
-    reloaded = createTelegramTopicTargetStore({ path });
+    reloaded = createBaleTopicTargetStore({ path });
     await reloaded.load();
     assert.equal(
       reloaded.getByProfileKey("manual:follower-c")?.target.threadId,
@@ -4152,17 +4152,17 @@ test("Thread store denies follower writes until transport ownership promotes", a
 });
 
 test("Thread store snapshot commit is fenced by exact transport ownership", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-fence-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-fence-"));
   const path = join(dir, "state.json");
   const ownersPath = join(dir, "owners.json");
   try {
-    const owner = createTelegramLockRuntime({
+    const owner = createBaleLockRuntime({
       locksPath: ownersPath,
       instanceId: "leader:first",
     });
     const acquired = owner.acquire({ cwd: "/repo" });
     assert.equal(acquired.ok, true);
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       canPersist: () => true,
       commitPersist: (commit) => owner.commitIfOwned(commit),
@@ -4187,7 +4187,7 @@ test("Thread store snapshot commit is fenced by exact transport ownership", asyn
       instanceId: "follower-b",
       slot: "B",
     });
-    const replacement = createTelegramLockRuntime({
+    const replacement = createBaleLockRuntime({
       locksPath: ownersPath,
       instanceId: "leader:replacement",
     });
@@ -4204,7 +4204,7 @@ test("Thread store snapshot commit is fenced by exact transport ownership", asyn
       /lost exact transport ownership before commit/,
     );
 
-    const reloaded = createTelegramTopicTargetStore({ path });
+    const reloaded = createBaleTopicTargetStore({ path });
     await reloaded.load();
     assert.equal(reloaded.getByProfileKey("cwd:/repo")?.target.threadId, 42);
     assert.equal(reloaded.getByProfileKey("manual:follower-b"), undefined);
@@ -4215,13 +4215,13 @@ test("Thread store snapshot commit is fenced by exact transport ownership", asyn
 });
 
 test("Thread store skips semantically unchanged state snapshots", async (t) => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-semantic-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-semantic-"));
   const path = join(dir, "state.json");
   const mkdirSpy = t.mock.method(fsPromises, "mkdir");
   syncBuiltinESMExports();
   try {
     let nowMs = 1000;
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => nowMs,
     });
@@ -4253,11 +4253,11 @@ test("Thread store skips semantically unchanged state snapshots", async (t) => {
 });
 
 test("Status projection writes follow transport ownership and a corrupt projection never blocks loading", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-status-owner-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-status-owner-"));
   const path = join(dir, "state.json");
   try {
     let owns = false;
-    const store = createTelegramTopicTargetStore({ path, canPersist: () => owns });
+    const store = createBaleTopicTargetStore({ path, canPersist: () => owns });
     store.setStatusSnapshot({ runtime: { busRole: "follower" } });
     await store.persistStatus();
     await assert.rejects(readFile(join(dir, "status.json"), "utf8"), /ENOENT/, "a store without transport ownership writes no projection");
@@ -4265,7 +4265,7 @@ test("Status projection writes follow transport ownership and a corrupt projecti
     await store.persistStatus();
     if (process.platform !== "win32") assert.equal((await stat(join(dir, "status.json"))).mode & 0o777, 0o600);
     await writeFile(join(dir, "status.json"), "{ not json");
-    const reloaded = createTelegramTopicTargetStore({ path });
+    const reloaded = createBaleTopicTargetStore({ path });
     await reloaded.load();
     assert.deepEqual(reloaded.list(), [], "recovery hints are optional and never canonical");
   } finally {
@@ -4274,11 +4274,11 @@ test("Status projection writes follow transport ownership and a corrupt projecti
 });
 
 test("Snapshot equality ignores object key order but preserves array order and JSON values", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-order-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-order-"));
   const path = join(dir, "state.json");
   try {
     let nowMs = 1000;
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => nowMs });
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => nowMs });
     const identity = store.claimWorkspaceIdentity("/repo", "instance-a")!;
     const target = { chatId: 7, threadId: 42 };
     store.upsertWorkspaceBinding({ ...identity, target, updatedAtMs: 1000 }, "instance-a");
@@ -4316,10 +4316,10 @@ test("Snapshot equality ignores object key order but preserves array order and J
 });
 
 test("Thread store load does not clobber unpersisted thread mutations", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-"));
   const path = join(dir, "state.json");
   try {
-    const seeded = createTelegramTopicTargetStore({ path });
+    const seeded = createBaleTopicTargetStore({ path });
     seeded.upsert({
       profileKey: "cwd:/repo",
       target: { chatId: 7, threadId: 42 },
@@ -4330,7 +4330,7 @@ test("Thread store load does not clobber unpersisted thread mutations", async ()
       slot: "A",
     });
     await seeded.persist();
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     await store.load();
     store.upsert({
       profileKey: "manual:follower-b",
@@ -4344,7 +4344,7 @@ test("Thread store load does not clobber unpersisted thread mutations", async ()
     });
     await store.load();
     await store.persist();
-    const reloaded = createTelegramTopicTargetStore({ path });
+    const reloaded = createBaleTopicTargetStore({ path });
     await reloaded.load();
     assert.equal(reloaded.getByProfileKey("cwd:/repo")?.target.threadId, 42);
     assert.equal(
@@ -4357,13 +4357,13 @@ test("Thread store load does not clobber unpersisted thread mutations", async ()
 });
 
 test("Thread store refresh discards stale local projections for owner-published capability", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-"));
   const path = join(dir, "state.json");
   try {
-    const owner = createTelegramTopicTargetStore({ path });
+    const owner = createBaleTopicTargetStore({ path });
     owner.setBotState({ threadMode: "disabled", updatedAtMs: 1000 });
     await owner.persist();
-    const observer = createTelegramTopicTargetStore({ path });
+    const observer = createBaleTopicTargetStore({ path });
     await observer.load();
     observer.setStatusSnapshot({ diagnostics: { local: "stale" } });
     owner.setBotState({ threadMode: "enabled", updatedAtMs: 2000 });
@@ -4380,11 +4380,11 @@ test("Thread store refresh discards stale local projections for owner-published 
 
 test("Thread store concurrent persists use unique temp files", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-state-concurrent-persist-"),
+    join(tmpdir(), "pi-bale-state-concurrent-persist-"),
   );
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     store.upsert({
       profileKey: "cwd:/repo",
       target: { chatId: -1001, threadId: 42 },
@@ -4403,12 +4403,12 @@ test("Thread store concurrent persists use unique temp files", async () => {
 });
 
 test("Thread store retains mutations that arrive during snapshot commit", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-revision-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-revision-"));
   const path = join(dir, "state.json");
   try {
     let injectMutation = true;
-    let store: ReturnType<typeof createTelegramTopicTargetStore>;
-    store = createTelegramTopicTargetStore({
+    let store: ReturnType<typeof createBaleTopicTargetStore>;
+    store = createBaleTopicTargetStore({
       path,
       commitPersist(commit) {
         if (injectMutation) {
@@ -4463,17 +4463,17 @@ test("Thread store retains mutations that arrive during snapshot commit", async 
 });
 
 test("Thread store persists bot-wide capability state separately from threads", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     store.setBotState({
       threadMode: "disabled",
       updatedAtMs: 1234,
       lastReconcileAction: "thread-mode-unavailable",
     });
     await store.persist();
-    const reloaded = createTelegramTopicTargetStore({ path });
+    const reloaded = createBaleTopicTargetStore({ path });
     await reloaded.load();
     assert.deepEqual(reloaded.getBotState(), {
       threadMode: "disabled",
@@ -4486,7 +4486,7 @@ test("Thread store persists bot-wide capability state separately from threads", 
 });
 
 test("Thread store migrates legacy displayName fields to threadName on load", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-state-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-state-"));
   const path = join(dir, "state.json");
   try {
     await writeFile(
@@ -4519,7 +4519,7 @@ test("Thread store migrates legacy displayName fields to threadName on load", as
       }),
     );
 
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     await store.load();
     assert.equal(store.getByProfileKey("cwd:/repo")?.threadName, "Cedar");
     assert.equal(
@@ -4532,8 +4532,8 @@ test("Thread store migrates legacy displayName fields to threadName on load", as
 });
 
 test("Thread store returns defensive copies and prunes offline/stale observations", () => {
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 2000,
   });
   const record = store.upsert({
@@ -4586,8 +4586,8 @@ test("Thread store returns defensive copies and prunes offline/stale observation
 });
 
 test("Thread slot allocator preserves existing slots on reuse", () => {
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
   });
   store.upsert({
     profileKey: "cwd:/a",
@@ -4615,8 +4615,8 @@ test("Thread slot allocator preserves existing slots on reuse", () => {
 });
 
 test("Thread slot allocator follows the latest fresh slot around the ring", () => {
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
   });
   store.upsert({
     profileKey: "cwd:/old",
@@ -4639,8 +4639,8 @@ test("Thread slot allocator follows the latest fresh slot around the ring", () =
 });
 
 test("Thread slot allocator starts from the cursor instead of higher live slots", () => {
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
   });
   store.setBotState({ lastSlot: "D" });
   store.upsert({
@@ -4656,7 +4656,7 @@ test("Thread slot allocator starts from the cursor instead of higher live slots"
 });
 
 test("Thread slot allocator treats unexpired reservations as occupied", () => {
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(tmpdir(), "unused-state.json"),
     getNowMs: () => 1000,
   });
@@ -4672,7 +4672,7 @@ test("Thread slot allocator treats unexpired reservations as occupied", () => {
 });
 
 test("Thread slot allocator treats live pending provisions as occupied", () => {
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(tmpdir(), "unused-state.json"),
     getNowMs: () => 1000,
   });
@@ -4688,10 +4688,10 @@ test("Thread slot allocator treats live pending provisions as occupied", () => {
 });
 
 test("Thread store persists and prunes pending provisions", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-pending-provisions-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-pending-provisions-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => 1000,
     });
@@ -4707,7 +4707,7 @@ test("Thread store persists and prunes pending provisions", async () => {
     });
     await store.persist();
 
-    const reloaded = createTelegramTopicTargetStore({
+    const reloaded = createBaleTopicTargetStore({
       path,
       getNowMs: () => 1500,
     });
@@ -4732,10 +4732,10 @@ test("Thread store persists and prunes pending provisions", async () => {
 });
 
 test("Thread store persists exact graceful cleanup intents until confirmation", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-pending-cleanups-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-pending-cleanups-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
     store.upsertPendingCleanup({
       id: "cleanup:leader-a:runtime-1:7:42",
       owner: "leader",
@@ -4747,7 +4747,7 @@ test("Thread store persists exact graceful cleanup intents until confirmation", 
     });
     await store.persist();
 
-    const reloaded = createTelegramTopicTargetStore({ path });
+    const reloaded = createBaleTopicTargetStore({ path });
     await reloaded.load();
     assert.deepEqual(reloaded.listPendingCleanups(), [
       {
@@ -4766,7 +4766,7 @@ test("Thread store persists exact graceful cleanup intents until confirmation", 
     );
     await reloaded.persist();
 
-    const confirmed = createTelegramTopicTargetStore({ path });
+    const confirmed = createBaleTopicTargetStore({ path });
     await confirmed.load();
     assert.deepEqual(confirmed.listPendingCleanups(), []);
   } finally {
@@ -4776,7 +4776,7 @@ test("Thread store persists exact graceful cleanup intents until confirmation", 
 
 test("Thread store retains expired targeted pending provisions for reconciler cleanup", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-expired-pending-provisions-"),
+    join(tmpdir(), "pi-bale-expired-pending-provisions-"),
   );
   const path = join(dir, "state.json");
   try {
@@ -4809,7 +4809,7 @@ test("Thread store retains expired targeted pending provisions for reconciler cl
         ],
       }),
     );
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => 2000,
     });
@@ -4832,8 +4832,8 @@ test("Thread store retains expired targeted pending provisions for reconciler cl
 });
 
 test("Thread slot allocator continues after persisted last slot when no threads remain", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-thread-slot-cursor-"));
-  const path = join(dir, "telegram-targets.json");
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-thread-slot-cursor-"));
+  const path = join(dir, "bale-targets.json");
   try {
     await writeFile(
       path,
@@ -4845,7 +4845,7 @@ test("Thread slot allocator continues after persisted last slot when no threads 
         threads: [],
       }),
     );
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => 2000,
     });
@@ -4890,7 +4890,7 @@ test("Thread slot allocator continues after persisted last slot when no threads 
 });
 
 test("Thread slot allocator ignores expired reservations", () => {
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(tmpdir(), "unused-state.json"),
     getNowMs: () => 3000,
   });
@@ -4908,7 +4908,7 @@ test("Thread slot allocator ignores expired reservations", () => {
 });
 
 test("Thread store prunes expired reservations on load", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-reservations-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-reservations-"));
   const path = join(dir, "state.json");
   try {
     await writeFile(
@@ -4939,7 +4939,7 @@ test("Thread store prunes expired reservations on load", async () => {
         ],
       })}\n`,
     );
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => 3000,
     });
@@ -4954,8 +4954,8 @@ test("Thread store prunes expired reservations on load", async () => {
 });
 
 test("Thread slot allocator returns undefined when all slots are occupied", () => {
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
   });
   for (let code = "A".charCodeAt(0); code <= "Z".charCodeAt(0); code += 1) {
     const slot = String.fromCharCode(code);
@@ -4973,8 +4973,8 @@ test("Thread slot allocator returns undefined when all slots are occupied", () =
 });
 
 test("Thread store enforces one active target per live instance", () => {
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 3000,
   });
   store.upsert({
@@ -5002,12 +5002,12 @@ test("Thread store enforces one active target per live instance", () => {
 });
 
 function createGuardedThreadRenameFixture() {
-  const store = createTelegramTopicTargetStore({ path: "/unused/rename-state.json", getNowMs: () => 3 });
+  const store = createBaleTopicTargetStore({ path: "/unused/rename-state.json", getNowMs: () => 3 });
   const target = { chatId: 7, threadId: 41 };
   for (const [sessionId, threadId, slot, threadName] of [["first", 41, "A", "Anchor"], ["second", 42, "B", "Beacon"]] as const) {
     store.upsert({ profileKey: sessionId, target: { chatId: 7, threadId }, instanceId: sessionId, slot,
       threadName, status: "active", createdAtMs: 1, updatedAtMs: 1 });
-    store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", 0, sessionId)!,
+    store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", 0, sessionId)!,
       target: { chatId: 7, threadId }, slot, threadName, displayTitle: threadName, updatedAtMs: 1 });
   }
   return { store, target, request: { target, threadName: "Navigator", slot: "A" },
@@ -5024,7 +5024,7 @@ for (const boundary of ["entry", "response", "local-publication", "no-display"] 
       if (boundary === "local-publication") current = false;
       return result;
     };
-    const rename = createTelegramTopicTargetRenamer({ store: f.store,
+    const rename = createBaleTopicTargetRenamer({ store: f.store,
       assertAuthority() { if (!current) throw new Error("Rename recipient revoked"); },
       shouldRenameDisplayedTitle() { if (boundary === "no-display") current = false; return boundary !== "no-display"; },
       async callApi<TResponse>() { edits++; if (boundary === "response") current = false; return true as TResponse; },
@@ -5045,13 +5045,13 @@ test("Guarded Thread rename captures target, adapters and title policy across he
   const guard = () => { checks++; };
   const deps = { store: f.store, assertAuthority: guard, topicNameTemplate: "Pi {threadName}",
     shouldRenameDisplayedTitle: () => true,
-    async callApi<TResponse>(method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) {
+    async callApi<TResponse>(method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) {
       calls.push({ method, body }); assert.equal(options?.assertAuthority, guard); await held.promise; return true as TResponse;
     },
   };
-  const rename = createTelegramTopicTargetRenamer(deps), run = rename(f.request);
+  const rename = createBaleTopicTargetRenamer(deps), run = rename(f.request);
   f.request.target.threadId = 42; f.request.threadName = "Wrong"; f.request.slot = "B";
-  deps.store = createTelegramTopicTargetStore({ path: "/unused/replacement.json" });
+  deps.store = createBaleTopicTargetStore({ path: "/unused/replacement.json" });
   deps.callApi = async () => assert.fail("Cannot replace captured API");
   deps.assertAuthority = () => assert.fail("Cannot replace captured authority");
   deps.shouldRenameDisplayedTitle = () => false; deps.topicNameTemplate = "Wrong";
@@ -5067,8 +5067,8 @@ test("Guarded Thread rename captures target, adapters and title policy across he
 for (const boundary of ["current", "entry", "response", "parsing", "retry-wait"] as const) {
   test(`Guarded Thread rename composes store/direct/client at ${boundary}`, async () => {
     const f = createGuardedThreadRenameFixture(), before = f.snapshot();
-    const originalFetch = globalThis.fetch, family = process.env.PI_TELEGRAM_NETWORK_FAMILY;
-    delete process.env.PI_TELEGRAM_NETWORK_FAMILY;
+    const originalFetch = globalThis.fetch, family = process.env.PI_BALE_NETWORK_FAMILY;
+    delete process.env.PI_BALE_NETWORK_FAMILY;
     const requests: unknown[] = [], diagnostics: unknown[] = [];
     let current = boundary !== "entry", sleeps = 0;
     const guard = () => { if (!current) throw new Error("Rename recipient revoked"); };
@@ -5080,8 +5080,8 @@ for (const boundary of ["current", "entry", "response", "parsing", "retry-wait"]
       if (boundary === "parsing") response.text = async () => { current = false; return JSON.stringify({ ok: true, result: true }); };
       return response;
     };
-    const client = createTelegramApiClient(() => "123:fixture");
-    const direct = createTelegramBridgeApiRuntime({ client: { ...client,
+    const client = createBaleApiClient(() => "123:fixture");
+    const direct = createBaleBridgeApiRuntime({ client: { ...client,
       call(method, body, options) {
         assert.equal(options?.assertAuthority, guard);
         return client.call(method, body, { ...options, sleep: async () => { sleeps++; current = false; } });
@@ -5089,10 +5089,10 @@ for (const boundary of ["current", "entry", "response", "parsing", "retry-wait"]
       recordRuntimeEvent(_category, error) { diagnostics.push(error); },
     });
     try {
-      const run = createTelegramTopicTargetRenamer({ store: f.store, assertAuthority: guard, callApi: direct.call })(f.request);
+      const run = createBaleTopicTargetRenamer({ store: f.store, assertAuthority: guard, callApi: direct.call })(f.request);
       if (boundary === "current") assert.equal((await run)?.manualThreadName, "Navigator");
       else if (boundary === "entry") await assert.rejects(run, /Rename recipient revoked/);
-      else await assert.rejects(run, { name: "TelegramApiAuthorityError", requestIssued: true });
+      else await assert.rejects(run, { name: "BaleApiAuthorityError", requestIssued: true });
       assert.deepEqual(requests, boundary === "entry" ? [] : [{ chat_id: 7, message_thread_id: 41, name: "Navigator" }]);
       if (boundary !== "current") assert.deepEqual(f.snapshot(), before);
       assert.equal(sleeps, boundary === "retry-wait" ? 1 : 0);
@@ -5100,15 +5100,15 @@ for (const boundary of ["current", "entry", "response", "parsing", "retry-wait"]
       assert.deepEqual(f.store.getByProfileKey("second"), before.records.find(record => record.instanceId === "second"));
     } finally {
       globalThis.fetch = originalFetch;
-      if (family === undefined) delete process.env.PI_TELEGRAM_NETWORK_FAMILY; else process.env.PI_TELEGRAM_NETWORK_FAMILY = family;
+      if (family === undefined) delete process.env.PI_BALE_NETWORK_FAMILY; else process.env.PI_BALE_NETWORK_FAMILY = family;
     }
   });
 }
 
-test("Thread renamer edits the Telegram topic and persists a manual override", async () => {
+test("Thread renamer edits the Bale topic and persists a manual override", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 3000,
   });
   store.upsert({
@@ -5119,7 +5119,7 @@ test("Thread renamer edits the Telegram topic and persists a manual override", a
     updatedAtMs: 1000,
     threadName: "OldName",
   });
-  const workspaceIdentity = createTelegramWorkspaceBindingIdentity("/repo");
+  const workspaceIdentity = createBaleWorkspaceBindingIdentity("/repo");
   assert.ok(workspaceIdentity);
   store.upsertWorkspaceBinding({
     ...workspaceIdentity,
@@ -5127,7 +5127,7 @@ test("Thread renamer edits the Telegram topic and persists a manual override", a
     threadName: "OldName",
     updatedAtMs: 1000,
   });
-  const rename = createTelegramTopicTargetRenamer({
+  const rename = createBaleTopicTargetRenamer({
     store,
     topicNameTemplate: "Pi {threadName}",
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -5168,8 +5168,8 @@ test("Thread renamer edits the Telegram topic and persists a manual override", a
 
 test("Workspace rename preserves non-named display titles and fences a concurrent mode switch", async () => {
   for (const mode of ["letters", "directories", "names", "switching"]) {
-    const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
-    const identity = createTelegramWorkspaceBindingIdentity("/repo")!;
+    const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
+    const identity = createBaleWorkspaceBindingIdentity("/repo")!;
     const target = { chatId: 7, threadId: 42 };
     store.upsert({ profileKey: "cwd:/repo", target, instanceId: "leader", slot: "A",
       threadName: "Anchor", status: "active", createdAtMs: 1, updatedAtMs: 1 });
@@ -5178,7 +5178,7 @@ test("Workspace rename preserves non-named display titles and fences a concurren
     const previousTitle = store.getWorkspaceBinding("/repo")?.displayTitle;
     let displayName = mode === "names" || mode === "switching";
     let edits = 0;
-    const rename = createTelegramTopicTargetRenamer({
+    const rename = createBaleTopicTargetRenamer({
       store, shouldRenameDisplayedTitle: () => displayName,
       async callApi<TResponse>() { edits++; if (mode === "switching") displayName = false; return true as TResponse; },
     });
@@ -5196,9 +5196,9 @@ test("Workspace rename preserves non-named display titles and fences a concurren
 });
 
 test("Workspace rename cannot cross same-cwd session identity", async () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
-  const first = createTelegramWorkspaceBindingIdentity("/repo", 0, "session-a")!;
-  const second = createTelegramWorkspaceBindingIdentity("/repo", 0, "session-b")!;
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
+  const first = createBaleWorkspaceBindingIdentity("/repo", 0, "session-a")!;
+  const second = createBaleWorkspaceBindingIdentity("/repo", 0, "session-b")!;
   const firstTarget = { chatId: 7, threadId: 41 };
   store.upsert({ profileKey: "session-a", target: firstTarget,
     instanceId: "leader", slot: "A", threadName: "Atlas", status: "active",
@@ -5207,7 +5207,7 @@ test("Workspace rename cannot cross same-cwd session identity", async () => {
     threadName: "Atlas", updatedAtMs: 1 });
   store.upsertWorkspaceBinding({ ...second, target: { chatId: 7, threadId: 42 },
     slot: "B", threadName: "Beacon", updatedAtMs: 1 });
-  const rename = createTelegramTopicTargetRenamer({
+  const rename = createBaleTopicTargetRenamer({
     store,
     shouldRenameDisplayedTitle: () => true,
     async callApi<TResponse>() { return true as TResponse; },
@@ -5223,8 +5223,8 @@ test("Workspace rename cannot cross same-cwd session identity", async () => {
 });
 
 test("Workspace target replacement preserves its manual Thread display name", () => {
-  const store = createTelegramTopicTargetStore({ path: "/unused/state.json" });
-  const identity = createTelegramWorkspaceBindingIdentity("/repo")!;
+  const store = createBaleTopicTargetStore({ path: "/unused/state.json" });
+  const identity = createBaleWorkspaceBindingIdentity("/repo")!;
   store.upsertWorkspaceBinding({
     ...identity,
     target: { chatId: 7, threadId: 41 },
@@ -5249,8 +5249,8 @@ test("Workspace target replacement preserves its manual Thread display name", ()
 
 test("Thread renamer rejects a name reserved by another Workspace", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
   });
   store.upsert({
     profileKey: "cwd:/repo-a",
@@ -5260,7 +5260,7 @@ test("Thread renamer rejects a name reserved by another Workspace", async () => 
     updatedAtMs: 1,
     threadName: "Atlas",
   });
-  const workspaceIdentity = createTelegramWorkspaceBindingIdentity("/repo-b");
+  const workspaceIdentity = createBaleWorkspaceBindingIdentity("/repo-b");
   assert.ok(workspaceIdentity);
   store.upsertWorkspaceBinding({
     ...workspaceIdentity,
@@ -5268,7 +5268,7 @@ test("Thread renamer rejects a name reserved by another Workspace", async () => 
     threadName: "Cedar",
     updatedAtMs: 1,
   });
-  const rename = createTelegramTopicTargetRenamer({
+  const rename = createBaleTopicTargetRenamer({
     store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
       calls.push({ method, body });
@@ -5289,8 +5289,8 @@ test("Thread renamer rejects a name reserved by another Workspace", async () => 
 
 test("Thread renamer reserves bare slot letters for automatic reset", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 3000,
   });
   store.upsert({
@@ -5302,7 +5302,7 @@ test("Thread renamer reserves bare slot letters for automatic reset", async () =
     threadName: "OldName",
     slot: "D",
   });
-  const rename = createTelegramTopicTargetRenamer({
+  const rename = createBaleTopicTargetRenamer({
     store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
       calls.push({ method, body });
@@ -5330,11 +5330,11 @@ test("Thread renamer reserves bare slot letters for automatic reset", async () =
 });
 
 test("Thread store preserves thread identity after stale target pruning", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-identity-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-identity-"));
   const path = join(dir, "state.json");
   const calls: unknown[] = [];
   try {
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => 3000,
     });
@@ -5356,7 +5356,7 @@ test("Thread store preserves thread identity after stale target pruning", async 
     );
     await store.persist();
 
-    const reloaded = createTelegramTopicTargetStore({
+    const reloaded = createBaleTopicTargetStore({
       path,
       getNowMs: () => 4000,
     });
@@ -5368,7 +5368,7 @@ test("Thread store preserves thread identity after stale target pruning", async 
       slot: "A",
       updatedAtMs: 1000,
     });
-    const provision = createTelegramTopicTargetProvisioner({
+    const provision = createBaleTopicTargetProvisioner({
       topicChatId: -1001,
       store: reloaded,
       getNowMs: () => 4000,
@@ -5398,8 +5398,8 @@ test("Thread store preserves thread identity after stale target pruning", async 
 
 test("Thread provisioner does not reuse offline target history by profile key", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 1000,
   });
   store.upsert({
@@ -5411,7 +5411,7 @@ test("Thread provisioner does not reuse offline target history by profile key", 
     threadName: "old",
   });
 
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -5442,8 +5442,8 @@ test("Thread provisioner does not reuse offline target history by profile key", 
 
 test("Thread provisioner restores an active manual follower profile across runtime replacement", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 1000,
   });
   store.upsert({
@@ -5457,7 +5457,7 @@ test("Thread provisioner restores an active manual follower profile across runti
     slot: "C",
   });
 
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -5482,8 +5482,8 @@ test("Thread provisioner restores an active manual follower profile across runti
 
 test("Thread provisioner allocates a fresh follower slot after stale identity is forgotten", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 1000,
   });
   store.upsert({
@@ -5500,7 +5500,7 @@ test("Thread provisioner allocates a fresh follower slot after stale identity is
   store.markStaleByTarget({ chatId: -1001, threadId: 42 });
   store.forgetIdentityByProfileKey("manual:1234");
 
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -5527,8 +5527,8 @@ test("Thread provisioner allocates a fresh follower slot after stale identity is
 
 test("Thread provisioner restores a named manual follower across runtime replacement", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 1000,
   });
   store.upsert({
@@ -5543,7 +5543,7 @@ test("Thread provisioner restores a named manual follower across runtime replace
     threadName: "Talon",
   });
 
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -5569,8 +5569,8 @@ test("Thread provisioner restores a named manual follower across runtime replace
 
 test("Thread provisioner reuses the same-runtime active manual follower target", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 1000,
   });
   store.upsert({
@@ -5585,7 +5585,7 @@ test("Thread provisioner reuses the same-runtime active manual follower target",
     threadName: "Talon",
   });
 
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -5609,14 +5609,14 @@ test("Thread provisioner reuses the same-runtime active manual follower target",
 });
 
 test("Thread provisioner persists pending provision while creating a fresh topic", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-provision-pending-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-provision-pending-"));
   const path = join(dir, "state.json");
   try {
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => 2000,
     });
-    const provision = createTelegramTopicTargetProvisioner({
+    const provision = createBaleTopicTargetProvisioner({
       topicChatId: -1001,
       store,
       getNowMs: () => 2000,
@@ -5658,22 +5658,22 @@ test("Thread provisioner persists pending provision while creating a fresh topic
 });
 
 test("Thread provisioner preserves ambiguous creation intent and blocks successor duplication", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-provision-ambiguous-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-provision-ambiguous-"));
   const path = join(dir, "state.json");
   let nowMs = 2000;
   try {
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => nowMs,
     });
     let apiCalls = 0;
-    const provision = createTelegramTopicTargetProvisioner({
+    const provision = createBaleTopicTargetProvisioner({
       topicChatId: -1001,
       store,
       getNowMs: () => nowMs,
       async callApi() {
         apiCalls += 1;
-        throw new TelegramApiCommitUnknownError(
+        throw new BaleApiCommitUnknownError(
           "createForumTopic",
           new Error("response lost"),
         );
@@ -5682,7 +5682,7 @@ test("Thread provisioner preserves ambiguous creation intent and blocks successo
 
     await assert.rejects(
       () => provision({ instanceId: "inst-a", profileKey: "manual:inst-a" }),
-      isTelegramApiCommitUnknownError,
+      isBaleApiCommitUnknownError,
     );
     assert.deepEqual(store.listPendingProvisions(), [
       {
@@ -5698,7 +5698,7 @@ test("Thread provisioner preserves ambiguous creation intent and blocks successo
     ]);
 
     nowMs = 902001;
-    const successor = createTelegramTopicTargetProvisioner({
+    const successor = createBaleTopicTargetProvisioner({
       topicChatId: -1001,
       store,
       getNowMs: () => nowMs,
@@ -5724,9 +5724,9 @@ test("Thread provisioner preserves ambiguous creation intent and blocks successo
 });
 
 test("Explicit connection reset drops only matching unknown creation and preserves targeted recovery", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-connect-reset-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-connect-reset-"));
   const path = join(dir, "state.json");
-  const store = createTelegramTopicTargetStore({ path });
+  const store = createBaleTopicTargetStore({ path });
   const pending = { id: "unknown", owner: "manual-follower" as const, instanceId: "old",
     profileKey: "manual:stable", workspaceBindingKey: "old-session-key", status: "ambiguous" as const,
     slot: "A", startedAtMs: 1 };
@@ -5741,32 +5741,32 @@ test("Explicit connection reset drops only matching unknown creation and preserv
     const events: unknown[] = [];
     const input = { store, owner: "manual-follower" as const, instanceId: "new", profileKey: "manual:stable",
       isCurrent: () => true, recordEvent: (_category: string, message: unknown) => { events.push(message); } };
-    await assert.rejects(resetTelegramConnectionProvisioning({ ...input, isCurrent: () => false }), /authority changed/);
+    await assert.rejects(resetBaleConnectionProvisioning({ ...input, isCurrent: () => false }), /authority changed/);
     assert.equal(store.listPendingProvisions().length, 4);
-    await resetTelegramConnectionProvisioning(input);
+    await resetBaleConnectionProvisioning(input);
     assert.deepEqual(store.listPendingProvisions().map(p => p.id).sort(), ["other", "sidecar", "targeted"]);
     assert.deepEqual(store.listWorkspaceBindings(), beforeBindings);
     assert.deepEqual(store.list(), beforeRecords);
     assert.equal(events.length, 1);
-    const reopened = createTelegramTopicTargetStore({ path }); await reopened.load();
+    const reopened = createBaleTopicTargetStore({ path }); await reopened.load();
     assert.deepEqual(reopened.listPendingProvisions().map(p => p.id).sort(), ["other", "sidecar", "targeted"]);
-    await resetTelegramConnectionProvisioning(input);
+    await resetBaleConnectionProvisioning(input);
     assert.equal(events.length, 1, "No additional reset when only known targets remain");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Fresh connect creation IDs cannot alias a late old response under a fixed clock", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-connect-attempt-id-"));
-  const path = join(dir, "state.json"), store = createTelegramTopicTargetStore({ path, getNowMs: () => 1 });
-  const provision = createTelegramTopicTargetProvisioner({ topicChatId: 7, store, getNowMs: () => 1,
-    async callApi() { throw new TelegramApiCommitUnknownError("createForumTopic", new Error("lost")); } });
+  const path = join(dir, "state.json"), store = createBaleTopicTargetStore({ path, getNowMs: () => 1 });
+  const provision = createBaleTopicTargetProvisioner({ topicChatId: 7, store, getNowMs: () => 1,
+    async callApi() { throw new BaleApiCommitUnknownError("createForumTopic", new Error("lost")); } });
   try {
     const request = { instanceId: "owner", profileKey: "manual:stable" };
-    await assert.rejects(provision(request), isTelegramApiCommitUnknownError);
+    await assert.rejects(provision(request), isBaleApiCommitUnknownError);
     const old = store.listPendingProvisions()[0]!;
-    await resetTelegramConnectionProvisioning({ store, owner: "manual-follower", ...request,
+    await resetBaleConnectionProvisioning({ store, owner: "manual-follower", ...request,
       isCurrent: () => true, recordEvent() {} });
-    await assert.rejects(provision(request), isTelegramApiCommitUnknownError);
+    await assert.rejects(provision(request), isBaleApiCommitUnknownError);
     const fresh = store.listPendingProvisions()[0]!;
     assert.notEqual(fresh.id, old.id);
     assert.equal(await store.recordPendingProvisionTargetRecovery(old, { chatId: 7, threadId: 44 }), false);
@@ -5776,14 +5776,14 @@ test("Fresh connect creation IDs cannot alias a late old response under a fixed 
 
 test("Late connection reset completion cannot restore abandoned metadata into a successor", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-connect-reset-generation-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   const pending = { id: "old", owner: "leader" as const, instanceId: "old", profileKey: "cwd:/repo",
     status: "ambiguous" as const, startedAtMs: 1 };
   const replacement = { ...pending, id: "new", instanceId: "new" };
   let current = true;
   try {
     store.upsertPendingProvision(pending); await store.persist();
-    await assert.rejects(resetTelegramConnectionProvisioning({
+    await assert.rejects(resetBaleConnectionProvisioning({
       store: { ...store, async resetPendingProvisionForConnect(expected, isCurrent) {
         const result = await store.resetPendingProvisionForConnect(expected, isCurrent);
         current = false;
@@ -5799,13 +5799,13 @@ test("Late connection reset completion cannot restore abandoned metadata into a 
 
 test("Connection reset superseded before publication keeps the original in-memory and durable hold", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-connect-reset-before-publication-"));
-  const path = join(dir, "state.json"), store = createTelegramTopicTargetStore({ path });
+  const path = join(dir, "state.json"), store = createBaleTopicTargetStore({ path });
   const pending = { id: "old", owner: "leader" as const, instanceId: "old", profileKey: "cwd:/repo",
     status: "ambiguous" as const, startedAtMs: 1 };
   let current = true;
   try {
     store.upsertPendingProvision(pending); await store.persist();
-    await assert.rejects(resetTelegramConnectionProvisioning({
+    await assert.rejects(resetBaleConnectionProvisioning({
       store: { ...store, async resetPendingProvisionForConnect(expected, isCurrent) {
         const publication = store.resetPendingProvisionForConnect(expected, isCurrent);
         current = false;
@@ -5815,21 +5815,21 @@ test("Connection reset superseded before publication keeps the original in-memor
       recordEvent() { assert.fail("No obsolete success notice"); },
     }), /authority/);
     assert.deepEqual(store.listPendingProvisions(), [pending]);
-    const reopened = createTelegramTopicTargetStore({ path }); await reopened.load();
+    const reopened = createBaleTopicTargetStore({ path }); await reopened.load();
     assert.deepEqual(reopened.listPendingProvisions(), [pending]);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Connection reset publication refusal retains the creation hold", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-connect-reset-refused-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-connect-reset-refused-"));
   let mayPersist = true;
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), canPersist: () => mayPersist });
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json"), canPersist: () => mayPersist });
   const pending = { id: "unknown", owner: "leader" as const, instanceId: "old", profileKey: "cwd:/repo",
     status: "ambiguous" as const, startedAtMs: 1 };
   try {
     store.upsertPendingProvision(pending); await store.persist();
     mayPersist = false;
-    await assert.rejects(resetTelegramConnectionProvisioning({ store, owner: "leader", instanceId: "new",
+    await assert.rejects(resetBaleConnectionProvisioning({ store, owner: "leader", instanceId: "new",
       profileKey: "cwd:/repo", isCurrent: () => true, recordEvent() { assert.fail("No success notice"); } }),
       /publication authority/);
     assert.deepEqual(store.listPendingProvisions(), [pending]);
@@ -5837,13 +5837,13 @@ test("Connection reset publication refusal retains the creation hold", async () 
 });
 
 test("Thread provisioner treats a malformed successful create as commit-unknown", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-provision-malformed-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-provision-malformed-"));
   try {
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path: join(dir, "state.json"),
       getNowMs: () => 2000,
     });
-    const provision = createTelegramTopicTargetProvisioner({
+    const provision = createBaleTopicTargetProvisioner({
       topicChatId: -1001,
       store,
       getNowMs: () => 2000,
@@ -5854,7 +5854,7 @@ test("Thread provisioner treats a malformed successful create as commit-unknown"
 
     await assert.rejects(
       () => provision({ instanceId: "inst-a", profileKey: "manual:inst-a" }),
-      isTelegramApiCommitUnknownError,
+      isBaleApiCommitUnknownError,
     );
     assert.equal(store.listPendingProvisions()[0]?.status, "ambiguous");
   } finally {
@@ -5863,12 +5863,12 @@ test("Thread provisioner treats a malformed successful create as commit-unknown"
 });
 
 test("Thread provisioner fails closed before mutation without leader ownership", async () => {
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets-no-owner.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets-no-owner.json",
     getNowMs: () => 2000,
   });
   let apiCalls = 0;
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getCurrentLeaderEpoch: () => undefined,
@@ -5888,16 +5888,16 @@ test("Thread provisioner fails closed before mutation without leader ownership",
 
 test("Thread provisioner preserves its intent and stops binding after create loses ownership", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-provision-epoch-loss-"),
+    join(tmpdir(), "pi-bale-provision-epoch-loss-"),
   );
   const path = join(dir, "state.json");
   let currentEpoch: number | undefined = 1;
   try {
-    const store = createTelegramTopicTargetStore({
+    const store = createBaleTopicTargetStore({
       path,
       getNowMs: () => 2000,
     });
-    const provision = createTelegramTopicTargetProvisioner({
+    const provision = createBaleTopicTargetProvisioner({
       topicChatId: -1001,
       store,
       getNowMs: () => 2000,
@@ -5932,13 +5932,13 @@ test("Thread provisioner preserves its intent and stops binding after create los
     assert.deepEqual(file.threads, []);
 
     currentEpoch = 2;
-    const successorStore = createTelegramTopicTargetStore({
+    const successorStore = createBaleTopicTargetStore({
       path,
       getNowMs: () => 3000,
     });
     await successorStore.load();
     let successorApiCalls = 0;
-    const successor = createTelegramTopicTargetProvisioner({
+    const successor = createBaleTopicTargetProvisioner({
       topicChatId: -1001,
       store: successorStore,
       getNowMs: () => 3000,
@@ -5963,15 +5963,15 @@ test("Thread provisioner preserves its intent and stops binding after create los
 
 test("Post-create recovery preserves the acknowledged title with or without a starting record", async () => {
   for (const failStatus of ["starting", "active"] as const) {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-provision-post-create-fail-"));
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-provision-post-create-fail-"));
     const path = join(dir, "state.json");
     try {
-      const store = createTelegramTopicTargetStore({ path, getNowMs: () => 2000 });
+      const store = createBaleTopicTargetStore({ path, getNowMs: () => 2000 });
       const identity = store.claimWorkspaceIdentity("/repo/extensions", "inst-a")!;
       const request = { instanceId: "inst-a", profileKey: "manual:inst-a",
         workspaceBindingKey: identity.bindingKey, workspaceCwd: identity.cwd };
       let creations = 0;
-      const provision = createTelegramTopicTargetProvisioner({
+      const provision = createBaleTopicTargetProvisioner({
         topicChatId: -1001, getNowMs: () => 2000,
         store: { ...store, upsert(record) {
           if (record.status === failStatus) throw new Error("binding persist failed");
@@ -5986,7 +5986,7 @@ test("Post-create recovery preserves the acknowledged title with or without a st
         },
       });
       await assert.rejects(provision(request), /binding persist failed/);
-      const restored = createTelegramTopicTargetStore({ path, getNowMs: () => 3000 });
+      const restored = createBaleTopicTargetStore({ path, getNowMs: () => 3000 });
       await restored.load();
       assert.deepEqual(restored.listPendingProvisions(), [{
         id: store.listPendingProvisions()[0]!.id, owner: "manual-follower", instanceId: "inst-a",
@@ -5994,13 +5994,13 @@ test("Post-create recovery preserves the acknowledged title with or without a st
         threadName: "Atlas", displayTitle: "extensions",
         slot: "A", target: { chatId: -1001, threadId: 88 }, startedAtMs: 2000,
       }]);
-      const recover = createTelegramTopicTargetProvisioner({
+      const recover = createBaleTopicTargetProvisioner({
         topicChatId: -1001, store: restored, getNowMs: () => 3000,
         resolveInitialWorkspaceDisplayTitle() { throw new Error("must not reproject an acknowledged title"); },
         async callApi() { throw new Error("must not recreate the acknowledged target"); },
       });
       await assert.rejects(recover({ ...request, instanceId: "successor",
-        workspaceBindingKey: createTelegramWorkspaceBindingIdentity(identity.cwd, 0, "other-session")!.bindingKey,
+        workspaceBindingKey: createBaleWorkspaceBindingIdentity(identity.cwd, 0, "other-session")!.bindingKey,
       }), /unfinished Thread creation does not match this session/);
       assert.equal(restored.listPendingProvisions().length, 1, "Foreign resume never consumes creation evidence");
       const recovered = await recover(request);
@@ -6011,7 +6011,7 @@ test("Post-create recovery preserves the acknowledged title with or without a st
       assert.equal(restored.listPendingProvisions().length, 1,
         "Creation evidence remains until the exact Workspace commit");
       await store.load();
-      const committed = commitTelegramWorkspaceProvisionBinding({
+      const committed = commitBaleWorkspaceProvisionBinding({
         store, instanceId: request.instanceId, profileKey: request.profileKey,
         binding: { ...identity, target: recovered.target, slot: recovered.record.slot,
           threadName: recovered.record.threadName, updatedAtMs: 3000 },
@@ -6021,7 +6021,7 @@ test("Post-create recovery preserves the acknowledged title with or without a st
       assert.equal(JSON.parse(await readFile(path, "utf8")).pendingProvisions.length, 1,
         "The caller still owns durable settlement");
       await store.persist();
-      const settled = createTelegramTopicTargetStore({ path });
+      const settled = createBaleTopicTargetStore({ path });
       await settled.load();
       assert.equal(settled.getWorkspaceBinding(identity.cwd)?.displayTitle, "extensions");
       assert.deepEqual(settled.listPendingProvisions(), []);
@@ -6034,14 +6034,14 @@ test("Post-create recovery preserves the acknowledged title with or without a st
 
 test("Deleted creation evidence cannot resurrect a pending target, while closed and cleanup targets stay protected", async () => {
   for (const scenario of ["active-deleted", "pending-deleted", "legacy-deleted", "closed", "cleanup"] as const) {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-pending-invalidation-"));
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-pending-invalidation-"));
     try {
-      const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 2000 });
+      const store = createBaleTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 2000 });
       const identity = store.claimWorkspaceIdentity("/repo/extensions", "inst-a")!;
       const request = { instanceId: "inst-a", profileKey: "manual:inst-a",
         workspaceBindingKey: identity.bindingKey, workspaceCwd: identity.cwd };
       let creations = 0;
-      const provision = createTelegramTopicTargetProvisioner({
+      const provision = createBaleTopicTargetProvisioner({
         topicChatId: 7, store: { ...store, upsert(record) {
           if (scenario === "pending-deleted" && creations === 1) throw new Error("post-create failure");
           return store.upsert(record);
@@ -6065,7 +6065,7 @@ test("Deleted creation evidence cannot resurrect a pending target, while closed 
       }
       await store.persist();
       if (scenario === "closed" || scenario === "cleanup") {
-        assert.throws(() => commitTelegramWorkspaceProvisionBinding({
+        assert.throws(() => commitBaleWorkspaceProvisionBinding({
           store, instanceId: request.instanceId, profileKey: request.profileKey,
           binding: { ...identity, target: { chatId: 7, threadId: 42 }, updatedAtMs: 2000 },
           displayTitle: "extensions",
@@ -6091,11 +6091,11 @@ test("Deleted creation evidence cannot resurrect a pending target, while closed 
 
 test("Thread provisioner creates forum topics without retrying non-idempotent requests", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 1000,
   });
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -6124,10 +6124,10 @@ test("Thread provisioner creates forum topics without retrying non-idempotent re
 });
 
 test("Thread provisioner rejects slotless fresh targets at global capacity", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-provision-capacity-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-provision-capacity-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   for (const [index, slot] of Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").entries()) {
-    const identity = createTelegramWorkspaceBindingIdentity(`/retained/${index}`);
+    const identity = createBaleWorkspaceBindingIdentity(`/retained/${index}`);
     assert.ok(identity);
     store.upsertWorkspaceBinding({
       ...identity,
@@ -6137,7 +6137,7 @@ test("Thread provisioner rejects slotless fresh targets at global capacity", asy
     });
   }
   let apiCalls = 0;
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: 7,
     store,
     async callApi<TResponse>() {
@@ -6150,7 +6150,7 @@ test("Thread provisioner rejects slotless fresh targets at global capacity", asy
       instanceId: "legacy-follower",
       owner: { kind: "manual-follower", instanceId: "legacy-follower" },
       profileKey: "manual:legacy-follower",
-    }), /Telegram Workspace slot reservation is unavailable/u);
+    }), /Bale Workspace slot reservation is unavailable/u);
     assert.equal(apiCalls, 0);
     assert.equal(store.list().length, 0);
     assert.equal(store.listPendingProvisions().length, 0);
@@ -6161,10 +6161,10 @@ test("Thread provisioner rejects slotless fresh targets at global capacity", asy
 });
 
 test("Thread provisioner skips names reserved by dormant Workspaces", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-workspace-name-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-workspace-name-"));
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
-  const workspaceIdentity = createTelegramWorkspaceBindingIdentity("/repo/old");
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
+  const workspaceIdentity = createBaleWorkspaceBindingIdentity("/repo/old");
   assert.ok(workspaceIdentity);
   store.upsertWorkspaceBinding({
     ...workspaceIdentity,
@@ -6173,7 +6173,7 @@ test("Thread provisioner skips names reserved by dormant Workspaces", async () =
     slot: "C",
     updatedAtMs: 1,
   });
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: 7,
     store,
     getNowMs: () => 2000,
@@ -6205,8 +6205,8 @@ test("Thread provisioner skips names reserved by dormant Workspaces", async () =
 
 test("Thread provisioner creates a new topic for new or stale profiles", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
   });
   store.upsert({
     profileKey: "cwd:/repo",
@@ -6216,7 +6216,7 @@ test("Thread provisioner creates a new topic for new or stale profiles", async (
     updatedAtMs: 1000,
   });
 
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -6256,8 +6256,8 @@ test("Thread provisioner creates a new topic for new or stale profiles", async (
 
 test("Thread provisioner reuses current instance target before claiming another topic", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 2000,
   });
   store.upsert({
@@ -6277,7 +6277,7 @@ test("Thread provisioner reuses current instance target before claiming another 
     updatedAtMs: 1000,
     slot: "C",
   });
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: 1,
     store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -6299,8 +6299,8 @@ test("Thread provisioner reuses current instance target before claiming another 
 
 test("Thread provisioner claims pending topic before creating a new one", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 2000,
   });
   store.upsert({
@@ -6311,7 +6311,7 @@ test("Thread provisioner claims pending topic before creating a new one", async 
     updatedAtMs: 1000,
     slot: "C",
   });
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: 1,
     store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -6334,8 +6334,8 @@ test("Thread provisioner claims pending topic before creating a new one", async 
 
 test("Thread provisioner ignores inactive history before creating a new one", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 2000,
   });
   store.upsert({
@@ -6354,7 +6354,7 @@ test("Thread provisioner ignores inactive history before creating a new one", as
     updatedAtMs: 1000,
     slot: "B",
   });
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: 1,
     store,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -6382,8 +6382,8 @@ test("Thread provisioner ignores inactive history before creating a new one", as
 
 test("Thread provisioner does not claim inactive slot with a live owner", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 2000,
   });
   store.upsert({
@@ -6403,7 +6403,7 @@ test("Thread provisioner does not claim inactive slot with a live owner", async 
     instanceId: "live-b",
     slot: "B",
   });
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: 1,
     store,
     getNowMs: () => 2000,
@@ -6425,8 +6425,8 @@ test("Thread provisioner does not claim inactive slot with a live owner", async 
 
 test("Thread provisioner assigns follower slot after active leader slot", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 1000,
   });
   store.upsert({
@@ -6440,7 +6440,7 @@ test("Thread provisioner assigns follower slot after active leader slot", async 
     slot: "A",
   });
 
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -6465,8 +6465,8 @@ test("Thread provisioner assigns follower slot after active leader slot", async 
 
 test("Thread provisioner assigns monotonic slots to new topics", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 1000,
   });
   store.upsert({
@@ -6479,7 +6479,7 @@ test("Thread provisioner assigns monotonic slots to new topics", async () => {
     slot: "A",
   });
 
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -6508,8 +6508,8 @@ test("Thread provisioner assigns monotonic slots to new topics", async () => {
 
 test("Thread provisioner assigns fresh baked names from visible thread-name sequence", async () => {
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: "/tmp/unused-telegram-targets.json",
+  const store = createBaleTopicTargetStore({
+    path: "/tmp/unused-bale-targets.json",
     getNowMs: () => 1000,
   });
   store.upsert({
@@ -6522,7 +6522,7 @@ test("Thread provisioner assigns fresh baked names from visible thread-name sequ
     slot: "E",
   });
 
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: -1001,
     store,
     getNowMs: () => 2000,
@@ -6568,7 +6568,7 @@ test("Thread helpers resolve the current instance record from preferred target o
   ];
 
   assert.equal(
-    findCurrentTelegramInstanceThreadRecord({
+    findCurrentBaleInstanceThreadRecord({
       records,
       instanceId: "current",
       preferredTarget: { chatId: 7, threadId: 10 },
@@ -6576,7 +6576,7 @@ test("Thread helpers resolve the current instance record from preferred target o
     "leader:old",
   );
   assert.equal(
-    findCurrentTelegramInstanceThreadRecord({
+    findCurrentBaleInstanceThreadRecord({
       records,
       instanceId: "current",
       preferredTarget: { chatId: 7, threadId: 99 },
@@ -6584,7 +6584,7 @@ test("Thread helpers resolve the current instance record from preferred target o
     "manual:follower",
   );
   assert.equal(
-    findCurrentTelegramInstanceThreadRecord({ records, instanceId: "current" })
+    findCurrentBaleInstanceThreadRecord({ records, instanceId: "current" })
       ?.profileKey,
     "manual:follower",
   );
@@ -6608,7 +6608,7 @@ test("Thread identity resolver keeps status and prompt on registered local metad
   };
 
   assert.deepEqual(
-    resolveTelegramInstanceThreadIdentity({ follower, record: staleRecord }),
+    resolveBaleInstanceThreadIdentity({ follower, record: staleRecord }),
     {
       target: { chatId: 100, threadId: 42 },
       slot: "J",
@@ -6616,7 +6616,7 @@ test("Thread identity resolver keeps status and prompt on registered local metad
     },
   );
   assert.deepEqual(
-    resolveTelegramInstanceThreadIdentity({
+    resolveBaleInstanceThreadIdentity({
       target: { chatId: 100, threadId: 42 },
       follower,
       record: staleRecord,
@@ -6630,7 +6630,7 @@ test("Thread identity resolver keeps status and prompt on registered local metad
 });
 
 test("Leader thread state runtime owns target identity transitions", () => {
-  const state = createTelegramLeaderThreadStateRuntime();
+  const state = createBaleLeaderThreadStateRuntime();
   assert.equal(state.getTarget(), undefined);
   state.set({
     target: { chatId: 7, threadId: 11 },
@@ -6664,7 +6664,7 @@ test("Current-thread assembly owns preferred-target order and status identity", 
       threadName: "Aspen",
     },
   ];
-  const assembly = createTelegramCurrentThreadAssembly({
+  const assembly = createBaleCurrentThreadAssembly({
     instanceId: "current",
     listRecords: () => records,
     getActiveTurnTarget: () => activeTarget,
@@ -6674,11 +6674,11 @@ test("Current-thread assembly owns preferred-target order and status identity", 
     getFollowerThreadName: () => "Cedar",
     getFollowerDisplayTitle: () => followerDisplayTitle,
     listWorkspaceBindings: () => [
-      { ...createTelegramWorkspaceBindingIdentity("/repo")!, target: { chatId: 7, threadId: 11 },
+      { ...createBaleWorkspaceBindingIdentity("/repo")!, target: { chatId: 7, threadId: 11 },
         threadName: "Cedar", slot: "C", displayTitle: "stale-disk-title", updatedAtMs: 1 },
-      { ...createTelegramWorkspaceBindingIdentity("/other")!, target: { chatId: 7, threadId: 55 },
+      { ...createBaleWorkspaceBindingIdentity("/other")!, target: { chatId: 7, threadId: 55 },
         threadName: "Oak", slot: "O", displayTitle: "other", updatedAtMs: 1 },
-      { ...createTelegramWorkspaceBindingIdentity("/moved")!, target: { chatId: 7, threadId: 66 },
+      { ...createBaleWorkspaceBindingIdentity("/moved")!, target: { chatId: 7, threadId: 66 },
         threadName: "Pine", slot: "P", updatedAtMs: 1 },
     ],
     resolveAutomaticDisplayTitle: (binding) => `auto:${binding.threadName}`,
@@ -6737,7 +6737,7 @@ test("Current-instance thread runtime owns record and live identity selection", 
     },
   ];
   let registered = false;
-  const runtime = createTelegramCurrentInstanceThreadRuntime({
+  const runtime = createBaleCurrentInstanceThreadRuntime({
     instanceId: "current",
     listRecords: () => records,
     getPreferredTarget: () => ({ chatId: 7, threadId: 11 }),
@@ -6767,7 +6767,7 @@ test("Current-instance thread runtime owns record and live identity selection", 
 });
 
 test("Thread status runtime owns bus and identity projections", () => {
-  const runtime = createTelegramThreadStatusProjectionRuntime({
+  const runtime = createBaleThreadStatusProjectionRuntime({
     getThreadMode: () => "enabled",
     isBusPollingStarted: () => false,
     isFollowerRegistered: () => true,
@@ -6826,7 +6826,7 @@ test("Thread helpers project thread state for status without entrypoint mapping"
   ];
 
   assert.deepEqual(
-    listTelegramThreadStatusFollowers({
+    listBaleThreadStatusFollowers({
       followers: [
         {
           instanceId: "current",
@@ -6863,7 +6863,7 @@ test("Thread helpers project thread state for status without entrypoint mapping"
       },
     ],
   );
-  assert.deepEqual(listTelegramThreadStatusTargets(records), [
+  assert.deepEqual(listBaleThreadStatusTargets(records), [
     {
       instanceId: "current",
       status: "active",
@@ -6890,7 +6890,7 @@ test("Thread helpers project thread state for status without entrypoint mapping"
     },
   ]);
   assert.deepEqual(
-    listTelegramThreadStatusReservations([
+    listBaleThreadStatusReservations([
       {
         target: { chatId: 7, threadId: 12 },
         slot: "C",
@@ -6911,7 +6911,7 @@ test("Thread helpers project thread state for status without entrypoint mapping"
     ],
   );
   assert.deepEqual(
-    listTelegramThreadStatusObservations([
+    listBaleThreadStatusObservations([
       {
         target: { chatId: 7, threadId: 13 },
         syncStatus: "closed",
@@ -6934,68 +6934,68 @@ test("Thread helpers project thread state for status without entrypoint mapping"
 
 test("Thread helpers extract thread targets from Bot API bodies", () => {
   assert.deepEqual(
-    getTelegramTargetFromApiBody({ chat_id: "-1001", message_thread_id: "42" }),
+    getBaleTargetFromApiBody({ chat_id: "-1001", message_thread_id: "42" }),
     { chatId: -1001, threadId: 42 },
   );
-  assert.equal(getTelegramTargetFromApiBody({ chat_id: -1001 }), undefined);
+  assert.equal(getBaleTargetFromApiBody({ chat_id: -1001 }), undefined);
   assert.equal(
-    getTelegramTargetFromApiBody({ chat_id: -1001, message_thread_id: "x" }),
+    getBaleTargetFromApiBody({ chat_id: -1001, message_thread_id: "x" }),
     undefined,
   );
 });
 
 test("Bot API Threaded Mode unavailable helper detects disabled thread support", () => {
   assert.equal(
-    isTelegramTopicModeUnavailableError(
+    isBaleTopicModeUnavailableError(
       new Error(
-        "Telegram API createForumTopic failed: HTTP 400: Bad Request: not a forum",
+        "Bale API createForumTopic failed: HTTP 400: Bad Request: not a forum",
       ),
     ),
     true,
   );
   assert.equal(
-    isTelegramTopicModeUnavailableError(
+    isBaleTopicModeUnavailableError(
       new Error(
-        "Telegram API createForumTopic failed: HTTP 400: Bad Request: topics are disabled",
+        "Bale API createForumTopic failed: HTTP 400: Bad Request: topics are disabled",
       ),
     ),
     true,
   );
   assert.equal(
-    isTelegramTopicModeUnavailableError(new Error("network failed")),
+    isBaleTopicModeUnavailableError(new Error("network failed")),
     false,
   );
 });
 
 test("Thread stale error helper detects deleted or missing topics", () => {
   assert.equal(
-    isTelegramTopicTargetStaleError(
+    isBaleTopicTargetStaleError(
       new Error(
-        "Telegram API sendMessage failed: HTTP 400: Bad Request: message thread not found",
+        "Bale API sendMessage failed: HTTP 400: Bad Request: message thread not found",
       ),
     ),
     true,
   );
   assert.equal(
-    isTelegramTopicTargetStaleError(
+    isBaleTopicTargetStaleError(
       new Error(
-        "Telegram API editForumTopic failed: HTTP 400: Bad Request: TOPIC_ID_INVALID",
+        "Bale API editForumTopic failed: HTTP 400: Bad Request: TOPIC_ID_INVALID",
       ),
     ),
     true,
   );
   assert.equal(
-    isTelegramTopicTargetStaleError(new Error("network failed")),
+    isBaleTopicTargetStaleError(new Error("network failed")),
     false,
   );
 });
 
 test("Own bus topic provisioner assigns a leader topic through the common provisioner", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-own-topic-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-own-topic-"));
   const calls: unknown[] = [];
   const events: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   try {
@@ -7036,8 +7036,8 @@ test("Own bus topic provisioner assigns a leader topic through the common provis
 });
 
 test("Previous-leader cleanup cannot invalidate or reserve a target rebound during close", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "telegram-rebound-leader-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const dir = await mkdtemp(join(tmpdir(), "bale-rebound-leader-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   const old = { profileKey: "leader:old", owner: { kind: "leader" as const, instanceId: "old" }, target: { chatId: 7, threadId: 10 }, instanceId: "old", status: "active" as const, createdAtMs: 1, updatedAtMs: 1, slot: "A" };
   const calls: string[] = [];
   try {
@@ -7063,11 +7063,11 @@ test("Previous-leader cleanup cannot invalidate or reserve a target rebound duri
 
 test("Own bus topic provisioner cleans previous leader before reusing promoted follower topic", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-own-topic-promoted-cleanup-"),
+    join(tmpdir(), "pi-bale-own-topic-promoted-cleanup-"),
   );
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   try {
@@ -7131,11 +7131,11 @@ test("Own bus topic provisioner cleans previous leader before reusing promoted f
 
 test("Own bus topic provisioner reuses promoted follower topic", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-own-topic-promoted-follower-"),
+    join(tmpdir(), "pi-bale-own-topic-promoted-follower-"),
   );
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   try {
@@ -7180,10 +7180,10 @@ test("Own bus topic provisioner reuses promoted follower topic", async () => {
 
 test("Own bus topic provisioner restores a promoted leader session handoff", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-own-topic-promoted-reload-"),
+    join(tmpdir(), "pi-bale-own-topic-promoted-reload-"),
   );
-  const path = join(dir, "telegram-targets.json");
-  const store = createTelegramTopicTargetStore({ path });
+  const path = join(dir, "bale-targets.json");
+  const store = createBaleTopicTargetStore({ path });
   const calls: unknown[] = [];
   try {
     store.upsert({
@@ -7198,7 +7198,7 @@ test("Own bus topic provisioner restores a promoted leader session handoff", asy
       threadName: "Cinder",
     });
     await store.persist();
-    setTelegramLeaderSessionHandoff({
+    setBaleLeaderSessionHandoff({
       pid: process.pid,
       instanceId: `${process.pid}:old-session`,
       createdAtMs: Date.now(),
@@ -7226,8 +7226,8 @@ test("Own bus topic provisioner restores a promoted leader session handoff", asy
       reused: true,
     });
     assert.deepEqual(calls, []);
-    assert.equal(getTelegramLeaderSessionHandoff(), undefined);
-    const restored = createTelegramTopicTargetStore({ path });
+    assert.equal(getBaleLeaderSessionHandoff(), undefined);
+    const restored = createBaleTopicTargetStore({ path });
     await restored.load();
     assert.equal(restored.list().length, 1);
     assert.deepEqual(restored.list()[0]?.owner, {
@@ -7237,16 +7237,16 @@ test("Own bus topic provisioner restores a promoted leader session handoff", asy
     });
     assert.equal(restored.list()[0]?.threadName, "Cinder");
   } finally {
-    setTelegramLeaderSessionHandoff(undefined);
+    setBaleLeaderSessionHandoff(undefined);
     await rm(dir, { force: true, recursive: true });
   }
 });
 
 test("Own bus topic provisioner does not claim pending follower topics", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-own-topic-pending-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-own-topic-pending-"));
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   try {
@@ -7290,10 +7290,10 @@ test("Own bus topic provisioner does not claim pending follower topics", async (
 });
 
 test("Own bus topic provisioner ignores non-current offline history", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-own-topic-stale-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-own-topic-stale-"));
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   try {
@@ -7337,10 +7337,10 @@ test("Own bus topic provisioner ignores non-current offline history", async () =
 });
 
 test("Own bus topic provisioner reuses a current topic without visible startup probes", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-own-topic-no-probe-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-own-topic-no-probe-"));
   const calls: unknown[] = [];
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   try {
@@ -7387,10 +7387,10 @@ test("Own bus topic provisioner reuses a current topic without visible startup p
 });
 
 test("Thread store persists only current state statuses", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-threads-"));
-  const path = join(dir, "telegram-targets.json");
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-threads-"));
+  const path = join(dir, "bale-targets.json");
   try {
-    const store = createTelegramTopicTargetStore({ path });
+    const store = createBaleTopicTargetStore({ path });
     store.upsert({
       profileKey: "topic:1:42",
       target: { chatId: 1, threadId: 42 },
@@ -7423,7 +7423,7 @@ test("Thread store persists only current state statuses", async () => {
     });
     await store.persist();
 
-    const loaded = createTelegramTopicTargetStore({ path });
+    const loaded = createBaleTopicTargetStore({ path });
     await loaded.load();
     const record = loaded.getByProfileKey("topic:1:42");
     assert.ok(record);
@@ -7449,9 +7449,9 @@ test("Production Restore storage resolver separates profiles and refuses foreign
     let profile: string | undefined;
     let token: string | undefined = "fixture:token";
     let beforePublish = () => {};
-    const threadStore = createTelegramTopicTargetStore({ path: () => profile ? `${path}.${profile}` : path,
+    const threadStore = createBaleTopicTargetStore({ path: () => profile ? `${path}.${profile}` : path,
       commitPersist(commit) { beforePublish(); commit(); return true; } });
-    const resolve = createTelegramWorkspaceRestoreResolver({ getProfileName: () => profile, getBotToken: () => token,
+    const resolve = createBaleWorkspaceRestoreResolver({ getProfileName: () => profile, getBotToken: () => token,
       agentDir: dirname(path), threadStore });
     const first = resolve()!;
     assert.equal(resolve(), first);
@@ -7516,7 +7516,7 @@ for (const role of ["leader", "follower"] as const) {
   test(`Restore with all 26 slots occupied preserves the slot and every other binding (${role})`, async () => {
     await fixture(async ({ store, open, threads, request, auth }) => {
       for (let index = 1; index < 26; index++) {
-        threads.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity(`/repo/${index}`, index, `session-${index}`)!,
+        threads.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity(`/repo/${index}`, index, `session-${index}`)!,
           target: { chatId: 7, threadId: 100 + index }, slot: String.fromCharCode(65 + index), threadName: `Thread ${index}`,
           journalBindingKeys: [`manual:${index}`], journalBindingsComplete: true, updatedAtMs: 1 });
       }
@@ -7566,7 +7566,7 @@ for (const role of ["leader", "follower"] as const) {
         if (boundary === "after-write-before-rename") await assert.rejects(store.commit(request, auth), /publication/);
         else assert.equal((await store.commit(request, auth))?.phase, "relocated");
         const committed = boundary === "after-rename";
-        const cold = createTelegramTopicTargetStore({ path });
+        const cold = createBaleTopicTargetStore({ path });
         await cold.load();
         assert.equal(cold.listWorkspaceBindings()[0]?.target.threadId, committed ? 42 : 10);
         assert.equal(open().list().length, committed ? 1 : 0);
@@ -7631,9 +7631,9 @@ for (const fault of ["none", "routing-lost-ack", "source-before-write", "source-
     await fixture(async ({ store, open, request, auth, path }) => {
       const identity = { instanceId: "old", processId: process.pid, processBirthId: `${process.pid}:restore`, sessionGeneration: 1 };
       const options = { path: join(dirname(path), "source.json"), queueRuntimeIdentity: identity,
-        botIdentity: createTelegramUpdateJournalBotIdentity({ botToken: "fixture:restore", botId: 7 }) };
-      const journal = createTelegramUpdateJournalStore(options);
-      request.source.journalBindingKey = createTelegramUpdateJournalBindingKey(options);
+        botIdentity: createBaleUpdateJournalBotIdentity({ botToken: "fixture:restore", botId: 7 }) };
+      const journal = createBaleUpdateJournalStore(options);
+      request.source.journalBindingKey = createBaleUpdateJournalBindingKey(options);
       journal.appendBatch(request.source.updateIds.map(update_id => ({ update_id,
         message: { message_id: update_id, from: { id: 7, is_bot: false }, chat: { id: 7, type: "private" }, text: "fixture" } })));
       const relocated = await store.commit(request, auth);
@@ -7657,12 +7657,12 @@ for (const fault of ["none", "routing-lost-ack", "source-before-write", "source-
       assert.equal(store.issueCleanup(routing, auth), undefined);
       assert.equal(store.recordSourceSettlement(routing, { ...request.source, updateIds: [999], kind: "completed" }, auth), undefined);
       const events: unknown[] = [], ctx = {};
-      const recipientJournal = createTelegramUpdateJournalStore({ ...options, path: `${options.path}.recipient` });
+      const recipientJournal = createBaleUpdateJournalStore({ ...options, path: `${options.path}.recipient` });
       recipientJournal.appendBatch([{ update_id: 99, message: { message_id: 99, chat: { id: 7, type: "private" }, text: "Independent accepted recipient work" } }]);
       recipientJournal.markQueued({ receiptId: "recipient-work", queueKind: "prompt", sourceUpdateIds: [99], owner: identity });
       const recipientBefore = recipientJournal.read();
       let queuedReceipt: { receiptId: string; queueKind: "prompt" | "control"; sourceUpdateIds: number[]; journalBindingKey?: string } | undefined;
-      const worker = createTelegramUpdateWorkerRuntime({ journal: { ...journal, removeCompleted(ids) {
+      const worker = createBaleUpdateWorkerRuntime({ journal: { ...journal, removeCompleted(ids) {
           if (fault === "source-before-write") throw new Error("No completion commit");
           const result = journal.removeCompleted(ids);
           if (fault === "source-lost-ack") throw new Error("Completion ACK lost");
@@ -7675,7 +7675,7 @@ for (const fault of ["none", "routing-lost-ack", "source-before-write", "source-
         onQueueReceiptCommitted(receipt) {
           queuedReceipt = { ...receipt, sourceUpdateIds: [...receipt.sourceUpdateIds] };
           const entry = journal.read().entries.find(value => value.updateId === 100)!;
-          assert.ok(store.recordSourceAcceptance(store.list()[0]!, { ...createTelegramUpdateJournalEntryDigest(entry),
+          assert.ok(store.recordSourceAcceptance(store.list()[0]!, { ...createBaleUpdateJournalEntryDigest(entry),
             journalBindingKey: request.source.journalBindingKey, recipient: recipient("leader"), kind: "queued",
             receiptId: receipt.receiptId, queueKind: receipt.queueKind,
             queueOwnerSha256: createHash("sha256").update(JSON.stringify(entry.queueOwner)).digest("hex") }, auth));
@@ -7738,9 +7738,9 @@ for (const kind of ["completed", "queued", "forwarded"] as const) {
       const role = kind === "forwarded" ? "follower" : "leader";
       await fixture(async ({ store, open, request, auth, path }) => {
         const options = { path: join(dirname(path), "acceptance-source.json"),
-          botIdentity: createTelegramUpdateJournalBotIdentity({ botToken: "fixture:restore", botId: 7 }) };
-        const journal = createTelegramUpdateJournalStore(options);
-        request.source.journalBindingKey = createTelegramUpdateJournalBindingKey(options);
+          botIdentity: createBaleUpdateJournalBotIdentity({ botToken: "fixture:restore", botId: 7 }) };
+        const journal = createBaleUpdateJournalStore(options);
+        request.source.journalBindingKey = createBaleUpdateJournalBindingKey(options);
         journal.appendBatch(request.source.updateIds.map(update_id => ({ update_id,
           message: { message_id: update_id, from: { id: 7, is_bot: false }, chat: { id: 7, type: "private" }, text: "fixture" } })));
         const queued = kind === "queued" ? journal.markQueued({ sourceUpdateIds: request.source.updateIds,
@@ -7748,12 +7748,12 @@ for (const kind of ["completed", "queued", "forwarded"] as const) {
             processBirthId: `${process.pid}:acceptance`, sessionGeneration: 1 } }) : undefined;
         const sourceBefore = await readFile(options.path, "utf8");
         const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-        const makeEvidence = (updateId: number): TelegramWorkspaceRestoreSourceAcceptance => ({
+        const makeEvidence = (updateId: number): BaleWorkspaceRestoreSourceAcceptance => ({
           journalBindingKey: request.source.journalBindingKey, updateId,
           sourceSha256: hash(journal.read().entries.find(entry => entry.updateId === updateId)), recipient: recipient(role),
           ...(kind === "completed" ? { kind } : kind === "queued"
             ? { kind, receiptId: "accepted", queueKind: "prompt", queueOwnerSha256: hash(queued!.queueOwner) }
-            : { kind, recipientBindingKey: "manual:old", deliveryId: createTelegramBusFollowerDeliveryIdentity({
+            : { kind, recipientBindingKey: "manual:old", deliveryId: createBaleBusFollowerDeliveryIdentity({
               kind: "leader.forwardMessage", recipientBindingKey: "manual:old", sourceUpdateId: updateId }).deliveryId }),
         });
         const evidence = makeEvidence(100);
@@ -7770,7 +7770,7 @@ for (const kind of ["completed", "queued", "forwarded"] as const) {
             }
           } });
           assert.throws(() => interrupted.recordSourceAcceptance(routing, evidence, auth), /Acceptance publication interrupted/);
-          const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+          const cold = createBaleTopicTargetStore({ path }); await cold.load();
           const recovered = restoreStorage(cold);
           routing = recovered.list()[0]!;
           assert.deepEqual(routing.routing?.acceptances, boundary === "before-rename" ? undefined : [evidence]);
@@ -7796,20 +7796,20 @@ for (const kind of ["completed", "queued", "forwarded"] as const) {
           assert.equal(await readFile(path, "utf8"), before);
           routing = store.recordSourceAcceptance(routing, evidence, auth)!;
           assert.ok(routing);
-          const completionSha256 = getTelegramWorkspaceRestoreSourceCompletionSha256(routing, evidence);
+          const completionSha256 = getBaleWorkspaceRestoreSourceCompletionSha256(routing, evidence);
           assert.match(completionSha256, /^[a-f0-9]{64}$/u);
           const reordered = JSON.parse(JSON.stringify(routing, function (_key, value) {
             return value && typeof value === "object" && !Array.isArray(value)
               ? Object.fromEntries(Object.keys(value).reverse().map(key => [key, value[key]])) : value;
           }));
-          assert.equal(getTelegramWorkspaceRestoreSourceCompletionSha256(reordered, evidence), completionSha256,
+          assert.equal(getBaleWorkspaceRestoreSourceCompletionSha256(reordered, evidence), completionSha256,
             "object order is representation, not a different completion authority");
-          assert.notEqual(getTelegramWorkspaceRestoreSourceCompletionSha256({ ...routing,
+          assert.notEqual(getBaleWorkspaceRestoreSourceCompletionSha256({ ...routing,
             request: { ...routing.request, operationId: `${routing.request.operationId}:other` } }, evidence), completionSha256);
-          assert.notEqual(getTelegramWorkspaceRestoreSourceCompletionSha256({ ...routing,
+          assert.notEqual(getBaleWorkspaceRestoreSourceCompletionSha256({ ...routing,
             request: { ...routing.request, target: { ...routing.request.target, threadId: 43 } } }, evidence), completionSha256);
-          assert.throws(() => getTelegramWorkspaceRestoreSourceCompletionSha256(routing, { ...evidence, sourceSha256: "f".repeat(64) }), /retained acceptance scope/);
-          assert.throws(() => getTelegramWorkspaceRestoreSourceCompletionSha256({ ...routing, operatorUserId: 8 }, evidence), /retained acceptance scope/);
+          assert.throws(() => getBaleWorkspaceRestoreSourceCompletionSha256(routing, { ...evidence, sourceSha256: "f".repeat(64) }), /retained acceptance scope/);
+          assert.throws(() => getBaleWorkspaceRestoreSourceCompletionSha256({ ...routing, operatorUserId: 8 }, evidence), /retained acceptance scope/);
           assert.deepEqual(routing.routing?.settlements, [], "acceptance alone never becomes source disposition");
           assert.equal(store.issueCleanup(routing, auth), undefined);
           assert.equal(store.retire(routing, auth), undefined);
@@ -7833,10 +7833,10 @@ for (const kind of ["completed", "queued", "forwarded"] as const) {
           assert.equal(await readFile(path, "utf8"), published);
           const accepted = store.recordSourceAcceptance(routing, makeEvidence(101), auth)!;
           assert.deepEqual(accepted.routing?.acceptances, [evidence, makeEvidence(101)]);
-          const cold = createTelegramTopicTargetStore({ path, canPersist: () => false }); await cold.load();
+          const cold = createBaleTopicTargetStore({ path, canPersist: () => false }); await cold.load();
           assert.deepEqual(restoreStorage(cold).list(), [accepted]);
           const coldBefore = await readFile(path, "utf8");
-          assert.equal(getTelegramWorkspaceRestoreSourceCompletionSha256(restoreStorage(cold).list()[0]!, evidence), completionSha256,
+          assert.equal(getBaleWorkspaceRestoreSourceCompletionSha256(restoreStorage(cold).list()[0]!, evidence), completionSha256,
             "cold loading and another source's progress retain the same immutable acceptance scope");
           assert.deepEqual(restoreStorage(cold).recordSourceAcceptance(accepted, evidence, auth), accepted,
             "an exact duplicate observes retained proof without canonical publication");
@@ -7847,7 +7847,7 @@ for (const kind of ["completed", "queued", "forwarded"] as const) {
           const successor = { ...auth, executor: { instanceId: "successor", leaderEpoch: "next" } };
           const adopted = store.adopt(accepted, successor)!;
           assert.deepEqual(adopted.routing, accepted.routing, "executor succession preserves acceptance and unissued disposition");
-          assert.equal(getTelegramWorkspaceRestoreSourceCompletionSha256(adopted, evidence), completionSha256,
+          assert.equal(getBaleWorkspaceRestoreSourceCompletionSha256(adopted, evidence), completionSha256,
             "executor, revision and timestamp changes cannot invalidate an issued source ACK");
           assert.equal(store.recordSourceAcceptance(accepted, evidence, auth), undefined);
           // Storage validates the supplied ACK shape; the composed journal owner must prove its truth.
@@ -7887,7 +7887,7 @@ for (const scenario of ["prompt", "control", "partial", "no-admission", "legacy"
         if (scenario === "cold-admission-cleanup") retained.routing.cleanup = "issued";
         else { delete retained.routing.acceptances; retained.routing.settlements[0].kind = "queue-completed"; }
         const forged = JSON.stringify(snapshot); writeFileSync(path, forged, { mode: 0o600 });
-        const cold = createTelegramTopicTargetStore({ path });
+        const cold = createBaleTopicTargetStore({ path });
         await assert.rejects(() => cold.load(), /Invalid Workspace Restore evidence/);
         assert.throws(() => restoreStorage(cold).list(), /Invalid Workspace Restore evidence/);
         assert.equal(await readFile(path, "utf8"), forged, "invalid cold evidence is retained, never repaired");
@@ -7913,7 +7913,7 @@ for (const scenario of ["prompt", "control", "partial", "no-admission", "legacy"
       assert.deepEqual(intent.routing?.acceptances, accepted.routing?.acceptances);
       assert.equal(store.recordSourceSettlement(intent, terminal, auth), undefined, "terminal proof cannot downgrade or duplicate");
       assert.equal(store.recordSourceSettlement(intent, admission, auth), undefined);
-      const cold = createTelegramTopicTargetStore({ path, canPersist: () => false }); await cold.load();
+      const cold = createBaleTopicTargetStore({ path, canPersist: () => false }); await cold.load();
       assert.deepEqual(restoreStorage(cold).list(), [intent]);
       assert.equal(store.issueCleanup(intent, auth)?.intent.routing?.cleanup, "issued");
     });
@@ -7926,7 +7926,7 @@ for (const tamper of ["empty", "duplicate", "hash", "recipient", "receipt", "set
       const ready = store.confirmReady(store.issueRecipient((await store.commit(request, auth))!, recipient("leader"), auth)!.intent,
         recipient("leader"), auth)!;
       const routing = store.issueRouting(ready, auth)!.intent;
-      const evidence: TelegramWorkspaceRestoreSourceAcceptance = { kind: "queued", journalBindingKey: request.source.journalBindingKey,
+      const evidence: BaleWorkspaceRestoreSourceAcceptance = { kind: "queued", journalBindingKey: request.source.journalBindingKey,
         updateId: 100, sourceSha256: "a".repeat(64), recipient: recipient("leader"), receiptId: "receipt", queueKind: "prompt",
         queueOwnerSha256: "b".repeat(64) };
       store.recordSourceAcceptance(routing, evidence, auth);
@@ -7941,7 +7941,7 @@ for (const tamper of ["empty", "duplicate", "hash", "recipient", "receipt", "set
       if (tamper === "cleanup") recorded.cleanup = "issued";
       await writeFile(path, JSON.stringify(snapshot));
       const before = await readFile(path, "utf8");
-      const cold = createTelegramTopicTargetStore({ path });
+      const cold = createBaleTopicTargetStore({ path });
       await assert.rejects(() => cold.load(), /Workspace Restore evidence/);
       assert.throws(() => restoreStorage(cold).list(), /Workspace Restore evidence/);
       assert.equal(await readFile(path, "utf8"), before, "malformed proof is retained without repair");
@@ -7993,7 +7993,7 @@ test("Temporary Thread reservation is durable, single-attempt and slot-free", as
     assert.equal(reserved.reserved, true);
     assert.equal(reserved.entry.phase, "creating");
     assert.equal(reserved.entry.target, undefined);
-    const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+    const cold = createBaleTopicTargetStore({ path }); await cold.load();
     assert.deepEqual(cold.listWorkspaceBindings().map(value => value.slot), slots, "a temporary tab consumes no slot");
     const before = await readFile(path, "utf8");
     const again = store.reserveTemporaryThread(temporarySource, "b".repeat(32), { ...auth, executor: { instanceId: "next", leaderEpoch: "next" } })!;
@@ -8011,7 +8011,7 @@ test("Temporary Thread reservation is durable, single-attempt and slot-free", as
     assert.deepEqual(created.target, { chatId: 7, threadId: 55 });
     assert.equal(store.acknowledgeTemporaryThread(created, { chatId: 7, threadId: 56 }, auth), undefined, "a created entry never reopens");
     assert.equal(store.acknowledgeTemporaryThread(reserved.entry, { chatId: 7, threadId: 56 }, auth), undefined, "stale evidence cannot acknowledge");
-    const restarted = createTelegramTopicTargetStore({ path }); await restarted.load();
+    const restarted = createBaleTopicTargetStore({ path }); await restarted.load();
     const reopened = restarted.workspaceRestore({ profileName: "default", tokenSha256: "a".repeat(64), getNowMs: () => 1000 });
     assert.deepEqual(reopened.listTemporaryThreads(), [created]);
     assert.deepEqual(reopened.reserveTemporaryThread(temporarySource, temporaryToken, auth), { reserved: false, entry: created });
@@ -8022,7 +8022,7 @@ for (const protection of ["none", "binding", "record", "reservation", "provision
   test(`Implicit temporary registration checks canonical ownership before publication (${protection})`, async () => {
     await fixture(async ({ store, open, threads, auth, path }) => {
       const target = { chatId: 7, threadId: 55 }, input = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [300] };
-      if (protection === "binding") threads.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/other", 0, "other")!,
+      if (protection === "binding") threads.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/other", 0, "other")!,
         target, slot: "B", updatedAtMs: 1000 });
       if (protection === "record") threads.upsert({ profileKey: "manual:other", instanceId: "other", target, slot: "B",
         status: "active", createdAtMs: 1, updatedAtMs: 1 });
@@ -8076,8 +8076,8 @@ test("Temporary Thread input membership is grouped, exact, append-only and cold-
     assert.equal(store.retireTemporaryThread(recorded, auth), undefined, "membership is not terminal sibling disposition proof");
     assert.equal(await readFile(path, "utf8"), before, "duplicates and refusals do not write");
     input.updateIds.push(999);
-    const detached = getTelegramTemporaryThreadInputs(recorded); detached[1]!.updateIds.push(998);
-    const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+    const detached = getBaleTemporaryThreadInputs(recorded); detached[1]!.updateIds.push(998);
+    const cold = createBaleTopicTargetStore({ path }); await cold.load();
     const reopened = open({ threadStore: cold });
     assert.deepEqual(reopened.listTemporaryThreads(), [recorded]);
     assert.deepEqual(reopened.listTemporaryThreads()[0]?.inputs?.[1]?.updateIds, [301, 302], "caller mutations cannot alter membership");
@@ -8108,9 +8108,9 @@ for (const scenario of ["exact", "missing", "partial", "foreign-binding", "forei
         reads++;
         if (!proofAvailable || scenario === "missing" || (scenario === "partial" && updateId === 302)) return undefined;
         if (scenario === "throws") throw new Error("Fixture retained evidence unreadable");
-        const evidence = { journalBindingKey: input.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" };
+        const evidence = { journalBindingKey: input.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" };
         if (scenario === "foreign-binding") evidence.journalBindingKey = "foreign";
-        if (scenario === "foreign-owner") evidence.operatorAuthorityId = "telegram-owner:8";
+        if (scenario === "foreign-owner") evidence.operatorAuthorityId = "bale-owner:8";
         if (scenario === "foreign-id") evidence.updateId = 999;
         if (scenario === "authority-after-read") auth.isCurrent = () => false;
         if (scenario === "operator-after-read") auth.operatorUserId = 8;
@@ -8137,7 +8137,7 @@ for (const scenario of ["exact", "missing", "partial", "foreign-binding", "forei
         assert.deepEqual(store.recordTemporaryThreadInputCancellation(current, input, auth, inspect), current);
         assert.equal(await readFile(path, "utf8"), bytes, "exact duplicate reconciliation is read-only");
         assert.equal(store.retireTemporaryThread(current, auth), undefined, "cancelled membership alone is not deletion authority");
-        const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+        const cold = createBaleTopicTargetStore({ path }); await cold.load();
         assert.deepEqual(open({ threadStore: cold }).listTemporaryThreads(), [current]);
       }
     });
@@ -8150,20 +8150,20 @@ test("Forward-completed groups resolve a multi-input tab alongside cancelled gro
     const first = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [temporarySource.updateId] };
     const second = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [301, 302] };
     entry = store.recordTemporaryThreadInput(entry, second, auth)!;
-    const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" });
+    const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" });
     assert.equal(store.recordTemporaryThreadInputCompletion(entry, { ...first, updateIds: [999] }, auth), undefined, "the group must be known");
     entry = store.recordTemporaryThreadInputCompletion(entry, first, auth)!;
     assert.deepEqual(entry.completedInputs, [first]);
     const bytes = await readFile(path, "utf8");
     assert.deepEqual(store.recordTemporaryThreadInputCompletion(entry, first, auth), entry);
     assert.equal(await readFile(path, "utf8"), bytes, "an exact duplicate is read-only");
-    assert.equal(isTelegramTemporaryThreadFullyResolved(entry), false);
+    assert.equal(isBaleTemporaryThreadFullyResolved(entry), false);
     assert.equal(store.retireTemporaryThread(entry, auth), undefined, "an unresolved group keeps the tab");
     assert.equal(store.recordTemporaryThreadInputCancellation(entry, first, auth, proof), undefined, "a completed group cannot be cancelled");
-    const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+    const cold = createBaleTopicTargetStore({ path }); await cold.load();
     assert.deepEqual(open({ threadStore: cold }).listTemporaryThreads()[0]?.completedInputs, [first]);
     entry = store.recordTemporaryThreadInputCancellation(entry, second, auth, proof)!;
-    assert.equal(isTelegramTemporaryThreadFullyResolved(entry), true);
+    assert.equal(isBaleTemporaryThreadFullyResolved(entry), true);
     assert.equal(store.recordTemporaryThreadInputCompletion(entry, second, auth), undefined, "a cancelled group cannot be completed");
     assert.deepEqual(store.retireTemporaryThread(entry, auth), entry, "completed plus cancelled groups release the tab");
     assert.deepEqual(store.listTemporaryThreads(), []);
@@ -8187,7 +8187,7 @@ for (const scenario of ["independent", "restore-owned", "foreign-target", "parti
         const before = await readFile(path, "utf8");
         assert.throws(() => store.recordTemporaryThreadInputCompletion(entry, request.source, auth), /Conflicting Workspace Restore evidence/);
         assert.throws(() => store.recordTemporaryThreadInputCancellation(entry, request.source, auth, updateId => ({
-          journalBindingKey: request.source.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" })), /Conflicting Workspace Restore evidence/);
+          journalBindingKey: request.source.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" })), /Conflicting Workspace Restore evidence/);
         assert.equal(await readFile(path, "utf8"), before, "partial source evidence stays protective and is never repaired into a grant");
         return;
       }
@@ -8198,12 +8198,12 @@ for (const scenario of ["independent", "restore-owned", "foreign-target", "parti
         assert.ok(recorded);
         assert.deepEqual(recorded.completedInputs, [origin]);
         assert.equal(store.retireTemporaryThread(recorded, auth), undefined, "the Restore group is not Forward-completed");
-        const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+        const cold = createBaleTopicTargetStore({ path }); await cold.load();
         assert.deepEqual(open({ threadStore: cold }).listTemporaryThreads(), [recorded]);
       } else {
         assert.equal(recorded, undefined, "even partial selected-source overlap cannot borrow Forward completion");
         assert.equal(store.recordTemporaryThreadInputCancellation(entry, input, auth, updateId => ({
-          journalBindingKey: input.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" })), undefined,
+          journalBindingKey: input.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" })), undefined,
           "retention alone cannot cancel any selected Restore source");
         assert.equal(await readFile(path, "utf8"), before);
       }
@@ -8218,23 +8218,23 @@ test("A durable Forward issuance fact is one-time and blocks cancellation and Re
     const first = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [temporarySource.updateId] };
     const second = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [301] };
     entry = store.recordTemporaryThreadInput(entry, second, auth)!;
-    const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" });
+    const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" });
     assert.equal(store.recordTemporaryThreadForwardIssued(entry, { ...first, updateIds: [999] }, auth), undefined, "the group must be known");
     const issued = store.recordTemporaryThreadForwardIssued(entry, first, auth)!;
     assert.deepEqual(issued.forwardedInputs, [first]);
     const bytes = await readFile(path, "utf8");
     assert.equal(store.recordTemporaryThreadForwardIssued(issued, first, auth), undefined, "a second issuance is refused, never replayed");
     assert.equal(await readFile(path, "utf8"), bytes);
-    const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+    const cold = createBaleTopicTargetStore({ path }); await cold.load();
     assert.deepEqual(open({ threadStore: cold }).listTemporaryThreads()[0]?.forwardedInputs, [first], "issuance survives restart");
     assert.equal(open({ threadStore: cold }).recordTemporaryThreadForwardIssued(open({ threadStore: cold }).listTemporaryThreads()[0]!, first, auth), undefined);
     assert.equal(store.recordTemporaryThreadInputCancellation(issued, first, auth, proof), undefined, "issued unknown work cannot be cancelled");
-    assert.equal(isTelegramTemporaryThreadFullyResolved(issued), false, "issuance is not resolution");
+    assert.equal(isBaleTemporaryThreadFullyResolved(issued), false, "issuance is not resolution");
     assert.equal(store.retireTemporaryThread(issued, auth), undefined);
     const sibling = store.recordTemporaryThreadInputCancellation(issued, second, auth, proof)!;
-    assert.equal(isTelegramTemporaryThreadFullyResolved(sibling), false, "an independently cancelled sibling does not resolve issued Forward");
+    assert.equal(isBaleTemporaryThreadFullyResolved(sibling), false, "an independently cancelled sibling does not resolve issued Forward");
     const done = store.recordTemporaryThreadInputCompletion(sibling, first, auth)!;
-    assert.equal(isTelegramTemporaryThreadFullyResolved(done), true, "positive completion resolves the issued group");
+    assert.equal(isBaleTemporaryThreadFullyResolved(done), true, "positive completion resolves the issued group");
     assert.deepEqual(done.forwardedInputs, [first]);
     assert.equal(store.retireTemporaryThread(done, auth)?.token, temporaryToken);
   });
@@ -8245,7 +8245,7 @@ for (const fault of ["restore-overlap", "cancelled", "legacy-fields", "invalid-s
     await fixture(async ({ store, open, request, auth, path }) => {
       let entry = store.acknowledgeTemporaryThread(store.reserveTemporaryThread(temporarySource, temporaryToken, auth)!.entry, request.target, auth)!;
       const first = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [temporarySource.updateId] };
-      const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" });
+      const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" });
       if (fault === "restore-overlap") {
         request.source = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [temporarySource.updateId] };
         request.target = entry.target!;
@@ -8281,7 +8281,7 @@ test("A multi-input temporary tab is released only by one completed group with e
     const second = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [301] };
     const third = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [302] };
     for (const input of [second, third]) entry = store.recordTemporaryThreadInput(entry, input, auth)!;
-    const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" });
+    const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" });
     assert.equal(store.retireTemporaryThread(entry, auth), undefined, "ordinary retirement still needs one known group");
     assert.equal(store.retireTemporaryThread(entry, auth, first), undefined, "uncancelled siblings protect the tab");
     entry = store.recordTemporaryThreadInputCancellation(entry, second, auth, proof)!;
@@ -8301,7 +8301,7 @@ test("Cancelled temporary inputs cannot Restore but do not cancel an independent
     const input = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [301, 302] };
     entry = store.recordTemporaryThreadInput(entry, input, auth)!;
     entry = store.recordTemporaryThreadInputCancellation(entry, input, auth,
-      updateId => ({ journalBindingKey: input.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" }))!;
+      updateId => ({ journalBindingKey: input.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" }))!;
     const before = await readFile(path, "utf8");
     for (const updateIds of [[301, 302], [301], [300, 301]]) {
       assert.equal(await store.commit({ ...request, source: { journalBindingKey: input.journalBindingKey, updateIds } }, auth).catch(() => undefined), undefined);
@@ -8310,7 +8310,7 @@ test("Cancelled temporary inputs cannot Restore but do not cancel an independent
     assert.ok(await store.commit({ ...request, source: { journalBindingKey: input.journalBindingKey, updateIds: [300] } }, auth));
     assert.equal(store.recordTemporaryThreadInputCancellation(store.listTemporaryThreads()[0]!,
       { journalBindingKey: input.journalBindingKey, updateIds: [300] }, auth,
-      updateId => ({ journalBindingKey: input.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" })), undefined,
+      updateId => ({ journalBindingKey: input.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" })), undefined,
       "an issued/retained Restore source cannot become an ordinary cancellation fact");
   });
 });
@@ -8364,7 +8364,7 @@ for (const conflict of ["provision", "reservation", "binding", "record"] as cons
           /Protected Workspace Restore provisioning conflict/);
         return;
       }
-      if (conflict === "binding") threads.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/other", 0, "other")!,
+      if (conflict === "binding") threads.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/other", 0, "other")!,
         target, slot: "B", updatedAtMs: 1000 });
       else threads.upsert({ profileKey: "manual:other", owner: { kind: "manual-follower", instanceId: "other" }, instanceId: "other",
         target, slot: "B", status: "active", createdAtMs: 1, updatedAtMs: 1 });
@@ -8402,9 +8402,9 @@ for (const fault of ["none", "unissued", "ended-authority", "foreign-executor", 
     await fixture(async ({ store, auth, path }) => {
       let entry = store.acknowledgeTemporaryThread(store.reserveTemporaryThread(temporarySource, temporaryToken, auth)!.entry,
         { chatId: 7, threadId: 55 }, auth)!;
-      const group = getTelegramTemporaryThreadInputs(entry)[0];
+      const group = getBaleTemporaryThreadInputs(entry)[0];
       entry = store.recordTemporaryThreadInputCancellation(entry, group, auth, id => ({ journalBindingKey: group.journalBindingKey,
-        updateId: id, operatorAuthorityId: "telegram-owner:7" }))!;
+        updateId: id, operatorAuthorityId: "bale-owner:7" }))!;
       const unissued = entry;
       entry = store.issueTemporaryThreadCleanup(entry, auth)!.entry;
       if (["bound", "unknown-provision", "targeted-provision", "malformed"].includes(fault)) {
@@ -8437,7 +8437,7 @@ for (const fault of ["none", "unresolved", "stale-frame", "ended-authority", "un
         { chatId: 7, threadId: 55 }, auth)!;
       const first = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [300] };
       const second = { journalBindingKey: temporarySource.journalBindingKey, updateIds: [301] };
-      const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" });
+      const proof = (updateId: number) => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" });
       entry = store.recordTemporaryThreadInput(entry, second, auth)!;
       entry = store.recordTemporaryThreadInputCancellation(entry, first, auth, proof)!;
       const incomplete = entry;
@@ -8468,7 +8468,7 @@ for (const fault of ["none", "unresolved", "stale-frame", "ended-authority", "un
         const result = publication.issueTemporaryThreadCleanup(candidate, active);
         assert.equal(result?.issued, fault === "none" || fault === "unknown-provision" ? true : undefined);
       }
-      const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+      const cold = createBaleTopicTargetStore({ path }); await cold.load();
       const successor = open({ threadStore: cold });
       const observed = successor.listTemporaryThreads()[0]!;
       assert.equal(observed.cleanupIssued, fault === "none" || fault === "unknown-provision" || fault === "after-rename" ? true : undefined);
@@ -8521,7 +8521,7 @@ for (const kind of ["legacy", "unknown-protocol", "missing-membership"] as const
       if (kind === "unknown-protocol") entry.forwardProtocol = "one-shot-v2";
       if (kind === "missing-membership") delete entry.inputs;
       await writeFile(path, JSON.stringify(disk));
-      const cold = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+      const cold = createBaleTopicTargetStore({ path, getNowMs: () => 1000 });
       const retained = open({ threadStore: cold });
       if (kind !== "legacy") {
         assert.throws(() => retained.listTemporaryThreads(), /Invalid Workspace Restore evidence/);
@@ -8579,7 +8579,7 @@ test("Temporary Thread evidence is strict and bounded", async () => {
       if (tamper === "empty") file.workspaceRestore.temporaryThreads = [];
       if (tamper === "target-chat") Object.assign(entries[0], { phase: "created", target: { chatId: 8, threadId: 5 } });
       await writeFile(path, JSON.stringify(file), { mode: 0o600 });
-      const cold = createTelegramTopicTargetStore({ path });
+      const cold = createBaleTopicTargetStore({ path });
       await assert.rejects(() => cold.load(), /Workspace Restore evidence/, tamper);
     }
   });
@@ -8588,7 +8588,7 @@ test("Temporary Thread evidence is strict and bounded", async () => {
 test("Generic cleanup protection covers temporary tabs and fails closed on unreadable evidence", async () => {
   await fixture(async ({ store, threads, auth, path }) => {
     const target = { chatId: 7, threadId: 55 };
-    const protection = createTelegramCleanupTargetProtection(threads);
+    const protection = createBaleCleanupTargetProtection(threads);
     const action = { kind: "close-delete-unbound-topic", target } as Parameters<typeof protection>[1];
     assert.equal(protection(target, action), false);
     store.acknowledgeTemporaryThread(store.reserveTemporaryThread(temporarySource, temporaryToken, auth)!.entry, target, auth);
@@ -8607,7 +8607,7 @@ for (const scenario of ["temporary", "bound", "creating", "stale-frame", "owner-
       const reserved = store.reserveTemporaryThread(temporarySource, temporaryToken, auth)!.entry;
       const expected = scenario === "creating" ? reserved : store.acknowledgeTemporaryThread(reserved, target, auth)!;
       const next = { ...auth, executor: { instanceId: "successor", leaderEpoch: "successor-epoch" } };
-      const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+      const cold = createBaleTopicTargetStore({ path }); await cold.load();
       const reopened = open({ threadStore: cold });
       if (scenario === "bound") {
         assert.ok(await store.commit({ ...request, target, source: { journalBindingKey: temporarySource.journalBindingKey,
@@ -8681,7 +8681,7 @@ test("New-world forgetting removes only this operator's previous-instance state 
 
 test("A follower cannot publish temporary Thread evidence", async () => {
   await fixture(async ({ store, auth, path, open }) => {
-    const follower = createTelegramTopicTargetStore({ path, canPersist: () => false }); await follower.load();
+    const follower = createBaleTopicTargetStore({ path, canPersist: () => false }); await follower.load();
     const before = await readFile(path, "utf8");
     assert.equal(open({ threadStore: follower }).reserveTemporaryThread(temporarySource, temporaryToken, auth), undefined);
     assert.equal(await readFile(path, "utf8"), before);
@@ -8693,7 +8693,7 @@ test("A follower cannot publish temporary Thread evidence", async () => {
     assert.equal(await readFile(path, "utf8"), published, "membership publication never borrows leader persistence");
     assert.equal(open({ threadStore: follower }).recordTemporaryThreadInputCancellation(created,
       { journalBindingKey: temporarySource.journalBindingKey, updateIds: [300] }, auth,
-      updateId => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "telegram-owner:7" })), undefined);
+      updateId => ({ journalBindingKey: temporarySource.journalBindingKey, updateId, operatorAuthorityId: "bale-owner:7" })), undefined);
     assert.equal(await readFile(path, "utf8"), published, "cancellation facts cannot borrow leader persistence either");
   });
 });
@@ -8714,7 +8714,7 @@ for (const mode of ["exact", "unordered", "partial", "extra", "routed", "issued"
       if (mode === "exact" || mode === "unordered") {
         assert.deepEqual(retired, intent);
         assert.deepEqual(store.list(), []);
-        const cold = createTelegramTopicTargetStore({ path }); await cold.load();
+        const cold = createBaleTopicTargetStore({ path }); await cold.load();
         assert.deepEqual(cold.listWorkspaceBindings(), bindings, "retirement keeps the relocated binding and slot");
         assert.equal(store.retireAbandoned(intent, ids, authority), undefined, "retirement is not replayable");
       } else {
@@ -8814,7 +8814,7 @@ for (const collision of ["none", "slot", "binding", "source-target", "destinatio
       const before = await readFile(path, "utf8");
       const other = structuredClone(request);
       other.operationId = "other";
-      other.binding = { ...request.binding, ...createTelegramWorkspaceBindingIdentity("/other", 0, "other")!,
+      other.binding = { ...request.binding, ...createBaleWorkspaceBindingIdentity("/other", 0, "other")!,
         target: { chatId: 7, threadId: 99 }, slot: "B" };
       other.owner = { ...request.owner, profileKey: "cwd:/other", instanceId: "other",
         owner: { kind: "leader", cwd: "/other", instanceId: "other" }, target: { chatId: 7, threadId: 99 }, slot: "B" };
@@ -8822,7 +8822,7 @@ for (const collision of ["none", "slot", "binding", "source-target", "destinatio
       other.source.updateIds = [200];
       if (collision === "slot") other.binding.slot = other.owner.slot = "A";
       if (collision === "binding") {
-        other.binding = { ...other.binding, ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session")! };
+        other.binding = { ...other.binding, ...createBaleWorkspaceBindingIdentity("/repo", 0, "session")! };
         other.owner.owner = { kind: "leader", cwd: "/repo", instanceId: "other" };
         other.owner.profileKey = "cwd:/repo";
       }
@@ -8850,7 +8850,7 @@ for (const fault of ["identity", "commit-port"] as const) {
     await fixture(async ({ request, auth, path }) => {
       const nativeOptions = { path, commitPersist(commit: () => void) { if (fault === "commit-port") return false; commit(); return true; } };
       const options = { profileName: "default", tokenSha256: "a".repeat(64) };
-      const store = createTelegramTopicTargetStore(nativeOptions).workspaceRestore(options);
+      const store = createBaleTopicTargetStore(nativeOptions).workspaceRestore(options);
       options.profileName = "other";
       options.tokenSha256 = "b".repeat(64);
       nativeOptions.commitPersist = commit => { commit(); return true; };

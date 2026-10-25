@@ -1,19 +1,19 @@
 /**
- * Telegram Thread naming rules and manual-name interaction
+ * Bale Thread naming rules and manual-name interaction
  * Zones: thread identity names, palettes, title formatting, runtime controls
  * Owns name/title value policy and one expiring exact-target dialog per session scope.
  * Excludes occupancy/slot allocation, display-mode projection, transport and API/store effects.
  */
-import { areTelegramTargetsEqual as sameTarget, } from "./target.js";
-export const TELEGRAM_THREAD_NAME_DIALOG_TTL_MS = 5 * 60_000;
+import { areBaleTargetsEqual as sameTarget, } from "./target.js";
+export const BALE_THREAD_NAME_DIALOG_TTL_MS = 5 * 60_000;
 function targetKey(target) {
     return `${target.chatId}:${target.threadId ?? "chat"}`;
 }
 function cloneCandidate(candidate) {
     return { ...candidate, target: { ...candidate.target } };
 }
-export function createTelegramThreadNameDialogRuntime(options) {
-    const ttlMs = options?.ttlMs ?? TELEGRAM_THREAD_NAME_DIALOG_TTL_MS;
+export function createBaleThreadNameDialogRuntime(options) {
+    const ttlMs = options?.ttlMs ?? BALE_THREAD_NAME_DIALOG_TTL_MS;
     const nowMs = options?.nowMs ?? Date.now;
     const candidates = new Map();
     const recipientCurrent = (entry) => {
@@ -218,7 +218,7 @@ export function createTelegramThreadNameDialogRuntime(options) {
         },
     };
 }
-export function normalizeTelegramTopicTargetThreadName(threadName) {
+export function normalizeBaleTopicTargetThreadName(threadName) {
     return threadName.replace(/\s+/g, " ").trim().slice(0, 96);
 }
 function getGraphemeSegments(value) {
@@ -227,12 +227,12 @@ function getGraphemeSegments(value) {
         return Array.from(value);
     return Array.from(new segmenter(undefined, { granularity: "grapheme" }).segment(value), (part) => part.segment);
 }
-export function getTelegramTopicIdentityName(threadName) {
-    return getGraphemeSegments(normalizeTelegramTopicTargetThreadName(threadName))
+export function getBaleTopicIdentityName(threadName) {
+    return getGraphemeSegments(normalizeBaleTopicTargetThreadName(threadName))
         .join("")
         .trim();
 }
-const TELEGRAM_THREAD_NAME_PALETTE = {
+const BALE_THREAD_NAME_PALETTE = {
     A: ["Atlas", "Aster", "Aurora", "Anchor", "Ashen"],
     B: ["Beacon", "Briar", "Boreal", "Birch", "Bison"],
     C: ["Cedar", "Comet", "Cipher", "Coral", "Cinder"],
@@ -260,36 +260,36 @@ const TELEGRAM_THREAD_NAME_PALETTE = {
     Y: ["Yarrow", "Yonder", "Yukon", "Yale", "Yogi"],
     Z: ["Zenith", "Zephyr", "Zircon", "Zebra", "Zion"],
 };
-export function chooseTelegramThreadName(input) {
+export function chooseBaleThreadName(input) {
     if (!input.slot || !/^[A-Z]$/.test(input.slot))
         return undefined;
-    const names = TELEGRAM_THREAD_NAME_PALETTE[input.slot];
+    const names = BALE_THREAD_NAME_PALETTE[input.slot];
     if (!names || names.length === 0)
         return undefined;
-    const occupied = new Set((input.occupied ?? []).map((name) => getTelegramTopicIdentityName(name)));
+    const occupied = new Set((input.occupied ?? []).map((name) => getBaleTopicIdentityName(name)));
     const start = input.getRandom
         ? Math.max(0, Math.min(names.length - 1, Math.floor(input.getRandom() * names.length)))
-        : getTelegramThreadNameEntropyIndex(input.entropy, names.length);
+        : getBaleThreadNameEntropyIndex(input.entropy, names.length);
     for (let offset = 0; offset < names.length; offset += 1) {
         const name = names[(start + offset) % names.length];
-        if (!occupied.has(getTelegramTopicIdentityName(name)))
+        if (!occupied.has(getBaleTopicIdentityName(name)))
             return name;
     }
     for (const paletteSlot of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-        for (const name of TELEGRAM_THREAD_NAME_PALETTE[paletteSlot] ?? []) {
-            if (!occupied.has(getTelegramTopicIdentityName(name)))
+        for (const name of BALE_THREAD_NAME_PALETTE[paletteSlot] ?? []) {
+            if (!occupied.has(getBaleTopicIdentityName(name)))
                 return name;
         }
     }
     return undefined;
 }
-export function getTelegramThreadNameLeadingSlot(threadName) {
+export function getBaleThreadNameLeadingSlot(threadName) {
     if (!threadName)
         return undefined;
-    const first = getTelegramTopicIdentityName(threadName)[0];
+    const first = getBaleTopicIdentityName(threadName)[0];
     return first && /^[A-Z]$/.test(first) ? first : undefined;
 }
-function getTelegramThreadNameEntropyIndex(entropy, length) {
+function getBaleThreadNameEntropyIndex(entropy, length) {
     if (length <= 1)
         return 0;
     if (typeof entropy === "number" && entropy < 1_000_000_000_000)
@@ -302,8 +302,8 @@ function getTelegramThreadNameEntropyIndex(entropy, length) {
     }
     return hash % length;
 }
-export function getTelegramTopicThreadNameValidationError(threadName, _slot) {
-    const identity = getTelegramTopicIdentityName(threadName);
+export function getBaleTopicThreadNameValidationError(threadName, _slot) {
+    const identity = getBaleTopicIdentityName(threadName);
     const reasons = [];
     if (!identity)
         reasons.push("it is empty after trimming");
@@ -315,7 +315,7 @@ export function getTelegramTopicThreadNameValidationError(threadName, _slot) {
     if (!/^[A-Z]/.test(identity)) {
         reasons.push("it does not start with an uppercase Latin letter");
     }
-    const genericLabels = new Set(["telegram", "leader", "follower"]);
+    const genericLabels = new Set(["bale", "leader", "follower"]);
     if (genericLabels.has(identity.toLowerCase())) {
         reasons.push("it is a generic role label");
     }
@@ -323,9 +323,9 @@ export function getTelegramTopicThreadNameValidationError(threadName, _slot) {
         reasons.push("it is only a bare slot letter");
     if (reasons.length === 0)
         return undefined;
-    return `Invalid Telegram instance name: ${reasons.join("; ")}. Use exactly one capitalized Latin word with no spaces, punctuation, emoji, non-Latin letters, or digits; it must not be a generic role label or only a bare slot letter.`;
+    return `Invalid Bale instance name: ${reasons.join("; ")}. Use exactly one capitalized Latin word with no spaces, punctuation, emoji, non-Latin letters, or digits; it must not be a generic role label or only a bare slot letter.`;
 }
-export function getTelegramManualThreadDisplayNameValidationError(threadName) {
+export function getBaleManualThreadDisplayNameValidationError(threadName) {
     const trimmed = threadName.trim();
     const normalized = trimmed.replace(/\s+/g, " ");
     const reasons = [];
@@ -341,10 +341,10 @@ export function getTelegramManualThreadDisplayNameValidationError(threadName) {
     }
     if (reasons.length === 0)
         return undefined;
-    return `Invalid Telegram Thread display name: ${reasons.join("; ")}. Use 1–96 printable ASCII characters.`;
+    return `Invalid Bale Thread display name: ${reasons.join("; ")}. Use 1–96 printable ASCII characters.`;
 }
-export function isTelegramTopicThreadNameValidForSlot(threadName, slot) {
-    return !getTelegramTopicThreadNameValidationError(threadName, slot);
+export function isBaleTopicThreadNameValidForSlot(threadName, slot) {
+    return !getBaleTopicThreadNameValidationError(threadName, slot);
 }
 function applyTopicNameTemplate(template, request, slot) {
     const threadName = request.threadName?.replace(/\s+/g, " ").trim() || request.profileKey;
@@ -356,16 +356,16 @@ function applyTopicNameTemplate(template, request, slot) {
         result = result.replaceAll("{slot}", slot);
     return result;
 }
-export function getTelegramTopicName(request, template = "{slot}", slot) {
+export function getBaleTopicName(request, template = "{slot}", slot) {
     const name = applyTopicNameTemplate(template, request, slot)
         .replace(/\s+/g, " ")
         .trim();
     return (name || slot || "Pi").slice(0, 128);
 }
-export function getTelegramTopicTitleForThreadName(threadName, slot, template = "{threadName}") {
-    return getTelegramTopicName({
+export function getBaleTopicTitleForThreadName(threadName, slot, template = "{threadName}") {
+    return getBaleTopicName({
         instanceId: "",
-        profileKey: normalizeTelegramTopicTargetThreadName(threadName) || "Pi",
+        profileKey: normalizeBaleTopicTargetThreadName(threadName) || "Pi",
         threadName,
     }, template, slot);
 }

@@ -1,16 +1,16 @@
 /**
- * Telegram runtime storage housekeeping
+ * Bale runtime storage housekeeping
  * Zones: filesystem diagnostics, unclean-shutdown recovery
  * Owns best-effort removal of obsolete recovery folders and orphaned session journal families
  */
 import { lstatSync, readdirSync, rmdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { decodeTelegramSessionDirectoryName, getTelegramProfilePathSuffix, } from "./paths.js";
+import { decodeBaleSessionDirectoryName, getBaleProfilePathSuffix, } from "./paths.js";
 /**
  * Remove recovery folders written by earlier releases (runtime root and session folders).
  * Current releases delete damaged files instead of quarantining them; nothing reads these copies.
  */
-export function removeTelegramLegacyRecoveryStorage(runtimeDir) {
+export function removeBaleLegacyRecoveryStorage(runtimeDir) {
     const removed = [];
     const remove = (path) => {
         try {
@@ -40,14 +40,14 @@ export function removeTelegramLegacyRecoveryStorage(runtimeDir) {
         remove(join(runtimeDir, "sessions", session, "recovery"));
     return removed;
 }
-const TELEGRAM_SESSION_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+const BALE_SESSION_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 /**
  * Leader housekeeping (operator policy): a session without a Workspace slot loses its
  * current-profile journal family; the folder disappears once no profile uses it.
  */
-export function createTelegramSessionFolderSweeper(deps) {
+export function createBaleSessionFolderSweeper(deps) {
     const getNowMs = deps.getNowMs ?? Date.now;
-    const intervalMs = deps.intervalMs ?? TELEGRAM_SESSION_SWEEP_INTERVAL_MS;
+    const intervalMs = deps.intervalMs ?? BALE_SESSION_SWEEP_INTERVAL_MS;
     let lastSweepAtMs;
     return {
         sweep() {
@@ -57,7 +57,7 @@ export function createTelegramSessionFolderSweeper(deps) {
             lastSweepAtMs = now;
             const sessionsDir = deps.getSessionsDir();
             const kept = new Set(deps.getKeptSessionIds());
-            const suffix = getTelegramProfilePathSuffix(deps.getProfileName()).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+            const suffix = getBaleProfilePathSuffix(deps.getProfileName()).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
             const family = new RegExp(`^journal\\.[a-f0-9]{16}${suffix}\\.json(?:\\.segments|\\.retained)?$`, "u");
             const removed = [];
             let names;
@@ -68,7 +68,7 @@ export function createTelegramSessionFolderSweeper(deps) {
                 return removed;
             }
             for (const name of names) {
-                const sessionId = decodeTelegramSessionDirectoryName(name);
+                const sessionId = decodeBaleSessionDirectoryName(name);
                 if (sessionId === undefined || kept.has(sessionId))
                     continue;
                 const folder = join(sessionsDir, name);

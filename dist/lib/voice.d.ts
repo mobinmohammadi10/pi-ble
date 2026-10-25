@@ -1,89 +1,89 @@
 /**
- * Telegram voice reply policy and provider registries
- * Zones: telegram, voice, pi agent prompts
+ * Bale voice reply policy and provider registries
+ * Zones: bale, voice, pi agent prompts
  * Owns: voice reply modes (manual / mirror / always), voice turn flags and preview suppression,
  * voice prompt contributions, and the process-global synthesis/transcription provider registries.
- * Excludes: voice markup parsing (outbound-markup), audio generation and Telegram delivery
+ * Excludes: voice markup parsing (outbound-markup), audio generation and Bale delivery
  * (outbound, outbound-voice), queue, preview lifecycle and turn building.
  */
-export type TelegramVoiceReplyMode = "manual" | "mirror" | "always";
-export type TelegramVoiceSynthesisProviderResult = string | undefined;
-export interface TelegramVoiceTurnView {
+export type BaleVoiceReplyMode = "manual" | "mirror" | "always";
+export type BaleVoiceSynthesisProviderResult = string | undefined;
+export interface BaleVoiceTurnView {
     voiceReplyPreferred?: boolean;
     voiceReplyRequired?: boolean;
     hasVoiceInput?: boolean;
     userText?: string;
 }
-export interface TelegramVoiceSynthesisProvider {
+export interface BaleVoiceSynthesisProvider {
     (text: string, options?: {
         lang?: string;
         rate?: string;
-    }): Promise<TelegramVoiceSynthesisProviderResult>;
+    }): Promise<BaleVoiceSynthesisProviderResult>;
     getVoicePolicy?: () => {
-        replyMode?: TelegramVoiceReplyMode;
+        replyMode?: BaleVoiceReplyMode;
     };
-    getVoicePromptContribution?: (view: TelegramVoiceTurnView) => string | undefined;
+    getVoicePromptContribution?: (view: BaleVoiceTurnView) => string | undefined;
 }
-export type TelegramVoiceTranscriptionProviderResult = string | {
+export type BaleVoiceTranscriptionProviderResult = string | {
     text: string;
     language?: string;
 } | undefined;
-export interface TelegramVoiceTranscriptionFile {
+export interface BaleVoiceTranscriptionFile {
     path: string;
     fileName?: string;
     mimeType?: string;
     kind?: string;
 }
-export interface TelegramVoiceTranscriptionProvider {
-    (file: TelegramVoiceTranscriptionFile, options?: {
+export interface BaleVoiceTranscriptionProvider {
+    (file: BaleVoiceTranscriptionFile, options?: {
         language?: string;
-    }): Promise<TelegramVoiceTranscriptionProviderResult>;
+    }): Promise<BaleVoiceTranscriptionProviderResult>;
 }
 /**
- * Register a high-level Telegram voice synthesis provider.
+ * Register a high-level Bale voice synthesis provider.
  *
  * Stable public API callers must pass a stable `options.id` so diagnostics,
  * replacement, and cleanup can identify the provider. Omitted ids remain a
  * compatibility path for pre-matrix callers and receive generated session-local
  * ids.
  */
-export declare function registerTelegramVoiceSynthesisProvider(provider: TelegramVoiceSynthesisProvider | ((text: string, options?: {
+export declare function registerBaleVoiceSynthesisProvider(provider: BaleVoiceSynthesisProvider | ((text: string, options?: {
     lang?: string;
     rate?: string;
-}) => Promise<TelegramVoiceSynthesisProviderResult>), options?: {
+}) => Promise<BaleVoiceSynthesisProviderResult>), options?: {
     id?: string;
 }): () => void;
-export declare function getTelegramVoiceSynthesisProviders(): TelegramVoiceSynthesisProvider[];
-export declare function hasTelegramVoiceSynthesisProvider(): boolean;
-export declare function clearTelegramVoiceSynthesisProviders(): void;
+export declare function getBaleVoiceSynthesisProviders(): BaleVoiceSynthesisProvider[];
+export declare function hasBaleVoiceSynthesisProvider(): boolean;
+export declare function clearBaleVoiceSynthesisProviders(): void;
 /**
- * Register a high-level Telegram voice transcription provider.
+ * Register a high-level Bale voice transcription provider.
  *
  * Stable public API callers must pass a stable `options.id`. Omitted ids remain
  * a compatibility path for pre-matrix callers and receive generated
  * session-local ids.
  */
-export declare function registerTelegramVoiceTranscriptionProvider(provider: TelegramVoiceTranscriptionProvider, options?: {
+export declare function registerBaleVoiceTranscriptionProvider(provider: BaleVoiceTranscriptionProvider, options?: {
     id?: string;
 }): () => void;
-export declare function getTelegramVoiceTranscriptionProviders(): TelegramVoiceTranscriptionProvider[];
-export declare function hasTelegramVoiceTranscriptionProvider(): boolean;
-export declare function clearTelegramVoiceTranscriptionProviders(): void;
-export declare const TELEGRAM_VOICE_REPLY_MODES: readonly ["manual", "mirror", "always"];
+export declare function getBaleVoiceTranscriptionProviders(): BaleVoiceTranscriptionProvider[];
+export declare function hasBaleVoiceTranscriptionProvider(): boolean;
+export declare function clearBaleVoiceTranscriptionProviders(): void;
+export declare const BALE_VOICE_REPLY_MODES: readonly ["manual", "mirror", "always"];
 /**
  * Returns the active voice reply mode for the current session.
  *
- * Pi-telegram owns reply-mode policy through telegram.json. If
+ * Pi-bale owns reply-mode policy through bale.json. If
  * config.voice.replyMode is missing, invalid, or legacy `hidden`, the effective
  * mode is manual.
  */
-export declare function getTelegramVoiceReplyMode(config?: {
+export declare function getBaleVoiceReplyMode(config?: {
     voice?: {
         replyMode?: string;
     };
-}): TelegramVoiceReplyMode;
+}): BaleVoiceReplyMode;
 /** Small helper to compute the two voice flags from mode + hasVoiceFile */
-export declare function computeVoiceTurnFlags(voiceReplyMode: TelegramVoiceReplyMode | undefined, hasVoiceFile: boolean): {
+export declare function computeVoiceTurnFlags(voiceReplyMode: BaleVoiceReplyMode | undefined, hasVoiceFile: boolean): {
     voiceReplyPreferred: boolean;
     voiceReplyRequired: boolean;
 };
@@ -92,7 +92,7 @@ export declare function isVoiceTurn(turn: {
     voiceReplyPreferred?: boolean;
     voiceReplyRequired?: boolean;
 } | null | undefined): boolean;
-export declare function computeVoicePromptContribution(voiceReplyMode: TelegramVoiceReplyMode | undefined, files: Array<{
+export declare function computeVoicePromptContribution(voiceReplyMode: BaleVoiceReplyMode | undefined, files: Array<{
     kind?: string;
 }>, rawText: string): string | undefined;
 /**

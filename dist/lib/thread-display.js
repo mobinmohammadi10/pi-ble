@@ -1,12 +1,12 @@
 /**
- * Telegram Workspace display projection
- * Zones: telegram, tui, thread identity
+ * Bale Workspace display projection
+ * Zones: bale, tui, thread identity
  * Owns mode-specific labels and serialized, authority-fenced title application.
  * Excludes routing, name allocation, profile mutation, and live-owner discovery.
  */
 import { homedir } from "node:os";
 import { isDeepStrictEqual } from "node:util";
-import { normalizeTelegramWorkspacePath } from "./workspace-identity.js";
+import { normalizeBaleWorkspacePath } from "./workspace-identity.js";
 function labelText(value) {
     return value.replace(/\s+/gu, " ").trim();
 }
@@ -42,7 +42,7 @@ function directoryLabel(cwd, directories) {
     return parts.length ? labelText(parts.join("/")) : "/";
 }
 /** Pure directory tokenization shared by previews, initial titles, and reconciliation. */
-export function tokenizeTelegramDirectorySegment(segment) {
+export function tokenizeBaleDirectorySegment(segment) {
     return segment
         .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1\u0000$2")
         .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1\u0000$2")
@@ -55,7 +55,7 @@ function formatDirectoryLabel(cwd, directories, mode, homeDirectory) {
         return "/";
     const formatted = segments
         .map((segment) => {
-        const tokens = tokenizeTelegramDirectorySegment(segment);
+        const tokens = tokenizeBaleDirectorySegment(segment);
         if (!tokens.length)
             return "";
         if (mode === "directory-snake")
@@ -72,7 +72,7 @@ function formatDirectoryLabel(cwd, directories, mode, homeDirectory) {
     return formatted.join(mode === "directory-snake" ? "_" : " / ");
 }
 /** Maps one leader-captured authenticated owner roster onto retained binding identities. */
-export function resolveTelegramLiveWorkspaceBindingKeys(bindings, leaderTarget, followers) {
+export function resolveBaleLiveWorkspaceBindingKeys(bindings, leaderTarget, followers) {
     const targets = new Set();
     const add = (target) => {
         if (target && typeof target.threadId === "number") {
@@ -88,7 +88,7 @@ export function resolveTelegramLiveWorkspaceBindingKeys(bindings, leaderTarget, 
 }
 /** Missing or ambiguous metadata yields no label rather than inventing identity. */
 /** Case-insensitive label occurrences; directory modes count only live bindings. */
-function countTelegramDisplayLabels(bindings, labels, mode, liveBindingKeys) {
+function countBaleDisplayLabels(bindings, labels, mode, liveBindingKeys) {
     const counts = new Map();
     for (const binding of bindings) {
         const label = labels.get(binding.bindingKey);
@@ -101,11 +101,11 @@ function countTelegramDisplayLabels(bindings, labels, mode, liveBindingKeys) {
     }
     return counts;
 }
-export function resolveTelegramWorkspaceDisplayNames(bindings, mode, liveBindingKeys = new Set()) {
+export function resolveBaleWorkspaceDisplayNames(bindings, mode, liveBindingKeys = new Set()) {
     const labels = new Map();
     const homeDirectory = (mode === "directory-snake" || mode === "directory-title") &&
         (process.platform === "linux" || process.platform === "darwin")
-        ? normalizeTelegramWorkspacePath(homedir())
+        ? normalizeBaleWorkspacePath(homedir())
         : undefined;
     const directories = Array.from(new Set(bindings.map((binding) => binding.cwd)));
     const liveDirectoryCounts = new Map();
@@ -159,7 +159,7 @@ export function resolveTelegramWorkspaceDisplayNames(bindings, mode, liveBinding
     if (mode === "directories" ||
         mode === "directory-snake" ||
         mode === "directory-title") {
-        const counts = countTelegramDisplayLabels(bindings, labels, mode, liveBindingKeys);
+        const counts = countBaleDisplayLabels(bindings, labels, mode, liveBindingKeys);
         for (const binding of bindings) {
             const label = labels.get(binding.bindingKey);
             if (binding.manualThreadName ||
@@ -180,14 +180,14 @@ export function resolveTelegramWorkspaceDisplayNames(bindings, mode, liveBinding
                 : `_${binding.slot.toLowerCase()}`));
         }
     }
-    const counts = countTelegramDisplayLabels(bindings, labels, mode, liveBindingKeys);
+    const counts = countBaleDisplayLabels(bindings, labels, mode, liveBindingKeys);
     for (const [key, label] of labels) {
         if ((counts.get(label.toLowerCase()) ?? 0) > 1)
             labels.delete(key);
     }
     return labels;
 }
-export function resolveTelegramInitialWorkspaceDisplayName(input) {
+export function resolveBaleInitialWorkspaceDisplayName(input) {
     const retained = input.bindings.find((binding) => binding.bindingKey === input.binding.bindingKey);
     const binding = retained
         ? {
@@ -199,12 +199,12 @@ export function resolveTelegramInitialWorkspaceDisplayName(input) {
                 : {}),
         }
         : input.binding;
-    return resolveTelegramWorkspaceDisplayNames([
+    return resolveBaleWorkspaceDisplayNames([
         ...input.bindings.filter((candidate) => candidate.bindingKey !== binding.bindingKey),
         binding,
     ], input.mode, new Set([...(input.liveBindingKeys ?? []), binding.bindingKey])).get(binding.bindingKey);
 }
-export async function applyTelegramThreadDisplaySetting(mode, deps) {
+export async function applyBaleThreadDisplaySetting(mode, deps) {
     const profile = deps.getProfileKey();
     const setter = deps.ownsLeader()
         ? deps.getLeaderSetter()
@@ -213,12 +213,12 @@ export async function applyTelegramThreadDisplaySetting(mode, deps) {
         throw new Error("Thread display settings require a connected compatible instance.");
     await setter(mode);
     if (deps.getProfileKey() !== profile)
-        throw new Error("Telegram Thread display setting changed profile.");
+        throw new Error("Bale Thread display setting changed profile.");
     await deps.reloadConfig();
     if (deps.getProfileKey() !== profile)
-        throw new Error("Telegram Thread display setting changed profile.");
+        throw new Error("Bale Thread display setting changed profile.");
 }
-export function createTelegramThreadDisplaySettingsRuntime(deps) {
+export function createBaleThreadDisplaySettingsRuntime(deps) {
     return {
         isCustom() {
             const target = deps.getTarget();
@@ -234,13 +234,13 @@ export function createTelegramThreadDisplaySettingsRuntime(deps) {
                 return;
             const reset = await deps.reset(target);
             if (!reset.ok) {
-                throw new Error(reset.message ?? "Telegram Thread display override reset failed.");
+                throw new Error(reset.message ?? "Bale Thread display override reset failed.");
             }
         },
     };
 }
 /** Caller owns triggering and reporting; no timer or background retry is created. */
-export function createTelegramThreadDisplayReconciler(deps) {
+export function createBaleThreadDisplayReconciler(deps) {
     let tail = Promise.resolve();
     const apply = async (bindingKey) => {
         const epoch = deps.getLeaderEpoch();
@@ -251,13 +251,13 @@ export function createTelegramThreadDisplayReconciler(deps) {
                 deps.getLeaderEpoch() !== epoch ||
                 deps.getProfileKey() !== profile ||
                 deps.getMode() !== mode) {
-                throw new Error("Telegram Thread display update lost profile, mode, or leader authority.");
+                throw new Error("Bale Thread display update lost profile, mode, or leader authority.");
             }
         };
         assertAuthority();
         const bindings = deps.store.listWorkspaceBindings();
         const liveBindingKeys = deps.captureLiveBindingKeys(bindings);
-        const titles = resolveTelegramWorkspaceDisplayNames(bindings, mode, liveBindingKeys);
+        const titles = resolveBaleWorkspaceDisplayNames(bindings, mode, liveBindingKeys);
         let changed = 0;
         for (const binding of bindings) {
             if (bindingKey !== undefined && binding.bindingKey !== bindingKey)
@@ -267,14 +267,14 @@ export function createTelegramThreadDisplayReconciler(deps) {
                 continue;
             const title = titles.get(binding.bindingKey);
             if (!title)
-                throw new Error("Telegram Thread display identity is missing or ambiguous.");
+                throw new Error("Bale Thread display identity is missing or ambiguous.");
             const assertBinding = (expected) => {
                 assertAuthority();
                 const current = deps.store
                     .listWorkspaceBindings()
                     .find((candidate) => candidate.bindingKey === expected.bindingKey);
                 if (!isDeepStrictEqual(current, expected) || !isBindingCurrent()) {
-                    throw new Error("Telegram Thread display binding changed.");
+                    throw new Error("Bale Thread display binding changed.");
                 }
             };
             assertBinding(binding);
@@ -287,9 +287,9 @@ export function createTelegramThreadDisplayReconciler(deps) {
             }, { maxAttempts: 1 });
             assertBinding(binding);
             if (acknowledged !== true)
-                throw new Error("Telegram Thread display update was not acknowledged.");
+                throw new Error("Bale Thread display update was not acknowledged.");
             if (!deps.store.setWorkspaceDisplayTitle(binding, title)) {
-                throw new Error("Telegram Thread display binding changed before title commit.");
+                throw new Error("Bale Thread display binding changed before title commit.");
             }
             await deps.store.persist();
             assertBinding({ ...binding, displayTitle: title });

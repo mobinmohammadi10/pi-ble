@@ -1,6 +1,6 @@
 /**
- * Public Telegram voice API
+ * Public Bale voice API
  * Zones: package boundary, extension interop
  * Exposes the stable STT/TTS provider surface and voice policy helpers
  */
-export { TELEGRAM_VOICE_REPLY_MODES, computeVoicePromptContribution, computeVoiceTurnFlags, getTelegramVoiceReplyMode, isVoiceTurn, registerTelegramVoiceSynthesisProvider, registerTelegramVoiceTranscriptionProvider, shouldSuppressPreviewForVoice, type TelegramVoiceReplyMode, type TelegramVoiceSynthesisProvider, type TelegramVoiceSynthesisProviderResult, type TelegramVoiceTranscriptionFile, type TelegramVoiceTranscriptionProvider, type TelegramVoiceTranscriptionProviderResult, type TelegramVoiceTurnView, } from "../lib/voice.ts";
+export { BALE_VOICE_REPLY_MODES, computeVoicePromptContribution, computeVoiceTurnFlags, getBaleVoiceReplyMode, isVoiceTurn, registerBaleVoiceSynthesisProvider, registerBaleVoiceTranscriptionProvider, shouldSuppressPreviewForVoice, type BaleVoiceReplyMode, type BaleVoiceSynthesisProvider, type BaleVoiceSynthesisProviderResult, type BaleVoiceTranscriptionFile, type BaleVoiceTranscriptionProvider, type BaleVoiceTranscriptionProviderResult, type BaleVoiceTurnView, } from "../lib/voice.ts";

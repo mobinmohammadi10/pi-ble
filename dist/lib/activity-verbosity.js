@@ -1,19 +1,19 @@
 /**
- * Bridge-owned Telegram activity verbosity projection
- * Zones: telegram activity, rich rendering, operational delivery
+ * Bridge-owned Bale activity verbosity projection
+ * Zones: bale activity, rich rendering, operational delivery
  * Owns persistent bounded thinking and tool disclosures; excludes activity normalization, assistant answer rendering, and transport authority policy
  */
-import { escapeHtml, renderTelegramInlineMarkdownHtml } from "./rendering.js";
-import { areTelegramTargetsEqual as targetEquals, } from "./target.js";
-const TELEGRAM_ACTIVITY_DETAIL_MAX_CHARS = 1_200;
-const TELEGRAM_ACTIVITY_MESSAGE_MAX_CHARS = 3_900;
-export const TELEGRAM_ACTIVITY_MESSAGE_MAX_TOOLS = 6;
-const TELEGRAM_REASONING_MESSAGE_MAX_FRAMES = 24;
-export const TELEGRAM_REASONING_BUFFER_MAX_CHARS = 1_200;
+import { escapeHtml, renderBaleInlineMarkdownHtml } from "./rendering.js";
+import { areBaleTargetsEqual as targetEquals, } from "./target.js";
+const BALE_ACTIVITY_DETAIL_MAX_CHARS = 1_200;
+const BALE_ACTIVITY_MESSAGE_MAX_CHARS = 3_900;
+export const BALE_ACTIVITY_MESSAGE_MAX_TOOLS = 6;
+const BALE_REASONING_MESSAGE_MAX_FRAMES = 24;
+export const BALE_REASONING_BUFFER_MAX_CHARS = 1_200;
 // Match native answer drafts: accumulate the opening frame for one full
 // interval, then publish at most one updated frame per interval.
-const TELEGRAM_REASONING_MIN_INTERVAL_MS = 2_000;
-export const TELEGRAM_TOOL_UPDATE_MAX_ENTRIES = 4;
+const BALE_REASONING_MIN_INTERVAL_MS = 2_000;
+export const BALE_TOOL_UPDATE_MAX_ENTRIES = 4;
 function redactActivityText(text) {
     return text
         .replace(/\b\d{8,12}:[A-Za-z0-9_-]{30,}\b/g, "[REDACTED_BOT_TOKEN]")
@@ -89,10 +89,10 @@ function serializeActivityValue(value) {
         text = JSON.stringify(String(value));
     }
     const redacted = redactActivityText(text);
-    if (redacted.length <= TELEGRAM_ACTIVITY_DETAIL_MAX_CHARS)
+    if (redacted.length <= BALE_ACTIVITY_DETAIL_MAX_CHARS)
         return redacted;
-    const omitted = redacted.length - TELEGRAM_ACTIVITY_DETAIL_MAX_CHARS;
-    return `${redacted.slice(0, TELEGRAM_ACTIVITY_DETAIL_MAX_CHARS)}\n… [${omitted} chars truncated]`;
+    const omitted = redacted.length - BALE_ACTIVITY_DETAIL_MAX_CHARS;
+    return `${redacted.slice(0, BALE_ACTIVITY_DETAIL_MAX_CHARS)}\n… [${omitted} chars truncated]`;
 }
 function neutralizeActivityAutoLinks(text) {
     return text.replace(/\b(https?:\/\/)(?=\S)/gi, "$1\u200b");
@@ -101,7 +101,7 @@ function escapeActivityEvidenceHtml(text) {
     return escapeHtml(neutralizeActivityAutoLinks(text));
 }
 function renderThinkingActivityEvidenceHtml(text) {
-    return renderTelegramInlineMarkdownHtml(neutralizeActivityAutoLinks(text), {
+    return renderBaleInlineMarkdownHtml(neutralizeActivityAutoLinks(text), {
         allowLinks: false,
     });
 }
@@ -135,7 +135,7 @@ function renderToolActivityHtml(tool) {
         `<blockquote expandable>${escapeActivityEvidenceHtml(evidence.join("\n\n"))}</blockquote>`,
     ].join("\n");
 }
-export function renderTelegramToolActivityHtml(tools) {
+export function renderBaleToolActivityHtml(tools) {
     return tools.map(renderToolActivityHtml).join("\n\n");
 }
 function createToolActivityDetail(summary, text, isOpen = false) {
@@ -176,22 +176,22 @@ function renderToolActivityRichBlocks(tool) {
         },
     ];
 }
-export function renderTelegramToolActivityRichMessage(tools) {
+export function renderBaleToolActivityRichMessage(tools) {
     return {
         blocks: tools.flatMap(renderToolActivityRichBlocks),
         skip_entity_detection: true,
     };
 }
 function toolMessageSize(tools) {
-    return renderTelegramToolActivityHtml(tools).length;
+    return renderBaleToolActivityHtml(tools).length;
 }
 function isKnownSafeRichActivityRejection(error) {
     return (error instanceof Error && /HTTP 400: Bad Request:/i.test(error.message));
 }
-export function renderTelegramThinkingActivityHtml(text) {
+export function renderBaleThinkingActivityHtml(text) {
     return `<blockquote expandable>${renderThinkingActivityEvidenceHtml(text)}</blockquote>`;
 }
-export function createTelegramActivityVerbosityRuntime(deps) {
+export function createBaleActivityVerbosityRuntime(deps) {
     let active = true;
     let generation = 0;
     let tail = Promise.resolve();
@@ -267,8 +267,8 @@ export function createTelegramActivityVerbosityRuntime(deps) {
             const text = redactActivityText(omitted > 0
                 ? `… [${omitted} earlier chars omitted]\n${retained}`
                 : retained);
-            body = renderTelegramThinkingActivityHtml(text);
-            if (body.length <= TELEGRAM_ACTIVITY_MESSAGE_MAX_CHARS)
+            body = renderBaleThinkingActivityHtml(text);
+            if (body.length <= BALE_ACTIVITY_MESSAGE_MAX_CHARS)
                 break;
             retained = retained.slice(-Math.max(1, Math.floor(retained.length * 0.75)));
         } while (retained.length > 1);
@@ -317,7 +317,7 @@ export function createTelegramActivityVerbosityRuntime(deps) {
         if (reasoningFlushTimer || reasoningBlocked)
             return;
         const elapsed = reasoningMessageFrames === 0 ? 0 : getNowMs() - lastReasoningPublishMs;
-        const delayMs = Math.max(0, TELEGRAM_REASONING_MIN_INTERVAL_MS - elapsed);
+        const delayMs = Math.max(0, BALE_REASONING_MIN_INTERVAL_MS - elapsed);
         const schedule = deps.setReasoningTimeout ?? setTimeout;
         reasoningFlushTimer = schedule(() => {
             reasoningFlushTimer = undefined;
@@ -342,9 +342,9 @@ export function createTelegramActivityVerbosityRuntime(deps) {
         }
         const canAppend = toolMessage &&
             targetEquals(toolMessage.target, target) &&
-            toolMessage.tools.length < TELEGRAM_ACTIVITY_MESSAGE_MAX_TOOLS &&
+            toolMessage.tools.length < BALE_ACTIVITY_MESSAGE_MAX_TOOLS &&
             toolMessageSize([...toolMessage.tools, tool]) <=
-                TELEGRAM_ACTIVITY_MESSAGE_MAX_CHARS;
+                BALE_ACTIVITY_MESSAGE_MAX_CHARS;
         try {
             if (canAppend && toolMessage) {
                 const nextTools = [...toolMessage.tools, tool];
@@ -354,10 +354,10 @@ export function createTelegramActivityVerbosityRuntime(deps) {
                         message_id: toolMessage.messageId,
                         ...(toolMessage.format === "rich"
                             ? {
-                                rich_message: renderTelegramToolActivityRichMessage(nextTools),
+                                rich_message: renderBaleToolActivityRichMessage(nextTools),
                             }
                             : {
-                                text: renderTelegramToolActivityHtml(nextTools),
+                                text: renderBaleToolActivityHtml(nextTools),
                                 parse_mode: "HTML",
                                 link_preview_options: { is_disabled: true },
                             }),
@@ -373,7 +373,7 @@ export function createTelegramActivityVerbosityRuntime(deps) {
                     await deps.editMessageText({
                         chat_id: target.chatId,
                         message_id: toolMessage.messageId,
-                        text: renderTelegramToolActivityHtml(nextTools),
+                        text: renderBaleToolActivityHtml(nextTools),
                         parse_mode: "HTML",
                         link_preview_options: { is_disabled: true },
                     });
@@ -397,7 +397,7 @@ export function createTelegramActivityVerbosityRuntime(deps) {
             try {
                 sent = await deps.sendRichMessage({
                     ...body,
-                    rich_message: renderTelegramToolActivityRichMessage([tool]),
+                    rich_message: renderBaleToolActivityRichMessage([tool]),
                 });
             }
             catch (error) {
@@ -407,7 +407,7 @@ export function createTelegramActivityVerbosityRuntime(deps) {
                     throw error;
                 sent = await deps.sendMessage({
                     ...body,
-                    text: renderTelegramToolActivityHtml([tool]),
+                    text: renderBaleToolActivityHtml([tool]),
                     parse_mode: "HTML",
                     link_preview_options: { is_disabled: true },
                 });
@@ -465,8 +465,8 @@ export function createTelegramActivityVerbosityRuntime(deps) {
             if (!showThinking)
                 return;
             reasoningChars += event.delta.length;
-            reasoningBuffer = `${reasoningBuffer}${event.delta}`.slice(-TELEGRAM_REASONING_BUFFER_MAX_CHARS);
-            if (reasoningMessageFrames < TELEGRAM_REASONING_MESSAGE_MAX_FRAMES) {
+            reasoningBuffer = `${reasoningBuffer}${event.delta}`.slice(-BALE_REASONING_BUFFER_MAX_CHARS);
+            if (reasoningMessageFrames < BALE_REASONING_MESSAGE_MAX_FRAMES) {
                 scheduleReasoningPublish(event, acceptedGeneration);
             }
             return;
@@ -476,7 +476,7 @@ export function createTelegramActivityVerbosityRuntime(deps) {
                 return;
             if (reasoningChars === 0 && event.text) {
                 reasoningChars = event.text.length;
-                reasoningBuffer = event.text.slice(-TELEGRAM_REASONING_BUFFER_MAX_CHARS);
+                reasoningBuffer = event.text.slice(-BALE_REASONING_BUFFER_MAX_CHARS);
             }
             clearReasoningFlushTimer();
             if (reasoningChars > 0 &&
@@ -516,7 +516,7 @@ export function createTelegramActivityVerbosityRuntime(deps) {
             if (!tool)
                 return;
             tool.updates.push(serializeActivityValue(event.update));
-            if (tool.updates.length > TELEGRAM_TOOL_UPDATE_MAX_ENTRIES) {
+            if (tool.updates.length > BALE_TOOL_UPDATE_MAX_ENTRIES) {
                 tool.updates.shift();
                 tool.droppedUpdates += 1;
             }

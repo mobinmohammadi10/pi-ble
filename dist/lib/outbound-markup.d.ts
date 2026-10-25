@@ -1,35 +1,35 @@
 /**
- * Telegram outbound markup parsing helpers
- * Zones: telegram outbound, assistant markup
+ * Bale outbound markup parsing helpers
+ * Zones: bale outbound, assistant markup
  * Owns top-level assistant action comment extraction, attribute parsing, and markup stripping shared by voice and outbound delivery
  */
-export interface TelegramTopLevelHtmlComment {
+export interface BaleTopLevelHtmlComment {
     raw: string;
     content: string;
     start: number;
     end: number;
 }
 export declare function collectTopLevelHtmlComments(markdown: string): {
-    comments: TelegramTopLevelHtmlComment[];
+    comments: BaleTopLevelHtmlComment[];
     openCommentStart?: number;
 };
-export declare function replaceTelegramButtonFences(markdown: string, replace: (payload: string, closed: boolean) => string): string;
-export declare function replaceTopLevelHtmlComments(markdown: string, replacer: (comment: TelegramTopLevelHtmlComment) => string): string;
-export declare function parseTelegramButtonPayloadRows(source: string): Record<string, unknown>[][] | undefined;
-export declare function parseTelegramActionPayloadRows(comment: TelegramTopLevelHtmlComment, command: string): Record<string, unknown>[][] | undefined;
-export declare function stripTelegramCommentMarkupForPreview(markdown: string): string;
-export declare function stripTelegramCommentMarkupForDelivery(markdown: string): string;
-export interface TelegramVoiceReplyItem {
+export declare function replaceBaleButtonFences(markdown: string, replace: (payload: string, closed: boolean) => string): string;
+export declare function replaceTopLevelHtmlComments(markdown: string, replacer: (comment: BaleTopLevelHtmlComment) => string): string;
+export declare function parseBaleButtonPayloadRows(source: string): Record<string, unknown>[][] | undefined;
+export declare function parseBaleActionPayloadRows(comment: BaleTopLevelHtmlComment, command: string): Record<string, unknown>[][] | undefined;
+export declare function stripBaleCommentMarkupForPreview(markdown: string): string;
+export declare function stripBaleCommentMarkupForDelivery(markdown: string): string;
+export interface BaleVoiceReplyItem {
     text: string;
     lang?: string;
     rate?: string;
 }
-export interface TelegramVoiceReplyPlan {
+export interface BaleVoiceReplyPlan {
     markdown: string;
     voiceText?: string;
-    voiceReplies?: TelegramVoiceReplyItem[];
+    voiceReplies?: BaleVoiceReplyItem[];
     lang?: string;
     rate?: string;
 }
-export declare function getTelegramActionString(payload: Record<string, unknown>, key: string): string | undefined;
-export declare function planTelegramVoiceReply(markdown: string): TelegramVoiceReplyPlan;
+export declare function getBaleActionString(payload: Record<string, unknown>, key: string): string | undefined;
+export declare function planBaleVoiceReply(markdown: string): BaleVoiceReplyPlan;

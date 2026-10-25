@@ -3,11 +3,11 @@
  * Usage: node --experimental-strip-types scripts/measure-bus.mjs
  *
  * This assertion-backed fixture instruments Map operations only. It does not
- * open sockets, read configured profiles, call Telegram, or measure latency.
+ * open sockets, read configured profiles, call Bale, or measure latency.
  */
 
 import assert from "node:assert/strict";
-import { createTelegramBusFollowerRegistry, createTelegramBusProtocolIdentity } from "../lib/bus.ts";
+import { createBaleBusFollowerRegistry, createBaleBusProtocolIdentity } from "../lib/bus.ts";
 
 const repetitions = 10;
 const methods = ["get", "set", "delete", "entries", "values"];
@@ -44,8 +44,8 @@ try {
     };
   }
   for (const size of [1, 13, 26]) {
-    const registry = createTelegramBusFollowerRegistry();
-    const protocol = createTelegramBusProtocolIdentity({ runtimeBuild: "measurement" });
+    const registry = createBaleBusFollowerRegistry();
+    const protocol = createBaleBusProtocolIdentity({ runtimeBuild: "measurement" });
     const registrations = Array.from({ length: size }, (_, index) => ({
       instanceId: `fixture-${index}`, profileKey: `manual:fixture-${index}`,
       registrationGeneration: `generation-${index}`, connectedAtMs: 1000,

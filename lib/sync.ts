@@ -1,44 +1,44 @@
 /**
- * Telegram synchronization helpers
- * Zones: Telegram bot reality mirror, demand-driven reconciliation, status diagnostics
- * Owns pure contracts for deciding when local Telegram mirror state should be refreshed without querying Telegram on every action
+ * Bale synchronization helpers
+ * Zones: Bale bot reality mirror, demand-driven reconciliation, status diagnostics
+ * Owns pure contracts for deciding when local Bale mirror state should be refreshed without querying Bale on every action
  */
 
-import { getTelegramTargetKey, type TelegramTarget } from "./target.ts";
+import { getBaleTargetKey, type BaleTarget } from "./target.ts";
 import {
-  getTelegramApiErrorRequestTarget,
-  isTelegramStaleTargetHttpError,
-} from "./telegram-api.ts";
+  getBaleApiErrorRequestTarget,
+  isBaleStaleTargetHttpError,
+} from "./bale-api.ts";
 import * as ThreadReconciler from "./thread-reconciler.ts";
 import {
-  commitTelegramWorkspaceProvisionBinding,
-  createTelegramCleanupTargetProtection,
-  getTelegramTargetFromApiBody,
-  getTelegramThreadOwnerKey,
-  isSameTelegramProcessInstance,
-  isTelegramTopicTargetStaleError,
+  commitBaleWorkspaceProvisionBinding,
+  createBaleCleanupTargetProtection,
+  getBaleTargetFromApiBody,
+  getBaleThreadOwnerKey,
+  isSameBaleProcessInstance,
+  isBaleTopicTargetStaleError,
   provisionOwnBusTopic,
-  resetTelegramConnectionProvisioning,
-  type TelegramOwnTopicProvisionResult,
-  type TelegramTopicTargetStore,
-  type TelegramWorkspaceDisplayBinding,
-  type TelegramWorkspaceThreadBinding,
+  resetBaleConnectionProvisioning,
+  type BaleOwnTopicProvisionResult,
+  type BaleTopicTargetStore,
+  type BaleWorkspaceDisplayBinding,
+  type BaleWorkspaceThreadBinding,
 } from "./threads.ts";
 import {
-  createTelegramWorkspaceAdmissionOperationId,
-  runWithTelegramWorkspaceAdmissionsAsync,
-  type TelegramWorkspaceAdmissionLedger,
+  createBaleWorkspaceAdmissionOperationId,
+  runWithBaleWorkspaceAdmissionsAsync,
+  type BaleWorkspaceAdmissionLedger,
 } from "./workspace-admission.ts";
-import { normalizeTelegramWorkspacePath } from "./workspace-identity.ts";
-import { TelegramWorkspaceSlotUnavailableError } from "./workspace-slots.ts";
+import { normalizeBaleWorkspacePath } from "./workspace-identity.ts";
+import { BaleWorkspaceSlotUnavailableError } from "./workspace-slots.ts";
 
-export interface TelegramTopicLifecycleSyncUpdate<TMessage = unknown> {
+export interface BaleTopicLifecycleSyncUpdate<TMessage = unknown> {
   kind: "created" | "closed" | "reopened";
-  target: TelegramTarget & { threadId: number };
+  target: BaleTarget & { threadId: number };
   message: TMessage;
 }
 
-export type TelegramSyncWorkspaceOperationRunner = <T>(
+export type BaleSyncWorkspaceOperationRunner = <T>(
   input: {
     operationId: string;
     operationKind: string;
@@ -47,16 +47,16 @@ export type TelegramSyncWorkspaceOperationRunner = <T>(
   operation: () => Promise<T>,
 ) => Promise<T>;
 
-export interface TelegramLeaderThreadSyncDeps {
+export interface BaleLeaderThreadSyncDeps {
   getAllowedUserId: () => number | undefined;
   instanceId: string;
   cwd?: string;
   sessionId?: string;
-  telegramProfile?: string;
+  baleProfile?: string;
   forceFreshUnnamed?: boolean;
   requestedThreadName?: string;
   resolveInitialWorkspaceDisplayTitle?: (
-    binding: TelegramWorkspaceDisplayBinding,
+    binding: BaleWorkspaceDisplayBinding,
   ) => string | undefined;
   getNowMs?: () => number;
   getRandom?: () => number;
@@ -66,13 +66,13 @@ export interface TelegramLeaderThreadSyncDeps {
   recordThreadReconciliationPlan?: (
     plan: ThreadReconciler.ThreadReconciliationPlan,
   ) => void;
-  topicTargetStore: TelegramTopicTargetStore;
+  topicTargetStore: BaleTopicTargetStore;
   callApi: <TResponse>(
     method: string,
     body: Record<string, unknown>,
   ) => Promise<TResponse>;
   probeWorkspaceBinding?: (
-    binding: TelegramWorkspaceThreadBinding,
+    binding: BaleWorkspaceThreadBinding,
   ) => Promise<void>;
   recordEvent: (
     category: string,
@@ -81,9 +81,9 @@ export interface TelegramLeaderThreadSyncDeps {
   ) => void;
 }
 
-export interface TelegramTopicLifecycleSyncDeps {
+export interface BaleTopicLifecycleSyncDeps {
   topicTargetStore: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     | "load"
     | "list"
     | "listReservations"
@@ -113,20 +113,20 @@ export interface TelegramTopicLifecycleSyncDeps {
   ) => void;
 }
 
-export type TelegramTopicLifecycleSyncHandler<TMessage = unknown> = (
-  lifecycle: TelegramTopicLifecycleSyncUpdate<TMessage>,
+export type BaleTopicLifecycleSyncHandler<TMessage = unknown> = (
+  lifecycle: BaleTopicLifecycleSyncUpdate<TMessage>,
 ) => Promise<void>;
 
-export interface TelegramObservedTopicLifecycleSyncDeps<
+export interface BaleObservedTopicLifecycleSyncDeps<
   TSyncState,
-> extends TelegramTopicLifecycleSyncDeps {
-  runWorkspaceOperation: TelegramSyncWorkspaceOperationRunner;
+> extends BaleTopicLifecycleSyncDeps {
+  runWorkspaceOperation: BaleSyncWorkspaceOperationRunner;
   getSyncState: () => TSyncState;
   setSyncState: (state: TSyncState) => void;
   getNowMs?: () => number;
 }
 
-export interface TelegramLeaderHealthRuntimeDeps<TSyncState> {
+export interface BaleLeaderHealthRuntimeDeps<TSyncState> {
   getNowMs?: () => number;
   intervalMs?: number;
   callGetMe: () => Promise<unknown>;
@@ -139,23 +139,23 @@ export interface TelegramLeaderHealthRuntimeDeps<TSyncState> {
   ) => void;
 }
 
-export interface TelegramLeaderHealthRuntime {
+export interface BaleLeaderHealthRuntime {
   start: () => void;
   stop: () => void;
 }
 
-export interface TelegramManualThreadDisconnectDeps<TSyncState> {
+export interface BaleManualThreadDisconnectDeps<TSyncState> {
   instanceId: string;
   getCurrentThreadRecord: () =>
     | {
-        target: TelegramTarget;
+        target: BaleTarget;
         instanceId?: string;
         profileKey?: string;
         owner?: { kind?: string };
       }
     | undefined;
   topicTargetStore: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     | "list"
     | "markStaleByTarget"
     | "persist"
@@ -166,7 +166,7 @@ export interface TelegramManualThreadDisconnectDeps<TSyncState> {
     method: string,
     body: Record<string, unknown>,
   ) => Promise<TResponse>;
-  getLeaderTarget: () => TelegramTarget | undefined;
+  getLeaderTarget: () => BaleTarget | undefined;
   getCurrentLeaderEpoch?: () => number | string | undefined;
   clearLeaderTarget: () => void;
   disconnectFollowerThread?: () => Promise<boolean>;
@@ -178,44 +178,44 @@ export interface TelegramManualThreadDisconnectDeps<TSyncState> {
     error: unknown,
     details?: Record<string, unknown>,
   ) => void;
-  runWorkspaceOperation: TelegramSyncWorkspaceOperationRunner;
+  runWorkspaceOperation: BaleSyncWorkspaceOperationRunner;
   workspaceOperationKind?: string;
   isDisconnectCurrent?: () => boolean;
   getNowMs?: () => number;
 }
 
-function markTelegramConfigSyncChange<TSyncState extends TelegramSyncState>(
+function markBaleConfigSyncChange<TSyncState extends BaleSyncState>(
   state: TSyncState,
   action: string,
   options?: { nowMs?: number },
 ): TSyncState {
   const nowMs = options?.nowMs ?? Date.now();
-  let nextState = markTelegramSyncSliceFresh(state, "pairing", {
+  let nextState = markBaleSyncSliceFresh(state, "pairing", {
     nowMs,
     action,
   }) as TSyncState;
-  nextState = markTelegramSyncSliceFresh(nextState, "allowed-user", {
+  nextState = markBaleSyncSliceFresh(nextState, "allowed-user", {
     nowMs,
     action,
   }) as TSyncState;
-  nextState = markTelegramSyncSliceFresh(nextState, "bot-identity", {
+  nextState = markBaleSyncSliceFresh(nextState, "bot-identity", {
     nowMs,
     action,
   }) as TSyncState;
   return nextState;
 }
 
-export function createTelegramPreservedLeaderQuitHandler(deps: {
+export function createBalePreservedLeaderQuitHandler(deps: {
   instanceId: string;
   topicTargetStore: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     "load" | "list" | "listPendingCleanups" | "detachTargetOwner"
   >;
   getCurrentLeaderEpoch: () => number | string | undefined;
   getProfileName: () => string | undefined;
   isPollingSuspended: () => boolean;
   resolveAutomaticThreadCleanupEnabled: () => boolean | Promise<boolean>;
-  runWorkspaceOperation: TelegramSyncWorkspaceOperationRunner;
+  runWorkspaceOperation: BaleSyncWorkspaceOperationRunner;
 }): (isSessionCurrent: () => boolean) => (() => Promise<void>) | undefined {
   return (isSessionCurrent) => {
     const epoch = deps.getCurrentLeaderEpoch();
@@ -235,7 +235,7 @@ export function createTelegramPreservedLeaderQuitHandler(deps: {
       if (!isCurrent()) return;
       await deps.runWorkspaceOperation(
         {
-          operationId: createTelegramWorkspaceAdmissionOperationId(),
+          operationId: createBaleWorkspaceAdmissionOperationId(),
           operationKind: "workspace.preserve-leader-quit",
           scopes: [{ kind: "profile" }],
         },
@@ -270,7 +270,7 @@ export function createTelegramPreservedLeaderQuitHandler(deps: {
             isCurrent()
           ) {
             throw new Error(
-              "Telegram preserved leader detachment was not committed.",
+              "Bale preserved leader detachment was not committed.",
             );
           }
         },
@@ -279,36 +279,36 @@ export function createTelegramPreservedLeaderQuitHandler(deps: {
   };
 }
 
-export interface TelegramSessionRestartThreadCleanupDeps<
-  TSyncState extends TelegramSyncState,
-> extends Omit<TelegramManualThreadDisconnectDeps<TSyncState>, "stopPolling"> {
+export interface BaleSessionRestartThreadCleanupDeps<
+  TSyncState extends BaleSyncState,
+> extends Omit<BaleManualThreadDisconnectDeps<TSyncState>, "stopPolling"> {
   suspendPolling: () => Promise<void>;
 }
 
-function createTelegramSessionRestartThreadCleanupHandler<
-  TSyncState extends TelegramSyncState,
+function createBaleSessionRestartThreadCleanupHandler<
+  TSyncState extends BaleSyncState,
 >(
-  deps: TelegramSessionRestartThreadCleanupDeps<TSyncState>,
+  deps: BaleSessionRestartThreadCleanupDeps<TSyncState>,
 ): () => Promise<string> {
-  return createTelegramManualThreadDisconnectHandler({
+  return createBaleManualThreadDisconnectHandler({
     ...deps,
     workspaceOperationKind: "workspace.cleanup-session-restart",
     async stopPolling() {
       await deps.suspendPolling();
-      return "Telegram bridge suspended for session restart.";
+      return "Bale bridge suspended for session restart.";
     },
   });
 }
 
-export interface TelegramThreadDisconnectAssembly {
+export interface BaleThreadDisconnectAssembly {
   disconnect: () => Promise<string>;
   cleanupForSessionRestart: () => Promise<string>;
 }
 
-export function createTelegramThreadDisconnectAssembly<
-  TSyncState extends TelegramSyncState,
+export function createBaleThreadDisconnectAssembly<
+  TSyncState extends BaleSyncState,
 >(
-  deps: Omit<TelegramManualThreadDisconnectDeps<TSyncState>, "stopPolling"> & {
+  deps: Omit<BaleManualThreadDisconnectDeps<TSyncState>, "stopPolling"> & {
     stopPolling: () => Promise<string>;
     captureStopPolling?: () => {
       isCurrent: () => boolean;
@@ -316,13 +316,13 @@ export function createTelegramThreadDisconnectAssembly<
     };
     suspendPolling: () => Promise<void>;
   },
-): TelegramThreadDisconnectAssembly {
+): BaleThreadDisconnectAssembly {
   return {
     async disconnect() {
       const captured = deps.captureStopPolling?.();
       const stop = captured?.stop ?? deps.stopPolling;
       let stopAttempted = false;
-      const disconnect = createTelegramManualThreadDisconnectHandler({
+      const disconnect = createBaleManualThreadDisconnectHandler({
         ...deps,
         workspaceOperationKind: "workspace.disconnect-thread",
         isDisconnectCurrent: captured?.isCurrent ?? deps.isDisconnectCurrent,
@@ -354,23 +354,23 @@ export function createTelegramThreadDisconnectAssembly<
           throw stopError;
         }
         const separator = /[.!?]$/u.test(stopped) ? " " : ". ";
-        return `${stopped}${separator}Thread cleanup was not confirmed. Check /telegram-status --debug.`;
+        return `${stopped}${separator}Thread cleanup was not confirmed. Check /bale-status --debug.`;
       }
     },
-    cleanupForSessionRestart: createTelegramSessionRestartThreadCleanupHandler({
+    cleanupForSessionRestart: createBaleSessionRestartThreadCleanupHandler({
       ...deps,
       suspendPolling: deps.suspendPolling,
     }),
   };
 }
 
-export function createTelegramManualThreadDisconnectHandler<
-  TSyncState extends TelegramSyncState,
->(deps: TelegramManualThreadDisconnectDeps<TSyncState>): () => Promise<string> {
+export function createBaleManualThreadDisconnectHandler<
+  TSyncState extends BaleSyncState,
+>(deps: BaleManualThreadDisconnectDeps<TSyncState>): () => Promise<string> {
   const assertCurrent = () => {
     if (deps.isDisconnectCurrent?.() === false)
       throw new Error(
-        "Telegram disconnect was superseded by a new connection.",
+        "Bale disconnect was superseded by a new connection.",
       );
   };
   const operation = async (): Promise<string> => {
@@ -392,11 +392,11 @@ export function createTelegramManualThreadDisconnectHandler<
           followerThreadKept = !disconnected;
         }
       } else {
-        const target = currentRecord.target as TelegramTarget & {
+        const target = currentRecord.target as BaleTarget & {
           threadId: number;
         };
         const runtimeGeneration = currentRecord.instanceId ?? deps.instanceId;
-        const intent: ThreadReconciler.TelegramThreadCleanupIntent = {
+        const intent: ThreadReconciler.BaleThreadCleanupIntent = {
           id: `cleanup:${deps.instanceId}:${runtimeGeneration}:${target.chatId}:${target.threadId}`,
           owner: isManualFollower ? "manual-follower" : "leader",
           instanceId: deps.instanceId,
@@ -415,7 +415,7 @@ export function createTelegramManualThreadDisconnectHandler<
               record.target.chatId === target.chatId &&
               record.target.threadId === target.threadId,
           );
-        const isCleanupTargetProtected = createTelegramCleanupTargetProtection(
+        const isCleanupTargetProtected = createBaleCleanupTargetProtection(
           deps.topicTargetStore,
           departingRecord,
         );
@@ -474,7 +474,7 @@ export function createTelegramManualThreadDisconnectHandler<
         deps.clearLeaderTarget();
       }
       deps.setSyncState(
-        markTelegramSyncSliceFresh(deps.getSyncState(), "target-bindings", {
+        markBaleSyncSliceFresh(deps.getSyncState(), "target-bindings", {
           nowMs: (deps.getNowMs ?? Date.now)(),
           action: "manual-disconnect",
         }) as TSyncState,
@@ -483,15 +483,15 @@ export function createTelegramManualThreadDisconnectHandler<
     assertCurrent();
     const stopped = await deps.stopPolling();
     if (followerThreadKept)
-      return "Telegram bridge disconnected. Thread kept: no live leader could delete it.";
+      return "Bale bridge disconnected. Thread kept: no live leader could delete it.";
     return cleanupPending
-      ? `${stopped} Telegram thread cleanup remains pending for the next leader.`
+      ? `${stopped} Bale thread cleanup remains pending for the next leader.`
       : stopped;
   };
   return () =>
     deps.runWorkspaceOperation(
       {
-        operationId: createTelegramWorkspaceAdmissionOperationId(),
+        operationId: createBaleWorkspaceAdmissionOperationId(),
         operationKind:
           deps.workspaceOperationKind ?? "workspace.disconnect-thread",
         scopes: [{ kind: "profile" }],
@@ -500,11 +500,11 @@ export function createTelegramManualThreadDisconnectHandler<
     );
 }
 
-export function createTelegramLeaderHealthRuntime<
-  TSyncState extends TelegramSyncState,
+export function createBaleLeaderHealthRuntime<
+  TSyncState extends BaleSyncState,
 >(
-  deps: TelegramLeaderHealthRuntimeDeps<TSyncState>,
-): TelegramLeaderHealthRuntime {
+  deps: BaleLeaderHealthRuntimeDeps<TSyncState>,
+): BaleLeaderHealthRuntime {
   const intervalMs = deps.intervalMs ?? 60_000;
   const getNowMs = deps.getNowMs ?? Date.now;
   let interval: ReturnType<typeof setInterval> | undefined;
@@ -512,12 +512,12 @@ export function createTelegramLeaderHealthRuntime<
   let tickPromise: Promise<void> | undefined;
 
   const markFresh = (): void => {
-    let state = markTelegramSyncSliceFresh(
+    let state = markBaleSyncSliceFresh(
       deps.getSyncState(),
       "transport-health",
       { nowMs: getNowMs(), action: "leader-health-tick" },
     ) as TSyncState;
-    state = markTelegramSyncSliceFresh(state, "bot-identity", {
+    state = markBaleSyncSliceFresh(state, "bot-identity", {
       nowMs: getNowMs(),
       action: "leader-health-tick",
     }) as TSyncState;
@@ -526,14 +526,14 @@ export function createTelegramLeaderHealthRuntime<
 
   const markSuspect = (error: unknown): void => {
     deps.setSyncState(
-      markTelegramSyncSliceSuspect(deps.getSyncState(), "transport-health", {
+      markBaleSyncSliceSuspect(deps.getSyncState(), "transport-health", {
         nowMs: getNowMs(),
         reason: String(error),
         action: "leader-health-tick",
       }) as TSyncState,
     );
     try {
-      deps.recordEvent("telegram", error, { phase: "leader-health-tick" });
+      deps.recordEvent("bale", error, { phase: "leader-health-tick" });
     } catch {
       // Health diagnostics cannot create an unhandled timer rejection.
     }
@@ -558,7 +558,7 @@ export function createTelegramLeaderHealthRuntime<
             markFresh();
           } catch (stateError) {
             try {
-              deps.recordEvent("telegram", stateError, {
+              deps.recordEvent("bale", stateError, {
                 phase: "leader-health-state",
               });
             } catch {
@@ -572,7 +572,7 @@ export function createTelegramLeaderHealthRuntime<
             markSuspect(error);
           } catch (stateError) {
             try {
-              deps.recordEvent("telegram", stateError, {
+              deps.recordEvent("bale", stateError, {
                 phase: "leader-health-state",
               });
             } catch {
@@ -600,12 +600,12 @@ export function createTelegramLeaderHealthRuntime<
   };
 }
 
-export interface TelegramStaleTopicApiErrorRecoveryDeps<TSyncState> {
+export interface BaleStaleTopicApiErrorRecoveryDeps<TSyncState> {
   topicTargetStore: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     "load" | "markStaleByTarget" | "persist"
   > &
-    Partial<Pick<TelegramTopicTargetStore, "invalidateTarget">>;
+    Partial<Pick<BaleTopicTargetStore, "invalidateTarget">>;
   getSyncState: () => TSyncState;
   setSyncState: (state: TSyncState) => void;
   recordEvent: (
@@ -618,19 +618,19 @@ export interface TelegramStaleTopicApiErrorRecoveryDeps<TSyncState> {
   isAuthorityCurrent?: () => boolean;
   getWorkspaceAdmission?: () =>
     | Pick<
-        TelegramWorkspaceAdmissionLedger,
+        BaleWorkspaceAdmissionLedger,
         "acquireAdmission" | "releaseAdmission"
       >
     | undefined;
 }
 
-export function captureTelegramStaleTargetRequestRecovery<
-  TSyncState extends TelegramSyncState,
+export function captureBaleStaleTargetRequestRecovery<
+  TSyncState extends BaleSyncState,
 >(
   body: Record<string, unknown>,
-  deps: TelegramStaleTopicApiErrorRecoveryDeps<TSyncState> & {
+  deps: BaleStaleTopicApiErrorRecoveryDeps<TSyncState> & {
     topicTargetStore: Pick<
-      TelegramTopicTargetStore,
+      BaleTopicTargetStore,
       "load" | "list" | "markStaleByTarget" | "persist" | "invalidateTarget"
     >;
     getCurrentLeaderEpoch: () => number | string | undefined;
@@ -639,13 +639,13 @@ export function captureTelegramStaleTargetRequestRecovery<
     onRecovered: () => void;
   },
 ): ((error: unknown) => Promise<void>) | undefined {
-  const target = getTelegramTargetFromApiBody(body);
+  const target = getBaleTargetFromApiBody(body);
   const epoch = deps.getCurrentLeaderEpoch();
   if (!target || epoch === undefined) return undefined;
-  const key = getTelegramTargetKey(target);
+  const key = getBaleTargetKey(target);
   const record = deps.topicTargetStore
     .list()
-    .find((candidate) => getTelegramTargetKey(candidate.target) === key);
+    .find((candidate) => getBaleTargetKey(candidate.target) === key);
   if (!record) return undefined;
   const generation = deps.getSessionGeneration();
   const profile = deps.getProfileName();
@@ -656,7 +656,7 @@ export function captureTelegramStaleTargetRequestRecovery<
   const isCurrent = (): boolean => {
     const current = deps.topicTargetStore
       .list()
-      .find((candidate) => getTelegramTargetKey(candidate.target) === key);
+      .find((candidate) => getBaleTargetKey(candidate.target) === key);
     return (
       isAuthorityCurrent() &&
       current?.instanceId === record.instanceId &&
@@ -666,16 +666,16 @@ export function captureTelegramStaleTargetRequestRecovery<
     );
   };
   return async (error) => {
-    const requestTarget = getTelegramApiErrorRequestTarget(error);
+    const requestTarget = getBaleApiErrorRequestTarget(error);
     if (
-      !isTelegramStaleTargetHttpError(error) ||
+      !isBaleStaleTargetHttpError(error) ||
       !requestTarget ||
-      getTelegramTargetKey(requestTarget) !== key ||
+      getBaleTargetKey(requestTarget) !== key ||
       !isCurrent()
     )
       return;
     if (
-      await recoverStaleTelegramTopicApiError(
+      await recoverStaleBaleTopicApiError(
         { chat_id: target.chatId, message_thread_id: target.threadId },
         error,
         { ...deps, isCurrent, isAuthorityCurrent },
@@ -686,24 +686,24 @@ export function captureTelegramStaleTargetRequestRecovery<
   };
 }
 
-export function createTelegramStaleTopicApiErrorRecoveryRuntime<
-  TSyncState extends TelegramSyncState,
+export function createBaleStaleTopicApiErrorRecoveryRuntime<
+  TSyncState extends BaleSyncState,
 >(
-  deps: TelegramStaleTopicApiErrorRecoveryDeps<TSyncState>,
+  deps: BaleStaleTopicApiErrorRecoveryDeps<TSyncState>,
 ): (apiBody: unknown, error: unknown) => Promise<boolean> {
   return (apiBody, error) =>
-    recoverStaleTelegramTopicApiError(apiBody, error, deps);
+    recoverStaleBaleTopicApiError(apiBody, error, deps);
 }
 
-export async function settleStaleTelegramTopicExecutionFailure<
-  TSyncState extends TelegramSyncState,
+export async function settleStaleBaleTopicExecutionFailure<
+  TSyncState extends BaleSyncState,
 >(
   error: unknown,
-  deps: TelegramStaleTopicApiErrorRecoveryDeps<TSyncState>,
+  deps: BaleStaleTopicApiErrorRecoveryDeps<TSyncState>,
 ): Promise<boolean> {
-  const target = getTelegramApiErrorRequestTarget(error);
-  if (!target || !isTelegramTopicTargetStaleError(error)) return false;
-  await recoverStaleTelegramTopicApiError(
+  const target = getBaleApiErrorRequestTarget(error);
+  if (!target || !isBaleTopicTargetStaleError(error)) return false;
+  await recoverStaleBaleTopicApiError(
     { chat_id: target.chatId, message_thread_id: target.threadId },
     error,
     deps,
@@ -711,17 +711,17 @@ export async function settleStaleTelegramTopicExecutionFailure<
   return true;
 }
 
-export async function recoverStaleTelegramTopicApiError<
-  TSyncState extends TelegramSyncState,
+export async function recoverStaleBaleTopicApiError<
+  TSyncState extends BaleSyncState,
 >(
   apiBody: unknown,
   error: unknown,
-  deps: TelegramStaleTopicApiErrorRecoveryDeps<TSyncState>,
+  deps: BaleStaleTopicApiErrorRecoveryDeps<TSyncState>,
 ): Promise<boolean> {
-  const target = getTelegramTargetFromApiBody(apiBody);
+  const target = getBaleTargetFromApiBody(apiBody);
   if (
     !target ||
-    !isTelegramTopicTargetStaleError(error) ||
+    !isBaleTopicTargetStaleError(error) ||
     deps.isCurrent?.() === false
   )
     return false;
@@ -750,7 +750,7 @@ export async function recoverStaleTelegramTopicApiError<
       await deps.topicTargetStore.persist();
     }
     const nowMs = (deps.getNowMs ?? Date.now)();
-    let state = markTelegramSyncSliceSuspect(
+    let state = markBaleSyncSliceSuspect(
       deps.getSyncState(),
       "topic-state",
       {
@@ -759,12 +759,12 @@ export async function recoverStaleTelegramTopicApiError<
         action: "topic-target-stale",
       },
     ) as TSyncState;
-    state = markTelegramSyncSliceSuspect(state, "transport-health", {
+    state = markBaleSyncSliceSuspect(state, "transport-health", {
       nowMs,
       reason: "stale-api-error",
       action: "topic-target-stale",
     }) as TSyncState;
-    state = markTelegramSyncSliceSuspect(state, "target-bindings", {
+    state = markBaleSyncSliceSuspect(state, "target-bindings", {
       nowMs,
       reason: "stale-api-error",
       action: "topic-target-stale",
@@ -780,11 +780,11 @@ export async function recoverStaleTelegramTopicApiError<
   if (!deps.getWorkspaceAdmission) return recover();
   const admission = deps.getWorkspaceAdmission();
   if (!admission) {
-    throw new Error("Telegram Workspace admission authority is unavailable.");
+    throw new Error("Bale Workspace admission authority is unavailable.");
   }
-  return runWithTelegramWorkspaceAdmissionsAsync({
+  return runWithBaleWorkspaceAdmissionsAsync({
     ledger: admission,
-    operationId: createTelegramWorkspaceAdmissionOperationId(),
+    operationId: createBaleWorkspaceAdmissionOperationId(),
     operationKind: "workspace.recover-stale-target",
     scopes: [{ kind: "target", target }],
     operation: recover,
@@ -799,9 +799,9 @@ export async function recoverStaleTelegramTopicApiError<
   });
 }
 
-export async function ensureTelegramLeaderThreadBinding(
-  deps: TelegramLeaderThreadSyncDeps,
-): Promise<TelegramOwnTopicProvisionResult | undefined> {
+export async function ensureBaleLeaderThreadBinding(
+  deps: BaleLeaderThreadSyncDeps,
+): Promise<BaleOwnTopicProvisionResult | undefined> {
   const leaderEpoch = deps.getCurrentLeaderEpoch?.();
   const assertLeaderEpoch = (phase: string): void => {
     if (
@@ -810,7 +810,7 @@ export async function ensureTelegramLeaderThreadBinding(
         deps.getCurrentLeaderEpoch() !== leaderEpoch)
     ) {
       throw new Error(
-        `Telegram leader thread binding lost ownership (${phase}).`,
+        `Bale leader thread binding lost ownership (${phase}).`,
       );
     }
   };
@@ -818,17 +818,17 @@ export async function ensureTelegramLeaderThreadBinding(
   await deps.topicTargetStore.load();
   assertLeaderEpoch("after-load");
   const normalizedLeaderCwd = deps.cwd
-    ? normalizeTelegramWorkspacePath(deps.cwd)
+    ? normalizeBaleWorkspacePath(deps.cwd)
     : undefined;
   const leaderOwner = {
     kind: "leader" as const,
     cwd: normalizedLeaderCwd,
     instanceId: deps.instanceId,
-    ...(deps.telegramProfile ? { telegramProfile: deps.telegramProfile } : {}),
+    ...(deps.baleProfile ? { baleProfile: deps.baleProfile } : {}),
   };
-  const leaderProfileKey = getTelegramThreadOwnerKey(leaderOwner);
+  const leaderProfileKey = getBaleThreadOwnerKey(leaderOwner);
   if (deps.forceFreshUnnamed) {
-    await resetTelegramConnectionProvisioning({
+    await resetBaleConnectionProvisioning({
       store: deps.topicTargetStore, owner: "leader", instanceId: deps.instanceId,
       profileKey: leaderProfileKey, isCurrent: () => {
         assertLeaderEpoch("connect-recovery");
@@ -854,14 +854,14 @@ export async function ensureTelegramLeaderThreadBinding(
       )
     : undefined;
   if (deps.cwd && !workspaceIdentity) {
-    if (capacityUnavailable) throw new TelegramWorkspaceSlotUnavailableError();
-    throw new Error("Telegram Workspace identity is already claimed.");
+    if (capacityUnavailable) throw new BaleWorkspaceSlotUnavailableError();
+    throw new Error("Bale Workspace identity is already claimed.");
   }
   const commitWorkspaceBinding = async (
-    result: TelegramOwnTopicProvisionResult,
-  ): Promise<TelegramOwnTopicProvisionResult> => {
+    result: BaleOwnTopicProvisionResult,
+  ): Promise<BaleOwnTopicProvisionResult> => {
     if (!workspaceIdentity) return result;
-    const committed = commitTelegramWorkspaceProvisionBinding({
+    const committed = commitBaleWorkspaceProvisionBinding({
       store: deps.topicTargetStore,
       instanceId: deps.instanceId,
       profileKey: leaderProfileKey,
@@ -902,16 +902,16 @@ export async function ensureTelegramLeaderThreadBinding(
       ...deps.topicTargetStore
         .listSyncObservations()
         .filter((observation) => observation.syncStatus === "deleted")
-        .map((observation) => getTelegramTargetKey(observation.target)),
+        .map((observation) => getBaleTargetKey(observation.target)),
       ...deps.topicTargetStore
         .listPendingCleanups()
-        .map((intent) => getTelegramTargetKey(intent.target)),
+        .map((intent) => getBaleTargetKey(intent.target)),
     ]);
     let invalidatedUnavailableTarget = false;
     for (const record of deps.topicTargetStore.list()) {
       if (
         record.instanceId !== deps.instanceId ||
-        !unavailableTargetKeys.has(getTelegramTargetKey(record.target))
+        !unavailableTargetKeys.has(getBaleTargetKey(record.target))
       ) {
         continue;
       }
@@ -951,20 +951,20 @@ export async function ensureTelegramLeaderThreadBinding(
     const recoverableWorkspaceBinding =
       persistedWorkspaceBinding ?? legacyWorkspaceBinding;
     const recoverableTargetKey = recoverableWorkspaceBinding
-      ? getTelegramTargetKey(recoverableWorkspaceBinding.target)
+      ? getBaleTargetKey(recoverableWorkspaceBinding.target)
       : undefined;
     const recoverableRecord = recoverableWorkspaceBinding
       ? deps.topicTargetStore
           .list()
           .find(
             (record) =>
-              getTelegramTargetKey(record.target) === recoverableTargetKey,
+              getBaleTargetKey(record.target) === recoverableTargetKey,
           )
       : undefined;
     const sameProcessWorkspaceBinding =
       !!recoverableRecord &&
       (recoverableRecord.instanceId === deps.instanceId ||
-        isSameTelegramProcessInstance(
+        isSameBaleProcessInstance(
           recoverableRecord.instanceId,
           deps.instanceId,
         ));
@@ -982,7 +982,7 @@ export async function ensureTelegramLeaderThreadBinding(
           assertLeaderEpoch("after-workspace-probe");
           workspaceTargetVisible = true;
         } catch (error) {
-          if (!isTelegramTopicTargetStaleError(error)) throw error;
+          if (!isBaleTopicTargetStaleError(error)) throw error;
           deps.topicTargetStore.markStaleByTarget(
             recoverableWorkspaceBinding.target,
             "deleted",
@@ -1001,7 +1001,7 @@ export async function ensureTelegramLeaderThreadBinding(
         const nowMs = deps.getNowMs?.() ?? Date.now();
         const slot = workspaceIdentity?.slot;
         if (!slot) {
-          throw new Error("Telegram Thread slot authority is unavailable.");
+          throw new Error("Bale Thread slot authority is unavailable.");
         }
         const recovered = await commitWorkspaceBinding({
           target: { ...recoverableWorkspaceBinding.target },
@@ -1029,7 +1029,7 @@ export async function ensureTelegramLeaderThreadBinding(
         await deps.topicTargetStore.persist();
         assertLeaderEpoch("after-recovered-record-persist");
         deps.recordEvent(
-          "telegram",
+          "bale",
           "Leader thread preserved after Workspace recovery",
           {
             phase: "leader-thread-reused",
@@ -1057,7 +1057,7 @@ export async function ensureTelegramLeaderThreadBinding(
     ) {
       const record = priorTargets[0];
       deps.recordEvent(
-        "telegram",
+        "bale",
         "Leader thread preserved after session lifecycle change",
         {
           phase: "leader-thread-reused",
@@ -1069,7 +1069,7 @@ export async function ensureTelegramLeaderThreadBinding(
       );
       assertLeaderEpoch("before-reuse");
       if (!record.slot) {
-        throw new Error("Telegram Thread slot authority is unavailable.");
+        throw new Error("Bale Thread slot authority is unavailable.");
       }
       return await commitWorkspaceBinding({
         target: record.target,
@@ -1092,7 +1092,7 @@ export async function ensureTelegramLeaderThreadBinding(
           deps.topicTargetStore.markStaleByTarget(record.target) ||
           forcedUnnamedStale;
         deps.recordEvent(
-          "telegram",
+          "bale",
           "Unnamed leader thread binding refreshed",
           {
             phase: "leader-thread-force-fresh-unnamed",
@@ -1110,7 +1110,7 @@ export async function ensureTelegramLeaderThreadBinding(
       getAllowedUserId: deps.getAllowedUserId,
       instanceId: deps.instanceId,
       cwd: normalizedLeaderCwd,
-      telegramProfile: deps.telegramProfile,
+      baleProfile: deps.baleProfile,
       getCurrentLeaderEpoch: deps.getCurrentLeaderEpoch,
       getThreadReconciliationMachineState:
         deps.getThreadReconciliationMachineState,
@@ -1144,7 +1144,7 @@ export async function ensureTelegramLeaderThreadBinding(
     });
     deps.recordThreadReconciliationPlan?.(replacementPlan);
     await ThreadReconciler.applyThreadReconciliationPlan(replacementPlan, {
-      isCleanupTargetProtected: createTelegramCleanupTargetProtection(
+      isCleanupTargetProtected: createBaleCleanupTargetProtection(
         deps.topicTargetStore,
       ),
       callApi: deps.callApi,
@@ -1169,23 +1169,23 @@ export async function ensureTelegramLeaderThreadBinding(
   }
 }
 
-const TELEGRAM_SYNC_SLICE_TARGET_BINDINGS = "target-bindings";
+const BALE_SYNC_SLICE_TARGET_BINDINGS = "target-bindings";
 
-export const TELEGRAM_SYNC_SLICES = [
+export const BALE_SYNC_SLICES = [
   "bot-identity",
   "bot-capabilities",
   "pairing",
   "allowed-user",
   "topic-capability",
   "topic-state",
-  TELEGRAM_SYNC_SLICE_TARGET_BINDINGS,
+  BALE_SYNC_SLICE_TARGET_BINDINGS,
   "reservations",
   "transport-health",
 ] as const;
 
-export type TelegramSyncSlice = (typeof TELEGRAM_SYNC_SLICES)[number];
+export type BaleSyncSlice = (typeof BALE_SYNC_SLICES)[number];
 
-export interface TelegramSyncSliceState {
+export interface BaleSyncSliceState {
   status: "fresh" | "suspect" | "unknown";
   updatedAtMs?: number;
   suspectAtMs?: number;
@@ -1193,27 +1193,27 @@ export interface TelegramSyncSliceState {
   lastReconcileAction?: string;
 }
 
-export type TelegramSyncState = Partial<
-  Record<TelegramSyncSlice, TelegramSyncSliceState>
+export type BaleSyncState = Partial<
+  Record<BaleSyncSlice, BaleSyncSliceState>
 >;
 
-export function createUnknownTelegramSyncState(): TelegramSyncState {
+export function createUnknownBaleSyncState(): BaleSyncState {
   return Object.fromEntries(
-    TELEGRAM_SYNC_SLICES.map((slice) => [slice, { status: "unknown" }]),
-  ) as TelegramSyncState;
+    BALE_SYNC_SLICES.map((slice) => [slice, { status: "unknown" }]),
+  ) as BaleSyncState;
 }
 
-export interface TelegramSyncStateRuntime {
-  getState(): TelegramSyncState;
-  setState(state: TelegramSyncState): void;
+export interface BaleSyncStateRuntime {
+  getState(): BaleSyncState;
+  setState(state: BaleSyncState): void;
   markConfigChange(action: string): void;
   markSliceFresh(
-    slice: TelegramSyncSlice,
+    slice: BaleSyncSlice,
     options: { nowMs: number; action: string },
   ): void;
 }
 
-export function createTelegramConfigSyncPersister<TConfig>(deps: {
+export function createBaleConfigSyncPersister<TConfig>(deps: {
   persist: (config?: TConfig) => Promise<void>;
   markConfigChange: (action: string) => void;
 }): (config?: TConfig) => Promise<void> {
@@ -1223,9 +1223,9 @@ export function createTelegramConfigSyncPersister<TConfig>(deps: {
   };
 }
 
-export function createTelegramSyncStateRuntime(
-  initialState = createUnknownTelegramSyncState(),
-): TelegramSyncStateRuntime {
+export function createBaleSyncStateRuntime(
+  initialState = createUnknownBaleSyncState(),
+): BaleSyncStateRuntime {
   let state = initialState;
   return {
     getState: () => state,
@@ -1233,21 +1233,21 @@ export function createTelegramSyncStateRuntime(
       state = nextState;
     },
     markConfigChange(action) {
-      state = markTelegramConfigSyncChange(state, action);
+      state = markBaleConfigSyncChange(state, action);
     },
     markSliceFresh(slice, options) {
-      state = markTelegramSyncSliceFresh(state, slice, options);
+      state = markBaleSyncSliceFresh(state, slice, options);
     },
   };
 }
 
-export interface TelegramProvisioningActivityRuntime {
+export interface BaleProvisioningActivityRuntime {
   isActive(): boolean;
   start(): void;
   end(): void;
 }
 
-export function createTelegramProvisioningActivityRuntime(): TelegramProvisioningActivityRuntime {
+export function createBaleProvisioningActivityRuntime(): BaleProvisioningActivityRuntime {
   let activeCount = 0;
   return {
     isActive: () => activeCount > 0,
@@ -1260,15 +1260,15 @@ export function createTelegramProvisioningActivityRuntime(): TelegramProvisionin
   };
 }
 
-export function markTelegramSyncSliceSuspect(
-  state: TelegramSyncState,
-  slice: TelegramSyncSlice,
+export function markBaleSyncSliceSuspect(
+  state: BaleSyncState,
+  slice: BaleSyncSlice,
   input: {
     reason: string;
     nowMs: number;
     action?: string;
   },
-): TelegramSyncState {
+): BaleSyncState {
   return {
     ...state,
     [slice]: {
@@ -1281,14 +1281,14 @@ export function markTelegramSyncSliceSuspect(
   };
 }
 
-export function markTelegramSyncSliceFresh(
-  state: TelegramSyncState,
-  slice: TelegramSyncSlice,
+export function markBaleSyncSliceFresh(
+  state: BaleSyncState,
+  slice: BaleSyncSlice,
   input: {
     nowMs: number;
     action: string;
   },
-): TelegramSyncState {
+): BaleSyncState {
   return {
     ...state,
     [slice]: {
@@ -1299,21 +1299,21 @@ export function markTelegramSyncSliceFresh(
   };
 }
 
-export function createTelegramObservedTopicLifecycleSyncHandler<
+export function createBaleObservedTopicLifecycleSyncHandler<
   TMessage = unknown,
-  TSyncState extends TelegramSyncState = TelegramSyncState,
+  TSyncState extends BaleSyncState = BaleSyncState,
 >(
-  deps: TelegramObservedTopicLifecycleSyncDeps<TSyncState>,
-): TelegramTopicLifecycleSyncHandler<TMessage> {
+  deps: BaleObservedTopicLifecycleSyncDeps<TSyncState>,
+): BaleTopicLifecycleSyncHandler<TMessage> {
   const syncTopicLifecycle =
-    createTelegramTopicLifecycleSyncHandler<TMessage>(deps);
+    createBaleTopicLifecycleSyncHandler<TMessage>(deps);
   const operation = async (
-    lifecycle: TelegramTopicLifecycleSyncUpdate<TMessage>,
+    lifecycle: BaleTopicLifecycleSyncUpdate<TMessage>,
   ): Promise<void> => {
     const nowMs = deps.getNowMs ?? Date.now;
     deps.assertExecutionCurrent?.(lifecycle.message);
     deps.setSyncState(
-      markTelegramSyncSliceSuspect(deps.getSyncState(), "topic-state", {
+      markBaleSyncSliceSuspect(deps.getSyncState(), "topic-state", {
         nowMs: nowMs(),
         reason: `topic-${lifecycle.kind}`,
         action: "topic-lifecycle",
@@ -1322,7 +1322,7 @@ export function createTelegramObservedTopicLifecycleSyncHandler<
     await syncTopicLifecycle(lifecycle);
     deps.assertExecutionCurrent?.(lifecycle.message);
     deps.setSyncState(
-      markTelegramSyncSliceFresh(deps.getSyncState(), "topic-state", {
+      markBaleSyncSliceFresh(deps.getSyncState(), "topic-state", {
         nowMs: nowMs(),
         action: "topic-lifecycle",
       }) as TSyncState,
@@ -1331,7 +1331,7 @@ export function createTelegramObservedTopicLifecycleSyncHandler<
   return (lifecycle) =>
     deps.runWorkspaceOperation(
       {
-        operationId: createTelegramWorkspaceAdmissionOperationId(),
+        operationId: createBaleWorkspaceAdmissionOperationId(),
         operationKind: "workspace.sync-topic-lifecycle",
         scopes: [{ kind: "profile" }],
       },
@@ -1339,9 +1339,9 @@ export function createTelegramObservedTopicLifecycleSyncHandler<
     );
 }
 
-export function createTelegramTopicLifecycleSyncHandler<TMessage = unknown>(
-  deps: TelegramTopicLifecycleSyncDeps,
-): TelegramTopicLifecycleSyncHandler<TMessage> {
+export function createBaleTopicLifecycleSyncHandler<TMessage = unknown>(
+  deps: BaleTopicLifecycleSyncDeps,
+): BaleTopicLifecycleSyncHandler<TMessage> {
   return async (lifecycle) => {
     deps.assertExecutionCurrent?.(lifecycle.message);
     await deps.topicTargetStore.load();
@@ -1397,10 +1397,10 @@ export function createTelegramTopicLifecycleSyncHandler<TMessage = unknown>(
         });
       if (!isKnownInRecords && !isKnownInReservations) {
         deps.recordEvent?.(
-          "telegram",
+          "bale",
           deps.isTopicProvisioningActive?.()
-            ? "Telegram unknown topic creation observed during provisioning"
-            : "Telegram unknown topic creation observed",
+            ? "Bale unknown topic creation observed during provisioning"
+            : "Bale unknown topic creation observed",
           {
             phase: deps.isTopicProvisioningActive?.()
               ? "topic-lifecycle-provisioning-skip"
@@ -1411,7 +1411,7 @@ export function createTelegramTopicLifecycleSyncHandler<TMessage = unknown>(
         );
       }
     }
-    deps.recordEvent?.("telegram", "Telegram topic lifecycle update", {
+    deps.recordEvent?.("bale", "Bale topic lifecycle update", {
       phase: "topic-lifecycle",
       lifecycle: lifecycle.kind,
       chatId: lifecycle.target.chatId,

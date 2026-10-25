@@ -1,14 +1,14 @@
 /**
- * Regression tests for the Telegram extension entrypoint wiring
+ * Regression tests for the Bale extension entrypoint wiring
  * Covers composition-root binding of tools, commands, lifecycle hooks, and prompt injection
- * Zones: telegram, pi agent, orchestration
+ * Zones: bale, pi agent, orchestration
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import telegramExtension from "../index.ts";
-import * as telegramEntrypoint from "../index.ts";
+import baleExtension from "../index.ts";
+import * as baleEntrypoint from "../index.ts";
 import type { ExtensionAPI, ExtensionContext } from "../lib/pi.ts";
 
 type RegisteredIndexTool = {
@@ -63,23 +63,23 @@ function createIndexExtensionContext(): ExtensionContext {
 }
 
 test("Extension entrypoint exposes only the default composition root", () => {
-  assert.deepEqual(Object.keys(telegramEntrypoint), ["default"]);
+  assert.deepEqual(Object.keys(baleEntrypoint), ["default"]);
 });
 
 test("Extension entrypoint wires domain bindings into the pi API", () => {
   const harness = createIndexApiHarness();
-  telegramExtension(harness.api);
+  baleExtension(harness.api);
   assert.deepEqual(
     [...harness.tools.keys()],
-    ["telegram_bind", "telegram_channel_post", "telegram_channel_posts", "telegram_attach", "telegram_message"],
+    ["bale_bind", "bale_channel_post", "bale_channel_posts", "bale_attach", "bale_message"],
   );
   assert.deepEqual(
     [...harness.commands.keys()],
     [
-      "telegram-setup",
-      "telegram-status",
-      "telegram-connect",
-      "telegram-disconnect",
+      "bale-setup",
+      "bale-status",
+      "bale-connect",
+      "bale-disconnect",
     ],
   );
   assert.deepEqual(
@@ -111,29 +111,29 @@ test("Extension entrypoint wires domain bindings into the pi API", () => {
 
 test("Extension model-step hook declines unbound contexts without SDK or queue effects", async () => {
   const harness = createIndexApiHarness();
-  telegramExtension(harness.api);
+  baleExtension(harness.api);
   const result = await getRequiredIndexHandler(harness.handlers, "turn_end")(
     { entries: [], outcome: "completed", turnIndex: 1 }, createIndexExtensionContext(),
   );
   assert.equal(result, undefined);
 });
 
-test("Extension before-agent-start hook skips Telegram guidance when unconfigured", async () => {
+test("Extension before-agent-start hook skips Bale guidance when unconfigured", async () => {
   const harness = createIndexApiHarness();
-  telegramExtension(harness.api);
+  baleExtension(harness.api);
   const handler = getRequiredIndexHandler(
     harness.handlers,
     "before_agent_start",
   );
   const basePrompt = "System base";
-  const telegramResult = await handler(
-    { systemPrompt: basePrompt, prompt: "[telegram] hello" },
+  const baleResult = await handler(
+    { systemPrompt: basePrompt, prompt: "[bale] hello" },
     createIndexExtensionContext(),
   );
   const localResult = await handler(
     { systemPrompt: basePrompt, prompt: "hello" },
     createIndexExtensionContext(),
   );
-  assert.equal(telegramResult, undefined);
+  assert.equal(baleResult, undefined);
   assert.equal(localResult, undefined);
 });

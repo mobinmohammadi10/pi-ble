@@ -1,33 +1,33 @@
 /**
- * Telegram preview streaming helpers
- * Zones: telegram outbound, native rich markdown drafts
+ * Bale preview streaming helpers
+ * Zones: bale outbound, native rich markdown drafts
  * Owns safe draft preview selection, runtime updates, and preview finalization
  * The streaming state machine is a pure transition function driven by one imperative shell per runtime.
  */
 
-import type { TelegramAssistantOutputPreparation } from "./activity.ts";
+import type { BaleAssistantOutputPreparation } from "./activity.ts";
 import * as Machine from "./machine.ts";
-import { stripTelegramCommentMarkupForPreview } from "./outbound-markup.ts";
+import { stripBaleCommentMarkupForPreview } from "./outbound-markup.ts";
 import {
-  isTelegramMarkdownFenceClosing,
-  normalizeTelegramNativeMarkdown,
-  parseTelegramMarkdownFenceOpening,
-  type TelegramMarkdownFence,
+  isBaleMarkdownFenceClosing,
+  normalizeBaleNativeMarkdown,
+  parseBaleMarkdownFenceOpening,
+  type BaleMarkdownFence,
 } from "./replies.ts";
 import {
-  getTelegramTargetThreadParams,
-  type TelegramTarget,
+  getBaleTargetThreadParams,
+  type BaleTarget,
 } from "./target.ts";
 import { shouldSuppressPreviewForVoice } from "./voice.ts";
 
-const TELEGRAM_DRAFT_ID_MAX = 2_147_483_647;
-const TELEGRAM_DRAFT_PREVIEW_MAX_CHARS = 4096;
+const BALE_DRAFT_ID_MAX = 2_147_483_647;
+const BALE_DRAFT_PREVIEW_MAX_CHARS = 4096;
 // Native draft cadence: at most one frame per interval, and a fresh preview
 // segment holds its first frame for one full interval so the opening frame is
 // an accumulated passage rather than a single streamed word.
-const TELEGRAM_DRAFT_INTERVAL_MS = 2_000;
+const BALE_DRAFT_INTERVAL_MS = 2_000;
 
-export interface TelegramPreviewState {
+export interface BalePreviewState {
   mode: "draft";
   draftId?: number;
   pendingText: string;
@@ -35,14 +35,14 @@ export interface TelegramPreviewState {
 }
 
 /** One immutable preview segment; a replacement segment gets a new id, so late results for an old one are dropped. */
-export interface TelegramPreviewSegment extends Readonly<TelegramPreviewState> {
+export interface BalePreviewSegment extends Readonly<BalePreviewState> {
   readonly id: number;
   readonly sealed: boolean;
 }
 
-export type TelegramPreviewReplyMarkup = unknown;
+export type BalePreviewReplyMarkup = unknown;
 
-type TelegramDraftSender = (
+type BaleDraftSender = (
   chatId: number,
   draftId: number,
   text?: string,
@@ -53,57 +53,57 @@ type TelegramDraftSender = (
   },
 ) => Promise<unknown>;
 
-type TelegramPreviewEventRecorder = (
+type BalePreviewEventRecorder = (
   category: string,
   error: unknown,
   details?: Record<string, unknown>,
 ) => void;
 
-export interface TelegramPreviewActiveTurn {
+export interface BalePreviewActiveTurn {
   chatId: number;
   replyToMessageId?: number;
-  target?: TelegramTarget;
+  target?: BaleTarget;
   voiceReplyPreferred?: boolean;
   voiceReplyRequired?: boolean;
   guestQueryId?: string;
 }
 
-export interface TelegramAssistantMessagePreviewHookEvent<TMessage> {
+export interface BaleAssistantMessagePreviewHookEvent<TMessage> {
   message: TMessage;
 }
 
-export interface TelegramAssistantMessagePreviewHooks<TMessage> {
+export interface BaleAssistantMessagePreviewHooks<TMessage> {
   onMessageStart: (
-    event: TelegramAssistantMessagePreviewHookEvent<TMessage>,
+    event: BaleAssistantMessagePreviewHookEvent<TMessage>,
   ) => Promise<void>;
   onMessageUpdate: (
-    event: TelegramAssistantMessagePreviewHookEvent<TMessage>,
+    event: BaleAssistantMessagePreviewHookEvent<TMessage>,
   ) => Promise<void>;
 }
 
-export interface TelegramPreviewControllerDeps {
+export interface BalePreviewControllerDeps {
   getDefaultReplyToMessageId?: () => number | undefined;
   maxMessageLength?: number;
-  sendDraft: TelegramDraftSender;
+  sendDraft: BaleDraftSender;
   canSend?: () => boolean;
   maxDraftId?: number;
   /** Throttle between draft frames; defaults to the native draft cadence. */
   minDraftIntervalMs?: number;
-  recordRuntimeEvent?: TelegramPreviewEventRecorder;
+  recordRuntimeEvent?: BalePreviewEventRecorder;
 }
 
-type TelegramPreviewTargetOptions = { target?: TelegramTarget };
+type BalePreviewTargetOptions = { target?: BaleTarget };
 
-export interface TelegramPreviewController {
+export interface BalePreviewController {
   /** Read-only view of the current segment; it never grants mutation. */
-  getState: () => TelegramPreviewSegment | undefined;
+  getState: () => BalePreviewSegment | undefined;
   /** True while a draft request is in flight or a pending request waits behind a publication. */
   isFlushing: () => boolean;
   seal: () => void;
-  preparePublication: () => TelegramAssistantOutputPreparation | undefined;
+  preparePublication: () => BaleAssistantOutputPreparation | undefined;
   prepareClear: (
     chatId: number,
-    options?: TelegramPreviewTargetOptions & {
+    options?: BalePreviewTargetOptions & {
       isDeliveryActive?: () => boolean;
     },
   ) => () => Promise<void>;
@@ -112,76 +112,76 @@ export interface TelegramPreviewController {
   invalidate: () => void;
   clear: (
     chatId: number,
-    options?: TelegramPreviewTargetOptions & { awaitFlush?: boolean },
+    options?: BalePreviewTargetOptions & { awaitFlush?: boolean },
   ) => Promise<void>;
   flush: (
     chatId: number,
-    options?: TelegramPreviewTargetOptions,
+    options?: BalePreviewTargetOptions,
   ) => Promise<void>;
   scheduleFlush: (
     chatId: number,
-    options?: TelegramPreviewTargetOptions,
+    options?: BalePreviewTargetOptions,
   ) => void;
   finalize: (
     chatId: number,
     replyToMessageId?: number,
-    options?: TelegramPreviewTargetOptions,
+    options?: BalePreviewTargetOptions,
   ) => Promise<boolean>;
 }
 
-export interface TelegramAssistantPreviewRuntimeDeps<
+export interface BaleAssistantPreviewRuntimeDeps<
   TMessage,
-  TReplyMarkup = TelegramPreviewReplyMarkup,
-> extends TelegramPreviewControllerDeps {
-  getActiveTurn: () => TelegramPreviewActiveTurn | undefined;
+  TReplyMarkup = BalePreviewReplyMarkup,
+> extends BalePreviewControllerDeps {
+  getActiveTurn: () => BalePreviewActiveTurn | undefined;
   isAssistantMessage: (message: TMessage) => boolean;
   getMessageText: (message: TMessage) => string;
   sendMarkdownReply: (
     chatId: number,
     replyToMessageId: number | undefined,
     markdown: string,
-    options?: { replyMarkup?: TReplyMarkup; target?: TelegramTarget },
+    options?: { replyMarkup?: TReplyMarkup; target?: BaleTarget },
   ) => Promise<number | undefined>;
 }
 
-type TelegramMarkdownFinalizer<TReplyMarkup> = (
+type BaleMarkdownFinalizer<TReplyMarkup> = (
   chatId: number,
   markdown: string,
   replyToMessageId?: number,
-  options?: { replyMarkup?: TReplyMarkup; target?: TelegramTarget },
+  options?: { replyMarkup?: TReplyMarkup; target?: BaleTarget },
 ) => Promise<boolean>;
 
-export interface TelegramPreparedPreviewDelivery<TReplyMarkup = unknown> {
-  clearPreview: TelegramPreviewController["clear"];
-  setPreviewPendingText: TelegramPreviewController["setPendingText"];
-  finalizeMarkdownPreview: TelegramMarkdownFinalizer<TReplyMarkup>;
+export interface BalePreparedPreviewDelivery<TReplyMarkup = unknown> {
+  clearPreview: BalePreviewController["clear"];
+  setPreviewPendingText: BalePreviewController["setPendingText"];
+  finalizeMarkdownPreview: BaleMarkdownFinalizer<TReplyMarkup>;
 }
 
-export type TelegramAssistantPreviewRuntime<
+export type BaleAssistantPreviewRuntime<
   TMessage,
-  TReplyMarkup = TelegramPreviewReplyMarkup,
-> = TelegramPreviewController &
-  TelegramAssistantMessagePreviewHooks<TMessage> & {
+  TReplyMarkup = BalePreviewReplyMarkup,
+> = BalePreviewController &
+  BaleAssistantMessagePreviewHooks<TMessage> & {
     prepareDelivery: (
       isDeliveryActive: () => boolean,
-    ) => TelegramPreparedPreviewDelivery<TReplyMarkup>;
-    finalizeMarkdown: TelegramMarkdownFinalizer<TReplyMarkup>;
+    ) => BalePreparedPreviewDelivery<TReplyMarkup>;
+    finalizeMarkdown: BaleMarkdownFinalizer<TReplyMarkup>;
   };
 
-interface TelegramPreviewFlushRequest {
+interface BalePreviewFlushRequest {
   chatId: number;
-  target?: TelegramTarget;
+  target?: BaleTarget;
 }
 
-interface TelegramPreviewMachineConfig {
+interface BalePreviewMachineConfig {
   maxDraftId: number;
   maxMessageLength: number;
   minDraftIntervalMs: number;
 }
 
-/** The whole preview state; only `transitionTelegramPreview` produces a new one. */
-export interface TelegramPreviewMachineState {
-  readonly segment: TelegramPreviewSegment | null;
+/** The whole preview state; only `transitionBalePreview` produces a new one. */
+export interface BalePreviewMachineState {
+  readonly segment: BalePreviewSegment | null;
   /** Bumped by reset and invalidation; a result issued under an older generation is inert. */
   readonly generation: number;
   readonly nextSegmentId: number;
@@ -190,19 +190,19 @@ export interface TelegramPreviewMachineState {
   /** Segment that owns the current generation's issued draft; old-generation requests do not block it. */
   readonly inFlight: number | null;
   /** The one coalesced flush request waiting behind an in-flight draft or an open publication. */
-  readonly pending: TelegramPreviewFlushRequest | null;
+  readonly pending: BalePreviewFlushRequest | null;
   readonly publications: readonly number[];
   /** The segment the throttle timer is armed for; the timer belongs to that segment alone. */
   readonly timerSegmentId: number | null;
 }
 
 /** Impure inputs the runner samples at dispatch time, so transitions stay pure. */
-interface TelegramPreviewClock {
+interface BalePreviewClock {
   now: number;
   canSend: boolean;
 }
 
-export type TelegramPreviewEvent =
+export type BalePreviewEvent =
   | { type: "reset" }
   | { type: "invalidated" }
   | { type: "segmentStarted" }
@@ -213,27 +213,27 @@ export type TelegramPreviewEvent =
   | { type: "draftWindowOpened"; at: number }
   | ({
       type: "flushRequested";
-      request: TelegramPreviewFlushRequest;
-    } & TelegramPreviewClock)
+      request: BalePreviewFlushRequest;
+    } & BalePreviewClock)
   | ({
       type: "timerFired";
-      request: TelegramPreviewFlushRequest;
+      request: BalePreviewFlushRequest;
       segmentId: number;
-    } & TelegramPreviewClock)
+    } & BalePreviewClock)
   | ({
       type: "draftSettled";
       segmentId: number;
       generation: number;
-      /** Present only when Telegram accepted the draft. */
+      /** Present only when Bale accepted the draft. */
       text?: string;
-    } & TelegramPreviewClock)
+    } & BalePreviewClock)
   | { type: "publicationOpened"; id: number }
-  | ({ type: "publicationSettled"; id: number } & TelegramPreviewClock);
+  | ({ type: "publicationSettled"; id: number } & BalePreviewClock);
 
-export type TelegramPreviewEffect =
+export type BalePreviewEffect =
   | {
       type: "sendDraft";
-      request: TelegramPreviewFlushRequest;
+      request: BalePreviewFlushRequest;
       draftId: number;
       text: string;
       segmentId: number;
@@ -242,18 +242,18 @@ export type TelegramPreviewEffect =
   | {
       type: "armTimer";
       delay: number;
-      request: TelegramPreviewFlushRequest;
+      request: BalePreviewFlushRequest;
       segmentId: number;
     }
   | { type: "cancelTimer" }
-  | { type: "clearClosedGate"; request: TelegramPreviewFlushRequest };
+  | { type: "clearClosedGate"; request: BalePreviewFlushRequest };
 
-export interface TelegramPreviewStep {
-  state: TelegramPreviewMachineState;
-  effects: readonly TelegramPreviewEffect[];
+export interface BalePreviewStep {
+  state: BalePreviewMachineState;
+  effects: readonly BalePreviewEffect[];
 }
 
-export function createTelegramPreviewMachineState(): TelegramPreviewMachineState {
+export function createBalePreviewMachineState(): BalePreviewMachineState {
   return {
     segment: null,
     generation: 0,
@@ -268,30 +268,30 @@ export function createTelegramPreviewMachineState(): TelegramPreviewMachineState
 }
 
 const step = (
-  state: TelegramPreviewMachineState,
-  ...effects: TelegramPreviewEffect[]
-): TelegramPreviewStep => ({ state, effects });
+  state: BalePreviewMachineState,
+  ...effects: BalePreviewEffect[]
+): BalePreviewStep => ({ state, effects });
 
 /** Drops the armed throttle timer, if any; every caller replaces or seals its segment. */
 const withoutTimer = (
-  state: TelegramPreviewMachineState,
-): TelegramPreviewStep =>
+  state: BalePreviewMachineState,
+): BalePreviewStep =>
   state.timerSegmentId === null
     ? step(state)
     : step({ ...state, timerSegmentId: null }, { type: "cancelTimer" });
 
 /** A replaced segment takes its pending request and its throttle timer with it. */
 function replaceSegment(
-  state: TelegramPreviewMachineState,
-  segment: TelegramPreviewSegment | null,
-): TelegramPreviewStep {
+  state: BalePreviewMachineState,
+  segment: BalePreviewSegment | null,
+): BalePreviewStep {
   return withoutTimer({ ...state, segment, pending: null });
 }
 
 function startSegment(
-  state: TelegramPreviewMachineState,
-  carry: Partial<TelegramPreviewState> = {},
-): TelegramPreviewStep {
+  state: BalePreviewMachineState,
+  carry: Partial<BalePreviewState> = {},
+): BalePreviewStep {
   const id = state.nextSegmentId + 1;
   return replaceSegment(
     { ...state, nextSegmentId: id },
@@ -308,11 +308,11 @@ function startSegment(
 
 /** One flush attempt for the current segment: gate, throttle, safe snapshot and draft id. */
 function attemptFlush(
-  state: TelegramPreviewMachineState,
-  request: TelegramPreviewFlushRequest,
-  clock: TelegramPreviewClock,
-  config: TelegramPreviewMachineConfig,
-): TelegramPreviewStep {
+  state: BalePreviewMachineState,
+  request: BalePreviewFlushRequest,
+  clock: BalePreviewClock,
+  config: BalePreviewMachineConfig,
+): BalePreviewStep {
   const segment = state.segment;
   if (!segment || segment.sealed) return step(state);
   if (!clock.canSend) return step(state, { type: "clearClosedGate", request });
@@ -325,14 +325,14 @@ function attemptFlush(
     );
   }
   const idle = withoutTimer(state);
-  const snapshot = buildTelegramNativeMarkdownPreviewSnapshot(
+  const snapshot = buildBaleNativeMarkdownPreviewSnapshot(
     segment,
     config.maxMessageLength,
   );
   if (!snapshot) return idle;
   const draftId =
     segment.draftId ??
-    allocateTelegramDraftId(state.nextDraftId, config.maxDraftId);
+    allocateBaleDraftId(state.nextDraftId, config.maxDraftId);
   return {
     state: {
       ...idle.state,
@@ -357,11 +357,11 @@ function attemptFlush(
 
 /** Single flight: a request during an in-flight draft or behind a publication waits as the one pending request. */
 function requestFlush(
-  state: TelegramPreviewMachineState,
-  request: TelegramPreviewFlushRequest,
-  clock: TelegramPreviewClock,
-  config: TelegramPreviewMachineConfig,
-): TelegramPreviewStep {
+  state: BalePreviewMachineState,
+  request: BalePreviewFlushRequest,
+  clock: BalePreviewClock,
+  config: BalePreviewMachineConfig,
+): BalePreviewStep {
   // Only a live, unsealed segment accepts flush requests, whatever the caller checked.
   if (!state.segment || state.segment.sealed) return step(state);
   if (state.inFlight !== null || state.publications.length > 0)
@@ -371,21 +371,21 @@ function requestFlush(
 
 /** A coalesced request runs once the in-flight draft and every open publication have settled. */
 function drainPending(
-  state: TelegramPreviewMachineState,
-  clock: TelegramPreviewClock,
-  config: TelegramPreviewMachineConfig,
-): TelegramPreviewStep {
+  state: BalePreviewMachineState,
+  clock: BalePreviewClock,
+  config: BalePreviewMachineConfig,
+): BalePreviewStep {
   const request = state.pending;
   if (!request || state.inFlight !== null || state.publications.length > 0)
     return step(state);
   return attemptFlush({ ...state, pending: null }, request, clock, config);
 }
 
-export function transitionTelegramPreview(
-  state: TelegramPreviewMachineState,
-  event: TelegramPreviewEvent,
-  config: TelegramPreviewMachineConfig,
-): TelegramPreviewStep {
+export function transitionBalePreview(
+  state: BalePreviewMachineState,
+  event: BalePreviewEvent,
+  config: BalePreviewMachineConfig,
+): BalePreviewStep {
   switch (event.type) {
     case "reset":
     case "invalidated": {
@@ -489,8 +489,8 @@ export function transitionTelegramPreview(
 }
 
 /** True while a draft request is in flight, or, when publications block, a pending request waits behind one. */
-export function isTelegramPreviewBusy(
-  state: TelegramPreviewMachineState,
+export function isBalePreviewBusy(
+  state: BalePreviewMachineState,
   blockedByPublication = true,
 ): boolean {
   return (
@@ -502,29 +502,29 @@ export function isTelegramPreviewBusy(
 }
 
 /**
- * The imperative shell around `transitionTelegramPreview`: it samples the clock and send gate into events, runs
+ * The imperative shell around `transitionBalePreview`: it samples the clock and send gate into events, runs
  * effects, records every transport failure in one place and resolves promise-shaped ports through `waitFor`.
  */
-function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
-  const config: TelegramPreviewMachineConfig = {
-    maxDraftId: deps.maxDraftId ?? TELEGRAM_DRAFT_ID_MAX,
-    maxMessageLength: deps.maxMessageLength ?? TELEGRAM_DRAFT_PREVIEW_MAX_CHARS,
-    minDraftIntervalMs: deps.minDraftIntervalMs ?? TELEGRAM_DRAFT_INTERVAL_MS,
+function createBalePreviewModel(deps: BalePreviewControllerDeps) {
+  const config: BalePreviewMachineConfig = {
+    maxDraftId: deps.maxDraftId ?? BALE_DRAFT_ID_MAX,
+    maxMessageLength: deps.maxMessageLength ?? BALE_DRAFT_PREVIEW_MAX_CHARS,
+    minDraftIntervalMs: deps.minDraftIntervalMs ?? BALE_DRAFT_INTERVAL_MS,
   };
   let timer: ReturnType<typeof setTimeout> | undefined;
   let publicationIds = 0;
-  const clock = (): TelegramPreviewClock => ({
+  const clock = (): BalePreviewClock => ({
     now: Date.now(),
     canSend: deps.canSend?.() !== false,
   });
-  const machine = Machine.createTelegramMachineRunner<
-    TelegramPreviewMachineState,
-    TelegramPreviewEvent,
-    TelegramPreviewEffect
+  const machine = Machine.createBaleMachineRunner<
+    BalePreviewMachineState,
+    BalePreviewEvent,
+    BalePreviewEffect
   >({
-    initial: createTelegramPreviewMachineState(),
+    initial: createBalePreviewMachineState(),
     transition: (state, event) =>
-      transitionTelegramPreview(state, event, config),
+      transitionBalePreview(state, event, config),
     run: (effect) => run(effect),
   });
   const { dispatch, waitFor } = machine;
@@ -532,7 +532,7 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
     const generation = machine.state.generation;
     return waitFor(
       (current) =>
-        current.generation !== generation || !isTelegramPreviewBusy(current),
+        current.generation !== generation || !isBalePreviewBusy(current),
     );
   };
   /** Captures predecessors only: a later draft/publication must never extend the boundary that blocks it. */
@@ -552,13 +552,13 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
   /** The one place preview transport failures become diagnostics; a failed call reports `false`. */
   const callTransport = async (
     phase: "draft" | "clear-draft",
-    request: TelegramPreviewFlushRequest,
+    request: BalePreviewFlushRequest,
     draftId: number,
     text: string | undefined,
   ): Promise<unknown> => {
     try {
       return await deps.sendDraft(request.chatId, draftId, text, {
-        ...getTelegramTargetThreadParams(
+        ...getBaleTargetThreadParams(
           request.target ?? { chatId: request.chatId },
         ),
       });
@@ -572,13 +572,13 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
     }
   };
   const sendDraft = async (
-    effect: Extract<TelegramPreviewEffect, { type: "sendDraft" }>,
+    effect: Extract<BalePreviewEffect, { type: "sendDraft" }>,
   ): Promise<void> => {
     const delivered = await callTransport(
       "draft",
       effect.request,
       effect.draftId,
-      normalizeTelegramNativeMarkdown(effect.text),
+      normalizeBaleNativeMarkdown(effect.text),
     );
     dispatch({
       type: "draftSettled",
@@ -588,7 +588,7 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
       ...clock(),
     });
   };
-  const run = (effect: TelegramPreviewEffect): void => {
+  const run = (effect: BalePreviewEffect): void => {
     switch (effect.type) {
       case "sendDraft":
         void sendDraft(effect);
@@ -624,7 +624,7 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
 
   const clear = async (
     chatId: number,
-    options: TelegramPreviewTargetOptions & {
+    options: BalePreviewTargetOptions & {
       awaitFlush?: boolean;
       isDeliveryActive?: () => boolean;
     } = {},
@@ -651,7 +651,7 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
 
   const flush = async (
     chatId: number,
-    options: TelegramPreviewTargetOptions = {},
+    options: BalePreviewTargetOptions = {},
   ): Promise<void> => {
     if (!machine.state.segment || machine.state.segment.sealed) return;
     dispatch({
@@ -663,12 +663,12 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
   };
 
   const prepareFinalizer = <TReplyMarkup>(input: {
-    sendMarkdownReply: TelegramAssistantPreviewRuntimeDeps<
+    sendMarkdownReply: BaleAssistantPreviewRuntimeDeps<
       unknown,
       TReplyMarkup
     >["sendMarkdownReply"];
     isDeliveryActive?: () => boolean;
-  }): TelegramMarkdownFinalizer<TReplyMarkup> => {
+  }): BaleMarkdownFinalizer<TReplyMarkup> => {
     const segmentId = machine.state.segment?.id;
     const generation = machine.state.generation;
     seal();
@@ -697,9 +697,9 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
     };
   };
 
-  const controller: TelegramPreviewController = {
+  const controller: BalePreviewController = {
     getState: () => machine.state.segment ?? undefined,
-    isFlushing: () => isTelegramPreviewBusy(machine.state),
+    isFlushing: () => isBalePreviewBusy(machine.state),
     seal,
     setPendingText: (text) => dispatch({ type: "textSet", text }),
     resetState: () => dispatch({ type: "reset" }),
@@ -752,7 +752,7 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
       await flush(chatId, options);
       const current = machine.state.segment;
       if (current?.id !== segment.id) return false;
-      const finalText = buildTelegramPreviewFinalText(current);
+      const finalText = buildBalePreviewFinalText(current);
       if (!finalText) {
         await clear(chatId, options);
         return false;
@@ -767,7 +767,7 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
     startSegment: (): void => {
       dispatch({ type: "segmentStarted" });
     },
-    ensureSegment: (): TelegramPreviewSegment => {
+    ensureSegment: (): BalePreviewSegment => {
       dispatch({ type: "segmentEnsured" });
       return machine.state.segment!;
     },
@@ -780,15 +780,15 @@ function createTelegramPreviewModel(deps: TelegramPreviewControllerDeps) {
   };
 }
 
-export function createTelegramPreviewController(
-  deps: TelegramPreviewControllerDeps,
-): TelegramPreviewController {
-  return createTelegramPreviewModel(deps).controller;
+export function createBalePreviewController(
+  deps: BalePreviewControllerDeps,
+): BalePreviewController {
+  return createBalePreviewModel(deps).controller;
 }
 
 /**
- * Returns true when the active turn is a Telegram Guest Mode query. A guest
- * query allows exactly one answer within a limited Telegram response window,
+ * Returns true when the active turn is a Bale Guest Mode query. A guest
+ * query allows exactly one answer within a limited Bale response window,
  * so it must never emit streaming draft previews.
  */
 export function shouldSuppressPreviewForGuestTurn(
@@ -797,15 +797,15 @@ export function shouldSuppressPreviewForGuestTurn(
   return !!turn?.guestQueryId;
 }
 
-export function createTelegramAssistantPreviewRuntime<
+export function createBaleAssistantPreviewRuntime<
   TMessage,
-  TReplyMarkup = TelegramPreviewReplyMarkup,
+  TReplyMarkup = BalePreviewReplyMarkup,
 >(
-  deps: TelegramAssistantPreviewRuntimeDeps<TMessage, TReplyMarkup>,
-): TelegramAssistantPreviewRuntime<TMessage, TReplyMarkup> {
-  const model = createTelegramPreviewModel(deps);
+  deps: BaleAssistantPreviewRuntimeDeps<TMessage, TReplyMarkup>,
+): BaleAssistantPreviewRuntime<TMessage, TReplyMarkup> {
+  const model = createBalePreviewModel(deps);
   const { controller } = model;
-  const suppressed = (turn: TelegramPreviewActiveTurn): boolean =>
+  const suppressed = (turn: BalePreviewActiveTurn): boolean =>
     shouldSuppressPreviewForVoice(turn) ||
     shouldSuppressPreviewForGuestTurn(turn);
   return {
@@ -855,7 +855,7 @@ export function createTelegramAssistantPreviewRuntime<
       const segment = model.ensureSegment();
       if (segment.sealed) return;
       const hadVisibleText = segment.pendingText.length > 0;
-      const pendingText = stripTelegramCommentMarkupForPreview(
+      const pendingText = stripBaleCommentMarkupForPreview(
         deps.getMessageText(message),
       );
       controller.setPendingText(pendingText);
@@ -864,7 +864,7 @@ export function createTelegramAssistantPreviewRuntime<
       // when the previous cadence boundary has already passed (fresh turn, slow
       // first token, or message rollover after tool work). Later deltas keep the
       // trailing deadline instead of sliding it on every update.
-      const interval = deps.minDraftIntervalMs ?? TELEGRAM_DRAFT_INTERVAL_MS;
+      const interval = deps.minDraftIntervalMs ?? BALE_DRAFT_INTERVAL_MS;
       if (
         interval > 0 &&
         !hadVisibleText &&
@@ -877,26 +877,26 @@ export function createTelegramAssistantPreviewRuntime<
   };
 }
 
-export function buildTelegramPreviewFinalText(
-  state: TelegramPreviewState,
+export function buildBalePreviewFinalText(
+  state: BalePreviewState,
 ): string | undefined {
   const finalText = state.pendingText.trim();
   if (finalText) return finalText;
   return state.lastSentText.trim() || undefined;
 }
 
-export function allocateTelegramDraftId(
+export function allocateBaleDraftId(
   currentDraftId: number,
   maxDraftId: number,
 ): number {
   return currentDraftId >= maxDraftId ? 1 : currentDraftId + 1;
 }
 
-interface TelegramDraftInlineState {
+interface BaleDraftInlineState {
   codeTicks: number;
   htmlComment: boolean;
   displayMath: boolean;
-  fence?: TelegramMarkdownFence;
+  fence?: BaleMarkdownFence;
   strongAsterisk: boolean;
   emphasisAsterisk: boolean;
   strongUnderscore: boolean;
@@ -906,7 +906,7 @@ interface TelegramDraftInlineState {
   linkDestination: boolean;
 }
 
-function createTelegramDraftInlineState(): TelegramDraftInlineState {
+function createBaleDraftInlineState(): BaleDraftInlineState {
   return {
     codeTicks: 0,
     htmlComment: false,
@@ -921,8 +921,8 @@ function createTelegramDraftInlineState(): TelegramDraftInlineState {
   };
 }
 
-function isTelegramDraftInlineStateClosed(
-  state: TelegramDraftInlineState,
+function isBaleDraftInlineStateClosed(
+  state: BaleDraftInlineState,
 ): boolean {
   return (
     state.codeTicks === 0 &&
@@ -970,9 +970,9 @@ function isInlineDelimiterCandidate(
   return /[\p{P}\p{S}]/u.test(previous) || /[\p{P}\p{S}]/u.test(next);
 }
 
-function updateTelegramDraftInlineStateForLine(
+function updateBaleDraftInlineStateForLine(
   line: string,
-  state: TelegramDraftInlineState,
+  state: BaleDraftInlineState,
 ): void {
   if (state.fence || state.displayMath) return;
   for (let index = 0; index < line.length; index += 1) {
@@ -1055,12 +1055,12 @@ function updateTelegramDraftInlineStateForLine(
   }
 }
 
-function updateTelegramDraftBlockStateForLine(
+function updateBaleDraftBlockStateForLine(
   line: string,
-  state: TelegramDraftInlineState,
+  state: BaleDraftInlineState,
 ): boolean {
   if (state.fence) {
-    if (isTelegramMarkdownFenceClosing(line, state.fence)) {
+    if (isBaleMarkdownFenceClosing(line, state.fence)) {
       state.fence = undefined;
     }
     return true;
@@ -1069,7 +1069,7 @@ function updateTelegramDraftBlockStateForLine(
     if (line.trim() === "$$") state.displayMath = false;
     return true;
   }
-  const openingFence = parseTelegramMarkdownFenceOpening(line);
+  const openingFence = parseBaleMarkdownFenceOpening(line);
   if (openingFence) {
     state.fence = openingFence;
     return true;
@@ -1081,27 +1081,27 @@ function updateTelegramDraftBlockStateForLine(
   return false;
 }
 
-function findSafeTelegramRichMarkdownDraftEnd(markdown: string): number {
-  const state = createTelegramDraftInlineState();
+function findSafeBaleRichMarkdownDraftEnd(markdown: string): number {
+  const state = createBaleDraftInlineState();
   let offset = 0;
   let safeEnd = 0;
   for (const line of markdown.split("\n")) {
     const lineEnd = offset + line.length;
-    const consumedAsBlock = updateTelegramDraftBlockStateForLine(line, state);
-    if (!consumedAsBlock) updateTelegramDraftInlineStateForLine(line, state);
+    const consumedAsBlock = updateBaleDraftBlockStateForLine(line, state);
+    if (!consumedAsBlock) updateBaleDraftInlineStateForLine(line, state);
     const nextOffset = lineEnd + 1;
-    if (isTelegramDraftInlineStateClosed(state)) safeEnd = lineEnd;
+    if (isBaleDraftInlineStateClosed(state)) safeEnd = lineEnd;
     offset = nextOffset;
   }
-  if (isTelegramDraftInlineStateClosed(state)) return markdown.length;
+  if (isBaleDraftInlineStateClosed(state)) return markdown.length;
   return safeEnd;
 }
 
-function hasTelegramPreviewVisibleContent(markdown: string): boolean {
+function hasBalePreviewVisibleContent(markdown: string): boolean {
   return /[\p{L}\p{N}]/u.test(markdown);
 }
 
-export function getSafeTelegramRichMarkdownDraftPrefix(
+export function getSafeBaleRichMarkdownDraftPrefix(
   markdown: string,
   maxMessageLength: number,
 ): string | undefined {
@@ -1111,10 +1111,10 @@ export function getSafeTelegramRichMarkdownDraftPrefix(
     source.length > maxMessageLength
       ? source.slice(0, maxMessageLength)
       : source;
-  const safeEnd = findSafeTelegramRichMarkdownDraftEnd(limited);
+  const safeEnd = findSafeBaleRichMarkdownDraftEnd(limited);
   if (safeEnd > 0) {
     const safePrefix = limited.slice(0, safeEnd).trimEnd();
-    return hasTelegramPreviewVisibleContent(safePrefix)
+    return hasBalePreviewVisibleContent(safePrefix)
       ? safePrefix
       : undefined;
   }
@@ -1124,8 +1124,8 @@ export function getSafeTelegramRichMarkdownDraftPrefix(
     if (candidateEnd <= 0) return undefined;
     const candidate = limited.slice(0, candidateEnd).trimEnd();
     if (
-      hasTelegramPreviewVisibleContent(candidate) &&
-      findSafeTelegramRichMarkdownDraftEnd(candidate) === candidate.length
+      hasBalePreviewVisibleContent(candidate) &&
+      findSafeBaleRichMarkdownDraftEnd(candidate) === candidate.length
     ) {
       return candidate || undefined;
     }
@@ -1133,11 +1133,11 @@ export function getSafeTelegramRichMarkdownDraftPrefix(
   return undefined;
 }
 
-function buildTelegramNativeMarkdownPreviewSnapshot(
-  state: TelegramPreviewState,
+function buildBaleNativeMarkdownPreviewSnapshot(
+  state: BalePreviewState,
   maxMessageLength: number,
 ): { text: string } | undefined {
-  const safeText = getSafeTelegramRichMarkdownDraftPrefix(
+  const safeText = getSafeBaleRichMarkdownDraftPrefix(
     state.pendingText,
     maxMessageLength,
   );

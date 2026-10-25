@@ -1,47 +1,47 @@
 /**
- * Telegram synchronization helpers
- * Zones: Telegram bot reality mirror, demand-driven reconciliation, status diagnostics
- * Owns pure contracts for deciding when local Telegram mirror state should be refreshed without querying Telegram on every action
+ * Bale synchronization helpers
+ * Zones: Bale bot reality mirror, demand-driven reconciliation, status diagnostics
+ * Owns pure contracts for deciding when local Bale mirror state should be refreshed without querying Bale on every action
  */
-import { type TelegramTarget } from "./target.ts";
+import { type BaleTarget } from "./target.ts";
 import * as ThreadReconciler from "./thread-reconciler.ts";
-import { type TelegramOwnTopicProvisionResult, type TelegramTopicTargetStore, type TelegramWorkspaceDisplayBinding, type TelegramWorkspaceThreadBinding } from "./threads.ts";
-import { type TelegramWorkspaceAdmissionLedger } from "./workspace-admission.ts";
-export interface TelegramTopicLifecycleSyncUpdate<TMessage = unknown> {
+import { type BaleOwnTopicProvisionResult, type BaleTopicTargetStore, type BaleWorkspaceDisplayBinding, type BaleWorkspaceThreadBinding } from "./threads.ts";
+import { type BaleWorkspaceAdmissionLedger } from "./workspace-admission.ts";
+export interface BaleTopicLifecycleSyncUpdate<TMessage = unknown> {
     kind: "created" | "closed" | "reopened";
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
     message: TMessage;
 }
-export type TelegramSyncWorkspaceOperationRunner = <T>(input: {
+export type BaleSyncWorkspaceOperationRunner = <T>(input: {
     operationId: string;
     operationKind: string;
     scopes: readonly [{
         kind: "profile";
     }];
 }, operation: () => Promise<T>) => Promise<T>;
-export interface TelegramLeaderThreadSyncDeps {
+export interface BaleLeaderThreadSyncDeps {
     getAllowedUserId: () => number | undefined;
     instanceId: string;
     cwd?: string;
     sessionId?: string;
-    telegramProfile?: string;
+    baleProfile?: string;
     forceFreshUnnamed?: boolean;
     requestedThreadName?: string;
-    resolveInitialWorkspaceDisplayTitle?: (binding: TelegramWorkspaceDisplayBinding) => string | undefined;
+    resolveInitialWorkspaceDisplayTitle?: (binding: BaleWorkspaceDisplayBinding) => string | undefined;
     getNowMs?: () => number;
     getRandom?: () => number;
     getCurrentLeaderEpoch?: () => number | string | undefined;
     getThreadReconciliationMachineState?: () => ThreadReconciler.ThreadReconciliationMachineState | undefined;
     recordThreadReconciliationPlan?: (plan: ThreadReconciler.ThreadReconciliationPlan) => void;
-    topicTargetStore: TelegramTopicTargetStore;
+    topicTargetStore: BaleTopicTargetStore;
     callApi: <TResponse>(method: string, body: Record<string, unknown>) => Promise<TResponse>;
-    probeWorkspaceBinding?: (binding: TelegramWorkspaceThreadBinding) => Promise<void>;
+    probeWorkspaceBinding?: (binding: BaleWorkspaceThreadBinding) => Promise<void>;
     recordEvent: (category: string, message: unknown, details?: Record<string, unknown>) => void;
 }
-export interface TelegramTopicLifecycleSyncDeps {
-    topicTargetStore: Pick<TelegramTopicTargetStore, "load" | "list" | "listReservations" | "listPendingProvisions" | "markStaleByTarget" | "markActiveByTarget" | "removePendingProvision" | "persist">;
+export interface BaleTopicLifecycleSyncDeps {
+    topicTargetStore: Pick<BaleTopicTargetStore, "load" | "list" | "listReservations" | "listPendingProvisions" | "markStaleByTarget" | "markActiveByTarget" | "removePendingProvision" | "persist">;
     isBusEnabled: () => boolean;
     callApi: <TResponse>(method: string, body: Record<string, unknown>) => Promise<TResponse>;
     isTopicProvisioningActive?: () => boolean;
@@ -51,14 +51,14 @@ export interface TelegramTopicLifecycleSyncDeps {
     assertExecutionCurrent?: (message: unknown) => void;
     recordEvent?: (category: string, message: unknown, details?: Record<string, unknown>) => void;
 }
-export type TelegramTopicLifecycleSyncHandler<TMessage = unknown> = (lifecycle: TelegramTopicLifecycleSyncUpdate<TMessage>) => Promise<void>;
-export interface TelegramObservedTopicLifecycleSyncDeps<TSyncState> extends TelegramTopicLifecycleSyncDeps {
-    runWorkspaceOperation: TelegramSyncWorkspaceOperationRunner;
+export type BaleTopicLifecycleSyncHandler<TMessage = unknown> = (lifecycle: BaleTopicLifecycleSyncUpdate<TMessage>) => Promise<void>;
+export interface BaleObservedTopicLifecycleSyncDeps<TSyncState> extends BaleTopicLifecycleSyncDeps {
+    runWorkspaceOperation: BaleSyncWorkspaceOperationRunner;
     getSyncState: () => TSyncState;
     setSyncState: (state: TSyncState) => void;
     getNowMs?: () => number;
 }
-export interface TelegramLeaderHealthRuntimeDeps<TSyncState> {
+export interface BaleLeaderHealthRuntimeDeps<TSyncState> {
     getNowMs?: () => number;
     intervalMs?: number;
     callGetMe: () => Promise<unknown>;
@@ -66,23 +66,23 @@ export interface TelegramLeaderHealthRuntimeDeps<TSyncState> {
     setSyncState: (state: TSyncState) => void;
     recordEvent: (category: string, message: unknown, details?: Record<string, unknown>) => void;
 }
-export interface TelegramLeaderHealthRuntime {
+export interface BaleLeaderHealthRuntime {
     start: () => void;
     stop: () => void;
 }
-export interface TelegramManualThreadDisconnectDeps<TSyncState> {
+export interface BaleManualThreadDisconnectDeps<TSyncState> {
     instanceId: string;
     getCurrentThreadRecord: () => {
-        target: TelegramTarget;
+        target: BaleTarget;
         instanceId?: string;
         profileKey?: string;
         owner?: {
             kind?: string;
         };
     } | undefined;
-    topicTargetStore: Pick<TelegramTopicTargetStore, "list" | "markStaleByTarget" | "persist" | "upsertPendingCleanup" | "removePendingCleanup">;
+    topicTargetStore: Pick<BaleTopicTargetStore, "list" | "markStaleByTarget" | "persist" | "upsertPendingCleanup" | "removePendingCleanup">;
     callApi: <TResponse>(method: string, body: Record<string, unknown>) => Promise<TResponse>;
-    getLeaderTarget: () => TelegramTarget | undefined;
+    getLeaderTarget: () => BaleTarget | undefined;
     getCurrentLeaderEpoch?: () => number | string | undefined;
     clearLeaderTarget: () => void;
     disconnectFollowerThread?: () => Promise<boolean>;
@@ -90,97 +90,97 @@ export interface TelegramManualThreadDisconnectDeps<TSyncState> {
     setSyncState: (state: TSyncState) => void;
     stopPolling: () => Promise<string>;
     recordRuntimeEvent: (category: string, error: unknown, details?: Record<string, unknown>) => void;
-    runWorkspaceOperation: TelegramSyncWorkspaceOperationRunner;
+    runWorkspaceOperation: BaleSyncWorkspaceOperationRunner;
     workspaceOperationKind?: string;
     isDisconnectCurrent?: () => boolean;
     getNowMs?: () => number;
 }
-export declare function createTelegramPreservedLeaderQuitHandler(deps: {
+export declare function createBalePreservedLeaderQuitHandler(deps: {
     instanceId: string;
-    topicTargetStore: Pick<TelegramTopicTargetStore, "load" | "list" | "listPendingCleanups" | "detachTargetOwner">;
+    topicTargetStore: Pick<BaleTopicTargetStore, "load" | "list" | "listPendingCleanups" | "detachTargetOwner">;
     getCurrentLeaderEpoch: () => number | string | undefined;
     getProfileName: () => string | undefined;
     isPollingSuspended: () => boolean;
     resolveAutomaticThreadCleanupEnabled: () => boolean | Promise<boolean>;
-    runWorkspaceOperation: TelegramSyncWorkspaceOperationRunner;
+    runWorkspaceOperation: BaleSyncWorkspaceOperationRunner;
 }): (isSessionCurrent: () => boolean) => (() => Promise<void>) | undefined;
-export interface TelegramSessionRestartThreadCleanupDeps<TSyncState extends TelegramSyncState> extends Omit<TelegramManualThreadDisconnectDeps<TSyncState>, "stopPolling"> {
+export interface BaleSessionRestartThreadCleanupDeps<TSyncState extends BaleSyncState> extends Omit<BaleManualThreadDisconnectDeps<TSyncState>, "stopPolling"> {
     suspendPolling: () => Promise<void>;
 }
-export interface TelegramThreadDisconnectAssembly {
+export interface BaleThreadDisconnectAssembly {
     disconnect: () => Promise<string>;
     cleanupForSessionRestart: () => Promise<string>;
 }
-export declare function createTelegramThreadDisconnectAssembly<TSyncState extends TelegramSyncState>(deps: Omit<TelegramManualThreadDisconnectDeps<TSyncState>, "stopPolling"> & {
+export declare function createBaleThreadDisconnectAssembly<TSyncState extends BaleSyncState>(deps: Omit<BaleManualThreadDisconnectDeps<TSyncState>, "stopPolling"> & {
     stopPolling: () => Promise<string>;
     captureStopPolling?: () => {
         isCurrent: () => boolean;
         stop: () => Promise<string>;
     };
     suspendPolling: () => Promise<void>;
-}): TelegramThreadDisconnectAssembly;
-export declare function createTelegramManualThreadDisconnectHandler<TSyncState extends TelegramSyncState>(deps: TelegramManualThreadDisconnectDeps<TSyncState>): () => Promise<string>;
-export declare function createTelegramLeaderHealthRuntime<TSyncState extends TelegramSyncState>(deps: TelegramLeaderHealthRuntimeDeps<TSyncState>): TelegramLeaderHealthRuntime;
-export interface TelegramStaleTopicApiErrorRecoveryDeps<TSyncState> {
-    topicTargetStore: Pick<TelegramTopicTargetStore, "load" | "markStaleByTarget" | "persist"> & Partial<Pick<TelegramTopicTargetStore, "invalidateTarget">>;
+}): BaleThreadDisconnectAssembly;
+export declare function createBaleManualThreadDisconnectHandler<TSyncState extends BaleSyncState>(deps: BaleManualThreadDisconnectDeps<TSyncState>): () => Promise<string>;
+export declare function createBaleLeaderHealthRuntime<TSyncState extends BaleSyncState>(deps: BaleLeaderHealthRuntimeDeps<TSyncState>): BaleLeaderHealthRuntime;
+export interface BaleStaleTopicApiErrorRecoveryDeps<TSyncState> {
+    topicTargetStore: Pick<BaleTopicTargetStore, "load" | "markStaleByTarget" | "persist"> & Partial<Pick<BaleTopicTargetStore, "invalidateTarget">>;
     getSyncState: () => TSyncState;
     setSyncState: (state: TSyncState) => void;
     recordEvent: (category: string, message: unknown, details?: Record<string, unknown>) => void;
     getNowMs?: () => number;
     isCurrent?: () => boolean;
     isAuthorityCurrent?: () => boolean;
-    getWorkspaceAdmission?: () => Pick<TelegramWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission"> | undefined;
+    getWorkspaceAdmission?: () => Pick<BaleWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission"> | undefined;
 }
-export declare function captureTelegramStaleTargetRequestRecovery<TSyncState extends TelegramSyncState>(body: Record<string, unknown>, deps: TelegramStaleTopicApiErrorRecoveryDeps<TSyncState> & {
-    topicTargetStore: Pick<TelegramTopicTargetStore, "load" | "list" | "markStaleByTarget" | "persist" | "invalidateTarget">;
+export declare function captureBaleStaleTargetRequestRecovery<TSyncState extends BaleSyncState>(body: Record<string, unknown>, deps: BaleStaleTopicApiErrorRecoveryDeps<TSyncState> & {
+    topicTargetStore: Pick<BaleTopicTargetStore, "load" | "list" | "markStaleByTarget" | "persist" | "invalidateTarget">;
     getCurrentLeaderEpoch: () => number | string | undefined;
     getSessionGeneration: () => number;
     getProfileName: () => string | undefined;
     onRecovered: () => void;
 }): ((error: unknown) => Promise<void>) | undefined;
-export declare function createTelegramStaleTopicApiErrorRecoveryRuntime<TSyncState extends TelegramSyncState>(deps: TelegramStaleTopicApiErrorRecoveryDeps<TSyncState>): (apiBody: unknown, error: unknown) => Promise<boolean>;
-export declare function settleStaleTelegramTopicExecutionFailure<TSyncState extends TelegramSyncState>(error: unknown, deps: TelegramStaleTopicApiErrorRecoveryDeps<TSyncState>): Promise<boolean>;
-export declare function recoverStaleTelegramTopicApiError<TSyncState extends TelegramSyncState>(apiBody: unknown, error: unknown, deps: TelegramStaleTopicApiErrorRecoveryDeps<TSyncState>): Promise<boolean>;
-export declare function ensureTelegramLeaderThreadBinding(deps: TelegramLeaderThreadSyncDeps): Promise<TelegramOwnTopicProvisionResult | undefined>;
-export declare const TELEGRAM_SYNC_SLICES: readonly ["bot-identity", "bot-capabilities", "pairing", "allowed-user", "topic-capability", "topic-state", "target-bindings", "reservations", "transport-health"];
-export type TelegramSyncSlice = (typeof TELEGRAM_SYNC_SLICES)[number];
-export interface TelegramSyncSliceState {
+export declare function createBaleStaleTopicApiErrorRecoveryRuntime<TSyncState extends BaleSyncState>(deps: BaleStaleTopicApiErrorRecoveryDeps<TSyncState>): (apiBody: unknown, error: unknown) => Promise<boolean>;
+export declare function settleStaleBaleTopicExecutionFailure<TSyncState extends BaleSyncState>(error: unknown, deps: BaleStaleTopicApiErrorRecoveryDeps<TSyncState>): Promise<boolean>;
+export declare function recoverStaleBaleTopicApiError<TSyncState extends BaleSyncState>(apiBody: unknown, error: unknown, deps: BaleStaleTopicApiErrorRecoveryDeps<TSyncState>): Promise<boolean>;
+export declare function ensureBaleLeaderThreadBinding(deps: BaleLeaderThreadSyncDeps): Promise<BaleOwnTopicProvisionResult | undefined>;
+export declare const BALE_SYNC_SLICES: readonly ["bot-identity", "bot-capabilities", "pairing", "allowed-user", "topic-capability", "topic-state", "target-bindings", "reservations", "transport-health"];
+export type BaleSyncSlice = (typeof BALE_SYNC_SLICES)[number];
+export interface BaleSyncSliceState {
     status: "fresh" | "suspect" | "unknown";
     updatedAtMs?: number;
     suspectAtMs?: number;
     reason?: string;
     lastReconcileAction?: string;
 }
-export type TelegramSyncState = Partial<Record<TelegramSyncSlice, TelegramSyncSliceState>>;
-export declare function createUnknownTelegramSyncState(): TelegramSyncState;
-export interface TelegramSyncStateRuntime {
-    getState(): TelegramSyncState;
-    setState(state: TelegramSyncState): void;
+export type BaleSyncState = Partial<Record<BaleSyncSlice, BaleSyncSliceState>>;
+export declare function createUnknownBaleSyncState(): BaleSyncState;
+export interface BaleSyncStateRuntime {
+    getState(): BaleSyncState;
+    setState(state: BaleSyncState): void;
     markConfigChange(action: string): void;
-    markSliceFresh(slice: TelegramSyncSlice, options: {
+    markSliceFresh(slice: BaleSyncSlice, options: {
         nowMs: number;
         action: string;
     }): void;
 }
-export declare function createTelegramConfigSyncPersister<TConfig>(deps: {
+export declare function createBaleConfigSyncPersister<TConfig>(deps: {
     persist: (config?: TConfig) => Promise<void>;
     markConfigChange: (action: string) => void;
 }): (config?: TConfig) => Promise<void>;
-export declare function createTelegramSyncStateRuntime(initialState?: Partial<Record<"reservations" | "bot-identity" | "bot-capabilities" | "pairing" | "allowed-user" | "topic-capability" | "topic-state" | "target-bindings" | "transport-health", TelegramSyncSliceState>>): TelegramSyncStateRuntime;
-export interface TelegramProvisioningActivityRuntime {
+export declare function createBaleSyncStateRuntime(initialState?: Partial<Record<"reservations" | "bot-identity" | "bot-capabilities" | "pairing" | "allowed-user" | "topic-capability" | "topic-state" | "target-bindings" | "transport-health", BaleSyncSliceState>>): BaleSyncStateRuntime;
+export interface BaleProvisioningActivityRuntime {
     isActive(): boolean;
     start(): void;
     end(): void;
 }
-export declare function createTelegramProvisioningActivityRuntime(): TelegramProvisioningActivityRuntime;
-export declare function markTelegramSyncSliceSuspect(state: TelegramSyncState, slice: TelegramSyncSlice, input: {
+export declare function createBaleProvisioningActivityRuntime(): BaleProvisioningActivityRuntime;
+export declare function markBaleSyncSliceSuspect(state: BaleSyncState, slice: BaleSyncSlice, input: {
     reason: string;
     nowMs: number;
     action?: string;
-}): TelegramSyncState;
-export declare function markTelegramSyncSliceFresh(state: TelegramSyncState, slice: TelegramSyncSlice, input: {
+}): BaleSyncState;
+export declare function markBaleSyncSliceFresh(state: BaleSyncState, slice: BaleSyncSlice, input: {
     nowMs: number;
     action: string;
-}): TelegramSyncState;
-export declare function createTelegramObservedTopicLifecycleSyncHandler<TMessage = unknown, TSyncState extends TelegramSyncState = TelegramSyncState>(deps: TelegramObservedTopicLifecycleSyncDeps<TSyncState>): TelegramTopicLifecycleSyncHandler<TMessage>;
-export declare function createTelegramTopicLifecycleSyncHandler<TMessage = unknown>(deps: TelegramTopicLifecycleSyncDeps): TelegramTopicLifecycleSyncHandler<TMessage>;
+}): BaleSyncState;
+export declare function createBaleObservedTopicLifecycleSyncHandler<TMessage = unknown, TSyncState extends BaleSyncState = BaleSyncState>(deps: BaleObservedTopicLifecycleSyncDeps<TSyncState>): BaleTopicLifecycleSyncHandler<TMessage>;
+export declare function createBaleTopicLifecycleSyncHandler<TMessage = unknown>(deps: BaleTopicLifecycleSyncDeps): BaleTopicLifecycleSyncHandler<TMessage>;

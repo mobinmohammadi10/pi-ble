@@ -1,14 +1,14 @@
 /**
- * Telegram UI/compat rendering helpers
- * Zones: telegram rendering, shared text utils
- * Converts bridge-owned UI/status/menu/interactive text into Telegram-safe plain text and HTML chunks with chunk-boundary handling
+ * Bale UI/compat rendering helpers
+ * Zones: bale rendering, shared text utils
+ * Converts bridge-owned UI/status/menu/interactive text into Bale-safe plain text and HTML chunks with chunk-boundary handling
  */
 export const MAX_MESSAGE_LENGTH = 4096;
-const TELEGRAM_TABLE_GRAPHEME_SEGMENTER = typeof Intl.Segmenter === "function"
+const BALE_TABLE_GRAPHEME_SEGMENTER = typeof Intl.Segmenter === "function"
     ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
     : undefined;
-const TELEGRAM_TABLE_EMOJI_GRAPHEME_PATTERN = /\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Regional_Indicator}/u;
-const TELEGRAM_VOID_HTML_TAGS = new Set(["br", "hr"]);
+const BALE_TABLE_EMOJI_GRAPHEME_PATTERN = /\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Regional_Indicator}/u;
+const BALE_VOID_HTML_TAGS = new Set(["br", "hr"]);
 export function escapeHtml(text) {
     return text
         .replace(/&/g, "&amp;")
@@ -38,7 +38,7 @@ function getHtmlOpeningTags(openTags) {
 }
 function updateOpenHtmlTags(tag, openTags) {
     const name = getHtmlTagName(tag);
-    if (!name || TELEGRAM_VOID_HTML_TAGS.has(name))
+    if (!name || BALE_VOID_HTML_TAGS.has(name))
         return;
     if (isHtmlClosingTag(tag)) {
         const index = openTags.map((openTag) => openTag.name).lastIndexOf(name);
@@ -396,7 +396,7 @@ function isMarkdownNumberedListMarker(marker) {
 function matchMarkdownHeadingLine(line) {
     return line.match(/^(\s*)#{1,6}\s+(.+)$/);
 }
-// --- UI Markdown-to-Telegram-HTML Rendering ---
+// --- UI Markdown-to-Bale-HTML Rendering ---
 function renderDelimitedInlineStyle(text, delimiter, render) {
     const escapedDelimiter = delimiter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const pattern = new RegExp(`(^|[^\\p{L}\\p{N}\\\\])(${escapedDelimiter})(?=\\S)([\\s\\S]+?)(?<=\\S)\\2(?=[^\\p{L}\\p{N}]|$)`, "gu");
@@ -468,7 +468,7 @@ function renderInlineMarkdown(text, options = {}) {
     result = result.replace(/\\([\\`*_{}\[\]()#+\-.!>~|])/g, "$1");
     return restoreInlineMarkdownTokens(result, tokenState);
 }
-export function renderTelegramInlineMarkdownHtml(text, options = {}) {
+export function renderBaleInlineMarkdownHtml(text, options = {}) {
     return renderInlineMarkdown(text, options);
 }
 function buildListIndent(level) {
@@ -552,11 +552,11 @@ function renderMarkdownTextLines(block) {
     }
     return rendered;
 }
-function sanitizeTelegramCodeLanguage(language) {
+function sanitizeBaleCodeLanguage(language) {
     return language.split(/\s+/)[0]?.replace(/[^A-Za-z0-9_+.-]/g, "") ?? "";
 }
 function renderMarkdownCodeBlock(code, language) {
-    const safeLanguage = language ? sanitizeTelegramCodeLanguage(language) : "";
+    const safeLanguage = language ? sanitizeBaleCodeLanguage(language) : "";
     const open = safeLanguage
         ? `<pre><code class="language-${escapeHtmlAttribute(safeLanguage)}">`
         : "<pre><code>";
@@ -592,11 +592,11 @@ function renderMarkdownCodeBlock(code, language) {
     pushCurrent();
     return chunks.length > 0 ? chunks : [`${open}${close}`];
 }
-function isTelegramTableEmojiGrapheme(grapheme) {
-    return (TELEGRAM_TABLE_EMOJI_GRAPHEME_PATTERN.test(grapheme) ||
+function isBaleTableEmojiGrapheme(grapheme) {
+    return (BALE_TABLE_EMOJI_GRAPHEME_PATTERN.test(grapheme) ||
         grapheme.includes("\u20e3"));
 }
-function getTelegramTableCodePointWidth(char) {
+function getBaleTableCodePointWidth(char) {
     const codePoint = char.codePointAt(0) ?? 0;
     if (codePoint === 0 || codePoint < 32)
         return 0;
@@ -618,22 +618,22 @@ function getTelegramTableCodePointWidth(char) {
     }
     return 1;
 }
-function getTelegramTableGraphemes(text) {
-    if (TELEGRAM_TABLE_GRAPHEME_SEGMENTER) {
-        return Array.from(TELEGRAM_TABLE_GRAPHEME_SEGMENTER.segment(text), (segment) => segment.segment);
+function getBaleTableGraphemes(text) {
+    if (BALE_TABLE_GRAPHEME_SEGMENTER) {
+        return Array.from(BALE_TABLE_GRAPHEME_SEGMENTER.segment(text), (segment) => segment.segment);
     }
     return Array.from(text);
 }
-function getTelegramTableCellWidth(text) {
-    return getTelegramTableGraphemes(text).reduce((width, grapheme) => {
-        if (isTelegramTableEmojiGrapheme(grapheme))
+function getBaleTableCellWidth(text) {
+    return getBaleTableGraphemes(text).reduce((width, grapheme) => {
+        if (isBaleTableEmojiGrapheme(grapheme))
             return width + 2;
         return (width +
-            Array.from(grapheme).reduce((sum, char) => sum + getTelegramTableCodePointWidth(char), 0));
+            Array.from(grapheme).reduce((sum, char) => sum + getBaleTableCodePointWidth(char), 0));
     }, 0);
 }
-function padTelegramTableCellEnd(cell, width) {
-    const padding = width - getTelegramTableCellWidth(cell);
+function padBaleTableCellEnd(cell, width) {
+    const padding = width - getBaleTableCellWidth(cell);
     return padding > 0 ? `${cell}${" ".repeat(padding)}` : cell;
 }
 function renderMarkdownTableBlock(lines) {
@@ -647,11 +647,11 @@ function renderMarkdownTableBlock(lines) {
         return next;
     });
     const widths = Array.from({ length: columnCount }, (_, columnIndex) => {
-        return Math.max(3, ...normalizedRows.map((row) => getTelegramTableCellWidth(row[columnIndex] ?? "")));
+        return Math.max(3, ...normalizedRows.map((row) => getBaleTableCellWidth(row[columnIndex] ?? "")));
     });
     const formatRow = (row) => {
         return row
-            .map((cell, columnIndex) => padTelegramTableCellEnd(cell ?? "", widths[columnIndex] ?? 3))
+            .map((cell, columnIndex) => padBaleTableCellEnd(cell ?? "", widths[columnIndex] ?? 3))
             .join(" | ");
     };
     const separator = widths.map((width) => "-".repeat(width)).join(" | ");
@@ -860,20 +860,20 @@ function renderMarkdownDocumentBlocks(normalizedMarkdown) {
     }
     return renderedBlocks;
 }
-function flushTelegramMarkdownChunkAccumulator(accumulator) {
+function flushBaleMarkdownChunkAccumulator(accumulator) {
     if (accumulator.current.length === 0)
         return;
     accumulator.chunks.push(accumulator.current);
     accumulator.current = "";
 }
-function splitOversizedTelegramMarkdownBlock(text) {
+function splitOversizedBaleMarkdownBlock(text) {
     const chunks = [];
     for (let i = 0; i < text.length; i += MAX_MESSAGE_LENGTH) {
         chunks.push(text.slice(i, i + MAX_MESSAGE_LENGTH));
     }
     return chunks;
 }
-function appendTelegramRenderedMarkdownBlock(accumulator, block) {
+function appendBaleRenderedMarkdownBlock(accumulator, block) {
     const separator = "\n".repeat(block.blankLinesBefore + 1);
     const candidate = accumulator.current.length === 0
         ? block.text
@@ -882,29 +882,29 @@ function appendTelegramRenderedMarkdownBlock(accumulator, block) {
         accumulator.current = candidate;
         return;
     }
-    flushTelegramMarkdownChunkAccumulator(accumulator);
+    flushBaleMarkdownChunkAccumulator(accumulator);
     if (block.text.length <= MAX_MESSAGE_LENGTH) {
         accumulator.current = block.text;
         return;
     }
-    accumulator.chunks.push(...splitOversizedTelegramMarkdownBlock(block.text));
+    accumulator.chunks.push(...splitOversizedBaleMarkdownBlock(block.text));
 }
-function chunkTelegramRenderedMarkdownBlocks(renderedBlocks) {
+function chunkBaleRenderedMarkdownBlocks(renderedBlocks) {
     const accumulator = {
         chunks: [],
         current: "",
     };
     for (const block of renderedBlocks) {
-        appendTelegramRenderedMarkdownBlock(accumulator, block);
+        appendBaleRenderedMarkdownBlock(accumulator, block);
     }
-    flushTelegramMarkdownChunkAccumulator(accumulator);
+    flushBaleMarkdownChunkAccumulator(accumulator);
     return accumulator.chunks;
 }
-function renderMarkdownToTelegramHtmlChunks(markdown) {
+function renderMarkdownToBaleHtmlChunks(markdown) {
     const normalized = normalizeMarkdownDocument(markdown);
     if (normalized.length === 0)
         return [];
-    return chunkTelegramRenderedMarkdownBlocks(renderMarkdownDocumentBlocks(normalized));
+    return chunkBaleRenderedMarkdownBlocks(renderMarkdownDocumentBlocks(normalized));
 }
 function chunkParagraphs(text) {
     if (text.length <= MAX_MESSAGE_LENGTH)
@@ -965,7 +965,7 @@ function chunkParagraphs(text) {
     flushCurrent();
     return chunks;
 }
-export function renderTelegramMessage(text, options) {
+export function renderBaleMessage(text, options) {
     const mode = options?.mode ?? "plain";
     if (mode === "plain") {
         return chunkParagraphs(text).map((chunk) => ({ text: chunk }));
@@ -976,7 +976,7 @@ export function renderTelegramMessage(text, options) {
             parseMode: "HTML",
         }));
     }
-    return renderMarkdownToTelegramHtmlChunks(text).map((chunk) => ({
+    return renderMarkdownToBaleHtmlChunks(text).map((chunk) => ({
         text: chunk,
         parseMode: "HTML",
     }));

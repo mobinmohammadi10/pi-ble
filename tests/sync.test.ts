@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram synchronization helpers
+ * Regression tests for Bale synchronization helpers
  * Covers demand-driven reconciliation triggers and pure sync-slice state transitions
  */
 
@@ -10,37 +10,37 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
-  TELEGRAM_SYNC_SLICES,
-  createTelegramLeaderHealthRuntime,
-  createTelegramPreservedLeaderQuitHandler,
-  createTelegramManualThreadDisconnectHandler,
-  createTelegramObservedTopicLifecycleSyncHandler,
-  createTelegramProvisioningActivityRuntime,
-  createTelegramSyncStateRuntime,
-  createTelegramThreadDisconnectAssembly,
-  createTelegramTopicLifecycleSyncHandler,
-  createUnknownTelegramSyncState,
-  ensureTelegramLeaderThreadBinding,
-  markTelegramSyncSliceFresh,
-  markTelegramSyncSliceSuspect,
-  recoverStaleTelegramTopicApiError,
-  settleStaleTelegramTopicExecutionFailure,
+  BALE_SYNC_SLICES,
+  createBaleLeaderHealthRuntime,
+  createBalePreservedLeaderQuitHandler,
+  createBaleManualThreadDisconnectHandler,
+  createBaleObservedTopicLifecycleSyncHandler,
+  createBaleProvisioningActivityRuntime,
+  createBaleSyncStateRuntime,
+  createBaleThreadDisconnectAssembly,
+  createBaleTopicLifecycleSyncHandler,
+  createUnknownBaleSyncState,
+  ensureBaleLeaderThreadBinding,
+  markBaleSyncSliceFresh,
+  markBaleSyncSliceSuspect,
+  recoverStaleBaleTopicApiError,
+  settleStaleBaleTopicExecutionFailure,
 } from "../lib/sync.ts";
-import { TelegramApiStaleTargetError, TelegramApiCommitUnknownError } from "../lib/telegram-api.ts";
+import { BaleApiStaleTargetError, BaleApiCommitUnknownError } from "../lib/bale-api.ts";
 import {
-  createTelegramWorkspaceAdmissionLedger,
-  runWithTelegramWorkspaceAdmissionsAsync,
-  TelegramWorkspaceAdmissionError,
+  createBaleWorkspaceAdmissionLedger,
+  runWithBaleWorkspaceAdmissionsAsync,
+  BaleWorkspaceAdmissionError,
 } from "../lib/workspace-admission.ts";
 import {
-  createTelegramTopicTargetStore,
-  createTelegramWorkspaceBindingIdentity,
+  createBaleTopicTargetStore,
+  createBaleWorkspaceBindingIdentity,
 } from "../lib/threads.ts";
 import {
-  createTelegramWorkspaceOperationRuntime,
-  createTelegramWorkspaceSlotRotation,
+  createBaleWorkspaceOperationRuntime,
+  createBaleWorkspaceSlotRotation,
 } from "../lib/workspace-retirement.ts";
-import { TelegramWorkspaceSlotUnavailableError } from "../lib/workspace-slots.ts";
+import { BaleWorkspaceSlotUnavailableError } from "../lib/workspace-slots.ts";
 
 async function runWorkspaceOperation<T>(
   _input: {
@@ -53,8 +53,8 @@ async function runWorkspaceOperation<T>(
   return operation();
 }
 
-test("Telegram sync state runtime owns transitions and nested provisioning activity", () => {
-  const syncState = createTelegramSyncStateRuntime();
+test("Bale sync state runtime owns transitions and nested provisioning activity", () => {
+  const syncState = createBaleSyncStateRuntime();
   syncState.markConfigChange("profile-change");
   assert.equal(syncState.getState()["bot-identity"]?.status, "fresh");
   syncState.markSliceFresh("target-bindings", {
@@ -67,7 +67,7 @@ test("Telegram sync state runtime owns transitions and nested provisioning activ
     lastReconcileAction: "binding-restored",
   });
 
-  const provisioning = createTelegramProvisioningActivityRuntime();
+  const provisioning = createBaleProvisioningActivityRuntime();
   provisioning.start();
   provisioning.start();
   provisioning.end();
@@ -135,20 +135,20 @@ function createTopicStore(
   };
 }
 
-test("Telegram sync recovers stale topic API errors outside the entrypoint", async () => {
+test("Bale sync recovers stale topic API errors outside the entrypoint", async () => {
   const store = createTopicStore([
     { target: { chatId: 7, threadId: 42 }, status: "active" },
   ]);
-  let state = createUnknownTelegramSyncState();
+  let state = createUnknownBaleSyncState();
   const events: Array<{
     category: string;
     phase?: unknown;
     threadId?: unknown;
   }> = [];
 
-  const recovered = await recoverStaleTelegramTopicApiError(
+  const recovered = await recoverStaleBaleTopicApiError(
     { chat_id: 7, message_thread_id: 42 },
-    new Error("Telegram API sendMessage failed: TOPIC_ID_INVALID"),
+    new Error("Bale API sendMessage failed: TOPIC_ID_INVALID"),
     {
       topicTargetStore: store,
       getNowMs: () => 1234,
@@ -180,8 +180,8 @@ test("Telegram sync recovers stale topic API errors outside the entrypoint", asy
 });
 
 test("Stale target recovery obeys exact retained-fence scope before mutation", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-stale-recovery-fence-"));
-  const admission = createTelegramWorkspaceAdmissionLedger({
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-stale-recovery-fence-"));
+  const admission = createBaleWorkspaceAdmissionLedger({
     path: join(dir, "workspace-admission.json"),
     profileKey: "profile:stale-recovery",
     owner: {
@@ -204,7 +204,7 @@ test("Stale target recovery obeys exact retained-fence scope before mutation", a
     { target: { chatId: 7, threadId: 42 }, status: "active" },
     { target: { chatId: 7, threadId: 43 }, status: "active" },
   ]);
-  let state = createUnknownTelegramSyncState();
+  let state = createUnknownBaleSyncState();
   const deps = {
     topicTargetStore: store,
     getWorkspaceAdmission: () => admission,
@@ -216,9 +216,9 @@ test("Stale target recovery obeys exact retained-fence scope before mutation", a
   };
   try {
     await assert.rejects(
-      recoverStaleTelegramTopicApiError(
+      recoverStaleBaleTopicApiError(
         { chat_id: 7, message_thread_id: 42 },
-        new Error("Telegram API sendMessage failed: TOPIC_ID_INVALID"),
+        new Error("Bale API sendMessage failed: TOPIC_ID_INVALID"),
         deps,
       ),
       /blocked by retirement/u,
@@ -227,9 +227,9 @@ test("Stale target recovery obeys exact retained-fence scope before mutation", a
     assert.equal(store.persisted, false);
 
     assert.equal(
-      await recoverStaleTelegramTopicApiError(
+      await recoverStaleBaleTopicApiError(
         { chat_id: 7, message_thread_id: 43 },
-        new Error("Telegram API sendMessage failed: TOPIC_ID_INVALID"),
+        new Error("Bale API sendMessage failed: TOPIC_ID_INVALID"),
         deps,
       ),
       true,
@@ -244,12 +244,12 @@ test("Stale target recovery obeys exact retained-fence scope before mutation", a
   }
 });
 
-test("Telegram sync terminally settles authenticated stale evidence after leader recovery", async () => {
+test("Bale sync terminally settles authenticated stale evidence after leader recovery", async () => {
   const store = createTopicStore([]);
-  let state = createUnknownTelegramSyncState();
-  const settled = await settleStaleTelegramTopicExecutionFailure(
-    new TelegramApiStaleTargetError(
-      "Telegram API sendMessage failed: Bad Request: message thread not found",
+  let state = createUnknownBaleSyncState();
+  const settled = await settleStaleBaleTopicExecutionFailure(
+    new BaleApiStaleTargetError(
+      "Bale API sendMessage failed: Bad Request: message thread not found",
       { chatId: 7, threadId: 42 },
     ),
     {
@@ -267,13 +267,13 @@ test("Telegram sync terminally settles authenticated stale evidence after leader
   assert.equal(state["topic-state"]?.status, "unknown");
 });
 
-test("Telegram sync ignores non-stale topic API errors", async () => {
+test("Bale sync ignores non-stale topic API errors", async () => {
   const store = createTopicStore([
     { target: { chatId: 7, threadId: 42 }, status: "active" },
   ]);
-  let state = createUnknownTelegramSyncState();
+  let state = createUnknownBaleSyncState();
 
-  const recovered = await recoverStaleTelegramTopicApiError(
+  const recovered = await recoverStaleBaleTopicApiError(
     { chat_id: 7, message_thread_id: 42 },
     new Error("network down"),
     {
@@ -291,10 +291,10 @@ test("Telegram sync ignores non-stale topic API errors", async () => {
   assert.equal(store.persisted, false);
 });
 
-test("Telegram leader health runtime refreshes sync slices outside the entrypoint", async () => {
-  let state = createUnknownTelegramSyncState();
+test("Bale leader health runtime refreshes sync slices outside the entrypoint", async () => {
+  let state = createUnknownBaleSyncState();
   let calls = 0;
-  const runtime = createTelegramLeaderHealthRuntime({
+  const runtime = createBaleLeaderHealthRuntime({
     intervalMs: 1,
     getNowMs: () => 1234,
     callGetMe: async () => {
@@ -319,11 +319,11 @@ test("Telegram leader health runtime refreshes sync slices outside the entrypoin
   );
 });
 
-test("Telegram leader health runtime owns one generation-fenced probe", async () => {
-  let state = createUnknownTelegramSyncState();
+test("Bale leader health runtime owns one generation-fenced probe", async () => {
+  let state = createUnknownBaleSyncState();
   let calls = 0;
   const releases: Array<() => void> = [];
-  const runtime = createTelegramLeaderHealthRuntime({
+  const runtime = createBaleLeaderHealthRuntime({
     intervalMs: 1,
     callGetMe: () =>
       new Promise<void>((resolve) => {
@@ -353,10 +353,10 @@ test("Telegram leader health runtime owns one generation-fenced probe", async ()
   runtime.stop();
 });
 
-test("Telegram leader health runtime marks transport suspect on probe failure", async () => {
-  let state = createUnknownTelegramSyncState();
+test("Bale leader health runtime marks transport suspect on probe failure", async () => {
+  let state = createUnknownBaleSyncState();
   const events: Array<{ category: string; phase?: unknown }> = [];
-  const runtime = createTelegramLeaderHealthRuntime({
+  const runtime = createBaleLeaderHealthRuntime({
     intervalMs: 1,
     getNowMs: () => 1234,
     callGetMe: async () => {
@@ -380,13 +380,13 @@ test("Telegram leader health runtime marks transport suspect on probe failure", 
     "leader-health-tick",
   );
   assert.deepEqual(events.at(-1), {
-    category: "telegram",
+    category: "bale",
     phase: "leader-health-tick",
   });
 });
 
-test("Telegram sync model includes every local assumption slice", () => {
-  assert.deepEqual(TELEGRAM_SYNC_SLICES, [
+test("Bale sync model includes every local assumption slice", () => {
+  assert.deepEqual(BALE_SYNC_SLICES, [
     "bot-identity",
     "bot-capabilities",
     "pairing",
@@ -397,13 +397,13 @@ test("Telegram sync model includes every local assumption slice", () => {
     "reservations",
     "transport-health",
   ]);
-  assert.deepEqual(createUnknownTelegramSyncState()["reservations"], {
+  assert.deepEqual(createUnknownBaleSyncState()["reservations"], {
     status: "unknown",
   });
 });
 
-test("Telegram sync slice state records suspect and fresh transitions", () => {
-  const suspect = markTelegramSyncSliceSuspect({}, "topic-state", {
+test("Bale sync slice state records suspect and fresh transitions", () => {
+  const suspect = markBaleSyncSliceSuspect({}, "topic-state", {
     nowMs: 1000,
     reason: "topic closed",
     action: "lifecycle-closed",
@@ -415,7 +415,7 @@ test("Telegram sync slice state records suspect and fresh transitions", () => {
     lastReconcileAction: "lifecycle-closed",
   });
 
-  const fresh = markTelegramSyncSliceFresh(suspect, "topic-state", {
+  const fresh = markBaleSyncSliceFresh(suspect, "topic-state", {
     nowMs: 2000,
     action: "startup-probe",
   });
@@ -427,23 +427,23 @@ test("Telegram sync slice state records suspect and fresh transitions", () => {
 });
 
 test("Explicit leader connect resets unknown creation while automatic startup remains protective", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-connect-recovery-"));
-  const store = createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-connect-recovery-"));
+  const store = createBaleTopicTargetStore({ path: join(dir, "state.json") });
   let creates = 0;
   const deps = {
     getAllowedUserId: () => 7, instanceId: "leader", cwd: "/repo", sessionId: "session",
     getCurrentLeaderEpoch: () => "epoch", topicTargetStore: store, recordEvent() {},
     async callApi<TResponse>(method: string) {
       assert.equal(method, "createForumTopic", "Recovery does not delete or probe unknown targets");
-      if (++creates === 1) throw new TelegramApiCommitUnknownError(method, new Error("response lost"));
+      if (++creates === 1) throw new BaleApiCommitUnknownError(method, new Error("response lost"));
       return { message_thread_id: 42 } as TResponse;
     },
   };
   try {
-    await assert.rejects(ensureTelegramLeaderThreadBinding(deps), /may have committed/);
-    await assert.rejects(ensureTelegramLeaderThreadBinding(deps), /unfinished Thread|remains ambiguous/);
+    await assert.rejects(ensureBaleLeaderThreadBinding(deps), /may have committed/);
+    await assert.rejects(ensureBaleLeaderThreadBinding(deps), /unfinished Thread|remains ambiguous/);
     assert.equal(creates, 1);
-    const result = await ensureTelegramLeaderThreadBinding({ ...deps, forceFreshUnnamed: true });
+    const result = await ensureBaleLeaderThreadBinding({ ...deps, forceFreshUnnamed: true });
     assert.equal(result?.target.threadId, 42);
     assert.equal(creates, 2);
     assert.deepEqual(store.listPendingProvisions(), []);
@@ -451,14 +451,14 @@ test("Explicit leader connect resets unknown creation while automatic startup re
 });
 
 test("Leader thread sync creates a visible leader thread when no binding exists", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-sync-"));
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-sync-"));
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   try {
-    const result = await ensureTelegramLeaderThreadBinding({
+    const result = await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "leader-a",
       cwd: "/repo",
@@ -489,9 +489,9 @@ test("Leader thread sync creates a visible leader thread when no binding exists"
 });
 
 test("Leader thread sync reuses same-profile topic across reload", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-sync-prev-"));
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-sync-prev-"));
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
@@ -509,7 +509,7 @@ test("Leader thread sync reuses same-profile topic across reload", async () => {
     });
     await store.persist();
 
-    const result = await ensureTelegramLeaderThreadBinding({
+    const result = await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "leader-a",
       cwd: "/repo",
@@ -552,8 +552,8 @@ test("Leader thread sync reuses same-profile topic across reload", async () => {
 });
 
 test("Leader thread sync rejects reused binding after load loses epoch", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-reuse-epoch-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-reuse-epoch-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -578,7 +578,7 @@ test("Leader thread sync rejects reused binding after load loses epoch", async (
     };
 
     await assert.rejects(
-      ensureTelegramLeaderThreadBinding({
+      ensureBaleLeaderThreadBinding({
         getAllowedUserId: () => 7,
         instanceId: "leader-a",
         cwd: "/repo",
@@ -598,10 +598,10 @@ test("Leader thread sync rejects reused binding after load loses epoch", async (
 
 test("Leader thread sync reuses same-process legacy leader topic across reload", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-leader-sync-same-pid-"),
+    join(tmpdir(), "pi-bale-leader-sync-same-pid-"),
   );
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
@@ -619,7 +619,7 @@ test("Leader thread sync reuses same-process legacy leader topic across reload",
     });
     await store.persist();
 
-    const result = await ensureTelegramLeaderThreadBinding({
+    const result = await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "3824869:1782088512458",
       cwd: "/repo",
@@ -661,13 +661,13 @@ test("Leader thread sync reuses same-process legacy leader topic across reload",
 });
 
 test("Leader Workspace recovery publishes the canonical retained slot for the exact session", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-canonical-slot-"));
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-canonical-slot-"));
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   try {
-    const retained = createTelegramWorkspaceBindingIdentity("/repo", 0, "old-session")!;
+    const retained = createBaleWorkspaceBindingIdentity("/repo", 0, "old-session")!;
     store.upsertWorkspaceBinding({
       ...retained,
       target: { chatId: 7, threadId: 41 },
@@ -688,7 +688,7 @@ test("Leader Workspace recovery publishes the canonical retained slot for the ex
     });
     await store.persist();
 
-    const result = await ensureTelegramLeaderThreadBinding({
+    const result = await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "42:2",
       cwd: "/repo",
@@ -696,7 +696,7 @@ test("Leader Workspace recovery publishes the canonical retained slot for the ex
       topicTargetStore: store,
       async probeWorkspaceBinding() {},
       async callApi<TResponse>() {
-        assert.fail("same-session recovery must not call Telegram");
+        assert.fail("same-session recovery must not call Bale");
         return {} as TResponse;
       },
       recordEvent() {},
@@ -715,12 +715,12 @@ test("Leader Workspace recovery publishes the canonical retained slot for the ex
 
 test("Leader Workspace recovery commits claim-assigned legacy slots before activation", async () => {
   for (const duplicate of [false, true]) {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-slot-migration-"));
-    const path = join(dir, "telegram-targets.json");
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-slot-migration-"));
+    const path = join(dir, "bale-targets.json");
     try {
-      const store = createTelegramTopicTargetStore({ path, getNowMs: () => 2000 });
+      const store = createBaleTopicTargetStore({ path, getNowMs: () => 2000 });
       store.upsertWorkspaceBinding({
-        ...createTelegramWorkspaceBindingIdentity("/repo")!,
+        ...createBaleWorkspaceBindingIdentity("/repo")!,
         target: { chatId: 7, threadId: 41 },
         ...(duplicate ? { slot: "A" } : {}),
         updatedAtMs: 1,
@@ -738,16 +738,16 @@ test("Leader Workspace recovery commits claim-assigned legacy slots before activ
       if (duplicate) {
         const snapshot = JSON.parse(await readFile(path, "utf8"));
         snapshot.workspaceBindings.push({
-          ...createTelegramWorkspaceBindingIdentity("/other")!,
+          ...createBaleWorkspaceBindingIdentity("/other")!,
           target: { chatId: 7, threadId: 42 },
           slot: "A",
           updatedAtMs: 1,
         });
         await writeFile(path, JSON.stringify(snapshot));
       }
-      const restored = createTelegramTopicTargetStore({ path, getNowMs: () => 2000 });
+      const restored = createBaleTopicTargetStore({ path, getNowMs: () => 2000 });
       let apiCalls = 0;
-      const result = await ensureTelegramLeaderThreadBinding({
+      const result = await ensureBaleLeaderThreadBinding({
         getAllowedUserId: () => 7,
         instanceId: "leader",
         cwd: "/repo",
@@ -771,9 +771,9 @@ test("Leader Workspace recovery commits claim-assigned legacy slots before activ
 });
 
 test("Leader thread sync does not visibly probe same-profile topic during reload", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-sync-defer-"));
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-sync-defer-"));
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
@@ -789,7 +789,7 @@ test("Leader thread sync does not visibly probe same-profile topic during reload
     });
     await store.persist();
 
-    const result = await ensureTelegramLeaderThreadBinding({
+    const result = await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "leader-a",
       cwd: "/repo",
@@ -817,9 +817,9 @@ test("Leader thread sync does not visibly probe same-profile topic during reload
 
 test("Leader thread sync proactively deletes known reservations on startup", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-leader-reservation-cleanup-"),
+    join(tmpdir(), "pi-bale-leader-reservation-cleanup-"),
   );
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -835,7 +835,7 @@ test("Leader thread sync proactively deletes known reservations on startup", asy
     });
     await store.persist();
 
-    await ensureTelegramLeaderThreadBinding({
+    await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "leader-a",
       cwd: "/repo",
@@ -844,7 +844,7 @@ test("Leader thread sync proactively deletes known reservations on startup", asy
         calls.push({ method, body });
         if (method === "sendChatAction" && body.message_thread_id === 9) {
           throw new Error(
-            "Telegram API sendChatAction failed: HTTP 400: Bad Request: message thread not found",
+            "Bale API sendChatAction failed: HTTP 400: Bad Request: message thread not found",
           );
         }
         return { message_thread_id: 10 } as TResponse;
@@ -867,9 +867,9 @@ test("Leader thread sync proactively deletes known reservations on startup", asy
 
 test("Leader thread sync preserves follower records from previous instances", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-leader-preserve-followers-"),
+    join(tmpdir(), "pi-bale-leader-preserve-followers-"),
   );
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -887,7 +887,7 @@ test("Leader thread sync preserves follower records from previous instances", as
     });
     await store.persist();
 
-    await ensureTelegramLeaderThreadBinding({
+    await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "leader-a",
       cwd: "/repo",
@@ -920,9 +920,9 @@ test("Leader thread sync preserves follower records from previous instances", as
 
 test("Leader thread sync cleans previous leader records regardless of profile key", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-leader-cross-profile-"),
+    join(tmpdir(), "pi-bale-leader-cross-profile-"),
   );
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -938,7 +938,7 @@ test("Leader thread sync cleans previous leader records regardless of profile ke
     });
     await store.persist();
 
-    await ensureTelegramLeaderThreadBinding({
+    await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "leader-a",
       cwd: "/repo",
@@ -964,9 +964,9 @@ test("Leader thread sync cleans previous leader records regardless of profile ke
 
 test("Leader thread sync preserves previous leader state when deletion is unconfirmed", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-leader-cleanup-unconfirmed-"),
+    join(tmpdir(), "pi-bale-leader-cleanup-unconfirmed-"),
   );
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -983,7 +983,7 @@ test("Leader thread sync preserves previous leader state when deletion is unconf
     await store.persist();
 
     await assert.rejects(
-      ensureTelegramLeaderThreadBinding({
+      ensureBaleLeaderThreadBinding({
         getAllowedUserId: () => 7,
         instanceId: "leader-a",
         cwd: "/repo",
@@ -1008,9 +1008,9 @@ test("Leader thread sync preserves previous leader state when deletion is unconf
 
 test("Leader thread sync aborts local previous-leader cleanup after ownership loss", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-leader-cleanup-epoch-loss-"),
+    join(tmpdir(), "pi-bale-leader-cleanup-epoch-loss-"),
   );
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -1029,7 +1029,7 @@ test("Leader thread sync aborts local previous-leader cleanup after ownership lo
     await store.persist();
 
     await assert.rejects(
-      ensureTelegramLeaderThreadBinding({
+      ensureBaleLeaderThreadBinding({
         getAllowedUserId: () => 7,
         instanceId: "leader-a",
         cwd: "/repo",
@@ -1054,8 +1054,8 @@ test("Leader thread sync aborts local previous-leader cleanup after ownership lo
 });
 
 test("Leader Workspace sync claims the first free global slot while D remains reserved", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-sync-d-to-e-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-sync-d-to-e-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -1071,7 +1071,7 @@ test("Leader Workspace sync claims the first free global slot while D remains re
     });
     await store.persist();
 
-    await ensureTelegramLeaderThreadBinding({
+    await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "leader-a",
       cwd: "/repo",
@@ -1096,8 +1096,8 @@ test("Leader Workspace sync claims the first free global slot while D remains re
 });
 
 test("Leader thread sync does not reuse a target with pending cleanup", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-sync-deleted-"));
-  const store = createTelegramTopicTargetStore({
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-sync-deleted-"));
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -1124,7 +1124,7 @@ test("Leader thread sync does not reuse a target with pending cleanup", async ()
     });
     await store.persist();
 
-    const result = await ensureTelegramLeaderThreadBinding({
+    const result = await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "leader-a",
       cwd: "/repo",
@@ -1145,9 +1145,9 @@ test("Leader thread sync does not reuse a target with pending cleanup", async ()
 });
 
 test("Leader thread sync can force-refresh unnamed stale-prone leader bindings", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-sync-refresh-"));
-  const store = createTelegramTopicTargetStore({
-    path: join(dir, "telegram-targets.json"),
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-sync-refresh-"));
+  const store = createBaleTopicTargetStore({
+    path: join(dir, "bale-targets.json"),
     getNowMs: () => 2000,
   });
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
@@ -1163,7 +1163,7 @@ test("Leader thread sync can force-refresh unnamed stale-prone leader bindings",
     });
     await store.persist();
 
-    const result = await ensureTelegramLeaderThreadBinding({
+    const result = await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "leader-a",
       cwd: "/repo",
@@ -1197,9 +1197,9 @@ test("Leader thread sync can force-refresh unnamed stale-prone leader bindings",
 
 test("Leader thread sync force-refresh preserves promoted follower bindings", async () => {
   const dir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-promoted-follower-refresh-"),
+    join(tmpdir(), "pi-bale-promoted-follower-refresh-"),
   );
-  const store = createTelegramTopicTargetStore({
+  const store = createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
@@ -1217,7 +1217,7 @@ test("Leader thread sync force-refresh preserves promoted follower bindings", as
     });
     await store.persist();
 
-    const result = await ensureTelegramLeaderThreadBinding({
+    const result = await ensureBaleLeaderThreadBinding({
       getAllowedUserId: () => 7,
       instanceId: "follower-b",
       cwd: "/repo",
@@ -1248,7 +1248,7 @@ test("Leader thread sync force-refresh preserves promoted follower bindings", as
 test("Topic lifecycle sync rechecks execution authority after loading bindings", async () => {
   let current = true;
   let reconciled = 0;
-  const handler = createTelegramTopicLifecycleSyncHandler({
+  const handler = createBaleTopicLifecycleSyncHandler({
     topicTargetStore: {
       async load() {
         current = false;
@@ -1294,7 +1294,7 @@ test("Topic lifecycle sync marks known topics stale or active", async () => {
     { target: { chatId: 7, threadId: 42 }, status: "active" },
   ]);
   const events: Array<Record<string, unknown>> = [];
-  const handler = createTelegramTopicLifecycleSyncHandler({
+  const handler = createBaleTopicLifecycleSyncHandler({
     topicTargetStore: store,
     isBusEnabled: () => true,
     async callApi() {
@@ -1371,7 +1371,7 @@ test("Topic lifecycle sync loads persisted bindings before deleting created topi
       this.persisted = true;
     },
   };
-  const handler = createTelegramTopicLifecycleSyncHandler({
+  const handler = createBaleTopicLifecycleSyncHandler({
     topicTargetStore: store,
     isBusEnabled: () => true,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -1395,7 +1395,7 @@ test("Topic lifecycle sync observes unknown created topics without deleting them
   const store = createTopicStore();
   const calls: Array<{ method: string; body: unknown }> = [];
   const events: Array<Record<string, unknown>> = [];
-  const handler = createTelegramTopicLifecycleSyncHandler({
+  const handler = createBaleTopicLifecycleSyncHandler({
     topicTargetStore: store,
     isBusEnabled: () => true,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -1418,7 +1418,7 @@ test("Topic lifecycle sync observes unknown created topics without deleting them
 
   const classicCalls: Array<{ method: string; body: unknown }> = [];
   store.persisted = false;
-  const classicHandler = createTelegramTopicLifecycleSyncHandler({
+  const classicHandler = createBaleTopicLifecycleSyncHandler({
     topicTargetStore: store,
     isBusEnabled: () => false,
     async callApi<TResponse>(method: string, body: Record<string, unknown>) {
@@ -1439,7 +1439,7 @@ test("Topic lifecycle sync does not delete unknown created topics during provisi
   const store = createTopicStore();
   const calls: Array<{ method: string; body: unknown }> = [];
   const events: Array<Record<string, unknown>> = [];
-  const handler = createTelegramTopicLifecycleSyncHandler({
+  const handler = createBaleTopicLifecycleSyncHandler({
     topicTargetStore: store,
     isBusEnabled: () => true,
     isTopicProvisioningActive: () => true,
@@ -1465,10 +1465,10 @@ test("Topic lifecycle sync does not delete unknown created topics during provisi
 
 test("Observed topic lifecycle stops before state or store mutation behind retained fences", async () => {
   for (const phase of ["fenced", "deletion-issued"] as const) {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-lifecycle-admission-"));
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-lifecycle-admission-"));
     try {
-      const store = createTelegramTopicTargetStore({
-        path: join(dir, "telegram-targets.json"),
+      const store = createBaleTopicTargetStore({
+        path: join(dir, "bale-targets.json"),
         getNowMs: () => 2000,
       });
       store.upsert({
@@ -1482,7 +1482,7 @@ test("Observed topic lifecycle stops before state or store mutation behind retai
         slot: "A",
       });
       await store.persist();
-      const admission = createTelegramWorkspaceAdmissionLedger({
+      const admission = createBaleWorkspaceAdmissionLedger({
         path: join(dir, "workspace-admission.json"),
         profileKey: "profile:lifecycle",
         owner: {
@@ -1505,12 +1505,12 @@ test("Observed topic lifecycle stops before state or store mutation behind retai
       if (phase === "deletion-issued") {
         assert.equal(admission.issueDeletionPermit(acquired.fence).kind, "issued");
       }
-      const operationRuntime = createTelegramWorkspaceOperationRuntime({
+      const operationRuntime = createBaleWorkspaceOperationRuntime({
         getWorkspaceAdmission: () => admission,
       });
-      let syncState = createUnknownTelegramSyncState();
+      let syncState = createUnknownBaleSyncState();
       let syncWrites = 0;
-      const handler = createTelegramObservedTopicLifecycleSyncHandler({
+      const handler = createBaleObservedTopicLifecycleSyncHandler({
         topicTargetStore: store,
         isBusEnabled: () => true,
         callApi: async <TResponse>() => ({ ok: true }) as TResponse,
@@ -1529,7 +1529,7 @@ test("Observed topic lifecycle stops before state or store mutation behind retai
           target: { chatId: 7, threadId: 42 },
           message: {},
         }),
-        (error) => error instanceof TelegramWorkspaceAdmissionError &&
+        (error) => error instanceof BaleWorkspaceAdmissionError &&
           error.code === "admission-blocked",
       );
       assert.equal(syncWrites, 0);
@@ -1543,7 +1543,7 @@ test("Observed topic lifecycle stops before state or store mutation behind retai
 
 test("Preserved leader quit requires unchanged authority, completed suspension and profile admission", async () => {
   for (const race of ["none", "unowned", "running", "cleanup-enabled", "policy-unknown", "pending-cleanup", "early-profile", "session", "epoch", "profile", "resumed", "replacement", "fenced"] as const) {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-preserved-leader-"));
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-preserved-leader-"));
     const path = join(dir, "state.json");
     let epoch: number | undefined = race === "unowned" ? undefined : 1;
     let profile = "default";
@@ -1551,14 +1551,14 @@ test("Preserved leader quit requires unchanged authority, completed suspension a
     let suspended = false;
     let armed = false;
     let loads = 0;
-    const ledger = createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
+    const ledger = createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
       profileKey: "default", owner: { processId: process.pid, processBirthId: `${process.pid}:leader-quit` },
       getProcessLiveness: () => "alive" });
-    const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => ledger });
+    const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => ledger });
     const target = { chatId: 7, threadId: 42 };
     const record = { profileKey: "cwd:/repo", owner: { kind: "leader" as const, cwd: "/repo", instanceId: "leader" },
       instanceId: "leader", target, status: "active" as const, slot: "A", createdAtMs: 1, updatedAtMs: 1 };
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000,
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => 1000,
       commitPersist(commit) {
         if (armed) {
           assert.ok(ledger.read().leases.some((lease) => lease.operationKind === "workspace.preserve-leader-quit"));
@@ -1577,14 +1577,14 @@ test("Preserved leader quit requires unchanged authority, completed suspension a
     store.load = async () => { if (armed) loads++; await load(); };
     try {
       store.upsert(record);
-      store.upsertWorkspaceBinding({ ...createTelegramWorkspaceBindingIdentity("/repo", 0, "session")!,
+      store.upsertWorkspaceBinding({ ...createBaleWorkspaceBindingIdentity("/repo", 0, "session")!,
         target, slot: "A", updatedAtMs: 1, journalBindingKeys: [], journalBindingsComplete: true });
       if (race === "pending-cleanup") store.upsertPendingCleanup({
         id: "pending", owner: "leader", instanceId: "leader", runtimeGeneration: "leader:1",
         target, requestedAtMs: 1,
       });
       await store.persist();
-      const prepare = createTelegramPreservedLeaderQuitHandler({
+      const prepare = createBalePreservedLeaderQuitHandler({
         instanceId: "leader", topicTargetStore: store, getCurrentLeaderEpoch: () => epoch,
         getProfileName: () => profile, isPollingSuspended: () => suspended,
         resolveAutomaticThreadCleanupEnabled: () => race === "policy-unknown"
@@ -1604,7 +1604,7 @@ test("Preserved leader quit requires unchanged authority, completed suspension a
       if (race === "fenced" || race === "replacement") {
         await assert.rejects(preserve!, race === "fenced" ? /blocked by retirement/ : /not committed/);
       } else await preserve?.();
-      const saved = createTelegramTopicTargetStore({ path });
+      const saved = createBaleTopicTargetStore({ path });
       await saved.load();
       assert.equal(saved.list().length, race === "none" ? 0 : 1, race);
       assert.equal(saved.listWorkspaceBindings()[0]?.inactiveSinceMs, race === "none" ? 1000 : undefined, race);
@@ -1623,7 +1623,7 @@ test("Preserved leader quit requires unchanged authority, completed suspension a
 
 test("Thread disconnect assembly distinguishes manual stop from restart suspension", async () => {
   const events: string[] = [];
-  const assembly = createTelegramThreadDisconnectAssembly({
+  const assembly = createBaleThreadDisconnectAssembly({
     instanceId: "runtime:1",
     getCurrentThreadRecord: () => undefined,
     topicTargetStore: {
@@ -1634,11 +1634,11 @@ test("Thread disconnect assembly distinguishes manual stop from restart suspensi
       removePendingCleanup: () => false,
     },
     callApi: async () => {
-      throw new Error("Unexpected Telegram API call.");
+      throw new Error("Unexpected Bale API call.");
     },
     getLeaderTarget: () => undefined,
     clearLeaderTarget: () => {},
-    getSyncState: createUnknownTelegramSyncState,
+    getSyncState: createUnknownBaleSyncState,
     setSyncState: () => {},
     stopPolling: async () => {
       events.push("stop");
@@ -1654,7 +1654,7 @@ test("Thread disconnect assembly distinguishes manual stop from restart suspensi
   assert.equal(await assembly.disconnect(), "stopped");
   assert.equal(
     await assembly.cleanupForSessionRestart(),
-    "Telegram bridge suspended for session restart.",
+    "Bale bridge suspended for session restart.",
   );
   assert.deepEqual(events, ["stop", "suspend"]);
 });
@@ -1669,9 +1669,9 @@ test("Thread disconnect and restart cleanup stop before mutation behind every re
   ];
   for (const phase of ["fenced", "deletion-issued"] as const) {
     for (const testCase of cases) {
-      const dir = await mkdtemp(join(tmpdir(), "pi-telegram-disconnect-admission-"));
+      const dir = await mkdtemp(join(tmpdir(), "pi-bale-disconnect-admission-"));
       try {
-        const ledger = createTelegramWorkspaceAdmissionLedger({
+        const ledger = createBaleWorkspaceAdmissionLedger({
           path: join(dir, "workspace-admission.json"),
           profileKey: "profile:test",
           owner: { processId: 101, processBirthId: "101:start:owner" },
@@ -1697,7 +1697,7 @@ test("Thread disconnect and restart cleanup stop before mutation behind every re
         }
         const mutations: string[] = [];
         const operationKinds: string[] = [];
-        const assembly = createTelegramThreadDisconnectAssembly({
+        const assembly = createBaleThreadDisconnectAssembly({
           instanceId: "leader-runtime:1",
           getCurrentThreadRecord: () => {
             mutations.push("read-current-record");
@@ -1736,7 +1736,7 @@ test("Thread disconnect and restart cleanup stop before mutation behind every re
           clearLeaderTarget: () => {
             mutations.push("clear-leader-target");
           },
-          getSyncState: createUnknownTelegramSyncState,
+          getSyncState: createUnknownBaleSyncState,
           setSyncState: () => {
             mutations.push("set-sync-state");
           },
@@ -1750,7 +1750,7 @@ test("Thread disconnect and restart cleanup stop before mutation behind every re
           recordRuntimeEvent: () => undefined,
           runWorkspaceOperation(input, operation) {
             operationKinds.push(input.operationKind);
-            return runWithTelegramWorkspaceAdmissionsAsync({
+            return runWithBaleWorkspaceAdmissionsAsync({
               ledger,
               ...input,
               operation,
@@ -1761,12 +1761,12 @@ test("Thread disconnect and restart cleanup stop before mutation behind every re
         if (testCase.entrypoint === "disconnect") {
           // A blocked Workspace admission must never leave the local transport running.
           const message = await assembly.disconnect();
-          assert.equal(message, "stopped. Thread cleanup was not confirmed. Check /telegram-status --debug.");
+          assert.equal(message, "stopped. Thread cleanup was not confirmed. Check /bale-status --debug.");
           assert.deepEqual(mutations, ["stop-polling"]);
         } else {
           await assert.rejects(
             () => assembly[testCase.entrypoint](),
-            (error) => error instanceof TelegramWorkspaceAdmissionError &&
+            (error) => error instanceof BaleWorkspaceAdmissionError &&
               error.code === "admission-blocked",
           );
           assert.deepEqual(mutations, []);
@@ -1781,7 +1781,7 @@ test("Thread disconnect and restart cleanup stop before mutation behind every re
 
 test("Manual disconnect stops the transport when Workspace admission reports corruption", async () => {
   const events: string[] = [];
-  const assembly = createTelegramThreadDisconnectAssembly({
+  const assembly = createBaleThreadDisconnectAssembly({
     instanceId: "leader-runtime:1",
     getCurrentThreadRecord: () => ({
       owner: { kind: "leader" },
@@ -1801,13 +1801,13 @@ test("Manual disconnect stops the transport when Workspace admission reports cor
     clearLeaderTarget: () => {
       events.push("clear-leader-target");
     },
-    getSyncState: createUnknownTelegramSyncState,
+    getSyncState: createUnknownBaleSyncState,
     setSyncState: () => {
       events.push("set-sync-state");
     },
     stopPolling: async () => {
       events.push("stop-polling");
-      return "Telegram bridge disconnected.";
+      return "Bale bridge disconnected.";
     },
     suspendPolling: async () => {
       events.push("suspend-polling");
@@ -1818,16 +1818,16 @@ test("Manual disconnect stops the transport when Workspace admission reports cor
     },
     runWorkspaceOperation() {
       // Mirrors a malformed or unreadable Workspace admission state file.
-      throw new Error("Telegram Workspace admission state is malformed.");
+      throw new Error("Bale Workspace admission state is malformed.");
     },
   });
 
   assert.equal(
     await assembly.disconnect(),
-    "Telegram bridge disconnected. Thread cleanup was not confirmed. Check /telegram-status --debug.",
+    "Bale bridge disconnected. Thread cleanup was not confirmed. Check /bale-status --debug.",
   );
   assert.deepEqual(events, [
-    "event:connection:Telegram Workspace admission state is malformed.:disconnect-cleanup",
+    "event:connection:Bale Workspace admission state is malformed.:disconnect-cleanup",
     "stop-polling",
   ]);
 });
@@ -1841,7 +1841,7 @@ test("Manual disconnect fences cleanup and fallback stop across connection repla
     let reads = 0;
     const apiCalls: string[] = [];
     const mutations: string[] = [];
-    const assembly = createTelegramThreadDisconnectAssembly({
+    const assembly = createBaleThreadDisconnectAssembly({
       instanceId: "leader-runtime:1",
       captureStopPolling() {
         captures++;
@@ -1849,7 +1849,7 @@ test("Manual disconnect fences cleanup and fallback stop across connection repla
         return {
           isCurrent: () => generation === expected,
           async stop() {
-            if (generation !== expected) throw new Error("Telegram disconnect was superseded by a new connection.");
+            if (generation !== expected) throw new Error("Bale disconnect was superseded by a new connection.");
             stops++;
             return "stopped";
           },
@@ -1874,7 +1874,7 @@ test("Manual disconnect fences cleanup and fallback stop across connection repla
       getCurrentLeaderEpoch: () => 1,
       getLeaderTarget: () => ({ chatId: -1007, threadId: 42 }),
       clearLeaderTarget: () => { mutations.push("clear-target"); },
-      getSyncState: createUnknownTelegramSyncState,
+      getSyncState: createUnknownBaleSyncState,
       setSyncState: () => { mutations.push("sync"); },
       stopPolling: async () => { assert.fail("Uncaptured stop must not touch the replacement"); },
       suspendPolling: async () => {},
@@ -1898,7 +1898,7 @@ test("Manual disconnect does not retry failed stop or claim uncertain cleanup wa
     let stops = 0;
     const apiCalls: string[] = [];
     const diagnostics: string[] = [];
-    const assembly = createTelegramThreadDisconnectAssembly({
+    const assembly = createBaleThreadDisconnectAssembly({
       instanceId: "leader-runtime:1",
       getCurrentThreadRecord: () => failureAt === "stop" ? undefined : {
         owner: { kind: failureAt === "follower-reply" ? "manual-follower" : "leader" },
@@ -1922,12 +1922,12 @@ test("Manual disconnect does not retry failed stop or claim uncertain cleanup wa
       getCurrentLeaderEpoch: () => failureAt === "follower-reply" ? undefined : 1,
       getLeaderTarget: () => undefined,
       clearLeaderTarget: () => {},
-      getSyncState: createUnknownTelegramSyncState,
+      getSyncState: createUnknownBaleSyncState,
       setSyncState: () => {},
       async stopPolling() {
         stops++;
         if (failureAt === "stop") throw new Error("Release reply unknown");
-        return "Telegram bridge disconnected.";
+        return "Bale bridge disconnected.";
       },
       suspendPolling: async () => {},
       recordRuntimeEvent: (_category, _error, details) => { diagnostics.push(String(details?.phase)); },
@@ -1940,7 +1940,7 @@ test("Manual disconnect does not retry failed stop or claim uncertain cleanup wa
       await assert.rejects(assembly.disconnect(), /Release reply unknown/);
     } else {
       assert.equal(await assembly.disconnect(),
-        "Telegram bridge disconnected. Thread cleanup was not confirmed. Check /telegram-status --debug.");
+        "Bale bridge disconnected. Thread cleanup was not confirmed. Check /bale-status --debug.");
       assert.ok(diagnostics.includes("disconnect-cleanup"));
     }
     assert.equal(stops, 1, "An uncertain stop outcome cannot authorize another teardown");
@@ -1953,8 +1953,8 @@ test("Manual follower disconnect delegates thread deletion to its live leader", 
   const calls: unknown[] = [];
   let followerDisconnects = 0;
   let persisted = 0;
-  let syncState = createUnknownTelegramSyncState();
-  const disconnect = createTelegramManualThreadDisconnectHandler({
+  let syncState = createUnknownBaleSyncState();
+  const disconnect = createBaleManualThreadDisconnectHandler({
     instanceId: "follower-runtime:1",
     getCurrentThreadRecord: () => ({
       owner: { kind: "manual-follower" },
@@ -1999,8 +1999,8 @@ test("Manual follower disconnect delegates thread deletion to its live leader", 
 test("Manual follower disconnect without a live leader stops locally and keeps the Thread", async () => {
   const calls: unknown[] = [];
   let stops = 0;
-  let syncState = createUnknownTelegramSyncState();
-  const disconnect = createTelegramManualThreadDisconnectHandler({
+  let syncState = createUnknownBaleSyncState();
+  const disconnect = createBaleManualThreadDisconnectHandler({
     instanceId: "follower-runtime:1",
     getCurrentThreadRecord: () => ({
       owner: { kind: "manual-follower" },
@@ -2034,25 +2034,25 @@ test("Manual follower disconnect without a live leader stops locally and keeps t
     getNowMs: () => 2000,
   });
 
-  assert.equal(await disconnect(), "Telegram bridge disconnected. Thread kept: no live leader could delete it.");
+  assert.equal(await disconnect(), "Bale bridge disconnected. Thread kept: no live leader could delete it.");
   assert.equal(stops, 1, "The operator can always stop a follower whose leader is gone or in classic mode");
   assert.deepEqual(calls, [], "No direct Bot API deletion is attempted");
 });
 
 test("Confirmed leader disconnect and restart cleanup preserve pressure-reclaimable slots across restart", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-leader-cleanup-rotation-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-leader-cleanup-rotation-"));
   const path = join(dir, "state.json");
   let nowMs = 1000;
   try {
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "admission.json"), profileKey: "default",
       owner: { processId: process.pid, processBirthId: `${process.pid}:cleanup-fixture` },
       getProcessLiveness: () => "alive",
     });
-    const operations = createTelegramWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
-    const store = createTelegramTopicTargetStore({ path, getNowMs: () => nowMs,
+    const operations = createBaleWorkspaceOperationRuntime({ getWorkspaceAdmission: () => admission });
+    const store = createBaleTopicTargetStore({ path, getNowMs: () => nowMs,
       getExternalReservedSlots: admission.listReservedSlots });
-    let syncState = createUnknownTelegramSyncState();
+    let syncState = createUnknownBaleSyncState();
     let deletions = 0;
     for (let index = 0; index < 26; index++) {
       const cwd = `/repo/${index}`;
@@ -2060,14 +2060,14 @@ test("Confirmed leader disconnect and restart cleanup preserve pressure-reclaima
       const slot = String.fromCharCode(65 + index);
       const target = { chatId: 7, threadId: 40 + index };
       store.upsertWorkspaceBinding({
-        ...createTelegramWorkspaceBindingIdentity(cwd, 0, `session-${index}`)!,
+        ...createBaleWorkspaceBindingIdentity(cwd, 0, `session-${index}`)!,
         target, slot, updatedAtMs: 1, journalBindingKeys: [], journalBindingsComplete: true,
       });
       const record = { profileKey: `cwd:${cwd}`, owner: { kind: "leader" as const, cwd, instanceId },
         instanceId, target, slot, status: "active" as const, createdAtMs: 1, updatedAtMs: 1 };
       store.upsert(record);
       await store.persist();
-      const cleanup = createTelegramThreadDisconnectAssembly({
+      const cleanup = createBaleThreadDisconnectAssembly({
         instanceId, getCurrentThreadRecord: () => record, topicTargetStore: store,
         async callApi<TResponse>(method: string) {
           if (method === "deleteForumTopic") deletions++;
@@ -2083,7 +2083,7 @@ test("Confirmed leader disconnect and restart cleanup preserve pressure-reclaima
       assert.equal(store.getWorkspaceBinding(cwd, "a", `session-${index}`)?.inactiveSinceMs, nowMs);
       nowMs++;
     }
-    const restored = createTelegramTopicTargetStore({ path, getNowMs: () => nowMs,
+    const restored = createBaleTopicTargetStore({ path, getNowMs: () => nowMs,
       getExternalReservedSlots: admission.listReservedSlots });
     await restored.load();
     assert.equal(deletions, 26);
@@ -2092,7 +2092,7 @@ test("Confirmed leader disconnect and restart cleanup preserve pressure-reclaima
     const clear = () => ({ liveOwner: "clear" as const, acceptedWork: "clear" as const,
       deliveryAuthority: "clear" as const });
     assert.ok(restored.captureWorkspaceSlotOccupancy(clear).bindings.every(binding => binding.protection === "eligible"));
-    const rotation = createTelegramWorkspaceSlotRotation({
+    const rotation = createBaleWorkspaceSlotRotation({
       store: restored, getAdmission: () => admission, getLeaderEpoch: () => 2,
       runExclusive: operations.runExclusive, getExternalProtection: clear, recordEvent() {},
       async deleteThread(authorize) {
@@ -2103,7 +2103,7 @@ test("Confirmed leader disconnect and restart cleanup preserve pressure-reclaima
     const slot = await rotation(() => operations.run({ operationId: "fresh-leader",
       operationKind: "workspace.provision-leader", scopes: [{ kind: "profile" }] }, async () => {
       const claim = restored.claimWorkspaceIdentity("/fresh", "new-leader", undefined, { sessionId: "new-session" });
-      if (!claim) throw new TelegramWorkspaceSlotUnavailableError();
+      if (!claim) throw new BaleWorkspaceSlotUnavailableError();
       return claim.slot;
     }));
     assert.equal(slot, "A");
@@ -2117,8 +2117,8 @@ test("Manual leader disconnect releases transport after cleanup loses epoch", as
   // Forum chat id: its close step before delete is the race window this test injects into.
   const trace: string[] = [];
   let currentEpoch: number | undefined = 1;
-  let syncState = createUnknownTelegramSyncState();
-  const disconnect = createTelegramManualThreadDisconnectHandler({
+  let syncState = createUnknownBaleSyncState();
+  const disconnect = createBaleManualThreadDisconnectHandler({
     instanceId: "leader-runtime:1",
     getCurrentThreadRecord: () => ({
       owner: { kind: "leader" },
@@ -2170,7 +2170,7 @@ test("Manual leader disconnect releases transport after cleanup loses epoch", as
 
   assert.equal(
     await disconnect(),
-    "stopped Telegram thread cleanup remains pending for the next leader.",
+    "stopped Bale thread cleanup remains pending for the next leader.",
   );
   assert.deepEqual(trace, [
     "upsert-intent",
@@ -2186,8 +2186,8 @@ test("Manual leader disconnect releases transport after cleanup loses epoch", as
 test("Promoted leader deletes its inherited follower thread under owned epoch", async () => {
   const trace: string[] = [];
   let currentEpoch: number | undefined = 1;
-  let syncState = createUnknownTelegramSyncState();
-  const disconnect = createTelegramManualThreadDisconnectHandler({
+  let syncState = createUnknownBaleSyncState();
+  const disconnect = createBaleManualThreadDisconnectHandler({
     instanceId: "leader-runtime:1",
     getCurrentThreadRecord: () => ({
       owner: { kind: "manual-follower" },
@@ -2253,8 +2253,8 @@ test("Promoted leader deletes its inherited follower thread under owned epoch", 
 
 test("Promoted leader disconnect releases leadership when deletion is unconfirmed", async () => {
   const trace: string[] = [];
-  let syncState = createUnknownTelegramSyncState();
-  const disconnect = createTelegramManualThreadDisconnectHandler({
+  let syncState = createUnknownBaleSyncState();
+  const disconnect = createBaleManualThreadDisconnectHandler({
     instanceId: "leader-runtime:1",
     getCurrentThreadRecord: () => ({
       owner: { kind: "manual-follower" },
@@ -2305,7 +2305,7 @@ test("Promoted leader disconnect releases leadership when deletion is unconfirme
 
   assert.equal(
     await disconnect(),
-    "stopped Telegram thread cleanup remains pending for the next leader.",
+    "stopped Bale thread cleanup remains pending for the next leader.",
   );
   assert.deepEqual(trace, [
     "upsert-intent",

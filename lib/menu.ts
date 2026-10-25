@@ -1,128 +1,128 @@
 /**
- * Telegram menu and inline-keyboard rendering helpers
- * Zones: telegram ui, controls, status menu
+ * Bale menu and inline-keyboard rendering helpers
+ * Zones: bale ui, controls, status menu
  * Owns app-menu/status state, inline UI text, and callback composition while model/thinking/queue menu details live in dedicated domains
  */
 
 import {
-  createTelegramMenuDelivery,
-  handleTelegramModelMenuCallbackAction,
-  openTelegramModelMenu,
-  sendTelegramModelMenuMessage,
-  updateTelegramModelMenuMessage,
-  type TelegramMenuMessageRuntimeDeps,
-  type TelegramModelMenuState,
-  type TelegramReplyMarkup,
+  createBaleMenuDelivery,
+  handleBaleModelMenuCallbackAction,
+  openBaleModelMenu,
+  sendBaleModelMenuMessage,
+  updateBaleModelMenuMessage,
+  type BaleMenuMessageRuntimeDeps,
+  type BaleModelMenuState,
+  type BaleReplyMarkup,
 } from "./menu-model.ts";
 import {
-  handleTelegramStatusMenuCallbackAction,
-  openTelegramStatusMenu,
-  sendTelegramStatusMessage,
-  updateTelegramStatusMessage,
+  handleBaleStatusMenuCallbackAction,
+  openBaleStatusMenu,
+  sendBaleStatusMessage,
+  updateBaleStatusMessage,
 } from "./menu-status.ts";
 import {
-  handleTelegramThinkingMenuCallbackAction,
-  openTelegramThinkingMenu,
-  updateTelegramThinkingMenuMessage,
+  handleBaleThinkingMenuCallbackAction,
+  openBaleThinkingMenu,
+  updateBaleThinkingMenuMessage,
 } from "./menu-thinking.ts";
 import {
   type MenuModel,
-  type ScopedTelegramModel,
-  type TelegramModelSwitchContinuationSource,
+  type ScopedBaleModel,
+  type BaleModelSwitchContinuationSource,
   type ThinkingLevel,
 } from "./model.ts";
 import {
-  handleTelegramSectionCallback,
-  handleTelegramSectionOpen,
-  handleTelegramSectionSettingsOpen,
-  parseTelegramSectionCallback,
-  type TelegramSectionRuntimeDeps,
-  type TelegramSectionRegistry,
+  handleBaleSectionCallback,
+  handleBaleSectionOpen,
+  handleBaleSectionSettingsOpen,
+  parseBaleSectionCallback,
+  type BaleSectionRuntimeDeps,
+  type BaleSectionRegistry,
 } from "./sections.ts";
 import type {
-  TelegramApiCallOptions,
-  TelegramInputRichMessage,
-} from "./telegram-api.ts";
+  BaleApiCallOptions,
+  BaleInputRichMessage,
+} from "./bale-api.ts";
 
 export {
-  applyTelegramModelPageSelection,
-  applyTelegramModelScopeSelection,
+  applyBaleModelPageSelection,
+  applyBaleModelScopeSelection,
   buildModelMenuReplyMarkup,
   buildModelPageMenuReplyMarkup,
-  buildTelegramModelCallbackPlan,
-  buildTelegramModelMenuRenderPayload,
-  buildTelegramModelMenuState,
-  buildTelegramModelMenuStateRuntime,
-  buildTelegramModelPageMenuRenderPayload,
-  createTelegramModelMenuRuntime,
-  createTelegramModelMenuStateBuilder,
+  buildBaleModelCallbackPlan,
+  buildBaleModelMenuRenderPayload,
+  buildBaleModelMenuState,
+  buildBaleModelMenuStateRuntime,
+  buildBaleModelPageMenuRenderPayload,
+  createBaleModelMenuRuntime,
+  createBaleModelMenuStateBuilder,
   formatScopedModelButtonText,
   getModelMenuItems,
-  getStoredTelegramModelMenuState,
-  getTelegramModelMenuPage,
-  getTelegramModelSelection,
-  handleTelegramModelMenuCallbackAction,
+  getStoredBaleModelMenuState,
+  getBaleModelMenuPage,
+  getBaleModelSelection,
+  handleBaleModelMenuCallbackAction,
   MODEL_MENU_TITLE,
   MODEL_PAGE_MENU_TITLE,
-  openTelegramModelMenu,
-  pruneStoredTelegramModelMenus,
-  resolveCachedTelegramModelMenuInputs,
-  sendTelegramModelMenuMessage,
-  storeTelegramModelMenuState,
-  TELEGRAM_MODEL_PAGE_SIZE,
-  updateTelegramModelMenuMessage,
+  openBaleModelMenu,
+  pruneStoredBaleModelMenus,
+  resolveCachedBaleModelMenuInputs,
+  sendBaleModelMenuMessage,
+  storeBaleModelMenuState,
+  BALE_MODEL_PAGE_SIZE,
+  updateBaleModelMenuMessage,
 } from "./menu-model.ts";
 export type {
-  BuildTelegramModelCallbackPlanParams,
-  BuildTelegramModelMenuStateParams,
-  CachedTelegramModelMenuInputs,
+  BuildBaleModelCallbackPlanParams,
+  BuildBaleModelMenuStateParams,
+  CachedBaleModelMenuInputs,
   MenuSettingsManager,
-  StoredTelegramModelMenuState,
-  TelegramMenuMessageRuntimeDeps,
-  TelegramMenuMutationResult,
-  TelegramMenuRenderPayload,
-  TelegramMenuSelectionResult,
-  TelegramModelCallbackPlan,
-  TelegramModelMenuCallbackDeps,
-  TelegramModelMenuInputCacheDeps,
-  TelegramModelMenuOpenDeps,
-  TelegramModelMenuPage,
-  TelegramModelMenuRuntime,
-  TelegramModelMenuRuntimeContext,
-  TelegramModelMenuRuntimeOptions,
-  TelegramModelMenuState,
-  TelegramModelMenuStateBuilderContext,
-  TelegramModelMenuStateBuilderDeps,
-  TelegramModelMenuStoreOptions,
-  TelegramModelScope,
-  TelegramReplyMarkup,
+  StoredBaleModelMenuState,
+  BaleMenuMessageRuntimeDeps,
+  BaleMenuMutationResult,
+  BaleMenuRenderPayload,
+  BaleMenuSelectionResult,
+  BaleModelCallbackPlan,
+  BaleModelMenuCallbackDeps,
+  BaleModelMenuInputCacheDeps,
+  BaleModelMenuOpenDeps,
+  BaleModelMenuPage,
+  BaleModelMenuRuntime,
+  BaleModelMenuRuntimeContext,
+  BaleModelMenuRuntimeOptions,
+  BaleModelMenuState,
+  BaleModelMenuStateBuilderContext,
+  BaleModelMenuStateBuilderDeps,
+  BaleModelMenuStoreOptions,
+  BaleModelScope,
+  BaleReplyMarkup,
 } from "./menu-model.ts";
 export {
   buildStatusReplyMarkup,
-  buildTelegramStatusMenuRenderPayload,
-  handleTelegramStatusMenuCallbackAction,
-  openTelegramStatusMenu,
-  sendTelegramStatusMessage,
-  updateTelegramStatusMessage,
+  buildBaleStatusMenuRenderPayload,
+  handleBaleStatusMenuCallbackAction,
+  openBaleStatusMenu,
+  sendBaleStatusMessage,
+  updateBaleStatusMessage,
 } from "./menu-status.ts";
 export type {
-  TelegramStatusMenuCallbackDeps,
-  TelegramStatusMenuOpenDeps,
+  BaleStatusMenuCallbackDeps,
+  BaleStatusMenuOpenDeps,
 } from "./menu-status.ts";
 export {
-  buildTelegramThinkingMenuRenderPayload,
+  buildBaleThinkingMenuRenderPayload,
   buildThinkingMenuReplyMarkup,
   buildThinkingMenuText,
-  handleTelegramThinkingMenuCallbackAction,
-  openTelegramThinkingMenu,
-  updateTelegramThinkingMenuMessage,
+  handleBaleThinkingMenuCallbackAction,
+  openBaleThinkingMenu,
+  updateBaleThinkingMenuMessage,
 } from "./menu-thinking.ts";
 export type {
-  TelegramThinkingMenuCallbackDeps,
-  TelegramThinkingMenuOpenDeps,
+  BaleThinkingMenuCallbackDeps,
+  BaleThinkingMenuOpenDeps,
 } from "./menu-thinking.ts";
 
-export interface TelegramMenuCallbackEntryDeps {
+export interface BaleMenuCallbackEntryDeps {
   handleStatusAction: () => Promise<boolean>;
   handleThinkingAction: () => Promise<boolean>;
   handleModelAction: () => Promise<boolean>;
@@ -142,21 +142,21 @@ export interface MenuCallbackQuery {
   };
 }
 
-export interface StoredTelegramMenuCallbackDeps<
+export interface StoredBaleMenuCallbackDeps<
   TModel extends MenuModel = MenuModel,
 > {
   getStoredModelMenuState: (
     messageId: number | undefined,
     chatId?: number,
-  ) => TelegramModelMenuState<TModel> | undefined;
+  ) => BaleModelMenuState<TModel> | undefined;
   handleStatusAction: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
   ) => Promise<boolean>;
   handleThinkingAction: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
   ) => Promise<boolean>;
   handleModelAction: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
   ) => Promise<boolean>;
   answerCallbackQuery: (
     callbackQueryId: string,
@@ -164,32 +164,32 @@ export interface StoredTelegramMenuCallbackDeps<
   ) => Promise<void>;
 }
 
-export interface TelegramMenuCallbackRuntimeDeps<
+export interface BaleMenuCallbackRuntimeDeps<
   TContext,
   TModel extends MenuModel = MenuModel,
 > {
   getStoredModelMenuState: (
     messageId: number | undefined,
     chatId?: number,
-  ) => TelegramModelMenuState<TModel> | undefined;
+  ) => BaleModelMenuState<TModel> | undefined;
   getActiveModel: (ctx: TContext) => TModel | undefined;
   getThinkingLevel: () => ThinkingLevel;
   setThinkingLevel: (level: ThinkingLevel) => void;
   updateStatus: (ctx: TContext) => void;
   updateModelMenuMessage: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     ctx: TContext,
   ) => Promise<void>;
   updateThinkingMenuMessage: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     ctx: TContext,
   ) => Promise<void>;
   updateStatusMessage: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     ctx: TContext,
   ) => Promise<void>;
   updateSettingsMenuMessage?: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     ctx: TContext,
   ) => Promise<void>;
   answerCallbackQuery: (
@@ -206,33 +206,33 @@ export interface TelegramMenuCallbackRuntimeDeps<
   setModel: (model: TModel) => Promise<boolean>;
   setCurrentModel: (model: TModel, ctx: TContext) => void;
   stagePendingModelSwitch: (
-    selection: ScopedTelegramModel<TModel>,
+    selection: ScopedBaleModel<TModel>,
     ctx: TContext,
-    continuationTurn: TelegramModelSwitchContinuationSource,
+    continuationTurn: BaleModelSwitchContinuationSource,
   ) => void;
-  restartInterruptedTelegramTurn: (
-    selection: ScopedTelegramModel<TModel>,
+  restartInterruptedBaleTurn: (
+    selection: ScopedBaleModel<TModel>,
     ctx: TContext,
-    continuationTurn: TelegramModelSwitchContinuationSource,
+    continuationTurn: BaleModelSwitchContinuationSource,
   ) => Promise<boolean> | boolean;
-  sectionRegistry?: TelegramSectionRegistry;
+  sectionRegistry?: BaleSectionRegistry;
   editInteractiveMessage?: (
     chatId: number,
     messageId: number,
     text: string,
     mode: "markdown" | "html" | "plain",
-    replyMarkup: TelegramReplyMarkup,
+    replyMarkup: BaleReplyMarkup,
   ) => Promise<void>;
   sendInteractiveMessage?: (
     chatId: number,
     text: string,
     mode: "markdown" | "html" | "plain",
-    replyMarkup: TelegramReplyMarkup,
+    replyMarkup: BaleReplyMarkup,
     options?: { target?: { chatId: number; threadId?: number } },
   ) => Promise<number | undefined>;
   sendSectionRichMessage?: (
     chatId: number,
-    message: TelegramInputRichMessage,
+    message: BaleInputRichMessage,
     options?: { target?: { chatId: number; threadId?: number } },
   ) => Promise<number | undefined>;
   enqueueSectionPrompt?: (
@@ -245,21 +245,21 @@ export interface TelegramMenuCallbackRuntimeDeps<
   isVoiceReplyActive?: () => boolean;
 }
 
-export interface TelegramMenuActionRuntimeDeps<
+export interface BaleMenuActionRuntimeDeps<
   TContext,
   TModel extends MenuModel = MenuModel,
-> extends TelegramMenuMessageRuntimeDeps {
+> extends BaleMenuMessageRuntimeDeps {
   getModelMenuState: (
     chatId: number,
     ctx: TContext,
     threadId?: number,
-  ) => Promise<TelegramModelMenuState<TModel>>;
+  ) => Promise<BaleModelMenuState<TModel>>;
   getActiveModel: (ctx: TContext) => TModel | undefined;
   getThinkingLevel: () => ThinkingLevel;
   getQueueItemCount?: () => number;
   getPendingCancellationCount?: () => number;
   buildStatusHtml: (ctx: TContext) => string;
-  storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
+  storeModelMenuState: (state: BaleModelMenuState<TModel>) => void;
   isIdle: (ctx: TContext) => boolean;
   canOfferInFlightModelSwitch: (ctx: TContext) => boolean;
   sendTextReply: (
@@ -269,27 +269,27 @@ export interface TelegramMenuActionRuntimeDeps<
     options?: {
       target?: { chatId: number; threadId?: number };
       parseMode?: "HTML";
-      assertAuthority?: TelegramApiCallOptions["assertAuthority"];
+      assertAuthority?: BaleApiCallOptions["assertAuthority"];
     },
   ) => Promise<unknown>;
-  sectionRegistry?: TelegramSectionRegistry;
+  sectionRegistry?: BaleSectionRegistry;
   isVoiceReplyActive?: () => boolean;
 }
 
-export interface TelegramMenuActionRuntime<
+export interface BaleMenuActionRuntime<
   TContext,
   TModel extends MenuModel = MenuModel,
 > {
   updateModelMenuMessage: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     ctx: TContext,
   ) => Promise<void>;
   updateThinkingMenuMessage: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     ctx: TContext,
   ) => Promise<void>;
   updateStatusMessage: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     ctx: TContext,
   ) => Promise<void>;
   sendStatusMessage: (
@@ -297,29 +297,29 @@ export interface TelegramMenuActionRuntime<
     replyToMessageId: number | undefined,
     ctx: TContext,
     threadId?: number,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openModelMenu: (
     chatId: number,
     replyToMessageId: number | undefined,
     ctx: TContext,
     threadId?: number,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   openThinkingMenu: (
     chatId: number,
     replyToMessageId: number | undefined,
     ctx: TContext,
     threadId?: number,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
 }
 
-export async function handleTelegramMenuCallbackEntry(
+export async function handleBaleMenuCallbackEntry(
   callbackQueryId: string,
   data: string | undefined,
-  state: TelegramModelMenuState | undefined,
-  deps: TelegramMenuCallbackEntryDeps,
+  state: BaleModelMenuState | undefined,
+  deps: BaleMenuCallbackEntryDeps,
 ): Promise<void> {
   if (!data) {
     await deps.answerCallbackQuery(callbackQueryId);
@@ -341,17 +341,17 @@ export async function handleTelegramMenuCallbackEntry(
   }
 }
 
-export async function handleStoredTelegramMenuCallback<
+export async function handleStoredBaleMenuCallback<
   TModel extends MenuModel = MenuModel,
 >(
   query: MenuCallbackQuery,
-  deps: StoredTelegramMenuCallbackDeps<TModel>,
+  deps: StoredBaleMenuCallbackDeps<TModel>,
 ): Promise<void> {
   const state = deps.getStoredModelMenuState(
     query.message?.message_id,
     query.message?.chat?.id,
   );
-  await handleTelegramMenuCallbackEntry(query.id, query.data, state, {
+  await handleBaleMenuCallbackEntry(query.id, query.data, state, {
     handleStatusAction: async () => {
       if (!state) return false;
       return deps.handleStatusAction(state);
@@ -368,48 +368,48 @@ export async function handleStoredTelegramMenuCallback<
   });
 }
 
-export type TelegramMenuCallbackRuntimeAdapterDeps<
+export type BaleMenuCallbackRuntimeAdapterDeps<
   TContext,
   TModel extends MenuModel = MenuModel,
 > = Omit<
-  TelegramMenuCallbackRuntimeDeps<TContext, TModel>,
+  BaleMenuCallbackRuntimeDeps<TContext, TModel>,
   "hasActiveToolExecutions"
 > & {
   getActiveToolExecutions: () => number;
 };
 
-export function createTelegramMenuCallbackHandler<
+export function createBaleMenuCallbackHandler<
   TQuery extends MenuCallbackQuery,
   TContext,
   TModel extends MenuModel = MenuModel,
 >(
-  deps: TelegramMenuCallbackRuntimeDeps<TContext, TModel>,
+  deps: BaleMenuCallbackRuntimeDeps<TContext, TModel>,
 ): (query: TQuery, ctx: TContext) => Promise<void> {
-  return (query, ctx) => handleTelegramMenuCallbackRuntime(query, ctx, deps);
+  return (query, ctx) => handleBaleMenuCallbackRuntime(query, ctx, deps);
 }
 
-export function createTelegramMenuCallbackHandlerForContext<
+export function createBaleMenuCallbackHandlerForContext<
   TQuery extends MenuCallbackQuery,
   TContext,
   TModel extends MenuModel = MenuModel,
 >(
-  deps: TelegramMenuCallbackRuntimeAdapterDeps<TContext, TModel>,
+  deps: BaleMenuCallbackRuntimeAdapterDeps<TContext, TModel>,
 ): (query: TQuery, ctx: TContext) => Promise<void> {
   const { getActiveToolExecutions, ...ports } = deps;
-  return createTelegramMenuCallbackHandler<TQuery, TContext, TModel>({
+  return createBaleMenuCallbackHandler<TQuery, TContext, TModel>({
     ...ports,
     hasActiveToolExecutions: () => getActiveToolExecutions() > 0,
   });
 }
 
-export async function handleTelegramMenuCallbackRuntime<
+export async function handleBaleMenuCallbackRuntime<
   TQuery extends MenuCallbackQuery,
   TContext,
   TModel extends MenuModel = MenuModel,
 >(
   query: TQuery,
   ctx: TContext,
-  deps: TelegramMenuCallbackRuntimeDeps<TContext, TModel>,
+  deps: BaleMenuCallbackRuntimeDeps<TContext, TModel>,
 ): Promise<void> {
   if (query.data === "menu:back") {
     const state = deps.getStoredModelMenuState(
@@ -426,7 +426,7 @@ export async function handleTelegramMenuCallbackRuntime<
   }
   // Section callbacks: dispatch before built-in menu handling
   if (deps.sectionRegistry && query.data?.startsWith("section:")) {
-    const parsed = parseTelegramSectionCallback(query.data);
+    const parsed = parseBaleSectionCallback(query.data);
     if (parsed) {
       const message = query.message;
       const chatId = message?.chat?.id;
@@ -439,7 +439,7 @@ export async function handleTelegramMenuCallbackRuntime<
           : undefined;
       if (typeof chatId === "number" && typeof messageId === "number") {
         const { token, action, payload } = parsed;
-        const sectionDeps: TelegramSectionRuntimeDeps = {
+        const sectionDeps: BaleSectionRuntimeDeps = {
           answerCallbackQuery: deps.answerCallbackQuery,
           target,
           editInteractiveMessage:
@@ -466,7 +466,7 @@ export async function handleTelegramMenuCallbackRuntime<
             );
             return;
           }
-          const handled = await handleTelegramSectionOpen(
+          const handled = await handleBaleSectionOpen(
             deps.sectionRegistry,
             token,
             chatId,
@@ -476,7 +476,7 @@ export async function handleTelegramMenuCallbackRuntime<
           );
           if (handled) return;
         } else if (action === "settings") {
-          const handled = await handleTelegramSectionSettingsOpen(
+          const handled = await handleBaleSectionSettingsOpen(
             deps.sectionRegistry,
             token,
             chatId,
@@ -486,7 +486,7 @@ export async function handleTelegramMenuCallbackRuntime<
           );
           if (handled) return;
         } else {
-          const handled = await handleTelegramSectionCallback(
+          const handled = await handleBaleSectionCallback(
             deps.sectionRegistry,
             token,
             action,
@@ -501,10 +501,10 @@ export async function handleTelegramMenuCallbackRuntime<
       }
     }
   }
-  await handleStoredTelegramMenuCallback(query, {
+  await handleStoredBaleMenuCallback(query, {
     getStoredModelMenuState: deps.getStoredModelMenuState,
     handleStatusAction: async (state) =>
-      handleTelegramStatusMenuCallbackAction(
+      handleBaleStatusMenuCallbackAction(
         query.id,
         query.data,
         deps.getActiveModel(ctx),
@@ -519,7 +519,7 @@ export async function handleTelegramMenuCallbackRuntime<
         },
       ),
     handleThinkingAction: async (state) =>
-      handleTelegramThinkingMenuCallbackAction(
+      handleBaleThinkingMenuCallbackAction(
         query.id,
         query.data,
         deps.getActiveModel(ctx),
@@ -537,7 +537,7 @@ export async function handleTelegramMenuCallbackRuntime<
       ),
     handleModelAction: async (state) => {
       try {
-        return await handleTelegramModelMenuCallbackAction(
+        return await handleBaleModelMenuCallbackAction(
           query.id,
           {
             data: query.data,
@@ -565,8 +565,8 @@ export async function handleTelegramMenuCallbackRuntime<
             stagePendingModelSwitch: (selection, continuationTurn) => {
               deps.stagePendingModelSwitch(selection, ctx, continuationTurn);
             },
-            restartInterruptedTelegramTurn: (selection, continuationTurn) =>
-              deps.restartInterruptedTelegramTurn(
+            restartInterruptedBaleTurn: (selection, continuationTurn) =>
+              deps.restartInterruptedBaleTurn(
                 selection,
                 ctx,
                 continuationTurn,
@@ -583,24 +583,24 @@ export async function handleTelegramMenuCallbackRuntime<
   });
 }
 
-export function createTelegramMenuActionRuntime<
+export function createBaleMenuActionRuntime<
   TContext,
   TModel extends MenuModel = MenuModel,
 >(
-  deps: TelegramMenuActionRuntimeDeps<TContext, TModel>,
-): TelegramMenuActionRuntime<TContext, TModel> {
+  deps: BaleMenuActionRuntimeDeps<TContext, TModel>,
+): BaleMenuActionRuntime<TContext, TModel> {
   return {
     updateModelMenuMessage: (state, ctx) =>
-      updateTelegramModelMenuMessage(state, deps.getActiveModel(ctx), deps),
+      updateBaleModelMenuMessage(state, deps.getActiveModel(ctx), deps),
     updateThinkingMenuMessage: (state, ctx) =>
-      updateTelegramThinkingMenuMessage(
+      updateBaleThinkingMenuMessage(
         state,
         deps.getActiveModel(ctx),
         deps.getThinkingLevel(),
         deps,
       ),
     updateStatusMessage: (state, ctx) =>
-      updateTelegramStatusMessage(
+      updateBaleStatusMessage(
         state,
         deps.buildStatusHtml(ctx),
         deps.getActiveModel(ctx),
@@ -612,12 +612,12 @@ export function createTelegramMenuActionRuntime<
         deps.getPendingCancellationCount?.() ?? 0,
       ),
     sendStatusMessage: (chatId, replyToMessageId, ctx, threadId, options) => {
-      const delivery = createTelegramMenuDelivery(
+      const delivery = createBaleMenuDelivery(
         { chatId, threadId },
         options,
         deps,
       );
-      return openTelegramStatusMenu({
+      return openBaleStatusMenu({
         isIdle: () => deps.isIdle(ctx),
         sendBusyMessage: async () => {
           await deps.sendTextReply(
@@ -645,7 +645,7 @@ export function createTelegramMenuActionRuntime<
           thinkingLevel,
           queueItemCount,
         ) =>
-          sendTelegramStatusMessage(
+          sendBaleStatusMessage(
             state,
             statusHtml,
             activeModel,
@@ -663,13 +663,13 @@ export function createTelegramMenuActionRuntime<
       });
     },
     openModelMenu: (chatId, replyToMessageId, ctx, threadId, options) => {
-      const delivery = createTelegramMenuDelivery(
+      const delivery = createBaleMenuDelivery(
         { chatId, threadId },
         options,
         deps,
       );
       const assertAuthority = delivery.assertAuthority;
-      return openTelegramModelMenu({
+      return openBaleModelMenu({
         isIdle: () => deps.isIdle(ctx),
         canOfferInFlightModelSwitch: () =>
           deps.canOfferInFlightModelSwitch(ctx),
@@ -700,7 +700,7 @@ export function createTelegramMenuActionRuntime<
         getModelMenuState: () => deps.getModelMenuState(chatId, ctx, threadId),
         getActiveModel: () => deps.getActiveModel(ctx),
         sendModelMenu: (state, activeModel) =>
-          sendTelegramModelMenuMessage(state, activeModel, {
+          sendBaleModelMenuMessage(state, activeModel, {
             ...deps,
             sendInteractiveMessage: delivery.sendInteractiveMessage,
           }),
@@ -708,12 +708,12 @@ export function createTelegramMenuActionRuntime<
       });
     },
     openThinkingMenu: (chatId, _replyToMessageId, ctx, threadId, options) => {
-      const delivery = createTelegramMenuDelivery(
+      const delivery = createBaleMenuDelivery(
         { chatId, threadId },
         options,
         deps,
       );
-      return openTelegramThinkingMenu({
+      return openBaleThinkingMenu({
         getModelMenuState: () => deps.getModelMenuState(chatId, ctx, threadId),
         getActiveModel: () => deps.getActiveModel(ctx),
         getThinkingLevel: deps.getThinkingLevel,

@@ -1,15 +1,15 @@
 /**
- * Telegram model menu UI helpers
- * Zones: telegram ui, model controls, menu composition
+ * Bale model menu UI helpers
+ * Zones: bale ui, model controls, menu composition
  * Owns model-menu state, scoped model pages, model callback planning, and model-menu message rendering
  */
-import { getCanonicalModelId, modelsMatch, parseTelegramCliScopedModelPatterns, resolveScopedModelPatterns, sortScopedModels, } from "./model.js";
-import { TelegramApiAuthorityError, } from "./telegram-api.js";
-const TELEGRAM_MODEL_MENU_CACHE_TTL_MS = 5000;
-const TELEGRAM_MODEL_MENU_STATE_TTL_MS = 10 * 60 * 1000;
-const MAX_STORED_TELEGRAM_MODEL_MENUS = 50;
+import { getCanonicalModelId, modelsMatch, parseBaleCliScopedModelPatterns, resolveScopedModelPatterns, sortScopedModels, } from "./model.js";
+import { BaleApiAuthorityError, } from "./bale-api.js";
+const BALE_MODEL_MENU_CACHE_TTL_MS = 5000;
+const BALE_MODEL_MENU_STATE_TTL_MS = 10 * 60 * 1000;
+const MAX_STORED_BALE_MODEL_MENUS = 50;
 /** Per-open delivery lifetime; never retain this guard in stored callback state. */
-export function createTelegramMenuDelivery(target, options, deps) {
+export function createBaleMenuDelivery(target, options, deps) {
     const assertAuthority = options?.assertAuthority, capturedTarget = { ...target };
     const sendInteractiveMessage = deps.sendInteractiveMessage, storeModelMenuState = deps.storeModelMenuState;
     let requestIssued = false;
@@ -18,7 +18,7 @@ export function createTelegramMenuDelivery(target, options, deps) {
             assertAuthority?.();
         }
         catch {
-            throw new TelegramApiAuthorityError(requestIssued);
+            throw new BaleApiAuthorityError(requestIssued);
         }
     };
     assertCurrent();
@@ -40,27 +40,27 @@ export function createTelegramMenuDelivery(target, options, deps) {
             if (assertAuthority &&
                 (state.chatId !== capturedTarget.chatId ||
                     state.threadId !== capturedTarget.threadId)) {
-                throw new TelegramApiAuthorityError(requestIssued);
+                throw new BaleApiAuthorityError(requestIssued);
             }
             storeModelMenuState(state);
             assertCurrent();
         },
     };
 }
-export const TELEGRAM_MODEL_PAGE_SIZE = 6;
-const TELEGRAM_MODEL_PAGE_PICKER_ROW_SIZE = 4;
+export const BALE_MODEL_PAGE_SIZE = 6;
+const BALE_MODEL_PAGE_PICKER_ROW_SIZE = 4;
 export const MODEL_MENU_TITLE = "<b>🤖 Choose a model:</b>";
 export const MODEL_PAGE_MENU_TITLE = "<b>Choose a page:</b>";
 const MODEL_DETAIL_MENU_TITLE = "<b>🤖 Model:</b>";
-function truncateTelegramButtonLabel(label, maxLength = 56) {
+function truncateBaleButtonLabel(label, maxLength = 56) {
     return label.length <= maxLength
         ? label
         : `${label.slice(0, maxLength - 1)}…`;
 }
-function getTelegramCliScopedModelPatterns() {
-    return parseTelegramCliScopedModelPatterns(process.argv.slice(2));
+function getBaleCliScopedModelPatterns() {
+    return parseBaleCliScopedModelPatterns(process.argv.slice(2));
 }
-function parseTelegramModelMenuCallbackAction(data) {
+function parseBaleModelMenuCallbackAction(data) {
     if (!data?.startsWith("model:"))
         return undefined;
     const [, action, value] = data.split(":");
@@ -78,18 +78,18 @@ function parseTelegramModelMenuCallbackAction(data) {
     }
     return undefined;
 }
-function applyTelegramMenuRenderPayload(state, payload) {
+function applyBaleMenuRenderPayload(state, payload) {
     state.mode = payload.nextMode;
     return payload;
 }
 /** Apply the payload mode to state, then edit the existing menu message in place. */
-export async function editTelegramMenuMessage(state, payload, deps) {
-    const appliedPayload = applyTelegramMenuRenderPayload(state, payload);
+export async function editBaleMenuMessage(state, payload, deps) {
+    const appliedPayload = applyBaleMenuRenderPayload(state, payload);
     await deps.editInteractiveMessage(state.chatId, state.messageId, appliedPayload.text, appliedPayload.mode, appliedPayload.replyMarkup);
 }
 /** Apply the payload mode to state, then send a fresh menu message to its exact chat/Thread. */
-export function sendTelegramMenuMessage(state, payload, deps) {
-    const appliedPayload = applyTelegramMenuRenderPayload(state, payload);
+export function sendBaleMenuMessage(state, payload, deps) {
+    const appliedPayload = applyBaleMenuRenderPayload(state, payload);
     return deps.sendInteractiveMessage(state.chatId, appliedPayload.text, appliedPayload.mode, appliedPayload.replyMarkup, state.threadId !== undefined
         ? { target: { chatId: state.chatId, threadId: state.threadId } }
         : undefined);
@@ -99,20 +99,20 @@ export function formatScopedModelButtonText(entry, currentModel) {
     if (entry.thinkingLevel) {
         label += ` (${entry.thinkingLevel})`;
     }
-    return truncateTelegramButtonLabel(label);
+    return truncateBaleButtonLabel(label);
 }
 export function formatStatusButtonLabel(label, value) {
-    return truncateTelegramButtonLabel(`${label}: ${value}`, 64);
+    return truncateBaleButtonLabel(`${label}: ${value}`, 64);
 }
 export function getModelMenuItems(state) {
     return state.scope === "scoped" && state.scopedModels.length > 0
         ? state.scopedModels
         : state.allModels;
 }
-function getTelegramMenuStateKey(chatId, messageId) {
+function getBaleMenuStateKey(chatId, messageId) {
     return `${chatId}:${messageId}`;
 }
-export function pruneStoredTelegramModelMenus(menus, options) {
+export function pruneStoredBaleModelMenus(menus, options) {
     const now = options.now ?? Date.now();
     for (const [messageId, entry] of menus.entries()) {
         if (now - entry.updatedAt <= options.maxAgeMs)
@@ -126,22 +126,22 @@ export function pruneStoredTelegramModelMenus(menus, options) {
         menus.delete(oldestKey);
     }
 }
-export function storeTelegramModelMenuState(menus, state, options) {
+export function storeBaleModelMenuState(menus, state, options) {
     const now = options.now ?? Date.now();
-    pruneStoredTelegramModelMenus(menus, { ...options, now });
-    menus.set(getTelegramMenuStateKey(state.chatId, state.messageId), {
+    pruneStoredBaleModelMenus(menus, { ...options, now });
+    menus.set(getBaleMenuStateKey(state.chatId, state.messageId), {
         state,
         updatedAt: now,
     });
-    pruneStoredTelegramModelMenus(menus, { ...options, now });
+    pruneStoredBaleModelMenus(menus, { ...options, now });
 }
-export function getStoredTelegramModelMenuState(menus, messageId, options, chatId) {
+export function getStoredBaleModelMenuState(menus, messageId, options, chatId) {
     if (messageId === undefined)
         return undefined;
     const now = options.now ?? Date.now();
-    pruneStoredTelegramModelMenus(menus, { ...options, now });
+    pruneStoredBaleModelMenus(menus, { ...options, now });
     const key = typeof chatId === "number"
-        ? getTelegramMenuStateKey(chatId, messageId)
+        ? getBaleMenuStateKey(chatId, messageId)
         : [...menus.keys()].find((candidate) => candidate.endsWith(`:${messageId}`));
     if (!key)
         return undefined;
@@ -153,19 +153,19 @@ export function getStoredTelegramModelMenuState(menus, messageId, options, chatI
     menus.set(key, entry);
     return entry.state;
 }
-export function createTelegramModelMenuRuntime(options = {}) {
+export function createBaleModelMenuRuntime(options = {}) {
     const menus = new Map();
     let cachedInputs;
     const getStoreOptions = () => ({
-        maxAgeMs: options.maxAgeMs ?? TELEGRAM_MODEL_MENU_STATE_TTL_MS,
-        maxStoredMenus: options.maxStoredMenus ?? MAX_STORED_TELEGRAM_MODEL_MENUS,
+        maxAgeMs: options.maxAgeMs ?? BALE_MODEL_MENU_STATE_TTL_MS,
+        maxStoredMenus: options.maxStoredMenus ?? MAX_STORED_BALE_MODEL_MENUS,
         now: options.now,
     });
     return {
         storeState: (state) => {
-            storeTelegramModelMenuState(menus, state, getStoreOptions());
+            storeBaleModelMenuState(menus, state, getStoreOptions());
         },
-        getState: (messageId, chatId) => getStoredTelegramModelMenuState(menus, messageId, getStoreOptions(), chatId),
+        getState: (messageId, chatId) => getStoredBaleModelMenuState(menus, messageId, getStoreOptions(), chatId),
         clear: () => {
             menus.clear();
             cachedInputs = undefined;
@@ -174,17 +174,17 @@ export function createTelegramModelMenuRuntime(options = {}) {
             cachedInputs = undefined;
         },
         buildState: async (stateOptions) => {
-            const result = await buildTelegramModelMenuStateRuntime({
+            const result = await buildBaleModelMenuStateRuntime({
                 ...stateOptions,
                 cachedInputs,
-                cacheTtlMs: TELEGRAM_MODEL_MENU_CACHE_TTL_MS,
+                cacheTtlMs: BALE_MODEL_MENU_CACHE_TTL_MS,
             });
             cachedInputs = result.cachedInputs;
             return result.state;
         },
     };
 }
-export function createTelegramModelMenuStateBuilder(deps) {
+export function createBaleModelMenuStateBuilder(deps) {
     return async (chatId, ctx, threadId) => {
         const settingsManager = await deps.createSettingsManager(ctx.cwd);
         return deps.runtime.buildState({
@@ -199,7 +199,7 @@ export function createTelegramModelMenuStateBuilder(deps) {
         });
     };
 }
-export async function resolveCachedTelegramModelMenuInputs(cachedInputs, deps) {
+export async function resolveCachedBaleModelMenuInputs(cachedInputs, deps) {
     const now = deps.now ?? Date.now();
     if (cachedInputs && cachedInputs.expiresAt > now)
         return cachedInputs;
@@ -214,7 +214,7 @@ export async function resolveCachedTelegramModelMenuInputs(cachedInputs, deps) {
         cliScopedModelPatterns,
     };
 }
-export function buildTelegramModelMenuState(params) {
+export function buildBaleModelMenuState(params) {
     const allModels = sortScopedModels(params.availableModels.map((model) => ({ model })), params.activeModel);
     const scopedModels = params.configuredScopedModelPatterns.length > 0
         ? sortScopedModels(resolveScopedModelPatterns(params.configuredScopedModelPatterns, params.availableModels), params.activeModel)
@@ -241,8 +241,8 @@ export function buildTelegramModelMenuState(params) {
         mode: "status",
     };
 }
-export async function buildTelegramModelMenuStateRuntime(options) {
-    const cachedInputs = await resolveCachedTelegramModelMenuInputs(options.cachedInputs, {
+export async function buildBaleModelMenuStateRuntime(options) {
+    const cachedInputs = await resolveCachedBaleModelMenuInputs(options.cachedInputs, {
         cacheTtlMs: options.cacheTtlMs,
         reloadSettings: options.reloadSettings,
         refreshAvailableModels: () => {
@@ -250,11 +250,11 @@ export async function buildTelegramModelMenuStateRuntime(options) {
             return options.ctx.modelRegistry.getAvailable();
         },
         getConfiguredScopedModelPatterns: options.getConfiguredScopedModelPatterns,
-        getCliScopedModelPatterns: options.getCliScopedModelPatterns ?? getTelegramCliScopedModelPatterns,
+        getCliScopedModelPatterns: options.getCliScopedModelPatterns ?? getBaleCliScopedModelPatterns,
     });
     return {
         cachedInputs,
-        state: buildTelegramModelMenuState({
+        state: buildBaleModelMenuState({
             chatId: options.chatId,
             threadId: options.threadId,
             activeModel: options.activeModel,
@@ -264,7 +264,7 @@ export async function buildTelegramModelMenuStateRuntime(options) {
         }),
     };
 }
-export function applyTelegramModelScopeSelection(state, value) {
+export function applyBaleModelScopeSelection(state, value) {
     if (value !== "all" && value !== "scoped")
         return "invalid";
     if (value === state.scope)
@@ -273,7 +273,7 @@ export function applyTelegramModelScopeSelection(state, value) {
     state.page = 0;
     return "changed";
 }
-export function applyTelegramModelPageSelection(state, value) {
+export function applyBaleModelPageSelection(state, value) {
     const page = Number(value);
     if (!Number.isFinite(page))
         return "invalid";
@@ -282,7 +282,7 @@ export function applyTelegramModelPageSelection(state, value) {
     state.page = page;
     return "changed";
 }
-export function getTelegramModelSelection(state, value) {
+export function getBaleModelSelection(state, value) {
     const index = Number(value);
     if (!Number.isFinite(index))
         return { kind: "invalid" };
@@ -291,7 +291,7 @@ export function getTelegramModelSelection(state, value) {
         return { kind: "missing" };
     return { kind: "selected", selection };
 }
-function applyTelegramModelDetailSelection(state, value) {
+function applyBaleModelDetailSelection(state, value) {
     const index = Number(value);
     if (!Number.isFinite(index))
         return "invalid";
@@ -303,8 +303,8 @@ function applyTelegramModelDetailSelection(state, value) {
     state.mode = "model-detail";
     return "changed";
 }
-function getTelegramSelectedDetailModel(state) {
-    const indexedSelection = getTelegramModelSelection(state, state.selectedModelIndex?.toString());
+function getBaleSelectedDetailModel(state) {
+    const indexedSelection = getBaleModelSelection(state, state.selectedModelIndex?.toString());
     if (indexedSelection.kind === "selected") {
         if (!state.selectedModelKey)
             return indexedSelection;
@@ -321,11 +321,11 @@ function getTelegramSelectedDetailModel(state) {
     }
     return indexedSelection;
 }
-function isTelegramModelScoped(state, model) {
+function isBaleModelScoped(state, model) {
     const key = getCanonicalModelId(model);
     return state.scopedModels.some((entry) => getCanonicalModelId(entry.model) === key);
 }
-function focusTelegramModelListPage(state, model, pageSize = TELEGRAM_MODEL_PAGE_SIZE) {
+function focusBaleModelListPage(state, model, pageSize = BALE_MODEL_PAGE_SIZE) {
     const key = getCanonicalModelId(model).toLowerCase();
     const index = getModelMenuItems(state).findIndex((entry) => getCanonicalModelId(entry.model).toLowerCase() === key);
     state.page = index < 0 ? 0 : Math.floor(index / pageSize);
@@ -335,7 +335,7 @@ function formatScopedModelPattern(entry) {
     const key = getCanonicalModelId(entry.model);
     return entry.thinkingLevel ? `${key}:${entry.thinkingLevel}` : key;
 }
-function setTelegramModelScope(state, model, enabled) {
+function setBaleModelScope(state, model, enabled) {
     const key = getCanonicalModelId(model);
     const lowerKey = key.toLowerCase();
     const scopedModelPatterns = state.scopedModelPatterns ?? [];
@@ -367,14 +367,14 @@ function setTelegramModelScope(state, model, enabled) {
     }
     return { patterns, enabled };
 }
-export function buildTelegramModelCallbackPlan(params) {
-    const action = parseTelegramModelMenuCallbackAction(params.data);
+export function buildBaleModelCallbackPlan(params) {
+    const action = parseBaleModelMenuCallbackAction(params.data);
     if (!action)
         return { kind: "ignore" };
     if (action.action === "noop")
         return { kind: "answer" };
     if (action.action === "scope") {
-        const scopeResult = applyTelegramModelScopeSelection(params.state, action.value);
+        const scopeResult = applyBaleModelScopeSelection(params.state, action.value);
         if (scopeResult === "invalid") {
             return { kind: "answer", text: "Unknown model scope." };
         }
@@ -395,7 +395,7 @@ export function buildTelegramModelCallbackPlan(params) {
         return { kind: "update-menu" };
     }
     if (action.action === "page") {
-        const pageResult = applyTelegramModelPageSelection(params.state, action.value);
+        const pageResult = applyBaleModelPageSelection(params.state, action.value);
         if (pageResult === "invalid") {
             return { kind: "answer", text: "Invalid page." };
         }
@@ -406,7 +406,7 @@ export function buildTelegramModelCallbackPlan(params) {
         return { kind: "update-menu" };
     }
     if (action.action === "open") {
-        const detailResult = applyTelegramModelDetailSelection(params.state, action.value);
+        const detailResult = applyBaleModelDetailSelection(params.state, action.value);
         if (detailResult === "invalid") {
             return { kind: "answer", text: "Selected model is no longer available" };
         }
@@ -421,18 +421,18 @@ export function buildTelegramModelCallbackPlan(params) {
                 text: "Model scope is controlled by CLI --models",
             };
         }
-        const selectionResult = getTelegramSelectedDetailModel(params.state);
+        const selectionResult = getBaleSelectedDetailModel(params.state);
         if (selectionResult.kind !== "selected") {
             return { kind: "answer", text: "Selected model is no longer available" };
         }
         const model = selectionResult.selection.model;
         const enabled = action.action === "scope-toggle"
-            ? !isTelegramModelScoped(params.state, model)
+            ? !isBaleModelScoped(params.state, model)
             : action.action === "scope-enable";
-        if (enabled === isTelegramModelScoped(params.state, model)) {
+        if (enabled === isBaleModelScoped(params.state, model)) {
             return { kind: "answer" };
         }
-        const result = setTelegramModelScope(params.state, model, enabled);
+        const result = setBaleModelScope(params.state, model, enabled);
         return {
             kind: "persist-scope",
             patterns: result.patterns,
@@ -445,8 +445,8 @@ export function buildTelegramModelCallbackPlan(params) {
         return { kind: "answer" };
     }
     const selectionResult = action.action === "pick-selected"
-        ? getTelegramSelectedDetailModel(params.state)
-        : getTelegramModelSelection(params.state, action.value);
+        ? getBaleSelectedDetailModel(params.state)
+        : getBaleModelSelection(params.state, action.value);
     if (selectionResult.kind === "invalid") {
         return { kind: "answer", text: "Invalid model selection" };
     }
@@ -456,7 +456,7 @@ export function buildTelegramModelCallbackPlan(params) {
     const selection = selectionResult.selection;
     if (modelsMatch(selection.model, params.activeModel)) {
         if (action.action === "pick-selected") {
-            focusTelegramModelListPage(params.state, selection.model);
+            focusBaleModelListPage(params.state, selection.model);
         }
         return {
             kind: "refresh-status",
@@ -491,7 +491,7 @@ export function buildTelegramModelCallbackPlan(params) {
         callbackText: `Switched to ${selection.model.id}`,
     };
 }
-export async function openTelegramModelMenu(deps) {
+export async function openBaleModelMenu(deps) {
     if (!deps.isIdle() && !deps.canOfferInFlightModelSwitch()) {
         await deps.sendBusyMessage();
         return;
@@ -508,8 +508,8 @@ export async function openTelegramModelMenu(deps) {
     state.mode = "model";
     deps.storeModelMenuState(state);
 }
-export async function handleTelegramModelMenuCallbackAction(callbackQueryId, params, deps) {
-    const plan = buildTelegramModelCallbackPlan(params);
+export async function handleBaleModelMenuCallbackAction(callbackQueryId, params, deps) {
+    const plan = buildBaleModelCallbackPlan(params);
     if (plan.kind === "ignore")
         return false;
     if (plan.kind === "answer") {
@@ -565,7 +565,7 @@ export async function handleTelegramModelMenuCallbackAction(callbackQueryId, par
         return true;
     }
     if (plan.mode === "restart-now") {
-        const restarted = await deps.restartInterruptedTelegramTurn(plan.selection, continuationTurn);
+        const restarted = await deps.restartInterruptedBaleTurn(plan.selection, continuationTurn);
         await deps.updateModelMenuMessage();
         if (!restarted) {
             await deps.answerCallbackQuery(callbackQueryId, "Pi is busy. Send /abort, /next, or /stop");
@@ -578,7 +578,7 @@ export async function handleTelegramModelMenuCallbackAction(callbackQueryId, par
     await deps.answerCallbackQuery(callbackQueryId, plan.callbackText);
     return true;
 }
-export function getTelegramModelMenuPage(state, pageSize) {
+export function getBaleModelMenuPage(state, pageSize) {
     const items = getModelMenuItems(state);
     const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
     const page = Math.max(0, Math.min(state.page, pageCount - 1));
@@ -591,7 +591,7 @@ export function getTelegramModelMenuPage(state, pageSize) {
     };
 }
 export function buildModelMenuReplyMarkup(state, currentModel, pageSize) {
-    const menuPage = getTelegramModelMenuPage(state, pageSize);
+    const menuPage = getBaleModelMenuPage(state, pageSize);
     const rows = [[{ text: "⬆️ Main menu", callback_data: "menu:back" }]];
     if (state.scopedModels.length > 0) {
         rows.push([
@@ -626,7 +626,7 @@ export function buildModelMenuReplyMarkup(state, currentModel, pageSize) {
     return { inline_keyboard: rows };
 }
 function buildModelDetailMenuReplyMarkup(state, currentModel) {
-    const selection = getTelegramSelectedDetailModel(state);
+    const selection = getBaleSelectedDetailModel(state);
     if (selection.kind !== "selected") {
         return {
             inline_keyboard: [
@@ -636,7 +636,7 @@ function buildModelDetailMenuReplyMarkup(state, currentModel) {
     }
     const model = selection.selection.model;
     const active = modelsMatch(model, currentModel);
-    const scoped = isTelegramModelScoped(state, model);
+    const scoped = isBaleModelScoped(state, model);
     return {
         inline_keyboard: [
             [{ text: "⬆️ Back", callback_data: "model:pages:back" }],
@@ -660,18 +660,18 @@ function buildModelDetailMenuReplyMarkup(state, currentModel) {
     };
 }
 function buildModelDetailMenuText(state) {
-    const selection = getTelegramSelectedDetailModel(state);
+    const selection = getBaleSelectedDetailModel(state);
     if (selection.kind !== "selected")
         return MODEL_DETAIL_MENU_TITLE;
     const model = selection.selection.model;
     return `${MODEL_DETAIL_MENU_TITLE}\n${getCanonicalModelId(model)}`;
 }
 export function buildModelPageMenuReplyMarkup(state, pageSize) {
-    const menuPage = getTelegramModelMenuPage(state, pageSize);
+    const menuPage = getBaleModelMenuPage(state, pageSize);
     const rows = [[{ text: "⬆️ Back", callback_data: "model:pages:back" }]];
-    for (let page = 0; page < menuPage.pageCount; page += TELEGRAM_MODEL_PAGE_PICKER_ROW_SIZE) {
+    for (let page = 0; page < menuPage.pageCount; page += BALE_MODEL_PAGE_PICKER_ROW_SIZE) {
         rows.push(Array.from({
-            length: Math.min(TELEGRAM_MODEL_PAGE_PICKER_ROW_SIZE, menuPage.pageCount - page),
+            length: Math.min(BALE_MODEL_PAGE_PICKER_ROW_SIZE, menuPage.pageCount - page),
         }, (_unused, offset) => {
             const pageIndex = page + offset;
             return {
@@ -684,17 +684,17 @@ export function buildModelPageMenuReplyMarkup(state, pageSize) {
     }
     return { inline_keyboard: rows };
 }
-export function buildTelegramModelPageMenuRenderPayload(state) {
+export function buildBaleModelPageMenuRenderPayload(state) {
     return {
         nextMode: "model-pages",
         text: MODEL_PAGE_MENU_TITLE,
         mode: "html",
-        replyMarkup: buildModelPageMenuReplyMarkup(state, TELEGRAM_MODEL_PAGE_SIZE),
+        replyMarkup: buildModelPageMenuReplyMarkup(state, BALE_MODEL_PAGE_SIZE),
     };
 }
-export function buildTelegramModelMenuRenderPayload(state, activeModel) {
+export function buildBaleModelMenuRenderPayload(state, activeModel) {
     if (state.mode === "model-pages") {
-        return buildTelegramModelPageMenuRenderPayload(state);
+        return buildBaleModelPageMenuRenderPayload(state);
     }
     if (state.mode === "model-detail") {
         return {
@@ -708,12 +708,12 @@ export function buildTelegramModelMenuRenderPayload(state, activeModel) {
         nextMode: "model",
         text: MODEL_MENU_TITLE,
         mode: "html",
-        replyMarkup: buildModelMenuReplyMarkup(state, activeModel, TELEGRAM_MODEL_PAGE_SIZE),
+        replyMarkup: buildModelMenuReplyMarkup(state, activeModel, BALE_MODEL_PAGE_SIZE),
     };
 }
-export async function updateTelegramModelMenuMessage(state, activeModel, deps) {
-    await editTelegramMenuMessage(state, buildTelegramModelMenuRenderPayload(state, activeModel), deps);
+export async function updateBaleModelMenuMessage(state, activeModel, deps) {
+    await editBaleMenuMessage(state, buildBaleModelMenuRenderPayload(state, activeModel), deps);
 }
-export function sendTelegramModelMenuMessage(state, activeModel, deps) {
-    return sendTelegramMenuMessage(state, buildTelegramModelMenuRenderPayload(state, activeModel), deps);
+export function sendBaleModelMenuMessage(state, activeModel, deps) {
+    return sendBaleMenuMessage(state, buildBaleModelMenuRenderPayload(state, activeModel), deps);
 }

@@ -1,16 +1,16 @@
 /**
- * Telegram UI/compat rendering helpers
- * Zones: telegram rendering, shared text utils
- * Converts bridge-owned UI/status/menu/interactive text into Telegram-safe plain text and HTML chunks with chunk-boundary handling
+ * Bale UI/compat rendering helpers
+ * Zones: bale rendering, shared text utils
+ * Converts bridge-owned UI/status/menu/interactive text into Bale-safe plain text and HTML chunks with chunk-boundary handling
  */
 
 export const MAX_MESSAGE_LENGTH = 4096;
 
-const TELEGRAM_TABLE_GRAPHEME_SEGMENTER =
+const BALE_TABLE_GRAPHEME_SEGMENTER =
   typeof Intl.Segmenter === "function"
     ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
     : undefined;
-const TELEGRAM_TABLE_EMOJI_GRAPHEME_PATTERN =
+const BALE_TABLE_EMOJI_GRAPHEME_PATTERN =
   /\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Regional_Indicator}/u;
 
 interface OpenHtmlTag {
@@ -18,7 +18,7 @@ interface OpenHtmlTag {
   openTag: string;
 }
 
-const TELEGRAM_VOID_HTML_TAGS = new Set(["br", "hr"]);
+const BALE_VOID_HTML_TAGS = new Set(["br", "hr"]);
 
 export function escapeHtml(text: string): string {
   return text
@@ -56,7 +56,7 @@ function getHtmlOpeningTags(openTags: OpenHtmlTag[]): string {
 
 function updateOpenHtmlTags(tag: string, openTags: OpenHtmlTag[]): void {
   const name = getHtmlTagName(tag);
-  if (!name || TELEGRAM_VOID_HTML_TAGS.has(name)) return;
+  if (!name || BALE_VOID_HTML_TAGS.has(name)) return;
   if (isHtmlClosingTag(tag)) {
     const index = openTags.map((openTag) => openTag.name).lastIndexOf(name);
     if (index !== -1) openTags.splice(index, 1);
@@ -461,7 +461,7 @@ function matchMarkdownHeadingLine(line: string): RegExpMatchArray | null {
   return line.match(/^(\s*)#{1,6}\s+(.+)$/);
 }
 
-// --- UI Markdown-to-Telegram-HTML Rendering ---
+// --- UI Markdown-to-Bale-HTML Rendering ---
 
 function renderDelimitedInlineStyle(
   text: string,
@@ -584,7 +584,7 @@ function renderInlineMarkdown(
   return restoreInlineMarkdownTokens(result, tokenState);
 }
 
-export function renderTelegramInlineMarkdownHtml(
+export function renderBaleInlineMarkdownHtml(
   text: string,
   options: { allowLinks?: boolean } = {},
 ): string {
@@ -681,12 +681,12 @@ function renderMarkdownTextLines(block: string): string[] {
   return rendered;
 }
 
-function sanitizeTelegramCodeLanguage(language: string): string {
+function sanitizeBaleCodeLanguage(language: string): string {
   return language.split(/\s+/)[0]?.replace(/[^A-Za-z0-9_+.-]/g, "") ?? "";
 }
 
 function renderMarkdownCodeBlock(code: string, language?: string): string[] {
-  const safeLanguage = language ? sanitizeTelegramCodeLanguage(language) : "";
+  const safeLanguage = language ? sanitizeBaleCodeLanguage(language) : "";
   const open = safeLanguage
     ? `<pre><code class="language-${escapeHtmlAttribute(safeLanguage)}">`
     : "<pre><code>";
@@ -725,14 +725,14 @@ function renderMarkdownCodeBlock(code: string, language?: string): string[] {
   return chunks.length > 0 ? chunks : [`${open}${close}`];
 }
 
-function isTelegramTableEmojiGrapheme(grapheme: string): boolean {
+function isBaleTableEmojiGrapheme(grapheme: string): boolean {
   return (
-    TELEGRAM_TABLE_EMOJI_GRAPHEME_PATTERN.test(grapheme) ||
+    BALE_TABLE_EMOJI_GRAPHEME_PATTERN.test(grapheme) ||
     grapheme.includes("\u20e3")
   );
 }
 
-function getTelegramTableCodePointWidth(char: string): number {
+function getBaleTableCodePointWidth(char: string): number {
   const codePoint = char.codePointAt(0) ?? 0;
   if (codePoint === 0 || codePoint < 32) return 0;
   if (/\p{Mark}/u.test(char)) return 0;
@@ -755,31 +755,31 @@ function getTelegramTableCodePointWidth(char: string): number {
   return 1;
 }
 
-function getTelegramTableGraphemes(text: string): string[] {
-  if (TELEGRAM_TABLE_GRAPHEME_SEGMENTER) {
+function getBaleTableGraphemes(text: string): string[] {
+  if (BALE_TABLE_GRAPHEME_SEGMENTER) {
     return Array.from(
-      TELEGRAM_TABLE_GRAPHEME_SEGMENTER.segment(text),
+      BALE_TABLE_GRAPHEME_SEGMENTER.segment(text),
       (segment) => segment.segment,
     );
   }
   return Array.from(text);
 }
 
-function getTelegramTableCellWidth(text: string): number {
-  return getTelegramTableGraphemes(text).reduce((width, grapheme) => {
-    if (isTelegramTableEmojiGrapheme(grapheme)) return width + 2;
+function getBaleTableCellWidth(text: string): number {
+  return getBaleTableGraphemes(text).reduce((width, grapheme) => {
+    if (isBaleTableEmojiGrapheme(grapheme)) return width + 2;
     return (
       width +
       Array.from(grapheme).reduce(
-        (sum, char) => sum + getTelegramTableCodePointWidth(char),
+        (sum, char) => sum + getBaleTableCodePointWidth(char),
         0,
       )
     );
   }, 0);
 }
 
-function padTelegramTableCellEnd(cell: string, width: number): string {
-  const padding = width - getTelegramTableCellWidth(cell);
+function padBaleTableCellEnd(cell: string, width: number): string {
+  const padding = width - getBaleTableCellWidth(cell);
   return padding > 0 ? `${cell}${" ".repeat(padding)}` : cell;
 }
 
@@ -797,14 +797,14 @@ function renderMarkdownTableBlock(lines: string[]): string[] {
     return Math.max(
       3,
       ...normalizedRows.map((row) =>
-        getTelegramTableCellWidth(row[columnIndex] ?? ""),
+        getBaleTableCellWidth(row[columnIndex] ?? ""),
       ),
     );
   });
   const formatRow = (row: string[]): string => {
     return row
       .map((cell, columnIndex) =>
-        padTelegramTableCellEnd(cell ?? "", widths[columnIndex] ?? 3),
+        padBaleTableCellEnd(cell ?? "", widths[columnIndex] ?? 3),
       )
       .join(" | ");
   };
@@ -871,7 +871,7 @@ function renderMarkdownQuoteBlock(lines: string[]): string[] {
   });
 }
 
-interface TelegramRenderedBlockWithSpacing {
+interface BaleRenderedBlockWithSpacing {
   text: string;
   blankLinesBefore: number;
 }
@@ -969,8 +969,8 @@ function collectMarkdownTextBlockLines(
 
 function renderMarkdownDocumentBlocks(
   normalizedMarkdown: string,
-): TelegramRenderedBlockWithSpacing[] {
-  const renderedBlocks: TelegramRenderedBlockWithSpacing[] = [];
+): BaleRenderedBlockWithSpacing[] {
+  const renderedBlocks: BaleRenderedBlockWithSpacing[] = [];
   let minimumBlankLinesBeforeNextBlock = 0;
   const pushRenderedBlocks = (
     blocks: string[],
@@ -1064,20 +1064,20 @@ function renderMarkdownDocumentBlocks(
   return renderedBlocks;
 }
 
-interface TelegramMarkdownChunkAccumulator {
+interface BaleMarkdownChunkAccumulator {
   chunks: string[];
   current: string;
 }
 
-function flushTelegramMarkdownChunkAccumulator(
-  accumulator: TelegramMarkdownChunkAccumulator,
+function flushBaleMarkdownChunkAccumulator(
+  accumulator: BaleMarkdownChunkAccumulator,
 ): void {
   if (accumulator.current.length === 0) return;
   accumulator.chunks.push(accumulator.current);
   accumulator.current = "";
 }
 
-function splitOversizedTelegramMarkdownBlock(text: string): string[] {
+function splitOversizedBaleMarkdownBlock(text: string): string[] {
   const chunks: string[] = [];
   for (let i = 0; i < text.length; i += MAX_MESSAGE_LENGTH) {
     chunks.push(text.slice(i, i + MAX_MESSAGE_LENGTH));
@@ -1085,9 +1085,9 @@ function splitOversizedTelegramMarkdownBlock(text: string): string[] {
   return chunks;
 }
 
-function appendTelegramRenderedMarkdownBlock(
-  accumulator: TelegramMarkdownChunkAccumulator,
-  block: TelegramRenderedBlockWithSpacing,
+function appendBaleRenderedMarkdownBlock(
+  accumulator: BaleMarkdownChunkAccumulator,
+  block: BaleRenderedBlockWithSpacing,
 ): void {
   const separator = "\n".repeat(block.blankLinesBefore + 1);
   const candidate =
@@ -1098,41 +1098,41 @@ function appendTelegramRenderedMarkdownBlock(
     accumulator.current = candidate;
     return;
   }
-  flushTelegramMarkdownChunkAccumulator(accumulator);
+  flushBaleMarkdownChunkAccumulator(accumulator);
   if (block.text.length <= MAX_MESSAGE_LENGTH) {
     accumulator.current = block.text;
     return;
   }
-  accumulator.chunks.push(...splitOversizedTelegramMarkdownBlock(block.text));
+  accumulator.chunks.push(...splitOversizedBaleMarkdownBlock(block.text));
 }
 
-function chunkTelegramRenderedMarkdownBlocks(
-  renderedBlocks: TelegramRenderedBlockWithSpacing[],
+function chunkBaleRenderedMarkdownBlocks(
+  renderedBlocks: BaleRenderedBlockWithSpacing[],
 ): string[] {
-  const accumulator: TelegramMarkdownChunkAccumulator = {
+  const accumulator: BaleMarkdownChunkAccumulator = {
     chunks: [],
     current: "",
   };
   for (const block of renderedBlocks) {
-    appendTelegramRenderedMarkdownBlock(accumulator, block);
+    appendBaleRenderedMarkdownBlock(accumulator, block);
   }
-  flushTelegramMarkdownChunkAccumulator(accumulator);
+  flushBaleMarkdownChunkAccumulator(accumulator);
   return accumulator.chunks;
 }
 
-function renderMarkdownToTelegramHtmlChunks(markdown: string): string[] {
+function renderMarkdownToBaleHtmlChunks(markdown: string): string[] {
   const normalized = normalizeMarkdownDocument(markdown);
   if (normalized.length === 0) return [];
-  return chunkTelegramRenderedMarkdownBlocks(
+  return chunkBaleRenderedMarkdownBlocks(
     renderMarkdownDocumentBlocks(normalized),
   );
 }
 
-// --- Unified Telegram Rendering ---
+// --- Unified Bale Rendering ---
 
-export type TelegramRenderMode = "plain" | "markdown" | "html";
+export type BaleRenderMode = "plain" | "markdown" | "html";
 
-export interface TelegramRenderedChunk {
+export interface BaleRenderedChunk {
   text: string;
   parseMode?: "HTML";
 }
@@ -1193,10 +1193,10 @@ function chunkParagraphs(text: string): string[] {
   return chunks;
 }
 
-export function renderTelegramMessage(
+export function renderBaleMessage(
   text: string,
-  options?: { mode?: TelegramRenderMode },
-): TelegramRenderedChunk[] {
+  options?: { mode?: BaleRenderMode },
+): BaleRenderedChunk[] {
   const mode = options?.mode ?? "plain";
   if (mode === "plain") {
     return chunkParagraphs(text).map((chunk) => ({ text: chunk }));
@@ -1207,7 +1207,7 @@ export function renderTelegramMessage(
       parseMode: "HTML",
     }));
   }
-  return renderMarkdownToTelegramHtmlChunks(text).map((chunk) => ({
+  return renderMarkdownToBaleHtmlChunks(text).map((chunk) => ({
     text: chunk,
     parseMode: "HTML",
   }));

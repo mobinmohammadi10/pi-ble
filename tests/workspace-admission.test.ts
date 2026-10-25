@@ -1,6 +1,6 @@
 /**
- * Durable Telegram Workspace admission ledger regressions
- * Zones: telegram workspace identity, filesystem authority, process recovery
+ * Durable Bale Workspace admission ledger regressions
+ * Zones: bale workspace identity, filesystem authority, process recovery
  * Covers cross-process exclusion, stale leases, exact recovery, and deletion permits
  */
 
@@ -19,41 +19,41 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createTelegramLockRuntime, readTelegramRuntimeState, mutateTelegramRuntimeStateSection } from "../lib/locks.ts";
-import { getTelegramProcessBirthIdentity } from "../lib/process-identity.ts";
+import { createBaleLockRuntime, readBaleRuntimeState, mutateBaleRuntimeStateSection } from "../lib/locks.ts";
+import { getBaleProcessBirthIdentity } from "../lib/process-identity.ts";
 import {
-  createTelegramWorkspaceAdmissionLedger,
-  createTelegramWorkspaceAdmissionProfileKey,
-  createTelegramWorkspaceAdmissionRuntimeBinding,
-  createTelegramWorkspaceJournalWriterAdmission,
-  runWithTelegramWorkspaceAdmissionsAsync,
-  resolveTelegramWorkspaceDestructiveFenceKind,
-  normalizeTelegramWorkspaceJournalWriterClosureFence,
-  normalizeTelegramWorkspaceJournalWriterProtocolMode,
-  TelegramWorkspaceAdmissionError,
-  type TelegramWorkspaceAdmissionLedger,
-  type TelegramWorkspaceAdmissionOwner,
-  type TelegramWorkspaceDeletionFenceKind,
-  type TelegramWorkspaceRetirementFence,
+  createBaleWorkspaceAdmissionLedger,
+  createBaleWorkspaceAdmissionProfileKey,
+  createBaleWorkspaceAdmissionRuntimeBinding,
+  createBaleWorkspaceJournalWriterAdmission,
+  runWithBaleWorkspaceAdmissionsAsync,
+  resolveBaleWorkspaceDestructiveFenceKind,
+  normalizeBaleWorkspaceJournalWriterClosureFence,
+  normalizeBaleWorkspaceJournalWriterProtocolMode,
+  BaleWorkspaceAdmissionError,
+  type BaleWorkspaceAdmissionLedger,
+  type BaleWorkspaceAdmissionOwner,
+  type BaleWorkspaceDeletionFenceKind,
+  type BaleWorkspaceRetirementFence,
 } from "../lib/workspace-admission.ts";
-import { resolveTelegramWorkspaceAdmissionPath } from "../lib/paths.ts";
+import { resolveBaleWorkspaceAdmissionPath } from "../lib/paths.ts";
 import { runNodeEval } from "./fixtures/node-eval.ts";
 
 const profileKey = "profile:test";
 const target = { chatId: 100, threadId: 10 };
-const deletionFenceKind: TelegramWorkspaceDeletionFenceKind = "manual-thread-cleanup";
+const deletionFenceKind: BaleWorkspaceDeletionFenceKind = "manual-thread-cleanup";
 // @ts-expect-error Writer closure can never authorize a deletion permit.
-const impossibleDeletionFenceKind: TelegramWorkspaceDeletionFenceKind = "journal-writer-closure";
+const impossibleDeletionFenceKind: BaleWorkspaceDeletionFenceKind = "journal-writer-closure";
 void deletionFenceKind;
 void impossibleDeletionFenceKind;
 
-const owner: TelegramWorkspaceAdmissionOwner = {
+const owner: BaleWorkspaceAdmissionOwner = {
   processId: 101,
   processBirthId: "101:start:owner",
 };
 
 function createTempPath(): { dir: string; path: string } {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-workspace-admission-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-workspace-admission-"));
   return { dir, path: join(dir, "workspace-admission.json") };
 }
 
@@ -61,14 +61,14 @@ function createLedger(input: {
   path: string;
   stateProfile?: string;
   profileKey?: string;
-  owner?: TelegramWorkspaceAdmissionOwner;
+  owner?: BaleWorkspaceAdmissionOwner;
   getNowMs?: () => number;
-  getProcessLiveness?: (owner: TelegramWorkspaceAdmissionOwner) => "alive" | "dead" | "unverifiable";
+  getProcessLiveness?: (owner: BaleWorkspaceAdmissionOwner) => "alive" | "dead" | "unverifiable";
   publishRename?: typeof renameSync;
   authorizeJournalWriterProtocolClosure?: Parameters<
-    typeof createTelegramWorkspaceAdmissionLedger>[0]["authorizeJournalWriterProtocolClosure"];
-}): TelegramWorkspaceAdmissionLedger {
-  return createTelegramWorkspaceAdmissionLedger({
+    typeof createBaleWorkspaceAdmissionLedger>[0]["authorizeJournalWriterProtocolClosure"];
+}): BaleWorkspaceAdmissionLedger {
+  return createBaleWorkspaceAdmissionLedger({
     path: input.path,
     stateProfile: input.stateProfile,
     profileKey: input.profileKey ?? profileKey,
@@ -81,9 +81,9 @@ function createLedger(input: {
 }
 
 function acquireFence(
-  ledger: TelegramWorkspaceAdmissionLedger,
+  ledger: BaleWorkspaceAdmissionLedger,
   operationId = "retirement-one",
-): TelegramWorkspaceRetirementFence {
+): BaleWorkspaceRetirementFence {
   const result = ledger.acquireRetirementFence({
     operationId,
     retirementIntentId: "intent-one",
@@ -99,13 +99,13 @@ function acquireFence(
 
 function isAdmissionError(
   error: unknown,
-  code: TelegramWorkspaceAdmissionError["code"],
+  code: BaleWorkspaceAdmissionError["code"],
 ): boolean {
-  return error instanceof TelegramWorkspaceAdmissionError && error.code === code;
+  return error instanceof BaleWorkspaceAdmissionError && error.code === code;
 }
 
-const rootProfileKey = createTelegramWorkspaceAdmissionProfileKey({ profileName: "default", botToken: "root-test-token" });
-function createStateLedger(input: Parameters<typeof createLedger>[0]): TelegramWorkspaceAdmissionLedger {
+const rootProfileKey = createBaleWorkspaceAdmissionProfileKey({ profileName: "default", botToken: "root-test-token" });
+function createStateLedger(input: Parameters<typeof createLedger>[0]): BaleWorkspaceAdmissionLedger {
   return createLedger({ stateProfile: "default", profileKey: rootProfileKey, ...input });
 }
 
@@ -159,15 +159,15 @@ test("Consolidated admission observes without creation and refuses malformed or 
 test("Consolidated admission supports nonleader leases and preserves all siblings and profiles", () => {
   const temp = createTempPath();
   try {
-    const transport = createTelegramLockRuntime({ statePath: temp.path, pid: 10, instanceId: "leader", runtimeGeneration: 1, isProcessAlive: () => true });
+    const transport = createBaleLockRuntime({ statePath: temp.path, pid: 10, instanceId: "leader", runtimeGeneration: 1, isProcessAlive: () => true });
     transport.acquire({ cwd: "/repo" });
     for (const [profile, section, value] of [["default", "workspace", { binding: 55, issued: true }],
       ["default", "runtime", { observation: true }], ["other", "workspace", { binding: 66 }]] as const)
-      mutateTelegramRuntimeStateSection(temp.path, profile, section, () => ({ value, result: true }), { isCurrent: () => true });
-    const before = readTelegramRuntimeState(temp.path), ledger = createStateLedger({ path: temp.path });
+      mutateBaleRuntimeStateSection(temp.path, profile, section, () => ({ value, result: true }), { isCurrent: () => true });
+    const before = readBaleRuntimeState(temp.path), ledger = createStateLedger({ path: temp.path });
     const lease = ledger.acquireAdmission({ operationId: "follower-send", operationKind: "send", scope: { kind: "target", target } });
     assert.equal(lease.kind, "acquired");
-    const other = createStateLedger({ path: temp.path, stateProfile: "other", profileKey: createTelegramWorkspaceAdmissionProfileKey({ profileName: "other", botToken: "other-token" }) });
+    const other = createStateLedger({ path: temp.path, stateProfile: "other", profileKey: createBaleWorkspaceAdmissionProfileKey({ profileName: "other", botToken: "other-token" }) });
     assert.equal(other.acquireAdmission({ operationId: "other-busy", operationKind: "send", scope: { kind: "profile" } }).kind, "acquired");
     assert.equal(ledger.acquireRetirementFence({ operationId: "blocked", retirementIntentId: "intent", bindingKey: "binding", slot: "A", target, leaderEpoch: 1, retirementRequestedAtMs: 1 }).kind, "blocked");
     if (lease.kind !== "acquired") return;
@@ -179,7 +179,7 @@ test("Consolidated admission supports nonleader leases and preserves all sibling
     assert.equal(statSync(temp.path).ino, inode);
     assert.equal(ledger.releaseAdmission(lease.lease), true);
     assert.equal(acquireFence(ledger).phase, "fenced");
-    const after = readTelegramRuntimeState(temp.path);
+    const after = readBaleRuntimeState(temp.path);
     for (const section of ["transport", "workspace", "runtime"] as const) assert.deepEqual(after.profiles.default?.[section], before.profiles.default?.[section]);
     assert.deepEqual(after.profiles.other?.workspace, before.profiles.other?.workspace);
     assert.equal(other.read().leases.length, 1);
@@ -252,10 +252,10 @@ for (const drift of ["path", "profileKey", "owner", "stateProfile"] as const) {
     const temp = createTempPath();
     try {
       const options = { path: temp.path, stateProfile: "default", profileKey: rootProfileKey, owner: { ...owner }, getProcessLiveness: () => "alive" as const };
-      const ledger = createTelegramWorkspaceAdmissionLedger(options);
+      const ledger = createBaleWorkspaceAdmissionLedger(options);
       const fenced = acquireFence(ledger), before = readFileSync(temp.path, "utf8");
       if (drift === "path") options.path = join(temp.dir, "other.json");
-      if (drift === "profileKey") options.profileKey = createTelegramWorkspaceAdmissionProfileKey({ botToken: "new-token" });
+      if (drift === "profileKey") options.profileKey = createBaleWorkspaceAdmissionProfileKey({ botToken: "new-token" });
       if (drift === "owner") options.owner.processBirthId = "replacement";
       if (drift === "stateProfile") options.stateProfile = "other";
       assert.throws(() => ledger.issueDeletionPermit(fenced), error => isAdmissionError(error, "authority-changed"));
@@ -281,7 +281,7 @@ for (const boundary of ["before-write", "after-write-before-rename", "after-rena
           if (drift && boundary === "after-rename") options.owner.processBirthId = "replaced";
         },
       };
-      const ledger = createTelegramWorkspaceAdmissionLedger(options), fenced = acquireFence(ledger);
+      const ledger = createBaleWorkspaceAdmissionLedger(options), fenced = acquireFence(ledger);
       drift = true;
       assert.throws(() => ledger.issueDeletionPermit(fenced), error => isAdmissionError(error, boundary === "after-rename" ? "publication-unknown" : "authority-changed"));
       const fresh = createStateLedger({ path: temp.path }), retained = fresh.read().fence;
@@ -297,7 +297,7 @@ test("Consolidated admission refuses nested unknown evidence without silently dr
   try {
     const ledger = createStateLedger({ path: temp.path });
     ledger.acquireAdmission({ operationId: "known", operationKind: "send", scope: { kind: "target", target } });
-    mutateTelegramRuntimeStateSection(temp.path, "default", "admission", current => {
+    mutateBaleRuntimeStateSection(temp.path, "default", "admission", current => {
       const state = current as { leases: Array<Record<string, unknown>> };
       state.leases[0]!.unknownIssuedEffect = true;
       return { value: state, result: true };
@@ -313,13 +313,13 @@ test("Consolidated admission binding resolves independent profile sections witho
   const temp = createTempPath();
   let profileName: string | undefined;
   try {
-    const binding = createTelegramWorkspaceAdmissionRuntimeBinding({ getStatePath: () => temp.path, getProfileName: () => profileName, getBotToken: () => "root-test-token", owner, getProcessLiveness: () => "alive" });
+    const binding = createBaleWorkspaceAdmissionRuntimeBinding({ getStatePath: () => temp.path, getProfileName: () => profileName, getBotToken: () => "root-test-token", owner, getProcessLiveness: () => "alive" });
     binding.resolve()!.acquireAdmission({ operationId: "default", operationKind: "send", scope: { kind: "profile" } });
     profileName = "other";
     const next = binding.resolve()!;
     assert.equal(next.read().leases.length, 0);
     next.acquireAdmission({ operationId: "other", operationKind: "send", scope: { kind: "profile" } });
-    assert.deepEqual(Object.keys(readTelegramRuntimeState(temp.path).profiles).sort(), ["default", "other"]);
+    assert.deepEqual(Object.keys(readBaleRuntimeState(temp.path).profiles).sort(), ["default", "other"]);
   } finally { rmSync(temp.dir, { recursive: true, force: true }); }
 });
 
@@ -411,12 +411,12 @@ test("Workspace writer-closure fence codec accepts only identity payload", () =>
   const value = { destructiveKind: "journal-writer-closure", phase: "fenced",
     operationId: "closure:1", profileKey, recoveryKey: "journal:work", owner,
     requestedAtMs: 900, acquiredAtMs: 1_000 };
-  assert.deepEqual(normalizeTelegramWorkspaceJournalWriterClosureFence(value, profileKey), value);
-  assert.equal(normalizeTelegramWorkspaceJournalWriterClosureFence({ ...value,
+  assert.deepEqual(normalizeBaleWorkspaceJournalWriterClosureFence(value, profileKey), value);
+  assert.equal(normalizeBaleWorkspaceJournalWriterClosureFence({ ...value,
     profileKey: "profile:other" }, profileKey), undefined);
-  assert.equal(normalizeTelegramWorkspaceJournalWriterClosureFence({ ...value,
+  assert.equal(normalizeBaleWorkspaceJournalWriterClosureFence({ ...value,
     target }, profileKey), undefined);
-  assert.equal(normalizeTelegramWorkspaceJournalWriterClosureFence({ ...value,
+  assert.equal(normalizeBaleWorkspaceJournalWriterClosureFence({ ...value,
     destructiveKind: "manual-thread-cleanup" }, profileKey), undefined);
 });
 
@@ -425,14 +425,14 @@ test("Workspace writer protocol mode binds startup and closure authority", () =>
     recoveryKey: "journal:work", startupAuthorityId: "operator-cutover:1",
     closureOperationId: "closure:1", writerInventorySha256: "a".repeat(64),
     installedBy: owner, installedAtMs: 1_000 };
-  assert.deepEqual(normalizeTelegramWorkspaceJournalWriterProtocolMode(mode, profileKey), mode);
-  assert.equal(normalizeTelegramWorkspaceJournalWriterProtocolMode({ ...mode,
+  assert.deepEqual(normalizeBaleWorkspaceJournalWriterProtocolMode(mode, profileKey), mode);
+  assert.equal(normalizeBaleWorkspaceJournalWriterProtocolMode({ ...mode,
     profileKey: "profile:other" }, profileKey), undefined);
-  assert.equal(normalizeTelegramWorkspaceJournalWriterProtocolMode({ ...mode,
+  assert.equal(normalizeBaleWorkspaceJournalWriterProtocolMode({ ...mode,
     protocol: "legacy" }, profileKey), undefined);
-  assert.equal(normalizeTelegramWorkspaceJournalWriterProtocolMode({ ...mode,
+  assert.equal(normalizeBaleWorkspaceJournalWriterProtocolMode({ ...mode,
     writerInventorySha256: "raw inventory" }, profileKey), undefined);
-  assert.equal(normalizeTelegramWorkspaceJournalWriterProtocolMode({ ...mode,
+  assert.equal(normalizeBaleWorkspaceJournalWriterProtocolMode({ ...mode,
     target }, profileKey), undefined);
 });
 
@@ -457,14 +457,14 @@ test("Workspace closure atomically installs protocol mode and admits only exact 
     assert.deepEqual(ledger.acquireJournalWriterClosure({ operationId: "closure:other",
       recoveryKey: "journal:work", requestedAtMs: 1_500 }),
     { kind: "blocked", reason: "retirement-active" });
-    const generic = createTelegramWorkspaceJournalWriterAdmission({ ledger,
+    const generic = createBaleWorkspaceJournalWriterAdmission({ ledger,
       createOperationId: () => "writer:generic" });
     assert.throws(() => generic(() => "unsafe"),
       error => isAdmissionError(error, "authority-changed"));
     assert.throws(() => ledger.acquireAdmission({ operationId: "writer:bypass",
       operationKind: "journal.input.acquire", scope: { kind: "profile" } }),
     error => isAdmissionError(error, "authority-changed"));
-    const admitted = createTelegramWorkspaceJournalWriterAdmission({ ledger,
+    const admitted = createBaleWorkspaceJournalWriterAdmission({ ledger,
       protocolAuthority: authority, createOperationId: () => "writer:v3" });
     assert.equal(admitted(() => {
       const nested = ledger.acquireAdmission({ operationId: "writer:v3:input",
@@ -569,7 +569,7 @@ test("Workspace ledger round-trips writer closure and blocks profile admission",
     assert.deepEqual(ledger.acquireRetirementFence({ operationId: "retire:1", retirementIntentId: "intent:1",
       bindingKey: "binding:1", slot: "A", target, leaderEpoch: "epoch:1",
       retirementRequestedAtMs: 1_001 }), { kind: "blocked", reason: "retirement-active" });
-    const deletionFence: TelegramWorkspaceRetirementFence = { phase: "fenced", operationId: "retire:1",
+    const deletionFence: BaleWorkspaceRetirementFence = { phase: "fenced", operationId: "retire:1",
       retirementIntentId: "intent:1", profileKey, bindingKey: "binding:1", slot: "A", target,
       leaderEpoch: "epoch:1", retirementRequestedAtMs: 1_001, owner, acquiredAtMs: 1_002 };
     assert.throws(() => ledger.issueDeletionPermit(deletionFence),
@@ -630,7 +630,7 @@ test("Workspace journal writer adapter retains acquisition identity and never ma
       if (acquireRenames === 1) throw new Error("lost acquire acknowledgement");
     } });
     let executions = 0;
-    const admitted = createTelegramWorkspaceJournalWriterAdmission({ ledger: acquireLedger,
+    const admitted = createBaleWorkspaceJournalWriterAdmission({ ledger: acquireLedger,
       createOperationId: () => "writer:stable" });
     assert.throws(() => admitted(() => { executions += 1; }),
       error => isAdmissionError(error, "publication-unknown"));
@@ -646,7 +646,7 @@ test("Workspace journal writer adapter retains acquisition identity and never ma
       renameSync(source, destination);
       if (releaseRenames === 2) throw new Error("lost release acknowledgement");
     } });
-    const releaseAdmitted = createTelegramWorkspaceJournalWriterAdmission({ ledger: releaseLedger,
+    const releaseAdmitted = createBaleWorkspaceJournalWriterAdmission({ ledger: releaseLedger,
       createOperationId: () => "writer:release", onReleaseError: error => releaseErrors.push(error) });
     assert.equal(releaseAdmitted(() => "settled"), "settled");
     assert.equal(releaseErrors.length, 1);
@@ -663,7 +663,7 @@ test("Workspace destructive fence distinguishes manual cleanup while legacy reti
   try {
     const retirement = acquireFence(createLedger({ path: retirementTemp.path }));
     assert.equal(retirement.destructiveKind, undefined);
-    assert.equal(resolveTelegramWorkspaceDestructiveFenceKind(retirement), "pressure-retirement");
+    assert.equal(resolveBaleWorkspaceDestructiveFenceKind(retirement), "pressure-retirement");
     assert.throws(() => createLedger({ path: retirementTemp.path })
       .issueThreadCleanupDeletionPermit(retirement),
     error => isAdmissionError(error, "authority-changed"));
@@ -695,20 +695,20 @@ test("Workspace admission runtime binds profile paths to stable bot identity", (
   const temp = createTempPath();
   try {
     assert.equal(
-      resolveTelegramWorkspaceAdmissionPath(temp.dir),
-      join(temp.dir, "tmp", "pi-telegram", "workspace-admission.json"),
+      resolveBaleWorkspaceAdmissionPath(temp.dir),
+      join(temp.dir, "tmp", "pi-bale", "workspace-admission.json"),
     );
     assert.equal(
-      resolveTelegramWorkspaceAdmissionPath(temp.dir, "work"),
-      join(temp.dir, "tmp", "pi-telegram", "workspace-admission.work.json"),
+      resolveBaleWorkspaceAdmissionPath(temp.dir, "work"),
+      join(temp.dir, "tmp", "pi-bale", "workspace-admission.work.json"),
     );
-    const firstProfileKey = createTelegramWorkspaceAdmissionProfileKey({
+    const firstProfileKey = createBaleWorkspaceAdmissionProfileKey({
       profileName: "work",
       botToken: "secret-a",
     });
     assert.notEqual(
       firstProfileKey,
-      createTelegramWorkspaceAdmissionProfileKey({
+      createBaleWorkspaceAdmissionProfileKey({
         profileName: "work",
         botToken: "secret-b",
       }),
@@ -717,11 +717,11 @@ test("Workspace admission runtime binds profile paths to stable bot identity", (
 
     let activeProfile: string | undefined;
     let botToken = "secret-default";
-    const runtime = createTelegramWorkspaceAdmissionRuntimeBinding({
+    const runtime = createBaleWorkspaceAdmissionRuntimeBinding({
       getProfileName: () => activeProfile,
       getBotToken: () => botToken,
       getPath: (profileName) =>
-        resolveTelegramWorkspaceAdmissionPath(temp.dir, profileName),
+        resolveBaleWorkspaceAdmissionPath(temp.dir, profileName),
       owner,
       getProcessLiveness: () => "alive",
     });
@@ -934,7 +934,7 @@ test("Concurrent admitted operations cannot share one live operation identity", 
       releaseOperation = resolve;
     });
     let operationCalls = 0;
-    const first = runWithTelegramWorkspaceAdmissionsAsync({
+    const first = runWithBaleWorkspaceAdmissionsAsync({
       ledger,
       operationId: "shared-live-operation",
       operationKind: "api.sendMessage",
@@ -948,7 +948,7 @@ test("Concurrent admitted operations cannot share one live operation identity", 
     assert.equal(ledger.read().leases.length, 1);
 
     await assert.rejects(
-      () => runWithTelegramWorkspaceAdmissionsAsync({
+      () => runWithBaleWorkspaceAdmissionsAsync({
         ledger,
         operationId: "shared-live-operation",
         operationKind: "api.sendMessage",
@@ -977,7 +977,7 @@ test("Concurrent admitted operations cannot share one live operation identity", 
     releaseOperation();
     await first;
     assert.deepEqual(ledger.read().leases, []);
-    await runWithTelegramWorkspaceAdmissionsAsync({
+    await runWithBaleWorkspaceAdmissionsAsync({
       ledger,
       operationId: "shared-live-operation",
       operationKind: "api.sendMessage",
@@ -1315,13 +1315,13 @@ function runRaceParticipant(input: {
   const processIdentityUrl = new URL("../lib/process-identity.ts", import.meta.url).href;
   const source = `
     import { existsSync, writeFileSync } from "node:fs";
-    import { createTelegramWorkspaceAdmissionLedger } from ${JSON.stringify(moduleUrl)};
-    import { getTelegramProcessBirthIdentity } from ${JSON.stringify(processIdentityUrl)};
+    import { createBaleWorkspaceAdmissionLedger } from ${JSON.stringify(moduleUrl)};
+    import { getBaleProcessBirthIdentity } from ${JSON.stringify(processIdentityUrl)};
     const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-    const owner = { processId: process.pid, processBirthId: getTelegramProcessBirthIdentity(process.pid, Date.now()) };
-    const ledger = createTelegramWorkspaceAdmissionLedger({ path: process.env.LEDGER_PATH,
+    const owner = { processId: process.pid, processBirthId: getBaleProcessBirthIdentity(process.pid, Date.now()) };
+    const ledger = createBaleWorkspaceAdmissionLedger({ path: process.env.LEDGER_PATH,
       stateProfile: ${JSON.stringify(input.stateProfile) ?? "undefined"},
-      profileKey: ${JSON.stringify(input.stateProfile === undefined ? profileKey : createTelegramWorkspaceAdmissionProfileKey({ profileName: input.stateProfile, botToken: "root-test-token" }))}, owner });
+      profileKey: ${JSON.stringify(input.stateProfile === undefined ? profileKey : createBaleWorkspaceAdmissionProfileKey({ profileName: input.stateProfile, botToken: "root-test-token" }))}, owner });
     writeFileSync(process.env.READY_PATH, "ready");
     while (!existsSync(process.env.START_PATH)) sleep(2);
     const action = process.env.ACTION;
@@ -1394,10 +1394,10 @@ test("A crashed process admission is reclaimed only after process-birth death pr
     const moduleUrl = new URL("../lib/workspace-admission.ts", import.meta.url).href;
     const processIdentityUrl = new URL("../lib/process-identity.ts", import.meta.url).href;
     const source = `
-      import { createTelegramWorkspaceAdmissionLedger } from ${JSON.stringify(moduleUrl)};
-      import { getTelegramProcessBirthIdentity } from ${JSON.stringify(processIdentityUrl)};
-      const owner = { processId: process.pid, processBirthId: getTelegramProcessBirthIdentity(process.pid, Date.now()) };
-      const ledger = createTelegramWorkspaceAdmissionLedger({ path: process.env.LEDGER_PATH, profileKey: ${JSON.stringify(profileKey)}, owner });
+      import { createBaleWorkspaceAdmissionLedger } from ${JSON.stringify(moduleUrl)};
+      import { getBaleProcessBirthIdentity } from ${JSON.stringify(processIdentityUrl)};
+      const owner = { processId: process.pid, processBirthId: getBaleProcessBirthIdentity(process.pid, Date.now()) };
+      const ledger = createBaleWorkspaceAdmissionLedger({ path: process.env.LEDGER_PATH, profileKey: ${JSON.stringify(profileKey)}, owner });
       const result = ledger.acquireAdmission({ operationId: "crashed-admission", operationKind: "api.sendMessage", scope: { kind: "target", target: ${JSON.stringify(target)} } });
       process.stdout.write(JSON.stringify(result));
     `;
@@ -1407,9 +1407,9 @@ test("A crashed process admission is reclaimed only after process-birth death pr
 
     const currentOwner = {
       processId: process.pid,
-      processBirthId: getTelegramProcessBirthIdentity(process.pid, Date.now()),
+      processBirthId: getBaleProcessBirthIdentity(process.pid, Date.now()),
     };
-    const recovered = createTelegramWorkspaceAdmissionLedger({
+    const recovered = createBaleWorkspaceAdmissionLedger({
       path: temp.path,
       profileKey,
       owner: currentOwner,

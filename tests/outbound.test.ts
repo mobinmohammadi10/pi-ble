@@ -1,6 +1,6 @@
 /**
- * Regression tests for Telegram outbound handler helpers
- * Exercises assistant-authored voice/button markup extraction, artifact generation, callbacks, and Telegram upload wiring
+ * Regression tests for Bale outbound handler helpers
+ * Exercises assistant-authored voice/button markup extraction, artifact generation, callbacks, and Bale upload wiring
  */
 
 import assert from "node:assert/strict";
@@ -9,32 +9,32 @@ import { basename, dirname, join } from "node:path";
 import test from "node:test";
 
 import { resetTransportReplyDedup } from "../lib/replies.ts";
-import { TelegramApiAuthorityError, TelegramApiCommitUnknownError } from "../lib/telegram-api.ts";
-import { createTelegramVoiceReplySender as createVoiceSenderWithPorts } from "../lib/outbound-voice.ts";
+import { BaleApiAuthorityError, BaleApiCommitUnknownError } from "../lib/bale-api.ts";
+import { createBaleVoiceReplySender as createVoiceSenderWithPorts } from "../lib/outbound-voice.ts";
 
 test.beforeEach(() => {
   resetTransportReplyDedup();
-  clearTelegramVoiceSynthesisProviders();
+  clearBaleVoiceSynthesisProviders();
 });
 
 import {
-  createTelegramButtonActionStore,
-  createTelegramButtonPromptTurn,
-  createTelegramOutboundReplyArtifactSender,
-  createTelegramOutboundReplyPlanner,
-  createTelegramOutboundTextPreviewRuntime,
-  createTelegramOutboundTextReplyRuntime,
-  createTelegramVoiceReplySender,
-  handleTelegramButtonCallbackQuery,
-  planTelegramButtonReply,
-  registerTelegramVoiceSynthesisProvider,
-  getTelegramVoiceSynthesisProviders,
-  hasTelegramVoiceSynthesisProvider,
-  clearTelegramVoiceSynthesisProviders,
+  createBaleButtonActionStore,
+  createBaleButtonPromptTurn,
+  createBaleOutboundReplyArtifactSender,
+  createBaleOutboundReplyPlanner,
+  createBaleOutboundTextPreviewRuntime,
+  createBaleOutboundTextReplyRuntime,
+  createBaleVoiceReplySender,
+  handleBaleButtonCallbackQuery,
+  planBaleButtonReply,
+  registerBaleVoiceSynthesisProvider,
+  getBaleVoiceSynthesisProviders,
+  hasBaleVoiceSynthesisProvider,
+  clearBaleVoiceSynthesisProviders,
 } from "../lib/outbound.ts";
 import {
-  planTelegramVoiceReply,
-  stripTelegramCommentMarkupForPreview,
+  planBaleVoiceReply,
+  stripBaleCommentMarkupForPreview,
 } from "../lib/outbound-markup.ts";
 
 const testReplyMarkup = {
@@ -45,7 +45,7 @@ test("Outbound text handler transforms text and markdown replies", async () => {
   const sent: string[] = [];
   const markdownOptions: unknown[] = [];
   const calls: Array<{ command: string; stdin?: string }> = [];
-  const runtime = createTelegramOutboundTextReplyRuntime({
+  const runtime = createBaleOutboundTextReplyRuntime({
     getHandlers: () => [{ type: "text", template: "/tools/translate" }],
     execCommand: async (command, _args, options) => {
       calls.push({ command, stdin: options?.stdin });
@@ -113,7 +113,7 @@ for (const surface of ["text", "markdown"] as const) {
         if (loss === "response") { current = false; if (supplied) supplied.assertAuthority = () => {}; }
         return 9;
       };
-      const runtime = createTelegramOutboundTextReplyRuntime({
+      const runtime = createBaleOutboundTextReplyRuntime({
         getHandlers: () => [{ type: "text", template: "/fixture/transform" }],
         execCommand: async () => {
           handlers++;
@@ -126,8 +126,8 @@ for (const surface of ["text", "markdown"] as const) {
       });
       const result = surface === "text" ? runtime.sendTextReply(7, 11, "body", options) : runtime.sendMarkdownReply(7, 11, "body", options);
       if (loss === "current") assert.equal(await result, 9);
-      else await assert.rejects(result, error => error instanceof TelegramApiAuthorityError &&
-        error.requestIssued === (loss === "response") && error.message === "Telegram API call authority is unavailable.");
+      else await assert.rejects(result, error => error instanceof BaleApiAuthorityError &&
+        error.requestIssued === (loss === "response") && error.message === "Bale API call authority is unavailable.");
       assert.equal(sends, loss === "current" || loss === "response" ? 1 : 0);
       assert.equal(handlers, loss === "before" ? 0 : surface === "markdown" ? 2 : 1);
     });
@@ -137,7 +137,7 @@ for (const surface of ["text", "markdown"] as const) {
 test("Outbound text runtime skips comment-only planned replies", async () => {
   const sent: string[] = [];
   const handlerCalls: string[] = [];
-  const runtime = createTelegramOutboundTextReplyRuntime({
+  const runtime = createBaleOutboundTextReplyRuntime({
     getHandlers: () => [{ type: "text", template: "/tools/translate" }],
     execCommand: async (command) => {
       handlerCalls.push(command);
@@ -165,8 +165,8 @@ test("Outbound text runtime skips comment-only planned replies", async () => {
 test("Outbound text handler preserves inline buttons on transformed replies", async () => {
   const sent: Array<{ markdown: string; replyMarkup: unknown }> = [];
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
-    ["Answer.", "", '<!-- telegram_button {"value":"Continue"} -->'].join("\n"),
+  const plan = planBaleButtonReply(
+    ["Answer.", "", '<!-- bale_button {"value":"Continue"} -->'].join("\n"),
     {
       registerAction: (action) => {
         actions.push(action);
@@ -174,7 +174,7 @@ test("Outbound text handler preserves inline buttons on transformed replies", as
       },
     },
   );
-  const runtime = createTelegramOutboundTextReplyRuntime({
+  const runtime = createBaleOutboundTextReplyRuntime({
     getHandlers: () => [{ type: "text", template: "/tools/translate" }],
     execCommand: async (_command, _args, options) => ({
       stdout: `translated:${options?.stdin ?? ""}`,
@@ -212,7 +212,7 @@ test("Outbound text handler preserves inline buttons on transformed replies", as
 test("Outbound text handler transforms finalized markdown previews", async () => {
   const finalized: string[] = [];
   const previewOptions: unknown[] = [];
-  const runtime = createTelegramOutboundTextPreviewRuntime({
+  const runtime = createBaleOutboundTextPreviewRuntime({
     getHandlers: () => [{ type: "text", template: "/tools/translate" }],
     execCommand: async (_command, _args, options) => ({
       stdout: `translated:${options?.stdin ?? ""}`,
@@ -252,7 +252,7 @@ test("Outbound text handler transforms finalized markdown previews", async () =>
 test("Outbound text handler keeps original reply on failure", async () => {
   const events: string[] = [];
   const sent: string[] = [];
-  const runtime = createTelegramOutboundTextReplyRuntime({
+  const runtime = createBaleOutboundTextReplyRuntime({
     getHandlers: () => [{ type: "text", template: "/tools/fail" }],
     execCommand: async () => ({
       stdout: "",
@@ -274,12 +274,12 @@ test("Outbound text handler keeps original reply on failure", async () => {
   assert.deepEqual(events, ["outbound-text-handler"]);
 });
 
-test("Voice reply planner extracts multiline JSON telegram_voice comments", () => {
-  const plan = planTelegramVoiceReply(
+test("Voice reply planner extracts multiline JSON bale_voice comments", () => {
+  const plan = planBaleVoiceReply(
     [
       "Technical answer.",
       "",
-      "<!-- telegram_voice {",
+      "<!-- bale_voice {",
       '  "text": "Short speakable summary.",',
       '  "lang": "ru",',
       '  "rate": "+20%"',
@@ -298,11 +298,11 @@ test("Voice reply planner extracts multiline JSON telegram_voice comments", () =
 });
 
 test("Voice reply planner supports escaped lines in JSON comments", () => {
-  const plan = planTelegramVoiceReply(
+  const plan = planBaleVoiceReply(
     [
       "Visible answer.",
       "",
-      '<!-- telegram_voice {"text":"Первая строка.\\nВторая строка.","lang":"ru","rate":"+5%"} -->',
+      '<!-- bale_voice {"text":"Первая строка.\\nВторая строка.","lang":"ru","rate":"+5%"} -->',
     ].join("\n"),
   );
   assert.deepEqual(plan, {
@@ -317,8 +317,8 @@ test("Voice reply planner supports escaped lines in JSON comments", () => {
 });
 
 test("Voice reply planner supports compact JSON comments", () => {
-  const plan = planTelegramVoiceReply(
-    'Text before.\n\n<!-- telegram_voice {"text":"Inline summary."} -->',
+  const plan = planBaleVoiceReply(
+    'Text before.\n\n<!-- bale_voice {"text":"Inline summary."} -->',
   );
   assert.deepEqual(plan, {
     markdown: "Text before.",
@@ -328,14 +328,14 @@ test("Voice reply planner supports compact JSON comments", () => {
 });
 
 test("Voice reply planner supports positional compact action cells", () => {
-  const plan = planTelegramVoiceReply(
+  const plan = planBaleVoiceReply(
     [
       "Text before.",
       "",
-      "<!-- telegram_voice {Short spoken summary.} -->",
-      "<!-- telegram_voice {Résumé bref.|fr} -->",
-      "<!-- telegram_voice {Fast summary.|en|+10%} -->",
-      String.raw`<!-- telegram_voice {Use A \| B and C\}|en} -->`,
+      "<!-- bale_voice {Short spoken summary.} -->",
+      "<!-- bale_voice {Résumé bref.|fr} -->",
+      "<!-- bale_voice {Fast summary.|en|+10%} -->",
+      String.raw`<!-- bale_voice {Use A \| B and C\}|en} -->`,
     ].join("\n"),
   );
   assert.deepEqual(plan, {
@@ -354,8 +354,8 @@ test("Voice reply planner supports positional compact action cells", () => {
 });
 
 test("Voice reply planner retains text-attribute compatibility", () => {
-  const plan = planTelegramVoiceReply(
-    'Text before.\n\n<!-- telegram_voice lang="ru" rate="+10%" text="Inline spoken summary." -->',
+  const plan = planBaleVoiceReply(
+    'Text before.\n\n<!-- bale_voice lang="ru" rate="+10%" text="Inline spoken summary." -->',
   );
   assert.deepEqual(plan, {
     markdown: "Text before.",
@@ -369,14 +369,14 @@ test("Voice reply planner retains text-attribute compatibility", () => {
 });
 
 test("Voice reply planner extracts canonical payloads and compatible attributes from tolerant envelopes", () => {
-  const plan = planTelegramVoiceReply(
+  const plan = planBaleVoiceReply(
     [
       "Text before.",
       "",
-      '<!-- telegram_voice: JSON noise {"text":"Structured voice.","lang":"en"} trailing -->',
-      '<!-- telegram_voice JSON {"text":"Trailing comma voice.",} -->',
-      '<!-- telegram_voice noise [draft {After bracket noise.} -->',
-      '<!-- telegram_voices ignored unknown=Unquoted value="Attribute voice." rate=+10% trailing -->',
+      '<!-- bale_voice: JSON noise {"text":"Structured voice.","lang":"en"} trailing -->',
+      '<!-- bale_voice JSON {"text":"Trailing comma voice.",} -->',
+      '<!-- bale_voice noise [draft {After bracket noise.} -->',
+      '<!-- bale_voices ignored unknown=Unquoted value="Attribute voice." rate=+10% trailing -->',
     ].join("\n"),
   );
   assert.deepEqual(plan, {
@@ -395,11 +395,11 @@ test("Voice reply planner extracts canonical payloads and compatible attributes 
 });
 
 test("Voice reply planner retains complete legacy attribute actions", () => {
-  const plan = planTelegramVoiceReply(
+  const plan = planBaleVoiceReply(
     [
       "Text before.",
       "",
-      '<!-- telegram_voice text="Speak this instead of leaking it as text." lang="ru" rate="+30%" -->',
+      '<!-- bale_voice text="Speak this instead of leaking it as text." lang="ru" rate="+30%" -->',
     ].join("\n"),
   );
   assert.deepEqual(plan, {
@@ -417,14 +417,14 @@ test("Voice reply planner retains complete legacy attribute actions", () => {
   });
 });
 
-test("Voice reply planner keeps multiple telegram_voice blocks as independent artifacts", () => {
-  const plan = planTelegramVoiceReply(
+test("Voice reply planner keeps multiple bale_voice blocks as independent artifacts", () => {
+  const plan = planBaleVoiceReply(
     [
       "Technical answer.",
       "",
-      '<!-- telegram_voice text="First summary." lang="ru" rate="+20%" -->',
+      '<!-- bale_voice text="First summary." lang="ru" rate="+20%" -->',
       "",
-      '<!-- telegram_voice {"text":"Second summary.","lang":"en","rate":"+10%"} -->',
+      '<!-- bale_voice {"text":"Second summary.","lang":"en","rate":"+10%"} -->',
     ].join("\n"),
   );
   assert.deepEqual(plan, {
@@ -440,7 +440,7 @@ test("Voice reply planner keeps multiple telegram_voice blocks as independent ar
 });
 
 test("Voice reply planner strips non-voice comments from delivered markdown", () => {
-  const plan = planTelegramVoiceReply(
+  const plan = planBaleVoiceReply(
     ["Visible text.", "", "<!-- internal note -->", "", "Visible tail."].join(
       "\n",
     ),
@@ -452,64 +452,64 @@ test("Voice reply planner strips non-voice comments from delivered markdown", ()
 
 test("Comment preview stripping hides generic and partial comments", () => {
   assert.equal(
-    stripTelegramCommentMarkupForPreview(
+    stripBaleCommentMarkupForPreview(
       "Visible text.\n\n<!-- hidden -->\n\nVisible tail.",
     ),
     "Visible text.\n\nVisible tail.",
   );
   assert.equal(
-    stripTelegramCommentMarkupForPreview(
+    stripBaleCommentMarkupForPreview(
       [
         "Visible text.",
         "",
-        '<!-- telegram_button {"label":"Hidden","prompt":"Hidden prompt."} -->',
+        '<!-- bale_button {"label":"Hidden","prompt":"Hidden prompt."} -->',
       ].join("\n"),
     ),
     "Visible text.",
   );
   assert.equal(
-    stripTelegramCommentMarkupForPreview("Visible text.\n\n<"),
+    stripBaleCommentMarkupForPreview("Visible text.\n\n<"),
     "Visible text.",
   );
   assert.equal(
-    stripTelegramCommentMarkupForPreview("Visible text.\n\n<!"),
+    stripBaleCommentMarkupForPreview("Visible text.\n\n<!"),
     "Visible text.",
   );
   assert.equal(
-    stripTelegramCommentMarkupForPreview("Visible text.\n\n<!-"),
+    stripBaleCommentMarkupForPreview("Visible text.\n\n<!-"),
     "Visible text.",
   );
   assert.equal(
-    stripTelegramCommentMarkupForPreview(
+    stripBaleCommentMarkupForPreview(
       "Visible text.\n\n<!-- internal note streaming",
     ),
     "Visible text.",
   );
 });
 
-test("Comments inside fenced code never activate actions and are stripped for Telegram", () => {
+test("Comments inside fenced code never activate actions and are stripped for Bale", () => {
   const markdown = [
     "Example:",
     "",
     "```md",
-    "<!-- telegram_voice lang=ru",
+    "<!-- bale_voice lang=ru",
     "Do not speak.",
     "-->",
     "",
-    '<!-- telegram_button label="Run"',
+    '<!-- bale_button label="Run"',
     "Do not queue.",
     "-->",
     "```",
   ].join("\n");
   const actions: unknown[] = [];
-  const buttonPlan = planTelegramButtonReply(markdown, {
+  const buttonPlan = planBaleButtonReply(markdown, {
     registerAction: (action) => {
       actions.push(action);
       return `btn:${actions.length}`;
     },
   });
-  const voicePlan = planTelegramVoiceReply(markdown);
-  const combinedPlan = createTelegramOutboundReplyPlanner({
+  const voicePlan = planBaleVoiceReply(markdown);
+  const combinedPlan = createBaleOutboundReplyPlanner({
     register: (action) => {
       actions.push(action);
       return `btn:${actions.length}`;
@@ -522,7 +522,7 @@ test("Comments inside fenced code never activate actions and are stripped for Te
   assert.equal(combinedPlan.markdown, voicePlan.markdown);
   assert.equal(combinedPlan.replyMarkup, undefined);
   assert.deepEqual(actions, []);
-  assert.equal(stripTelegramCommentMarkupForPreview(markdown), voicePlan.markdown);
+  assert.equal(stripBaleCommentMarkupForPreview(markdown), voicePlan.markdown);
 });
 
 test("Outbound comments resume after indented and longer closing fences", () => {
@@ -530,13 +530,13 @@ test("Outbound comments resume after indented and longer closing fences", () => 
     "Example:",
     "",
     "````md",
-    "<!-- telegram_button label=Skip -->",
+    "<!-- bale_button label=Skip -->",
     "   ````",
     "",
-    '<!-- telegram_button {"value":"OK"} -->',
+    '<!-- bale_button {"value":"OK"} -->',
   ].join("\n");
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(markdown, {
+  const plan = planBaleButtonReply(markdown, {
     registerAction: (action) => {
       actions.push(action);
       return `btn:${actions.length}`;
@@ -548,7 +548,7 @@ test("Outbound comments resume after indented and longer closing fences", () => 
       "Example:",
       "",
       "````md",
-      "<!-- telegram_button label=Skip -->",
+      "<!-- bale_button label=Skip -->",
       "   ````",
     ].join("\n"),
   );
@@ -559,20 +559,20 @@ test("Outbound action comments require top-level column-zero markers", () => {
   const markdown = [
     "Visible answer.",
     "",
-    "  <!-- telegram_voice lang=ru",
+    "  <!-- bale_voice lang=ru",
     "Indented voice.",
     "  -->",
     "",
-    '> <!-- telegram_button label="OK"',
+    '> <!-- bale_button label="OK"',
     "> Quoted prompt.",
     "> -->",
   ].join("\n");
   const actions: unknown[] = [];
-  const voicePlan = planTelegramVoiceReply(markdown);
+  const voicePlan = planBaleVoiceReply(markdown);
   assert.equal(voicePlan.markdown, "Visible answer.");
   assert.equal(voicePlan.voiceReplies, undefined);
   assert.deepEqual(
-    planTelegramButtonReply(markdown, {
+    planBaleButtonReply(markdown, {
       registerAction: (action) => {
         actions.push(action);
         return `btn:${actions.length}`;
@@ -585,13 +585,13 @@ test("Outbound action comments require top-level column-zero markers", () => {
 
 test("Button reply planner supports independent action comments", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
+  const plan = planBaleButtonReply(
     [
       "Visible answer.",
       "",
-      '<!-- telegram_button {"label":"OK","prompt":"PROMPT"} -->',
+      '<!-- bale_button {"label":"OK","prompt":"PROMPT"} -->',
       "",
-      '<!-- telegram_button label="More" prompt="Continue with more detail" -->',
+      '<!-- bale_button label="More" prompt="Continue with more detail" -->',
     ].join("\n"),
     {
       registerAction: (action) => {
@@ -615,7 +615,7 @@ test("Button reply planner supports independent action comments", () => {
 
 test("Outbound reply planner strips voice and button markup without losing artifacts", () => {
   const actions: unknown[] = [];
-  const plan = createTelegramOutboundReplyPlanner({
+  const plan = createBaleOutboundReplyPlanner({
     register: (action) => {
       actions.push(action);
       return `btn:${actions.length}`;
@@ -624,9 +624,9 @@ test("Outbound reply planner strips voice and button markup without losing artif
     [
       "Visible answer.",
       "",
-      '<!-- telegram_voice {"text":"Speak this summary."} -->',
+      '<!-- bale_voice {"text":"Speak this summary."} -->',
       "",
-      '<!-- telegram_button label="Continue" prompt="Continue with context." -->',
+      '<!-- bale_button label="Continue" prompt="Continue with context." -->',
     ].join("\n"),
   );
   assert.equal(plan.markdown, "Visible answer.");
@@ -642,8 +642,8 @@ test("Outbound reply planner strips voice and button markup without losing artif
 
 test("Button reply planner supports compact value payload", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
-    ["Visible answer.", "", '<!-- telegram_button {"value":"OK"} -->'].join("\n"),
+  const plan = planBaleButtonReply(
+    ["Visible answer.", "", '<!-- bale_button {"value":"OK"} -->'].join("\n"),
     {
       registerAction: (action) => {
         actions.push(action);
@@ -660,11 +660,11 @@ test("Button reply planner supports compact value payload", () => {
 
 test("Button reply planner retains prompt-attribute compatibility", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
+  const plan = planBaleButtonReply(
     [
       "Visible answer.",
       "",
-      '<!-- telegram_button label="Continue" prompt="Continue with the current plan." -->',
+      '<!-- bale_button label="Continue" prompt="Continue with the current plan." -->',
     ].join("\n"),
     {
       registerAction: (action) => {
@@ -684,13 +684,13 @@ test("Button reply planner retains prompt-attribute compatibility", () => {
 
 test("Button reply planner accepts complete JSON actions", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
+  const plan = planBaleButtonReply(
     [
       "Visible answer.",
       "",
-      '<!-- telegram_button {"label":"Boundary","prompt":"Where does JAM end and DEOS begin?"} -->',
+      '<!-- bale_button {"label":"Boundary","prompt":"Where does JAM end and DEOS begin?"} -->',
       "",
-      '<!-- telegram_button {"label":"Sources","prompt":"Which DEOS sources are canonical?"} -->',
+      '<!-- bale_button {"label":"Sources","prompt":"Which DEOS sources are canonical?"} -->',
     ].join("\n"),
     {
       registerAction: (action) => {
@@ -714,11 +714,11 @@ test("Button reply planner accepts complete JSON actions", () => {
 
 test("Button reply planner mirrors a lone label into its prompt", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
+  const plan = planBaleButtonReply(
     [
       "Visible answer.",
       "",
-      '<!-- telegram_button label="Closed" -->',
+      '<!-- bale_button label="Closed" -->',
       "",
       "Visible tail.",
     ].join("\n"),
@@ -735,11 +735,11 @@ test("Button reply planner mirrors a lone label into its prompt", () => {
 
 test("Button reply planner ignores text outside a closed button envelope", () => {
   const actions: unknown[] = [];
-  const plan = planTelegramButtonReply(
+  const plan = planBaleButtonReply(
     [
       "Visible answer.",
       "",
-      '<!-- telegram_button label="Long" -->',
+      '<!-- bale_button label="Long" -->',
       "First body line.",
       "Second body line.",
       "-->",
@@ -765,7 +765,7 @@ test("Button reply planner ignores text outside a closed button envelope", () =>
 });
 
 test("Button action store resolves generated callback data", () => {
-  const store = createTelegramButtonActionStore();
+  const store = createBaleButtonActionStore();
   const callbackData = store.register({ text: "Next", prompt: "Go next" });
   assert.match(callbackData, /^tgbtn:[a-f0-9-]+/);
   assert.deepEqual(store.resolve(callbackData), {
@@ -778,7 +778,7 @@ test("Button action store resolves generated callback data", () => {
 test("Button callback handler enqueues prompt actions", async () => {
   const events: unknown[] = [];
   await assert.equal(
-    await handleTelegramButtonCallbackQuery(
+    await handleBaleButtonCallbackQuery(
       {
         id: "callback-1",
         data: "btn:1",
@@ -814,7 +814,7 @@ test("Button callback handler enqueues prompt actions", async () => {
 test("Button callback handler consumes expired button callbacks", async () => {
   const events: unknown[] = [];
   assert.equal(
-    await handleTelegramButtonCallbackQuery(
+    await handleBaleButtonCallbackQuery(
       { id: "callback-1", data: "tgbtn:missing" },
       {},
       {
@@ -834,9 +834,9 @@ test("Button callback handler consumes expired button callbacks", async () => {
   ]);
 });
 
-test("Button prompt turns use Telegram prompt content", () => {
+test("Button prompt turns use Bale prompt content", () => {
   assert.deepEqual(
-    createTelegramButtonPromptTurn({
+    createBaleButtonPromptTurn({
       chatId: 7,
       replyToMessageId: 22,
       queueOrder: 3,
@@ -851,7 +851,7 @@ test("Button prompt turns use Telegram prompt content", () => {
       queueLane: "priority",
       laneOrder: 3,
       queuedAttachments: [],
-      content: [{ type: "text", text: "[telegram] Continue now" }],
+      content: [{ type: "text", text: "[bale] Continue now" }],
       historyText: "Continue now",
       statusSummary: "Continue",
     },
@@ -863,10 +863,10 @@ test("Button prompt turns use Telegram prompt content", () => {
 
 test("Voice reply sender includes thread target fields and scoped reply parameters", async () => {
   const events: unknown[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(
+  const dispose = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -901,10 +901,10 @@ test("Voice reply sender includes thread target fields and scoped reply paramete
 
 test("Voice reply sender can suppress prompt reply metadata for secondary voice", async () => {
   const events: unknown[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(
+  const dispose = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -932,10 +932,10 @@ test("Voice reply sender can suppress prompt reply metadata for secondary voice"
 
 test("Outbound artifact sender sends multiple voice replies independently", async () => {
   const events: unknown[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(async (text) => {
+  const dispose = registerBaleVoiceSynthesisProvider(async (text) => {
     return `/tmp/${text}.opus`;
   });
-  const sendOutboundReplyArtifacts = createTelegramOutboundReplyArtifactSender({
+  const sendOutboundReplyArtifacts = createBaleOutboundReplyArtifactSender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -981,7 +981,7 @@ test("Outbound artifact sender sends multiple voice replies independently", asyn
 
 test("Outbound artifact sender treats a plan without voice content as a no-op", async () => {
   const events: unknown[] = [];
-  const sendOutboundReplyArtifacts = createTelegramOutboundReplyArtifactSender({
+  const sendOutboundReplyArtifacts = createBaleOutboundReplyArtifactSender({
     execCommand: async () => {
       events.push("exec");
       return { stdout: "", stderr: "", code: 0, killed: false };
@@ -999,7 +999,7 @@ test("Outbound artifact sender treats a plan without voice content as a no-op", 
 });
 
 test("Outbound artifact sender still fails when voice content cannot be delivered", async () => {
-  const sendOutboundReplyArtifacts = createTelegramOutboundReplyArtifactSender({
+  const sendOutboundReplyArtifacts = createBaleOutboundReplyArtifactSender({
     execCommand: async () => ({ stdout: "", stderr: "", code: 0, killed: false }),
     sendMultipart: async () => {
       throw new Error("unexpected upload");
@@ -1016,12 +1016,12 @@ test("Outbound artifact sender still fails when voice content cannot be delivere
 
 test("Voice reply sender prefers configured outbound voice handlers over registered synthesis providers", async () => {
   const events: unknown[] = [];
-  const voiceTempDir = join(tmpdir(), "pi-telegram-voice-handler-test");
-  const dispose = registerTelegramVoiceSynthesisProvider(async () => {
+  const voiceTempDir = join(tmpdir(), "pi-bale-voice-handler-test");
+  const dispose = registerBaleVoiceSynthesisProvider(async () => {
     events.push("provider-called");
     return "/tmp/provider.opus";
   });
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     tempDir: voiceTempDir,
     getHandlers: () => [
       {
@@ -1051,10 +1051,10 @@ test("Voice reply sender prefers configured outbound voice handlers over registe
 
 test("Voice reply sender falls back from configured handlers to registered synthesis providers", async () => {
   const events: unknown[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(
+  const dispose = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/provider.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     getHandlers: () => [{ type: "voice", template: "/missing/tts" }],
     execCommand: async () => {
       throw new Error("configured handler failed");
@@ -1076,9 +1076,9 @@ test("Voice reply sender falls back from configured handlers to registered synth
 
 test("Voice reply sender uses configured outbound voice handlers when no provider is registered", async () => {
   const execCalls: unknown[] = [];
-  const voiceTempDir = join(tmpdir(), "pi-telegram-voice-handler-test");
+  const voiceTempDir = join(tmpdir(), "pi-bale-voice-handler-test");
   const uploads: unknown[] = [];
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     tempDir: voiceTempDir,
     getHandlers: () => [
       {
@@ -1147,11 +1147,11 @@ test("Voice reply sender uses configured outbound voice handlers when no provide
 
 for (const source of ["template", "programmatic", "provider"] as const) {
   test(`Voice ${source} upload uncertainty never advances to another provider`, async () => {
-    const failure = new TelegramApiCommitUnknownError("sendVoice", new Error("Lost acknowledgement"));
+    const failure = new BaleApiCommitUnknownError("sendVoice", new Error("Lost acknowledgement"));
     let uploads = 0;
     let fallbackSynthesis = 0;
-    const disposeFirst = registerTelegramVoiceSynthesisProvider(async () => "/fixture/first.opus");
-    const disposeNext = registerTelegramVoiceSynthesisProvider(async () => {
+    const disposeFirst = registerBaleVoiceSynthesisProvider(async () => "/fixture/first.opus");
+    const disposeNext = registerBaleVoiceSynthesisProvider(async () => {
       fallbackSynthesis += 1;
       return "/fixture/next.opus";
     });
@@ -1175,13 +1175,13 @@ for (const source of ["template", "programmatic", "provider"] as const) {
 
 test("Voice reply sender falls back to the next voice synthesis provider", async () => {
   const events: unknown[] = [];
-  const dispose1 = registerTelegramVoiceSynthesisProvider(async () => {
+  const dispose1 = registerBaleVoiceSynthesisProvider(async () => {
     throw new Error("provider 1 failed");
   });
-  const dispose2 = registerTelegramVoiceSynthesisProvider(async () => {
+  const dispose2 = registerBaleVoiceSynthesisProvider(async () => {
     return "/tmp/good.opus";
   });
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1212,10 +1212,10 @@ test("Voice reply sender falls back to the next voice synthesis provider", async
 
 test("Voice reply sender uploads generated ogg via sendVoice", async () => {
   const events: unknown[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(
+  const dispose = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1248,50 +1248,50 @@ test("Voice reply sender uploads generated ogg via sendVoice", async () => {
 // --- Combined profile: CI-like pipeline (composition + retry + critical) ---
 
 test("Voice synthesis provider registration and invocation", async () => {
-  clearTelegramVoiceSynthesisProviders();
+  clearBaleVoiceSynthesisProviders();
   const calls: string[] = [];
-  assert.equal(hasTelegramVoiceSynthesisProvider(), false);
-  const dispose = registerTelegramVoiceSynthesisProvider(async (text) => {
+  assert.equal(hasBaleVoiceSynthesisProvider(), false);
+  const dispose = registerBaleVoiceSynthesisProvider(async (text) => {
     calls.push(text);
     return `/tmp/voice-${text.length}.opus`;
   });
-  assert.equal(hasTelegramVoiceSynthesisProvider(), true);
-  const providers = getTelegramVoiceSynthesisProviders();
+  assert.equal(hasBaleVoiceSynthesisProvider(), true);
+  const providers = getBaleVoiceSynthesisProviders();
   assert.equal(providers.length, 1);
   const result = await providers[0]("hello", {});
   assert.equal(result, "/tmp/voice-5.opus");
   assert.deepEqual(calls, ["hello"]);
   dispose();
-  assert.equal(hasTelegramVoiceSynthesisProvider(), false);
+  assert.equal(hasBaleVoiceSynthesisProvider(), false);
 });
 
 test("Voice synthesis provider registry supports multiple providers", async () => {
-  clearTelegramVoiceSynthesisProviders();
-  assert.equal(getTelegramVoiceSynthesisProviders().length, 0);
-  const dispose1 = registerTelegramVoiceSynthesisProvider(
+  clearBaleVoiceSynthesisProviders();
+  assert.equal(getBaleVoiceSynthesisProviders().length, 0);
+  const dispose1 = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice1.opus",
   );
-  const dispose2 = registerTelegramVoiceSynthesisProvider(
+  const dispose2 = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice2.opus",
   );
-  assert.equal(getTelegramVoiceSynthesisProviders().length, 2);
-  assert.equal(hasTelegramVoiceSynthesisProvider(), true);
+  assert.equal(getBaleVoiceSynthesisProviders().length, 2);
+  assert.equal(hasBaleVoiceSynthesisProvider(), true);
   // returned array should be a copy
-  const providers = getTelegramVoiceSynthesisProviders();
+  const providers = getBaleVoiceSynthesisProviders();
   providers.pop();
-  assert.equal(getTelegramVoiceSynthesisProviders().length, 2);
+  assert.equal(getBaleVoiceSynthesisProviders().length, 2);
   dispose1();
-  assert.equal(getTelegramVoiceSynthesisProviders().length, 1);
+  assert.equal(getBaleVoiceSynthesisProviders().length, 1);
   dispose2();
-  assert.equal(getTelegramVoiceSynthesisProviders().length, 0);
+  assert.equal(getBaleVoiceSynthesisProviders().length, 0);
 });
 
 test("Voice reply sender passes replyMarkup to sendMultipart", async () => {
   const fields: Record<string, unknown>[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(
+  const dispose = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1317,13 +1317,13 @@ test("Voice reply sender passes replyMarkup to sendMultipart", async () => {
 
 test("Voice reply sender only passes replyMarkup to first successful voice reply", async () => {
   const fields: Record<string, unknown>[] = [];
-  const disposeFail = registerTelegramVoiceSynthesisProvider(async () => {
+  const disposeFail = registerBaleVoiceSynthesisProvider(async () => {
     throw new Error("Provider 1 failed");
   });
-  const disposeSuccess = registerTelegramVoiceSynthesisProvider(
+  const disposeSuccess = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1349,12 +1349,12 @@ test("Voice reply sender only passes replyMarkup to first successful voice reply
 });
 
 test("Voice reply sender throws when every handler fails", async () => {
-  clearTelegramVoiceSynthesisProviders();
+  clearBaleVoiceSynthesisProviders();
   const events: unknown[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(async () => {
+  const dispose = registerBaleVoiceSynthesisProvider(async () => {
     throw new Error("handler 1 failed");
   });
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1376,7 +1376,7 @@ test("Voice reply sender throws when every handler fails", async () => {
     /Failed to send voice reply: every voice synthesis provider and outbound voice handler failed/,
   );
   dispose();
-  assert.equal(hasTelegramVoiceSynthesisProvider(), false);
+  assert.equal(hasBaleVoiceSynthesisProvider(), false);
   assert.ok(events.length >= 2);
   assert.ok(events.some((e) => (e as string).includes("handler 1 failed")));
   assert.ok(
@@ -1390,13 +1390,13 @@ test("Voice reply sender throws when every handler fails", async () => {
 
 test("Voice reply sender skips provider that returns undefined and tries next", async () => {
   const events: unknown[] = [];
-  const dispose1 = registerTelegramVoiceSynthesisProvider(
+  const dispose1 = registerBaleVoiceSynthesisProvider(
     async () => undefined,
   );
-  const dispose2 = registerTelegramVoiceSynthesisProvider(
+  const dispose2 = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1420,11 +1420,11 @@ test("Voice reply sender skips provider that returns undefined and tries next", 
 
 test("Voice reply sender records event when provider returns empty string", async () => {
   const events: unknown[] = [];
-  const dispose1 = registerTelegramVoiceSynthesisProvider(async () => "");
-  const dispose2 = registerTelegramVoiceSynthesisProvider(
+  const dispose1 = registerBaleVoiceSynthesisProvider(async () => "");
+  const dispose2 = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1446,10 +1446,10 @@ test("Voice reply sender records event when provider returns empty string", asyn
 
 test("Voice reply sender accepts Opus files", async () => {
   const events: unknown[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(
+  const dispose = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/response.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1472,10 +1472,10 @@ test("Voice reply sender accepts Opus files", async () => {
 
 test("Voice reply sender accepts OGG files", async () => {
   const events: unknown[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(
+  const dispose = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/response.ogg",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1497,10 +1497,10 @@ test("Voice reply sender accepts OGG files", async () => {
 });
 
 test("Voice reply sender throws for non-ogg files", async () => {
-  const dispose = registerTelegramVoiceSynthesisProvider(
+  const dispose = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/response.mp3",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1522,13 +1522,13 @@ test("Voice reply sender throws for non-ogg files", async () => {
 test("Voice reply sender falls back to next handler when sendMultipart throws", async () => {
   const fields: Record<string, unknown>[] = [];
   let callCount = 0;
-  const dispose1 = registerTelegramVoiceSynthesisProvider(
+  const dispose1 = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice1.opus",
   );
-  const dispose2 = registerTelegramVoiceSynthesisProvider(
+  const dispose2 = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/voice2.opus",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1552,10 +1552,10 @@ test("Voice reply sender falls back to next handler when sendMultipart throws", 
 
 test("Voice reply sender accepts provider returning an audio path", async () => {
   const events: unknown[] = [];
-  const dispose = registerTelegramVoiceSynthesisProvider(
+  const dispose = registerBaleVoiceSynthesisProvider(
     async () => "/tmp/response.ogg",
   );
-  const sendVoiceReply = createTelegramVoiceReplySender({
+  const sendVoiceReply = createBaleVoiceReplySender({
     execCommand: async () => ({
       stdout: "",
       stderr: "",
@@ -1579,7 +1579,7 @@ test("Voice reply sender accepts provider returning an audio path", async () => 
 test("Outbound text handlers honour when guards on handlers and composition steps", async () => {
   const calls: string[] = [];
   const sent: string[] = [];
-  const runtime = createTelegramOutboundTextReplyRuntime({
+  const runtime = createBaleOutboundTextReplyRuntime({
     getHandlers: () => [
       { type: "text", when: false, template: "/tools/off" },
       { type: "text", template: [{ when: "!text", template: "/tools/skip" }, "/tools/upper"] },

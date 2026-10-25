@@ -1,32 +1,32 @@
 /**
  * Workspace slot allocation policy
- * Zones: telegram, workspace identity
+ * Zones: bale, workspace identity
  * Owns bounded profile-wide letter selection and inactivity ordering.
- * Excludes liveness discovery, persistence, routing, and Telegram deletion;
+ * Excludes liveness discovery, persistence, routing, and Bale deletion;
  * a selection is a proposal, never authority to retire a binding.
  */
-export declare const TELEGRAM_WORKSPACE_SLOTS = "abcdefghijklmnopqrstuvwxyz";
-export declare class TelegramWorkspaceSlotUnavailableError extends Error {
+export declare const BALE_WORKSPACE_SLOTS = "abcdefghijklmnopqrstuvwxyz";
+export declare class BaleWorkspaceSlotUnavailableError extends Error {
     constructor();
 }
-export interface TelegramWorkspaceSlotOccupancy {
+export interface BaleWorkspaceSlotOccupancy {
     bindingKey: string;
     slot: string;
     inactiveSinceMs?: number;
     protection: "eligible" | "protected" | "unknown";
 }
-export type TelegramWorkspaceSlotAllocation = {
+export type BaleWorkspaceSlotAllocation = {
     kind: "free";
     slot: string;
 } | {
     kind: "reclaim";
-    candidate: TelegramWorkspaceSlotOccupancy;
+    candidate: BaleWorkspaceSlotOccupancy;
 } | {
     kind: "blocked";
     reason: "invalid-state" | "protected-capacity";
 };
 /** A binding whose letter may be reassigned without touching its Thread, journals or accepted work. */
-export interface TelegramWorkspaceReusableSlot {
+export interface BaleWorkspaceReusableSlot {
     bindingKey: string;
     /** Uppercase display letter currently held by the binding. */
     slot: string;
@@ -41,10 +41,10 @@ export interface TelegramWorkspaceReusableSlot {
  * ignores accepted-work protection because reuse deletes nothing.
  * Returns undefined for an empty or malformed candidate set.
  */
-export declare function selectTelegramWorkspaceReusableSlot(candidates: readonly TelegramWorkspaceReusableSlot[]): TelegramWorkspaceReusableSlot | undefined;
+export declare function selectBaleWorkspaceReusableSlot(candidates: readonly BaleWorkspaceReusableSlot[]): BaleWorkspaceReusableSlot | undefined;
 /** Caller must recheck exact ownership and protected work before retirement. */
-export declare function planTelegramWorkspaceSlotAllocation(input: {
-    bindings: readonly TelegramWorkspaceSlotOccupancy[];
+export declare function planBaleWorkspaceSlotAllocation(input: {
+    bindings: readonly BaleWorkspaceSlotOccupancy[];
     reservedSlots: readonly string[];
     nowMs: number;
-}): TelegramWorkspaceSlotAllocation;
+}): BaleWorkspaceSlotAllocation;

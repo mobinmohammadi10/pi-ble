@@ -1,41 +1,41 @@
 /**
- * Telegram text-group coalescing helpers
- * Zones: telegram inbound, queue admission, split-message recovery
- * Owns conservative delayed grouping for Telegram text messages that look like automatic long-message splits
+ * Bale text-group coalescing helpers
+ * Zones: bale inbound, queue admission, split-message recovery
+ * Owns conservative delayed grouping for Bale text messages that look like automatic long-message splits
  */
 import { setTimeout as waitForTimeout } from "node:timers/promises";
-import { createTelegramPendingGroups, extractTelegramMessageText, } from "./media.js";
-const TELEGRAM_TEXT_GROUP_DEBOUNCE_MS = 1000;
-const TELEGRAM_TEXT_GROUP_MIN_SPLIT_LENGTH = 3600;
-const TELEGRAM_TEXT_GROUP_MAX_MESSAGE_ID_GAP = 12;
-function extractTelegramTextGroupText(message) {
-    return extractTelegramMessageText(message);
+import { createBalePendingGroups, extractBaleMessageText, } from "./media.js";
+const BALE_TEXT_GROUP_DEBOUNCE_MS = 1000;
+const BALE_TEXT_GROUP_MIN_SPLIT_LENGTH = 3600;
+const BALE_TEXT_GROUP_MAX_MESSAGE_ID_GAP = 12;
+function extractBaleTextGroupText(message) {
+    return extractBaleMessageText(message);
 }
-function isTelegramForwardedMessage(message) {
+function isBaleForwardedMessage(message) {
     return (message.forward_origin !== undefined ||
         message.forward_from !== undefined ||
         typeof message.forward_sender_name === "string");
 }
-function isTelegramTextGroupCommand(text) {
+function isBaleTextGroupCommand(text) {
     return text.trimStart().startsWith("/");
 }
-function isTelegramTextGroupClearingCommand(text) {
+function isBaleTextGroupClearingCommand(text) {
     const command = text.trimStart().split(/\s+/, 1)[0]?.split("@", 1)[0];
     return command === "/stop";
 }
-function getTelegramTextGroupMessageIdentity(message) {
+function getBaleTextGroupMessageIdentity(message) {
     const threadKey = typeof message.message_thread_id === "number"
         ? `thread:${message.message_thread_id}`
         : "private";
     return `${message.chat.id}:${threadKey}:${message.message_id}`;
 }
-function getTelegramTextGroupKey(message) {
+function getBaleTextGroupKey(message) {
     if (message.media_group_id)
         return undefined;
     if (!message.from || message.from.is_bot)
         return undefined;
-    if (!extractTelegramTextGroupText(message) &&
-        !isTelegramForwardedMessage(message)) {
+    if (!extractBaleTextGroupText(message) &&
+        !isBaleForwardedMessage(message)) {
         return undefined;
     }
     const threadKey = typeof message.message_thread_id === "number"
@@ -43,25 +43,25 @@ function getTelegramTextGroupKey(message) {
         : "private";
     return `${message.chat.id}:${threadKey}:${message.from.id}`;
 }
-function canStartTelegramTextGroup(message, minSplitLength) {
-    const text = extractTelegramTextGroupText(message);
-    return text.length >= minSplitLength && !isTelegramTextGroupCommand(text);
+function canStartBaleTextGroup(message, minSplitLength) {
+    const text = extractBaleTextGroupText(message);
+    return text.length >= minSplitLength && !isBaleTextGroupCommand(text);
 }
-function canAppendTelegramTextGroupMessage(group, message) {
-    const text = extractTelegramTextGroupText(message);
+function canAppendBaleTextGroupMessage(group, message) {
+    const text = extractBaleTextGroupText(message);
     const previous = group.messages.at(-1);
     return (!!previous &&
         message.message_id > previous.message_id &&
         message.message_id <=
-            previous.message_id + TELEGRAM_TEXT_GROUP_MAX_MESSAGE_ID_GAP &&
-        (text.length > 0 || isTelegramForwardedMessage(message)) &&
-        !isTelegramTextGroupCommand(text));
+            previous.message_id + BALE_TEXT_GROUP_MAX_MESSAGE_ID_GAP &&
+        (text.length > 0 || isBaleForwardedMessage(message)) &&
+        !isBaleTextGroupCommand(text));
 }
-export function createTelegramTextGroupController(options = {}) {
+export function createBaleTextGroupController(options = {}) {
     const plannedForwardCommentStarts = new Set();
     const plannedForwardCommentEnds = new Set();
-    const debounceMs = options.debounceMs ?? TELEGRAM_TEXT_GROUP_DEBOUNCE_MS;
-    const minSplitLength = options.minSplitLength ?? TELEGRAM_TEXT_GROUP_MIN_SPLIT_LENGTH;
+    const debounceMs = options.debounceMs ?? BALE_TEXT_GROUP_DEBOUNCE_MS;
+    const minSplitLength = options.minSplitLength ?? BALE_TEXT_GROUP_MIN_SPLIT_LENGTH;
     const forwardCommentWaitMs = options.forwardCommentWaitMs === undefined
         ? debounceMs
         : options.forwardCommentWaitMs;
@@ -79,7 +79,7 @@ export function createTelegramTextGroupController(options = {}) {
             : (timer) => {
                 timer.abort();
             });
-    const groups = createTelegramPendingGroups({ debounceMs, requireContext: true, setTimer, clearTimer });
+    const groups = createBalePendingGroups({ debounceMs, requireContext: true, setTimer, clearTimer });
     /** Admission policy for one message; the shared group machine owns timers, batches and dispatch. */
     const queueTextGroupMessage = (options) => {
         const existing = groups.get(options.key);
@@ -99,10 +99,10 @@ export function createTelegramTextGroupController(options = {}) {
         }
         if (!existing &&
             !options.forceStart &&
-            !canStartTelegramTextGroup(options.message, minSplitLength))
+            !canStartBaleTextGroup(options.message, minSplitLength))
             return false;
         if (existing &&
-            !canAppendTelegramTextGroupMessage(existing, options.message))
+            !canAppendBaleTextGroupMessage(existing, options.message))
             return false;
         groups.queue({
             ...queued,
@@ -120,26 +120,26 @@ export function createTelegramTextGroupController(options = {}) {
                 const forwarded = updates[index + 1]?.message;
                 if (!comment || !forwarded)
                     continue;
-                const commentText = extractTelegramTextGroupText(comment);
-                const commentKey = getTelegramTextGroupKey(comment);
-                const forwardedKey = getTelegramTextGroupKey(forwarded);
+                const commentText = extractBaleTextGroupText(comment);
+                const commentKey = getBaleTextGroupKey(comment);
+                const forwardedKey = getBaleTextGroupKey(forwarded);
                 if (!commentKey ||
                     commentKey !== forwardedKey ||
                     !commentText ||
-                    isTelegramTextGroupCommand(commentText) ||
-                    isTelegramForwardedMessage(comment) ||
-                    !isTelegramForwardedMessage(forwarded) ||
+                    isBaleTextGroupCommand(commentText) ||
+                    isBaleForwardedMessage(comment) ||
+                    !isBaleForwardedMessage(forwarded) ||
                     forwarded.message_id <= comment.message_id ||
                     forwarded.message_id >
-                        comment.message_id + TELEGRAM_TEXT_GROUP_MAX_MESSAGE_ID_GAP) {
+                        comment.message_id + BALE_TEXT_GROUP_MAX_MESSAGE_ID_GAP) {
                     continue;
                 }
-                plannedForwardCommentStarts.add(getTelegramTextGroupMessageIdentity(comment));
-                plannedForwardCommentEnds.add(getTelegramTextGroupMessageIdentity(forwarded));
+                plannedForwardCommentStarts.add(getBaleTextGroupMessageIdentity(comment));
+                plannedForwardCommentEnds.add(getBaleTextGroupMessageIdentity(forwarded));
             }
         },
         getPreparedForwardingPosition(message) {
-            const identity = getTelegramTextGroupMessageIdentity(message);
+            const identity = getBaleTextGroupMessageIdentity(message);
             if (plannedForwardCommentStarts.has(identity))
                 return "comment";
             if (plannedForwardCommentEnds.has(identity))
@@ -147,20 +147,20 @@ export function createTelegramTextGroupController(options = {}) {
             return undefined;
         },
         prepareForwardedMessage(message, position) {
-            const identity = getTelegramTextGroupMessageIdentity(message);
+            const identity = getBaleTextGroupMessageIdentity(message);
             if (position === "comment")
                 plannedForwardCommentStarts.add(identity);
             else
                 plannedForwardCommentEnds.add(identity);
         },
         queueMessage: ({ message, context, dispatchMessages }) => {
-            const identity = getTelegramTextGroupMessageIdentity(message);
-            const key = getTelegramTextGroupKey(message);
+            const identity = getBaleTextGroupMessageIdentity(message);
+            const key = getBaleTextGroupKey(message);
             const plannedStart = plannedForwardCommentStarts.delete(identity);
-            const forwarded = isTelegramForwardedMessage(message);
+            const forwarded = isBaleForwardedMessage(message);
             const existing = key ? groups.get(key) : undefined;
-            const text = extractTelegramTextGroupText(message);
-            if (existing && isTelegramTextGroupClearingCommand(text))
+            const text = extractBaleTextGroupText(message);
+            if (existing && isBaleTextGroupClearingCommand(text))
                 groups.clearKey(key);
             const candidatePosition = forwarded
                 ? "forward"
@@ -169,7 +169,7 @@ export function createTelegramTextGroupController(options = {}) {
             const pairCompleted = existingCandidate !== undefined &&
                 existingCandidate !== candidatePosition;
             const separateFromCandidate = existingCandidate === candidatePosition &&
-                !isTelegramTextGroupCommand(text);
+                !isBaleTextGroupCommand(text);
             if (separateFromCandidate && existing)
                 groups.closeBatch(key);
             const forceStart = plannedStart ||
@@ -177,7 +177,7 @@ export function createTelegramTextGroupController(options = {}) {
                     !!key &&
                     (forwarded ||
                         (typeof message.text === "string" &&
-                            !isTelegramTextGroupCommand(extractTelegramTextGroupText(message)))));
+                            !isBaleTextGroupCommand(extractBaleTextGroupText(message)))));
             const dispatchImmediately = pairCompleted ||
                 separateFromCandidate ||
                 plannedForwardCommentEnds.delete(identity) ||
@@ -191,10 +191,10 @@ export function createTelegramTextGroupController(options = {}) {
                 dispatchMessages,
                 forceStart,
                 dispatchImmediately,
-                forwardPairCandidate: forceStart && !canStartTelegramTextGroup(message, minSplitLength)
+                forwardPairCandidate: forceStart && !canStartBaleTextGroup(message, minSplitLength)
                     ? candidatePosition
                     : undefined,
-                delayMs: forceStart && !canStartTelegramTextGroup(message, minSplitLength)
+                delayMs: forceStart && !canStartBaleTextGroup(message, minSplitLength)
                     ? forwardCommentWaitMs === false
                         ? undefined
                         : forwardCommentWaitMs
@@ -211,7 +211,7 @@ export function createTelegramTextGroupController(options = {}) {
         },
     };
 }
-export function createTelegramTextGroupDispatchRuntime(deps) {
+export function createBaleTextGroupDispatchRuntime(deps) {
     return {
         handleMessage: async (message, ctx) => {
             const queuedTextGroup = deps.textGroups.queueMessage({
@@ -227,7 +227,7 @@ export function createTelegramTextGroupDispatchRuntime(deps) {
         },
     };
 }
-export function createTelegramGroupedInputClearer(deps) {
+export function createBaleGroupedInputClearer(deps) {
     return () => {
         deps.clearMediaGroups();
         deps.clearTextGroups();

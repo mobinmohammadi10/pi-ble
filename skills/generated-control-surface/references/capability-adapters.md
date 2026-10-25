@@ -1,3 +1,5 @@
+> Bale port: only the supported subset in [Bale compatibility](../../docs/bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
 # Capability Adapters
 
 Read only the section matching the current controlled capability.

@@ -1,28 +1,32 @@
+> Bale port: only the supported subset in [Bale compatibility](bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
 # Documentation Index
 
 Living index of project documentation in `/docs`.
 
-> Developer note: Pi executes the generated `dist/pi-telegram/index.js` entrypoint. After any project edit, run `npm run build` before `/reload`, restart, or live verification; otherwise the runtime can continue using stale compiled output.
+> Developer note: Pi executes the generated `dist/pi-bale/index.js` entrypoint. After any project edit, run `npm run build` before `/reload`, restart, or live verification; otherwise the runtime can continue using stale compiled output.
 
 `public-api.md` is the canonical entrypoint for stable extension surfaces. Focused documents exist only when a surface has enough runtime rules to need a dedicated standard.
 
 ## Documents
 
-- [architecture.md](./architecture.md) — Overview of the Telegram bridge runtime, optional profile isolation, queueing model and Normal/Priority/Steer plus Keep/Skip reaction policy, native Rich Markdown delivery, UI/compat rendering, and interactive controls
+- [architecture.md](./architecture.md) — Overview of the Bale bridge runtime, optional profile isolation, queueing model and Normal/Priority/Steer plus Keep/Skip reaction policy, native Rich Markdown delivery, UI/compat rendering, and interactive controls
 - [public-api.md](./public-api.md) — Stable public API map: package entrypoints, commands, config, assistant markup, extension APIs, smoke examples, and compatibility boundaries
 - [delivery.md](./delivery.md) — Target-aware companion delivery contract for operational views, logical message handles, target scopes, lifecycle fencing, and leader/follower transport
 - [activity.md](./activity.md) — Normalized Pi lifecycle API for extension-owned reasoning, intermediate prose, tool activity, source identity, delivery contexts, and consumer policy examples
-- [../.agents/skills/telegram-bot/SKILL.md](../.agents/skills/telegram-bot/SKILL.md) — Agent-facing Telegram Bot API lookup skill backed by a local full Bot API reference
+- [../.agents/skills/bale-bot/SKILL.md](../.agents/skills/bale-bot/SKILL.md) — Agent-facing Bale Bot API lookup skill backed by a local full Bot API reference
 - [../.agents/skills/domain-dag/SKILL.md](../.agents/skills/domain-dag/SKILL.md) — Project-local Domain DAG architecture skill and validator guidance
-- [../skills/show-me/SKILL.md](../skills/show-me/SKILL.md) — Portable visual-explanation skill with Telegram phone-width Markdown and self-contained browser-artifact guidance
+- [../skills/show-me/SKILL.md](../skills/show-me/SKILL.md) — Portable visual-explanation skill with Bale phone-width Markdown and self-contained browser-artifact guidance
 - [command-templates.md](./command-templates.md) — Portable command-template standard core
-- [inbound.md](./inbound.md) — Local `pi-telegram` inbound text/media handler bus, programmatic inbound handlers, registered STT provider fallbacks, legacy `attachmentHandlers` compatibility, placeholders, and fallbacks
-- [outbound.md](./outbound.md) — Local `pi-telegram` outbound-handler config, text/voice/button behavior, single-artifact Rich results, voice synthesis provider fallback priority, artifact outputs, and callback routing
+- [inbound.md](./inbound.md) — Local `pi-bale` inbound text/media handler bus, programmatic inbound handlers, registered STT provider fallbacks, legacy `attachmentHandlers` compatibility, placeholders, and fallbacks
+- [outbound.md](./outbound.md) — Local `pi-bale` outbound-handler config, text/voice/button behavior, single-artifact Rich results, voice synthesis provider fallback priority, artifact outputs, and callback routing
 - [compact-matrix-literal.md](./compact-matrix-literal.md) — Adaptive Button Literal / CML v4 standard for strict JSON objects, positional cells with disabled state, optional element commas, mixed bounded-depth matrices, atomic parsing, and renderer-owned width policy
 - [generative-apps.md](./generative-apps.md) — Generative Apps runtime and wire contract for managed `.mjs` identity, inference-bypass bindings, persistent state timelines, bounded adapters, replacement, and lifecycle; agent operation lives in the bundled `generative-apps` Skill
-- [callback-namespaces.md](./callback-namespaces.md) — Shared Telegram `callback_data` namespace standard for layered extensions
-- [updates.md](./updates.md) — Update classification and runtime handler registry that lets layered extensions observe and consume Telegram updates without owning their own polling connection
-- [multi-instance-bus.md](./multi-instance-bus.md) — Optional multi-instance Telegram bus architecture: profile-scoped transport, leader/follower routing, thread targets, instance slots, session-owned journal storage and sweeping, manual follower registration, and recovery semantics
-- [sections.md](./sections.md) — Telegram Extension Sections Standard: registration contract, context ports, callback routing, navigation hierarchy, and demo reference for pi extensions that want Telegram UI surfaces
+- [callback-namespaces.md](./callback-namespaces.md) — Shared Bale `callback_data` namespace standard for layered extensions
+- [updates.md](./updates.md) — Update classification and runtime handler registry that lets layered extensions observe and consume Bale updates without owning their own polling connection
+- [multi-instance-bus.md](./multi-instance-bus.md) — Optional multi-instance Bale bus architecture: profile-scoped transport, leader/follower routing, thread targets, instance slots, session-owned journal storage and sweeping, manual follower registration, and recovery semantics
+- [sections.md](./sections.md) — Bale Extension Sections Standard: registration contract, context ports, callback routing, navigation hierarchy, and demo reference for pi extensions that want Bale UI surfaces
 - [voice.md](./voice.md) — Voice integration guide: detection, reply policy, STT/TTS provider registration, provider-owned conversion, and transparent interception
 - [ui-style.md](./ui-style.md) — Inline UI style guide for buttons, toggles, tabs, option lists, cards, and dialogs
+
+- [Bale compatibility](bale-compatibility.md) — supported API subset, translation, disabled features and live gates.

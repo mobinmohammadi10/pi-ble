@@ -1,38 +1,38 @@
 /**
- * Telegram media and text extraction helpers
- * Zones: telegram inbound, media groups, filesystem paths
- * Normalizes inbound Telegram messages into reusable file, text, id, history, and media-group metadata
+ * Bale media and text extraction helpers
+ * Zones: bale inbound, media groups, filesystem paths
+ * Normalizes inbound Bale messages into reusable file, text, id, history, and media-group metadata
  */
 import * as Machine from "./machine.ts";
-export interface TelegramPhotoSize {
+export interface BalePhotoSize {
     file_id: string;
     file_size?: number;
 }
-export interface TelegramDocument {
+export interface BaleDocument {
     file_id: string;
     file_name?: string;
     mime_type?: string;
 }
-export type TelegramVideo = TelegramDocument;
-export type TelegramAudio = TelegramDocument;
-export type TelegramAnimation = TelegramDocument;
-export interface TelegramVoice {
+export type BaleVideo = BaleDocument;
+export type BaleAudio = BaleDocument;
+export type BaleAnimation = BaleDocument;
+export interface BaleVoice {
     file_id: string;
     mime_type?: string;
 }
-export interface TelegramRichMessage {
+export interface BaleRichMessage {
     blocks?: unknown[];
 }
-export interface TelegramMessageUser {
+export interface BaleMessageUser {
     id?: number;
     is_bot?: boolean;
     first_name?: string;
     last_name?: string;
     username?: string;
 }
-export interface TelegramMessageForwardOrigin {
+export interface BaleMessageForwardOrigin {
     type?: string;
-    sender_user?: TelegramMessageUser;
+    sender_user?: BaleMessageUser;
     sender_user_name?: string;
     sender_chat?: {
         title?: string;
@@ -46,50 +46,50 @@ export interface TelegramMessageForwardOrigin {
     };
     author_signature?: string;
 }
-export interface TelegramReplyToMessage {
+export interface BaleReplyToMessage {
     message_id?: number;
-    from?: TelegramMessageUser;
+    from?: BaleMessageUser;
     text?: string;
     caption?: string;
-    rich_message?: TelegramRichMessage;
-    photo?: TelegramPhotoSize[];
-    document?: TelegramDocument;
-    video?: TelegramVideo;
-    audio?: TelegramAudio;
-    voice?: TelegramVoice;
-    animation?: TelegramAnimation;
-    sticker?: TelegramSticker;
+    rich_message?: BaleRichMessage;
+    photo?: BalePhotoSize[];
+    document?: BaleDocument;
+    video?: BaleVideo;
+    audio?: BaleAudio;
+    voice?: BaleVoice;
+    animation?: BaleAnimation;
+    sticker?: BaleSticker;
 }
-export interface TelegramSticker {
+export interface BaleSticker {
     file_id: string;
     is_video?: boolean;
     is_animated?: boolean;
 }
-export interface TelegramMediaMessage {
+export interface BaleMediaMessage {
     message_id: number;
     chat?: {
         id: number;
         type?: string;
         username?: string;
     };
-    from?: TelegramMessageUser;
-    forward_origin?: TelegramMessageForwardOrigin;
-    forward_from?: TelegramMessageUser;
+    from?: BaleMessageUser;
+    forward_origin?: BaleMessageForwardOrigin;
+    forward_from?: BaleMessageUser;
     forward_sender_name?: string;
     text?: string;
     caption?: string;
-    rich_message?: TelegramRichMessage;
-    reply_to_message?: TelegramReplyToMessage;
+    rich_message?: BaleRichMessage;
+    reply_to_message?: BaleReplyToMessage;
     media_group_id?: string;
-    photo?: TelegramPhotoSize[];
-    document?: TelegramDocument;
-    video?: TelegramVideo;
-    audio?: TelegramAudio;
-    voice?: TelegramVoice;
-    animation?: TelegramAnimation;
-    sticker?: TelegramSticker;
+    photo?: BalePhotoSize[];
+    document?: BaleDocument;
+    video?: BaleVideo;
+    audio?: BaleAudio;
+    voice?: BaleVoice;
+    animation?: BaleAnimation;
+    sticker?: BaleSticker;
 }
-export interface TelegramMediaGroupMessage {
+export interface BaleMediaGroupMessage {
     message_id: number;
     chat: {
         id: number;
@@ -97,7 +97,7 @@ export interface TelegramMediaGroupMessage {
     message_thread_id?: number;
     media_group_id?: string;
 }
-export interface TelegramMediaGroupController<TMessage extends TelegramMediaGroupMessage, TContext = unknown> {
+export interface BaleMediaGroupController<TMessage extends BaleMediaGroupMessage, TContext = unknown> {
     queueMessage: (options: {
         message: TMessage;
         context?: TContext;
@@ -109,22 +109,22 @@ export interface TelegramMediaGroupController<TMessage extends TelegramMediaGrou
     resume: (context: TContext) => void;
     clear: () => void;
 }
-export interface TelegramMediaGroupDispatchRuntimeDeps<TMessage extends TelegramMediaGroupMessage, TContext> {
-    mediaGroups: TelegramMediaGroupController<TMessage, TContext>;
+export interface BaleMediaGroupDispatchRuntimeDeps<TMessage extends BaleMediaGroupMessage, TContext> {
+    mediaGroups: BaleMediaGroupController<TMessage, TContext>;
     dispatchMessages: (messages: TMessage[], ctx: TContext) => Promise<void>;
     onDeferredMessage?: (message: TMessage) => void;
 }
-export interface TelegramMediaGroupDispatchRuntime<TMessage extends TelegramMediaGroupMessage, TContext> {
+export interface BaleMediaGroupDispatchRuntime<TMessage extends BaleMediaGroupMessage, TContext> {
     handleMessage: (message: TMessage, ctx: TContext) => Promise<void>;
 }
-export interface TelegramMediaGroupControllerOptions {
+export interface BaleMediaGroupControllerOptions {
     debounceMs?: number;
     setTimer?: (callback: () => void, ms: number) => ReturnType<typeof setTimeout>;
     clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
 }
-export type TelegramAttachmentKind = "photo" | "document" | "video" | "audio" | "voice" | "animation" | "sticker";
+export type BaleAttachmentKind = "photo" | "document" | "video" | "audio" | "voice" | "animation" | "sticker";
 /** Where an inbound attachment came from; the download layer turns it into a scoped file name. */
-export interface TelegramAttachmentSource {
+export interface BaleAttachmentSource {
     kind: string;
     messageId: number;
     index?: number;
@@ -138,47 +138,47 @@ export interface TelegramAttachmentSource {
     /** Explicit source scope, e.g. a Guest Mode peer whose message IDs are not the bot chat's. */
     scope?: string;
 }
-export interface TelegramFileInfo {
+export interface BaleFileInfo {
     file_id: string;
     fileName: string;
     /** Present only when the sender chose the name. */
     userFileName?: string;
     /** Position inside a rich message. */
     index?: number;
-    source?: TelegramAttachmentSource;
+    source?: BaleAttachmentSource;
     mimeType?: string;
-    kind: TelegramAttachmentKind;
+    kind: BaleAttachmentKind;
     isImage: boolean;
 }
-export interface DownloadedTelegramFile {
+export interface DownloadedBaleFile {
     path: string;
     fileName?: string;
     isImage?: boolean;
     mimeType?: string;
-    kind?: TelegramAttachmentKind;
+    kind?: BaleAttachmentKind;
 }
-export interface DownloadedTelegramMessageFile {
+export interface DownloadedBaleMessageFile {
     path: string;
     fileName: string;
     isImage: boolean;
     mimeType?: string;
-    kind?: TelegramAttachmentKind;
+    kind?: BaleAttachmentKind;
 }
-export interface DownloadTelegramMessageFilesDeps {
-    downloadFile: (fileId: string, fileName: string, source?: TelegramAttachmentSource) => Promise<string>;
+export interface DownloadBaleMessageFilesDeps {
+    downloadFile: (fileId: string, fileName: string, source?: BaleAttachmentSource) => Promise<string>;
 }
 export declare function guessMediaType(path: string): string | undefined;
-export declare function extractTelegramMessageText(message: TelegramMediaMessage): string;
-export declare function extractTelegramForwardContextText(message: TelegramMediaMessage, allowedUserId?: number): string;
-export declare function buildTelegramReplyContextBlock(message: TelegramMediaMessage, replyFiles?: Pick<DownloadedTelegramFile, "path">[], replyOutputs?: readonly string[]): string;
-export declare function extractTelegramMessagesText(messages: TelegramMediaMessage[]): string;
-export declare function extractTelegramMessagesPromptText(messages: TelegramMediaMessage[]): string;
-export declare function extractFirstTelegramMessageText(messages: TelegramMediaMessage[]): string;
-export declare function hasTelegramMessagesPromptContent(messages: TelegramMediaMessage[]): boolean;
-export declare function collectTelegramMessageIds(messages: TelegramMediaMessage[]): number[];
-export declare function getTelegramMediaGroupKey(message: TelegramMediaGroupMessage): string | undefined;
-/** One pending input group; only `transitionTelegramPendingGroups` produces a new one. */
-export interface TelegramPendingGroup<TMessage, TContext, TMeta = undefined> {
+export declare function extractBaleMessageText(message: BaleMediaMessage): string;
+export declare function extractBaleForwardContextText(message: BaleMediaMessage, allowedUserId?: number): string;
+export declare function buildBaleReplyContextBlock(message: BaleMediaMessage, replyFiles?: Pick<DownloadedBaleFile, "path">[], replyOutputs?: readonly string[]): string;
+export declare function extractBaleMessagesText(messages: BaleMediaMessage[]): string;
+export declare function extractBaleMessagesPromptText(messages: BaleMediaMessage[]): string;
+export declare function extractFirstBaleMessageText(messages: BaleMediaMessage[]): string;
+export declare function hasBaleMessagesPromptContent(messages: BaleMediaMessage[]): boolean;
+export declare function collectBaleMessageIds(messages: BaleMediaMessage[]): number[];
+export declare function getBaleMediaGroupKey(message: BaleMediaGroupMessage): string | undefined;
+/** One pending input group; only `transitionBalePendingGroups` produces a new one. */
+export interface BalePendingGroup<TMessage, TContext, TMeta = undefined> {
     readonly messages: readonly TMessage[];
     readonly context?: TContext;
     /** Domain data carried with the group, such as a text group's forward-comment pairing side. */
@@ -193,17 +193,17 @@ export interface TelegramPendingGroup<TMessage, TContext, TMeta = undefined> {
     /** The next batch ends at this message, so later messages wait for the batch after it, whatever is in flight. */
     readonly boundaryId?: number;
 }
-export interface TelegramPendingGroupsState<TMessage, TContext, TMeta> {
-    readonly groups: ReadonlyMap<string, TelegramPendingGroup<TMessage, TContext, TMeta>>;
+export interface BalePendingGroupsState<TMessage, TContext, TMeta> {
+    readonly groups: ReadonlyMap<string, BalePendingGroup<TMessage, TContext, TMeta>>;
     readonly nextTimerId: number;
     readonly nextDispatchId: number;
 }
-export interface TelegramPendingGroupsConfig {
+export interface BalePendingGroupsConfig {
     debounceMs: number;
     /** A group without a context waits (text) instead of dispatching without one (media). */
     requireContext: boolean;
 }
-export type TelegramPendingGroupsEvent<TMessage, TContext, TMeta> = {
+export type BalePendingGroupsEvent<TMessage, TContext, TMeta> = {
     type: "queued";
     key: string;
     message: TMessage;
@@ -243,7 +243,7 @@ export type TelegramPendingGroupsEvent<TMessage, TContext, TMeta> = {
 } | {
     type: "cleared";
 };
-export type TelegramPendingGroupsEffect<TMessage, TContext> = {
+export type BalePendingGroupsEffect<TMessage, TContext> = {
     type: "armTimer";
     key: string;
     timerId: number;
@@ -258,23 +258,23 @@ export type TelegramPendingGroupsEffect<TMessage, TContext> = {
     messages: TMessage[];
     context?: TContext;
 };
-export interface TelegramPendingGroupsStep<TMessage, TContext, TMeta> extends Machine.TelegramMachineStep<TelegramPendingGroupsState<TMessage, TContext, TMeta>, TelegramPendingGroupsEffect<TMessage, TContext>> {
+export interface BalePendingGroupsStep<TMessage, TContext, TMeta> extends Machine.BaleMachineStep<BalePendingGroupsState<TMessage, TContext, TMeta>, BalePendingGroupsEffect<TMessage, TContext>> {
     /** `removed`: how many groups were dropped. */
     result: number;
 }
-export declare function createTelegramPendingGroupsState<TMessage, TContext, TMeta = undefined>(): TelegramPendingGroupsState<TMessage, TContext, TMeta>;
+export declare function createBalePendingGroupsState<TMessage, TContext, TMeta = undefined>(): BalePendingGroupsState<TMessage, TContext, TMeta>;
 /**
  * Pure transition for delayed input groups shared by media albums and split text. A group dispatches one batch at a
  * time; messages that arrive meanwhile wait for the next batch, a failure keeps the batch for a retry, and suspension
  * keeps every admitted message for the replacement context.
  */
-export declare function transitionTelegramPendingGroups<TMessage extends {
+export declare function transitionBalePendingGroups<TMessage extends {
     message_id: number;
-}, TContext, TMeta>(state: TelegramPendingGroupsState<TMessage, TContext, TMeta>, event: TelegramPendingGroupsEvent<TMessage, TContext, TMeta>, config: TelegramPendingGroupsConfig): TelegramPendingGroupsStep<TMessage, TContext, TMeta>;
-export interface TelegramPendingGroups<TMessage, TContext, TMeta> {
+}, TContext, TMeta>(state: BalePendingGroupsState<TMessage, TContext, TMeta>, event: BalePendingGroupsEvent<TMessage, TContext, TMeta>, config: BalePendingGroupsConfig): BalePendingGroupsStep<TMessage, TContext, TMeta>;
+export interface BalePendingGroups<TMessage, TContext, TMeta> {
     /** Read-only view of one group; it never grants mutation. */
-    get: (key: string) => TelegramPendingGroup<TMessage, TContext, TMeta> | undefined;
-    queue: (event: Omit<Extract<TelegramPendingGroupsEvent<TMessage, TContext, TMeta>, {
+    get: (key: string) => BalePendingGroup<TMessage, TContext, TMeta> | undefined;
+    queue: (event: Omit<Extract<BalePendingGroupsEvent<TMessage, TContext, TMeta>, {
         type: "queued";
     }>, "type"> & {
         dispatchMessages: (messages: TMessage[], ctx?: TContext) => unknown | Promise<unknown>;
@@ -289,23 +289,23 @@ export interface TelegramPendingGroups<TMessage, TContext, TMeta> {
     clear: () => void;
 }
 /**
- * The shell around `transitionTelegramPendingGroups`: it owns timer handles and each key's latest dispatcher, turns
+ * The shell around `transitionBalePendingGroups`: it owns timer handles and each key's latest dispatcher, turns
  * every dispatch outcome, including a synchronous throw, into `dispatchSettled`, and keeps each batch's promise for
  * flush callers.
  */
-export declare function createTelegramPendingGroups<TMessage extends {
+export declare function createBalePendingGroups<TMessage extends {
     message_id: number;
 }, TContext, TMeta = undefined>(options: {
     debounceMs: number;
     requireContext: boolean;
     setTimer: (callback: () => void, ms: number) => ReturnType<typeof setTimeout>;
     clearTimer: (timer: ReturnType<typeof setTimeout>) => void;
-}): TelegramPendingGroups<TMessage, TContext, TMeta>;
-export declare function createTelegramMediaGroupController<TMessage extends TelegramMediaGroupMessage, TContext = unknown>(options?: TelegramMediaGroupControllerOptions): TelegramMediaGroupController<TMessage, TContext>;
-export declare function createTelegramMediaGroupDispatchRuntime<TMessage extends TelegramMediaGroupMessage, TContext>(deps: TelegramMediaGroupDispatchRuntimeDeps<TMessage, TContext>): TelegramMediaGroupDispatchRuntime<TMessage, TContext>;
+}): BalePendingGroups<TMessage, TContext, TMeta>;
+export declare function createBaleMediaGroupController<TMessage extends BaleMediaGroupMessage, TContext = unknown>(options?: BaleMediaGroupControllerOptions): BaleMediaGroupController<TMessage, TContext>;
+export declare function createBaleMediaGroupDispatchRuntime<TMessage extends BaleMediaGroupMessage, TContext>(deps: BaleMediaGroupDispatchRuntimeDeps<TMessage, TContext>): BaleMediaGroupDispatchRuntime<TMessage, TContext>;
 /** Pure `[title]` bullet section appended after a blank line; empty items leave text unchanged. */
-export declare function appendTelegramListSection(text: string, title: string, items: string[]): string;
-export declare function appendTelegramAttachmentSection(text: string, files: Pick<DownloadedTelegramFile, "path">[]): string;
-export declare function formatTelegramHistoryText(rawText: string, files: DownloadedTelegramFile[], handlerOutputs?: string[]): string;
-export declare function downloadTelegramMessageFiles(messages: TelegramMediaMessage[], deps: DownloadTelegramMessageFilesDeps): Promise<DownloadedTelegramMessageFile[]>;
-export declare function collectTelegramFileInfos(messages: TelegramMediaMessage[]): TelegramFileInfo[];
+export declare function appendBaleListSection(text: string, title: string, items: string[]): string;
+export declare function appendBaleAttachmentSection(text: string, files: Pick<DownloadedBaleFile, "path">[]): string;
+export declare function formatBaleHistoryText(rawText: string, files: DownloadedBaleFile[], handlerOutputs?: string[]): string;
+export declare function downloadBaleMessageFiles(messages: BaleMediaMessage[], deps: DownloadBaleMessageFilesDeps): Promise<DownloadedBaleMessageFile[]>;
+export declare function collectBaleFileInfos(messages: BaleMediaMessage[]): BaleFileInfo[];

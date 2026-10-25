@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as Naming from "../lib/thread-naming.ts";
 import {
-  chooseTelegramThreadName,
-  createTelegramThreadNameDialogRuntime,
-  getTelegramManualThreadDisplayNameValidationError,
-  getTelegramTopicIdentityName,
-  getTelegramTopicName,
-  isTelegramTopicThreadNameValidForSlot,
-  TELEGRAM_THREAD_NAME_DIALOG_TTL_MS,
+  chooseBaleThreadName,
+  createBaleThreadNameDialogRuntime,
+  getBaleManualThreadDisplayNameValidationError,
+  getBaleTopicIdentityName,
+  getBaleTopicName,
+  isBaleTopicThreadNameValidForSlot,
+  BALE_THREAD_NAME_DIALOG_TTL_MS,
 } from "../lib/thread-naming.ts";
 
 const target = { chatId: 7, threadId: 42 };
@@ -17,7 +17,7 @@ const target = { chatId: 7, threadId: 42 };
 for (const boundary of ["current", "source", "successor", "expiry", "clock-source"] as const) {
   test(`Thread-name exact publication checks transient source authority without retaining it (${boundary})`, () => {
     let now = 100, source = true, publishing = false, granted = false;
-    const runtime = createTelegramThreadNameDialogRuntime({ nowMs() {
+    const runtime = createBaleThreadNameDialogRuntime({ nowMs() {
       if (boundary === "clock-source" && granted) source = false;
       return now;
     } });
@@ -29,7 +29,7 @@ for (const boundary of ["current", "source", "successor", "expiry", "clock-sourc
       if (!source) throw new Error("Source revoked");
       granted = true;
       if (boundary === "successor") runtime.open({ scope: "session:2", target, dialogMessageId: 20 });
-      if (boundary === "expiry") now += TELEGRAM_THREAD_NAME_DIALOG_TTL_MS;
+      if (boundary === "expiry") now += BALE_THREAD_NAME_DIALOG_TTL_MS;
     };
     publishing = true;
     if (boundary === "source" || boundary === "clock-source") {
@@ -37,7 +37,7 @@ for (const boundary of ["current", "source", "successor", "expiry", "clock-sourc
       assert.equal(runtime.inspect(target), undefined);
     } else if (boundary === "current") {
       const candidate = lifetime.publish(10, assertPublicationCurrent)!;
-      assert.equal(candidate.expiresAtMs, 100 + TELEGRAM_THREAD_NAME_DIALOG_TTL_MS);
+      assert.equal(candidate.expiresAtMs, 100 + BALE_THREAD_NAME_DIALOG_TTL_MS);
       source = false;
       assert.equal(runtime.capture(candidate)!.consumeName("Navigator").kind, "name", "Future input cannot inherit the completed source guard");
     } else {
@@ -52,7 +52,7 @@ for (const boundary of ["current", "source", "successor", "expiry", "clock-sourc
 for (const ending of ["finish", "cancel", "expiry", "reopen"] as const) {
   test(`Thread-name recipient callback stays independent of input ${ending}`, () => {
     let now = 100, current = true;
-    const runtime = createTelegramThreadNameDialogRuntime({ nowMs: () => now });
+    const runtime = createBaleThreadNameDialogRuntime({ nowMs: () => now });
     const assertAuthority = () => { if (!current) throw new Error("recipient ended"); };
     const input = { scope: "session:1", target, assertAuthority };
     const prepared = runtime.prepare(input)!;
@@ -63,7 +63,7 @@ for (const ending of ["finish", "cancel", "expiry", "reopen"] as const) {
     assert.equal("assertAuthority" in candidate, false, "Candidate views never expose callbacks");
     assert.equal("assertAuthority" in runtime.inspect(target)!, false);
     if (ending === "cancel") lifetime.select("cancel");
-    else if (ending === "expiry") { now += TELEGRAM_THREAD_NAME_DIALOG_TTL_MS; assert.equal(lifetime.isCurrent(), false); }
+    else if (ending === "expiry") { now += BALE_THREAD_NAME_DIALOG_TTL_MS; assert.equal(lifetime.isCurrent(), false); }
     else if (ending === "reopen") {
       lifetime.consumeName("Navigator");
       const reopened = lifetime.reopen()!;
@@ -79,7 +79,7 @@ for (const ending of ["finish", "cancel", "expiry", "reopen"] as const) {
 
 test("Thread-name dialog replaces duplicates and consumes one exact-target name", () => {
   let now = 100;
-  const runtime = createTelegramThreadNameDialogRuntime({ nowMs: () => now });
+  const runtime = createBaleThreadNameDialogRuntime({ nowMs: () => now });
   runtime.open({ scope: "session:1", target, dialogMessageId: 10 });
   runtime.open({ scope: "session:1", target, dialogMessageId: 11 });
   assert.deepEqual(runtime.select({
@@ -99,7 +99,7 @@ test("Thread-name dialog replaces duplicates and consumes one exact-target name"
 });
 
 test("Thread-name dialog reset and cancel are consume-once", () => {
-  const runtime = createTelegramThreadNameDialogRuntime();
+  const runtime = createBaleThreadNameDialogRuntime();
   for (const action of ["reset", "cancel"] as const) {
     runtime.open({ scope: "session:1", target, dialogMessageId: 20 });
     assert.deepEqual(runtime.select({
@@ -113,7 +113,7 @@ test("Thread-name dialog reset and cancel are consume-once", () => {
 
 test("Thread-name dialog rejects stale scope, expiry, and empty input", () => {
   let now = 1_000;
-  const runtime = createTelegramThreadNameDialogRuntime({ nowMs: () => now });
+  const runtime = createBaleThreadNameDialogRuntime({ nowMs: () => now });
   runtime.open({ scope: "session:1", target, dialogMessageId: 30 });
   assert.deepEqual(runtime.select({
     scope: "session:2", target, dialogMessageId: 30, action: "cancel",
@@ -122,7 +122,7 @@ test("Thread-name dialog rejects stale scope, expiry, and empty input", () => {
     scope: "session:1", target, text: "   ",
   }), { kind: "empty" });
   assert.equal(runtime.inspect(target)?.phase, "input");
-  now += TELEGRAM_THREAD_NAME_DIALOG_TTL_MS;
+  now += BALE_THREAD_NAME_DIALOG_TTL_MS;
   assert.deepEqual(runtime.consumeName({
     scope: "session:1", target, text: "Late",
   }), { kind: "none" });
@@ -130,7 +130,7 @@ test("Thread-name dialog rejects stale scope, expiry, and empty input", () => {
 });
 
 test("Thread-name dialog scope cleanup invalidates every target in that session", () => {
-  const runtime = createTelegramThreadNameDialogRuntime();
+  const runtime = createBaleThreadNameDialogRuntime();
   runtime.open({ scope: "session:1", target, dialogMessageId: 40 });
   runtime.open({
     scope: "session:1", target: { chatId: 7, threadId: 43 }, dialogMessageId: 41,
@@ -150,7 +150,7 @@ for (const phase of ["delivery", "input", "name", "reset"] as const) {
       let now = 100;
       let authority = true;
       let throws = false;
-      const runtime = createTelegramThreadNameDialogRuntime({ nowMs: () => now });
+      const runtime = createBaleThreadNameDialogRuntime({ nowMs: () => now });
       const lifetime = runtime.prepare({
         scope: "session:1", target,
         isCurrent() {
@@ -173,7 +173,7 @@ for (const phase of ["delivery", "input", "name", "reset"] as const) {
         runtime.open({ scope: "session:1", target, dialogMessageId: 10 });
       }
       if (boundary === "clear") runtime.clearScope("session:1");
-      if (boundary === "expiry") now += TELEGRAM_THREAD_NAME_DIALOG_TTL_MS;
+      if (boundary === "expiry") now += BALE_THREAD_NAME_DIALOG_TTL_MS;
       if (boundary === "recipient") authority = false;
       if (boundary === "throw") throws = true;
       assert.equal(lifetime.isCurrent(), false);
@@ -197,7 +197,7 @@ for (const phase of ["delivery", "input", "name", "reset"] as const) {
 }
 
 test("Thread-name prepared lifetime captures target and recipient callback before delivery", () => {
-  const runtime = createTelegramThreadNameDialogRuntime();
+  const runtime = createBaleThreadNameDialogRuntime();
   let authority = true;
   const input = {
     scope: "session:1", target: { ...target }, isCurrent: () => authority,
@@ -222,7 +222,7 @@ test("Thread-name prepared lifetime captures target and recipient callback befor
 
 test("Thread-name prepared publication refuses invalid IDs without publishing or replay", () => {
   for (const id of [0, -1, 1.5, NaN, Infinity]) {
-    const runtime = createTelegramThreadNameDialogRuntime();
+    const runtime = createBaleThreadNameDialogRuntime();
     const lifetime = runtime.prepare({ scope: "session:1", target });
     assert.ok(lifetime);
     assert.equal(lifetime.publish(id), undefined);
@@ -234,7 +234,7 @@ test("Thread-name prepared publication refuses invalid IDs without publishing or
 
 test("Thread-name captured input reopens only its own consumption at the original deadline", () => {
   let now = 100;
-  const runtime = createTelegramThreadNameDialogRuntime({ nowMs: () => now });
+  const runtime = createBaleThreadNameDialogRuntime({ nowMs: () => now });
   const candidate = runtime.open({ scope: "session:1", target, dialogMessageId: 10 });
   assert.equal(runtime.capture({ scope: "wrong", target, dialogMessageId: 10 }), undefined);
   assert.equal(runtime.capture({ scope: "session:1", target, dialogMessageId: 11 }), undefined);
@@ -261,7 +261,7 @@ test("Thread-name captured input reopens only its own consumption at the origina
 });
 
 test("Thread-name cancellation and finish terminalize only the captured lifetime", () => {
-  const runtime = createTelegramThreadNameDialogRuntime();
+  const runtime = createBaleThreadNameDialogRuntime();
   for (const action of ["cancel", "name", "reset"] as const) {
     const lifetime = runtime.prepare({ scope: "session:1", target });
     assert.ok(lifetime);
@@ -283,7 +283,7 @@ test("Thread-name cancellation and finish terminalize only the captured lifetime
 
 test("Thread-name recipient checks cannot lend authority through synchronous replacement", () => {
   for (const boundary of ["replace", "clear"] as const) {
-    const runtime = createTelegramThreadNameDialogRuntime();
+    const runtime = createBaleThreadNameDialogRuntime();
     let mutate = false;
     const lifetime = runtime.prepare({
       scope: "session:1", target,
@@ -305,7 +305,7 @@ test("Thread-name recipient checks cannot lend authority through synchronous rep
 });
 
 test("Thread-name post-observation claim check preserves another exact consumer", () => {
-  const runtime = createTelegramThreadNameDialogRuntime();
+  const runtime = createBaleThreadNameDialogRuntime();
   let consume: (() => void) | undefined;
   const prepared = runtime.prepare({
     scope: "session:1", target,
@@ -330,7 +330,7 @@ test("Thread-name post-observation claim check preserves another exact consumer"
 
 test("Thread-name held delivery cannot publish after newer delivery or session cleanup", async () => {
   for (const boundary of ["replace", "clear"] as const) {
-    const runtime = createTelegramThreadNameDialogRuntime();
+    const runtime = createBaleThreadNameDialogRuntime();
     const send = Promise.withResolvers<number>();
     const lifetime = runtime.prepare({ scope: "session:1", target });
     assert.ok(lifetime);
@@ -347,7 +347,7 @@ test("Thread-name held delivery cannot publish after newer delivery or session c
 
 test("Thread-name held name/reset failure cannot reopen a replacement after await", async () => {
   for (const kind of ["name", "reset"] as const) {
-    const runtime = createTelegramThreadNameDialogRuntime();
+    const runtime = createBaleThreadNameDialogRuntime();
     const result = Promise.withResolvers<void>();
     const lifetime = runtime.prepare({ scope: "session:1", target });
     assert.ok(lifetime);
@@ -368,14 +368,14 @@ test("Thread-name held name/reset failure cannot reopen a replacement after awai
 test("Thread-name hidden delivery/consumption expiry cannot be renewed by clock rewind", () => {
   for (const phase of ["delivery", "reset"] as const) {
     let now = 100;
-    const runtime = createTelegramThreadNameDialogRuntime({ nowMs: () => now });
+    const runtime = createBaleThreadNameDialogRuntime({ nowMs: () => now });
     const lifetime = runtime.prepare({ scope: "session:1", target });
     assert.ok(lifetime);
     if (phase === "reset") {
       assert.ok(lifetime.publish(10));
       lifetime.select("reset");
     }
-    now += TELEGRAM_THREAD_NAME_DIALOG_TTL_MS;
+    now += BALE_THREAD_NAME_DIALOG_TTL_MS;
     assert.equal(runtime.inspect(target), undefined);
     now = 100;
     assert.equal(lifetime.isCurrent(), false, "inspect must also expire unpublished or consumed entries");
@@ -384,7 +384,7 @@ test("Thread-name hidden delivery/consumption expiry cannot be renewed by clock 
 
 test("Thread-name preparation captures authority before clock and preserves a reentrant successor", () => {
   let observe: (() => void) | undefined;
-  const runtime = createTelegramThreadNameDialogRuntime({
+  const runtime = createBaleThreadNameDialogRuntime({
     nowMs() {
       const effect = observe;
       observe = undefined;
@@ -411,14 +411,14 @@ test("Thread-name preparation captures authority before clock and preserves a re
 
 test("Thread-name supplied recipient checks require positive boolean authority", () => {
   for (const value of [undefined, null, 0, 1, "true"]) {
-    const runtime = createTelegramThreadNameDialogRuntime();
+    const runtime = createBaleThreadNameDialogRuntime();
     const guard = (() => value) as unknown as () => boolean;
     assert.equal(runtime.prepare({ scope: "session:1", target, isCurrent: guard }), undefined);
   }
 });
 
 test("Thread-name capture and ordinary actions keep their inputs across recipient observations", () => {
-  const runtime = createTelegramThreadNameDialogRuntime();
+  const runtime = createBaleThreadNameDialogRuntime();
   let observe: (() => void) | undefined;
   const open = () => {
     const lifetime = runtime.prepare({
@@ -447,18 +447,18 @@ test("Thread-name capture and ordinary actions keep their inputs across recipien
 });
 
 test("Thread-name refused preparation preserves ordinary current input and other scopes", () => {
-  const runtime = createTelegramThreadNameDialogRuntime();
+  const runtime = createBaleThreadNameDialogRuntime();
   const candidate = runtime.open({ scope: "session:1", target, dialogMessageId: 10 });
   assert.equal(runtime.prepare({ scope: "replacement", target, isCurrent: () => false }), undefined);
   assert.deepEqual(runtime.inspect(target), candidate);
   assert.deepEqual(runtime.select({ scope: "session:1", target, dialogMessageId: 10, action: "cancel" }), { kind: "cancel" });
 });
 
-test("Baked thread names stay compact for narrow Telegram tabs", () => {
+test("Baked thread names stay compact for narrow Bale tabs", () => {
   for (const slot of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
     const seen = new Set<string>();
     for (let index = 0; index < 5; index += 1) {
-      const name = chooseTelegramThreadName({
+      const name = chooseBaleThreadName({
         slot,
         getRandom: () => index / 5,
       });
@@ -476,7 +476,7 @@ test("Baked thread names stay compact for narrow Telegram tabs", () => {
 
 test("Baked thread names skip identities reserved by Workspace bindings", () => {
   assert.equal(
-    chooseTelegramThreadName({
+    chooseBaleThreadName({
       slot: "C",
       getRandom: () => 0,
       occupied: ["Cedar", "Comet", "Cipher", "Coral"],
@@ -486,15 +486,15 @@ test("Baked thread names skip identities reserved by Workspace bindings", () => 
 });
 
 test("Baked thread names can be selected from timestamp entropy", () => {
-  const first = chooseTelegramThreadName({
+  const first = chooseBaleThreadName({
     slot: "C",
     entropy: 1_720_000_000_001,
   });
-  const second = chooseTelegramThreadName({
+  const second = chooseBaleThreadName({
     slot: "C",
     entropy: 1_720_000_000_001,
   });
-  const nearby = chooseTelegramThreadName({
+  const nearby = chooseBaleThreadName({
     slot: "C",
     entropy: 1_720_000_000_002,
   });
@@ -505,14 +505,14 @@ test("Baked thread names can be selected from timestamp entropy", () => {
 });
 
 test("Thread recovery identities remain compact capitalized Latin names", () => {
-  assert.equal(getTelegramTopicIdentityName("Jname"), "Jname");
-  assert.equal(getTelegramTopicIdentityName("  Jname  "), "Jname");
-  assert.equal(isTelegramTopicThreadNameValidForSlot("Jname", "J"), true);
+  assert.equal(getBaleTopicIdentityName("Jname"), "Jname");
+  assert.equal(getBaleTopicIdentityName("  Jname  "), "Jname");
+  assert.equal(isBaleTopicThreadNameValidForSlot("Jname", "J"), true);
   for (const name of [
     "J", "name", "Follower", "J identity", "J-identity", "Word Word",
     "wasd_123!?+$@", "🌙 J-identity",
   ]) {
-    assert.equal(isTelegramTopicThreadNameValidForSlot(name, "J"), false, name);
+    assert.equal(isBaleTopicThreadNameValidForSlot(name, "J"), false, name);
   }
 });
 
@@ -521,17 +521,17 @@ test("Manual Thread display names accept bounded printable ASCII", () => {
     "Jname", "name", "Follower", "J identity", "J-identity", "Word Word",
     "wasd_123!?+$@",
   ]) {
-    assert.equal(getTelegramManualThreadDisplayNameValidationError(name), undefined, name);
+    assert.equal(getBaleManualThreadDisplayNameValidationError(name), undefined, name);
   }
-  assert.match(getTelegramManualThreadDisplayNameValidationError("A") ?? "", /reset/);
-  assert.match(getTelegramManualThreadDisplayNameValidationError("   ") ?? "", /empty/);
-  assert.match(getTelegramManualThreadDisplayNameValidationError("🌙") ?? "", /printable ASCII/);
-  assert.match(getTelegramManualThreadDisplayNameValidationError("line\nbreak") ?? "", /printable ASCII/);
-  assert.match(getTelegramManualThreadDisplayNameValidationError("x".repeat(97)) ?? "", /96/);
+  assert.match(getBaleManualThreadDisplayNameValidationError("A") ?? "", /reset/);
+  assert.match(getBaleManualThreadDisplayNameValidationError("   ") ?? "", /empty/);
+  assert.match(getBaleManualThreadDisplayNameValidationError("🌙") ?? "", /printable ASCII/);
+  assert.match(getBaleManualThreadDisplayNameValidationError("line\nbreak") ?? "", /printable ASCII/);
+  assert.match(getBaleManualThreadDisplayNameValidationError("x".repeat(97)) ?? "", /96/);
 });
 
-test("Thread titles are trimmed and capped to Telegram's 128 character limit", () => {
-  const name = getTelegramTopicName(
+test("Thread titles are trimmed and capped to Bale's 128 character limit", () => {
+  const name = getBaleTopicName(
     {
       instanceId: "inst-a",
       profileKey: "cwd:/repo",
@@ -545,25 +545,25 @@ test("Thread titles are trimmed and capped to Telegram's 128 character limit", (
 
 test("Thread palette order and exhaustion preserve fallback and random edge behavior", () => {
   const occupied = Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").flatMap(slot =>
-    Array.from({ length: 5 }, (_, index) => Naming.chooseTelegramThreadName({ slot, getRandom: () => index / 5 })!));
+    Array.from({ length: 5 }, (_, index) => Naming.chooseBaleThreadName({ slot, getRandom: () => index / 5 })!));
   assert.equal(new Set(occupied).size, 130);
-  assert.equal(Naming.chooseTelegramThreadName({ slot: "A", occupied }), undefined);
-  assert.equal(Naming.chooseTelegramThreadName({ slot: "A", occupied: occupied.slice(0, 5), getRandom: () => 0 }), "Beacon");
-  assert.equal(Naming.chooseTelegramThreadName({ slot: undefined }), undefined);
-  assert.equal(Naming.chooseTelegramThreadName({ slot: "a" }), undefined);
-  assert.equal(Naming.chooseTelegramThreadName({ slot: "A", getRandom: () => -1 }), "Atlas");
-  assert.equal(Naming.chooseTelegramThreadName({ slot: "A", getRandom: () => Infinity }), "Ashen");
-  assert.throws(() => Naming.chooseTelegramThreadName({ slot: "A", getRandom: () => NaN }), TypeError);
-  assert.equal(Naming.chooseTelegramThreadName({ slot: "A", entropy: 0 }), "Atlas");
+  assert.equal(Naming.chooseBaleThreadName({ slot: "A", occupied }), undefined);
+  assert.equal(Naming.chooseBaleThreadName({ slot: "A", occupied: occupied.slice(0, 5), getRandom: () => 0 }), "Beacon");
+  assert.equal(Naming.chooseBaleThreadName({ slot: undefined }), undefined);
+  assert.equal(Naming.chooseBaleThreadName({ slot: "a" }), undefined);
+  assert.equal(Naming.chooseBaleThreadName({ slot: "A", getRandom: () => -1 }), "Atlas");
+  assert.equal(Naming.chooseBaleThreadName({ slot: "A", getRandom: () => Infinity }), "Ashen");
+  assert.throws(() => Naming.chooseBaleThreadName({ slot: "A", getRandom: () => NaN }), TypeError);
+  assert.equal(Naming.chooseBaleThreadName({ slot: "A", entropy: 0 }), "Atlas");
 });
 
 test("Thread identity normalization and title fallback retain their different bounds", () => {
-  assert.equal(Naming.normalizeTelegramTopicTargetThreadName("  Alpha\t Beta \n"), "Alpha Beta");
-  assert.equal(Naming.getTelegramTopicIdentityName("  🌙 Alpha  "), "🌙 Alpha");
-  assert.equal(Naming.getTelegramThreadNameLeadingSlot(" Jname "), "J");
-  assert.equal(Naming.getTelegramThreadNameLeadingSlot("name"), undefined);
-  assert.equal(Naming.normalizeTelegramTopicTargetThreadName("x".repeat(100)).length, 96);
-  assert.equal(Naming.getTelegramTopicName({ instanceId: "id", profileKey: "profile", threadName: " " }, "{threadName}"), "profile");
-  assert.equal(Naming.getTelegramTopicName({ instanceId: "id", profileKey: "profile" }, "", "A"), "A");
-  assert.equal(Naming.getTelegramTopicName({ instanceId: "id", profileKey: "profile" }, ""), "Pi");
+  assert.equal(Naming.normalizeBaleTopicTargetThreadName("  Alpha\t Beta \n"), "Alpha Beta");
+  assert.equal(Naming.getBaleTopicIdentityName("  🌙 Alpha  "), "🌙 Alpha");
+  assert.equal(Naming.getBaleThreadNameLeadingSlot(" Jname "), "J");
+  assert.equal(Naming.getBaleThreadNameLeadingSlot("name"), undefined);
+  assert.equal(Naming.normalizeBaleTopicTargetThreadName("x".repeat(100)).length, 96);
+  assert.equal(Naming.getBaleTopicName({ instanceId: "id", profileKey: "profile", threadName: " " }, "{threadName}"), "profile");
+  assert.equal(Naming.getBaleTopicName({ instanceId: "id", profileKey: "profile" }, "", "A"), "A");
+  assert.equal(Naming.getBaleTopicName({ instanceId: "id", profileKey: "profile" }, ""), "Pi");
 });

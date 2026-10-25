@@ -1,19 +1,19 @@
 /**
- * Telegram Workspace display projection
- * Zones: telegram, tui, thread identity
+ * Bale Workspace display projection
+ * Zones: bale, tui, thread identity
  * Owns mode-specific labels and serialized, authority-fenced title application.
  * Excludes routing, name allocation, profile mutation, and live-owner discovery.
  */
 import { homedir } from "node:os";
 import { isDeepStrictEqual } from "node:util";
 
-import type { TelegramThreadDisplayMode } from "./config.ts";
-import { normalizeTelegramWorkspacePath } from "./workspace-identity.ts";
-import type { TelegramApiCallOptions } from "./telegram-api.ts";
+import type { BaleThreadDisplayMode } from "./config.ts";
+import { normalizeBaleWorkspacePath } from "./workspace-identity.ts";
+import type { BaleApiCallOptions } from "./bale-api.ts";
 import type {
-  TelegramTopicTargetStore,
-  TelegramWorkspaceDisplayBinding,
-  TelegramWorkspaceThreadBinding,
+  BaleTopicTargetStore,
+  BaleWorkspaceDisplayBinding,
+  BaleWorkspaceThreadBinding,
 } from "./threads.ts";
 
 function labelText(value: string): string {
@@ -62,7 +62,7 @@ function directoryLabel(cwd: string, directories: readonly string[]): string {
 }
 
 /** Pure directory tokenization shared by previews, initial titles, and reconciliation. */
-export function tokenizeTelegramDirectorySegment(segment: string): string[] {
+export function tokenizeBaleDirectorySegment(segment: string): string[] {
   return segment
     .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1\u0000$2")
     .replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1\u0000$2")
@@ -80,7 +80,7 @@ function formatDirectoryLabel(
   if (!segments.length) return "/";
   const formatted = segments
     .map((segment) => {
-      const tokens = tokenizeTelegramDirectorySegment(segment);
+      const tokens = tokenizeBaleDirectorySegment(segment);
       if (!tokens.length) return "";
       if (mode === "directory-snake")
         return tokens.map((token) => token.toLowerCase()).join("_");
@@ -98,8 +98,8 @@ function formatDirectoryLabel(
 }
 
 /** Maps one leader-captured authenticated owner roster onto retained binding identities. */
-export function resolveTelegramLiveWorkspaceBindingKeys(
-  bindings: readonly TelegramWorkspaceThreadBinding[],
+export function resolveBaleLiveWorkspaceBindingKeys(
+  bindings: readonly BaleWorkspaceThreadBinding[],
   leaderTarget: { chatId: number; threadId?: number } | undefined,
   followers: readonly { target?: { chatId: number; threadId?: number } }[],
 ): ReadonlySet<string> {
@@ -122,10 +122,10 @@ export function resolveTelegramLiveWorkspaceBindingKeys(
 
 /** Missing or ambiguous metadata yields no label rather than inventing identity. */
 /** Case-insensitive label occurrences; directory modes count only live bindings. */
-function countTelegramDisplayLabels(
-  bindings: readonly TelegramWorkspaceDisplayBinding[],
+function countBaleDisplayLabels(
+  bindings: readonly BaleWorkspaceDisplayBinding[],
   labels: ReadonlyMap<string, string>,
-  mode: TelegramThreadDisplayMode,
+  mode: BaleThreadDisplayMode,
   liveBindingKeys: ReadonlySet<string>,
 ): Map<string, number> {
   const counts = new Map<string, number>();
@@ -143,16 +143,16 @@ function countTelegramDisplayLabels(
   return counts;
 }
 
-export function resolveTelegramWorkspaceDisplayNames(
-  bindings: readonly TelegramWorkspaceDisplayBinding[],
-  mode: TelegramThreadDisplayMode,
+export function resolveBaleWorkspaceDisplayNames(
+  bindings: readonly BaleWorkspaceDisplayBinding[],
+  mode: BaleThreadDisplayMode,
   liveBindingKeys: ReadonlySet<string> = new Set(),
 ): Map<string, string> {
   const labels = new Map<string, string>();
   const homeDirectory =
     (mode === "directory-snake" || mode === "directory-title") &&
     (process.platform === "linux" || process.platform === "darwin")
-      ? normalizeTelegramWorkspacePath(homedir())
+      ? normalizeBaleWorkspacePath(homedir())
       : undefined;
   const directories = Array.from(
     new Set(bindings.map((binding) => binding.cwd)),
@@ -209,7 +209,7 @@ export function resolveTelegramWorkspaceDisplayNames(
     mode === "directory-snake" ||
     mode === "directory-title"
   ) {
-    const counts = countTelegramDisplayLabels(
+    const counts = countBaleDisplayLabels(
       bindings,
       labels,
       mode,
@@ -245,7 +245,7 @@ export function resolveTelegramWorkspaceDisplayNames(
       );
     }
   }
-  const counts = countTelegramDisplayLabels(
+  const counts = countBaleDisplayLabels(
     bindings,
     labels,
     mode,
@@ -257,10 +257,10 @@ export function resolveTelegramWorkspaceDisplayNames(
   return labels;
 }
 
-export function resolveTelegramInitialWorkspaceDisplayName(input: {
-  bindings: readonly TelegramWorkspaceDisplayBinding[];
-  binding: TelegramWorkspaceDisplayBinding;
-  mode: TelegramThreadDisplayMode;
+export function resolveBaleInitialWorkspaceDisplayName(input: {
+  bindings: readonly BaleWorkspaceDisplayBinding[];
+  binding: BaleWorkspaceDisplayBinding;
+  mode: BaleThreadDisplayMode;
   preserveRetainedManualName?: boolean;
   liveBindingKeys?: ReadonlySet<string>;
 }): string | undefined {
@@ -277,7 +277,7 @@ export function resolveTelegramInitialWorkspaceDisplayName(input: {
           : {}),
       }
     : input.binding;
-  return resolveTelegramWorkspaceDisplayNames(
+  return resolveBaleWorkspaceDisplayNames(
     [
       ...input.bindings.filter(
         (candidate) => candidate.bindingKey !== binding.bindingKey,
@@ -289,15 +289,15 @@ export function resolveTelegramInitialWorkspaceDisplayName(input: {
   ).get(binding.bindingKey);
 }
 
-export async function applyTelegramThreadDisplaySetting(
-  mode: TelegramThreadDisplayMode,
+export async function applyBaleThreadDisplaySetting(
+  mode: BaleThreadDisplayMode,
   deps: {
     getProfileKey(): string | undefined;
     ownsLeader(): boolean;
     getLeaderSetter():
-      ((mode: TelegramThreadDisplayMode) => Promise<void>) | undefined;
+      ((mode: BaleThreadDisplayMode) => Promise<void>) | undefined;
     getFollowerSetter():
-      ((mode: TelegramThreadDisplayMode) => Promise<void>) | undefined;
+      ((mode: BaleThreadDisplayMode) => Promise<void>) | undefined;
     reloadConfig(): Promise<void>;
   },
 ): Promise<void> {
@@ -311,47 +311,47 @@ export async function applyTelegramThreadDisplaySetting(
     );
   await setter(mode);
   if (deps.getProfileKey() !== profile)
-    throw new Error("Telegram Thread display setting changed profile.");
+    throw new Error("Bale Thread display setting changed profile.");
   await deps.reloadConfig();
   if (deps.getProfileKey() !== profile)
-    throw new Error("Telegram Thread display setting changed profile.");
+    throw new Error("Bale Thread display setting changed profile.");
 }
 
-export interface TelegramThreadDisplayReconcilerDeps {
+export interface BaleThreadDisplayReconcilerDeps {
   store: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     "listWorkspaceBindings" | "setWorkspaceDisplayTitle" | "persist"
   >;
-  getMode(): TelegramThreadDisplayMode;
+  getMode(): BaleThreadDisplayMode;
   getProfileKey(): string;
   getLeaderEpoch(): string | number | undefined;
   captureBindingAuthority(
-    binding: TelegramWorkspaceThreadBinding,
+    binding: BaleWorkspaceThreadBinding,
   ): (() => boolean) | undefined;
   captureLiveBindingKeys(
-    bindings: readonly TelegramWorkspaceThreadBinding[],
+    bindings: readonly BaleWorkspaceThreadBinding[],
   ): ReadonlySet<string>;
   callApi<TResponse>(
     method: string,
     body: Record<string, unknown>,
-    options?: TelegramApiCallOptions,
+    options?: BaleApiCallOptions,
   ): Promise<TResponse>;
 }
 
-export function createTelegramThreadDisplaySettingsRuntime(deps: {
+export function createBaleThreadDisplaySettingsRuntime(deps: {
   getTarget(): { chatId: number; threadId?: number } | undefined;
   getBinding(target: {
     chatId: number;
     threadId?: number;
   }): { manualThreadName?: string } | undefined;
-  apply(mode: TelegramThreadDisplayMode): Promise<void>;
+  apply(mode: BaleThreadDisplayMode): Promise<void>;
   reset(target: {
     chatId: number;
     threadId?: number;
   }): Promise<{ ok: boolean; message?: string }>;
 }): {
   isCustom(): boolean;
-  setMode(mode: TelegramThreadDisplayMode): Promise<void>;
+  setMode(mode: BaleThreadDisplayMode): Promise<void>;
 } {
   return {
     isCustom() {
@@ -371,7 +371,7 @@ export function createTelegramThreadDisplaySettingsRuntime(deps: {
       const reset = await deps.reset(target);
       if (!reset.ok) {
         throw new Error(
-          reset.message ?? "Telegram Thread display override reset failed.",
+          reset.message ?? "Bale Thread display override reset failed.",
         );
       }
     },
@@ -379,8 +379,8 @@ export function createTelegramThreadDisplaySettingsRuntime(deps: {
 }
 
 /** Caller owns triggering and reporting; no timer or background retry is created. */
-export function createTelegramThreadDisplayReconciler(
-  deps: TelegramThreadDisplayReconcilerDeps,
+export function createBaleThreadDisplayReconciler(
+  deps: BaleThreadDisplayReconcilerDeps,
 ): { reconcile(bindingKey?: string): Promise<{ changed: number }> } {
   let tail: Promise<unknown> = Promise.resolve();
   const apply = async (bindingKey?: string): Promise<{ changed: number }> => {
@@ -395,14 +395,14 @@ export function createTelegramThreadDisplayReconciler(
         deps.getMode() !== mode
       ) {
         throw new Error(
-          "Telegram Thread display update lost profile, mode, or leader authority.",
+          "Bale Thread display update lost profile, mode, or leader authority.",
         );
       }
     };
     assertAuthority();
     const bindings = deps.store.listWorkspaceBindings();
     const liveBindingKeys = deps.captureLiveBindingKeys(bindings);
-    const titles = resolveTelegramWorkspaceDisplayNames(
+    const titles = resolveBaleWorkspaceDisplayNames(
       bindings,
       mode,
       liveBindingKeys,
@@ -415,17 +415,17 @@ export function createTelegramThreadDisplayReconciler(
       const title = titles.get(binding.bindingKey);
       if (!title)
         throw new Error(
-          "Telegram Thread display identity is missing or ambiguous.",
+          "Bale Thread display identity is missing or ambiguous.",
         );
       const assertBinding = (
-        expected: TelegramWorkspaceThreadBinding,
+        expected: BaleWorkspaceThreadBinding,
       ): void => {
         assertAuthority();
         const current = deps.store
           .listWorkspaceBindings()
           .find((candidate) => candidate.bindingKey === expected.bindingKey);
         if (!isDeepStrictEqual(current, expected) || !isBindingCurrent()) {
-          throw new Error("Telegram Thread display binding changed.");
+          throw new Error("Bale Thread display binding changed.");
         }
       };
       assertBinding(binding);
@@ -441,10 +441,10 @@ export function createTelegramThreadDisplayReconciler(
       );
       assertBinding(binding);
       if (acknowledged !== true)
-        throw new Error("Telegram Thread display update was not acknowledged.");
+        throw new Error("Bale Thread display update was not acknowledged.");
       if (!deps.store.setWorkspaceDisplayTitle(binding, title)) {
         throw new Error(
-          "Telegram Thread display binding changed before title commit.",
+          "Bale Thread display binding changed before title commit.",
         );
       }
       await deps.store.persist();

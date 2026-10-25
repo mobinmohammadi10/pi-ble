@@ -1,6 +1,6 @@
 /**
- * Telegram thread binding helpers
- * Zones: multi-instance bus, Telegram UI threads, durable Workspace state
+ * Bale thread binding helpers
+ * Zones: multi-instance bus, Bale UI threads, durable Workspace state
  * Owns live mappings, Workspace bindings and guarded Restore transitions; routing and transport effects stay outside.
  */
 
@@ -23,25 +23,25 @@ import { basename, dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import {
-  parseTelegramIntegerId as asInteger,
-  getTelegramTargetKey as getTargetRecoveryHintKey,
-  areTelegramTargetsEqual as targetMatches,
-  type TelegramTarget,
+  parseBaleIntegerId as asInteger,
+  getBaleTargetKey as getTargetRecoveryHintKey,
+  areBaleTargetsEqual as targetMatches,
+  type BaleTarget,
 } from "./target.ts";
 import {
-  isTelegramApiCommitUnknownError,
-  TelegramApiCommitUnknownError,
-  type TelegramApiCallOptions,
-} from "./telegram-api.ts";
+  isBaleApiCommitUnknownError,
+  BaleApiCommitUnknownError,
+  type BaleApiCallOptions,
+} from "./bale-api.ts";
 import {
-  getTelegramTopicName as buildTelegramTopicName,
-  chooseTelegramThreadName,
-  getTelegramManualThreadDisplayNameValidationError,
-  getTelegramThreadNameLeadingSlot,
-  getTelegramTopicIdentityName,
-  getTelegramTopicTitleForThreadName,
-  isTelegramTopicThreadNameValidForSlot,
-  normalizeTelegramTopicTargetThreadName,
+  getBaleTopicName as buildBaleTopicName,
+  chooseBaleThreadName,
+  getBaleManualThreadDisplayNameValidationError,
+  getBaleThreadNameLeadingSlot,
+  getBaleTopicIdentityName,
+  getBaleTopicTitleForThreadName,
+  isBaleTopicThreadNameValidForSlot,
+  normalizeBaleTopicTargetThreadName,
 } from "./thread-naming.ts";
 import {
   isWireRecord as restoreObject,
@@ -49,45 +49,45 @@ import {
 } from "./wire.ts";
 
 import {
-  renameTelegramPathWithRetry,
-  isTelegramOwnerPrivate,
-  TELEGRAM_STRICT_READ_FLAGS,
-  readTelegramRuntimeState,
-  withTelegramFileTransaction,
-  type TelegramLockContext,
-  type TelegramLockRuntime,
-  type TelegramOwnedStatePublicationOptions,
-  type TelegramOwnedStatePublicationResult,
-  type TelegramRuntimeStateMutation,
+  renameBalePathWithRetry,
+  isBaleOwnerPrivate,
+  BALE_STRICT_READ_FLAGS,
+  readBaleRuntimeState,
+  withBaleFileTransaction,
+  type BaleLockContext,
+  type BaleLockRuntime,
+  type BaleOwnedStatePublicationOptions,
+  type BaleOwnedStatePublicationResult,
+  type BaleRuntimeStateMutation,
 } from "./locks.ts";
-import { resolveTelegramProfileTempFilePath } from "./paths.ts";
-import { createTelegramRuntimeProjectionStore } from "./status.ts";
+import { resolveBaleProfileTempFilePath } from "./paths.ts";
+import { createBaleRuntimeProjectionStore } from "./status.ts";
 import * as ThreadReconciler from "./thread-reconciler.ts";
 import {
-  createTelegramSessionKey,
-  createTelegramWorkspaceBindingIdentityWithKey,
-  createTelegramWorkspaceDirectoryKey,
-  normalizeTelegramSessionId,
-  normalizeTelegramWorkspacePath,
-  TELEGRAM_WORKSPACE_KEY_MAX_LENGTH,
-  type TelegramWorkspaceBindingIdentity,
+  createBaleSessionKey,
+  createBaleWorkspaceBindingIdentityWithKey,
+  createBaleWorkspaceDirectoryKey,
+  normalizeBaleSessionId,
+  normalizeBaleWorkspacePath,
+  BALE_WORKSPACE_KEY_MAX_LENGTH,
+  type BaleWorkspaceBindingIdentity,
 } from "./workspace-identity.ts";
 import {
-  planTelegramWorkspaceSlotAllocation,
-  selectTelegramWorkspaceReusableSlot,
-  TELEGRAM_WORKSPACE_SLOTS,
-  TelegramWorkspaceSlotUnavailableError,
-  type TelegramWorkspaceSlotOccupancy,
+  planBaleWorkspaceSlotAllocation,
+  selectBaleWorkspaceReusableSlot,
+  BALE_WORKSPACE_SLOTS,
+  BaleWorkspaceSlotUnavailableError,
+  type BaleWorkspaceSlotOccupancy,
 } from "./workspace-slots.ts";
 export {
-  createTelegramWorkspaceBindingIdentity,
-  createTelegramWorkspaceDirectoryKey,
-  normalizeTelegramSessionId,
-  normalizeTelegramWorkspacePath,
-  type TelegramWorkspaceBindingIdentity,
+  createBaleWorkspaceBindingIdentity,
+  createBaleWorkspaceDirectoryKey,
+  normalizeBaleSessionId,
+  normalizeBaleWorkspacePath,
+  type BaleWorkspaceBindingIdentity,
 } from "./workspace-identity.ts";
 
-export type TelegramTopicTargetStatus =
+export type BaleTopicTargetStatus =
   | "active"
   | "offline"
   | "stale"
@@ -96,23 +96,23 @@ export type TelegramTopicTargetStatus =
   | "probe-required"
   | "failed";
 
-export type TelegramTopicSyncStatus = "open" | "closed" | "deleted" | "unknown";
+export type BaleTopicSyncStatus = "open" | "closed" | "deleted" | "unknown";
 
-export type TelegramThreadOwner =
+export type BaleThreadOwner =
   | {
       kind: "leader";
       cwd?: string;
       instanceId?: string;
-      telegramProfile?: string;
+      baleProfile?: string;
     }
-  | { kind: "manual-follower"; instanceId: string; telegramProfile?: string }
+  | { kind: "manual-follower"; instanceId: string; baleProfile?: string }
   | { kind: "pending-topic"; chatId: number; threadId: number }
   | { kind: "legacy"; key: string };
 
-const TELEGRAM_THREAD_RESERVATION_TTL_MS = 15 * 60 * 1000;
+const BALE_THREAD_RESERVATION_TTL_MS = 15 * 60 * 1000;
 
-export interface TelegramThreadReservation {
-  target: TelegramTarget & { threadId: number };
+export interface BaleThreadReservation {
+  target: BaleTarget & { threadId: number };
   slot: string;
   reason: string;
   createdAtMs: number;
@@ -122,7 +122,7 @@ export interface TelegramThreadReservation {
   lastReconcileAction?: string;
 }
 
-export interface TelegramThreadPendingProvision {
+export interface BaleThreadPendingProvision {
   id: string;
   owner: "leader" | "manual-follower";
   instanceId: string;
@@ -132,28 +132,28 @@ export interface TelegramThreadPendingProvision {
   threadName?: string;
   displayTitle?: string;
   slot?: string;
-  target?: TelegramTarget & { threadId: number };
+  target?: BaleTarget & { threadId: number };
   startedAtMs: number;
   expiresAtMs?: number;
   leaderEpoch?: number | string;
 }
 
-export type TelegramThreadCleanupIntent =
-  ThreadReconciler.TelegramThreadCleanupIntent;
+export type BaleThreadCleanupIntent =
+  ThreadReconciler.BaleThreadCleanupIntent;
 
-export type TelegramProvisionRecoveryFile = Record<
+export type BaleProvisionRecoveryFile = Record<
   string,
   {
     instanceId: string;
     profileKey?: string;
     leaderEpoch?: number | string;
-    target: TelegramTarget & { threadId: number };
+    target: BaleTarget & { threadId: number };
   }
 >;
 
-export interface TelegramTopicSyncObservation {
-  target: TelegramTarget & { threadId: number };
-  syncStatus: TelegramTopicSyncStatus;
+export interface BaleTopicSyncObservation {
+  target: BaleTarget & { threadId: number };
+  syncStatus: BaleTopicSyncStatus;
   observedAtMs: number;
   instanceId?: string;
   slot?: string;
@@ -161,12 +161,12 @@ export interface TelegramTopicSyncObservation {
   lastReconcileAction?: string;
 }
 
-export interface TelegramTopicTargetRecord {
+export interface BaleTopicTargetRecord {
   /** Legacy string key derived from `owner`; always present in memory, never persisted. */
   profileKey: string;
-  owner?: TelegramThreadOwner;
-  target: TelegramTarget & { threadId: number };
-  status: TelegramTopicTargetStatus;
+  owner?: BaleThreadOwner;
+  target: BaleTarget & { threadId: number };
+  status: BaleTopicTargetStatus;
   createdAtMs: number;
   updatedAtMs: number;
   threadName?: string;
@@ -175,7 +175,7 @@ export interface TelegramTopicTargetRecord {
   instanceId?: string;
   slot?: string;
   lastError?: string;
-  syncStatus?: TelegramTopicSyncStatus;
+  syncStatus?: BaleTopicSyncStatus;
   lastSyncObservedAtMs?: number;
   lastSyncProbeAtMs?: number;
   lastSyncError?: string;
@@ -183,19 +183,19 @@ export interface TelegramTopicTargetRecord {
   rerouteConfirmedAtMs?: number;
 }
 
-export interface TelegramThreadIdentityRecord {
+export interface BaleThreadIdentityRecord {
   profileKey: string;
   threadName?: string;
   slot?: string;
   updatedAtMs: number;
 }
 
-export interface TelegramWorkspaceJournalSource {
+export interface BaleWorkspaceJournalSource {
   sessionId: string;
   recipientBindingKey: string;
 }
 
-export interface TelegramWorkspaceThreadBinding {
+export interface BaleWorkspaceThreadBinding {
   cwd: string;
   workspaceKey: string;
   /** Exact durable Pi session identity; absent only on legacy cwd-only bindings. */
@@ -204,18 +204,18 @@ export interface TelegramWorkspaceThreadBinding {
   sessionKey?: string;
   instanceSlot: string;
   bindingKey: string;
-  target: TelegramTarget & { threadId: number };
+  target: BaleTarget & { threadId: number };
   /** Stable generated identity retained for compatibility and recovery. */
   threadName?: string;
   /** Explicit display override; absence selects the profile's automatic mode. */
   manualThreadName?: string;
   slot?: string;
-  /** Last title acknowledged by Telegram; never replaces the stable name. */
+  /** Last title acknowledged by Bale; never replaces the stable name. */
   displayTitle?: string;
   /** Historical follower-journal routing keys that may retain accepted work. */
   journalBindingKeys?: string[];
   /** Exact session-qualified journal addresses; retained across session re-key. */
-  journalSources?: TelegramWorkspaceJournalSource[];
+  journalSources?: BaleWorkspaceJournalSource[];
   /** True only when the historical journal-key set is proven complete. */
   journalBindingsComplete?: true;
   /** Sticky once this directory has multiple retained bindings. */
@@ -225,8 +225,8 @@ export interface TelegramWorkspaceThreadBinding {
   updatedAtMs: number;
 }
 
-export type TelegramWorkspaceDisplayBinding = Pick<
-  TelegramWorkspaceThreadBinding,
+export type BaleWorkspaceDisplayBinding = Pick<
+  BaleWorkspaceThreadBinding,
   | "bindingKey"
   | "cwd"
   | "slot"
@@ -235,73 +235,73 @@ export type TelegramWorkspaceDisplayBinding = Pick<
   | "showSlotSuffix"
 >;
 
-export interface TelegramWorkspaceRetirementIntent {
+export interface BaleWorkspaceRetirementIntent {
   id: string;
   reason: "pressure";
   profileKey: string;
-  binding: TelegramWorkspaceThreadBinding;
+  binding: BaleWorkspaceThreadBinding;
   leaderEpoch: number | string;
   requestedAtMs: number;
 }
 
-export type TelegramWorkspaceProtectionState =
+export type BaleWorkspaceProtectionState =
   "clear" | "protected" | "unknown";
 
-export interface TelegramWorkspaceExternalProtectionEvidence {
-  liveOwner: TelegramWorkspaceProtectionState;
-  acceptedWork: TelegramWorkspaceProtectionState;
-  deliveryAuthority: TelegramWorkspaceProtectionState;
+export interface BaleWorkspaceExternalProtectionEvidence {
+  liveOwner: BaleWorkspaceProtectionState;
+  acceptedWork: BaleWorkspaceProtectionState;
+  deliveryAuthority: BaleWorkspaceProtectionState;
 }
 
 /** Per-binding probe; `withSnapshot` lets one occupancy capture share binding-independent evidence reads. */
-export type TelegramWorkspaceExternalProtectionCapture = ((
-  binding: TelegramWorkspaceThreadBinding,
-) => TelegramWorkspaceExternalProtectionEvidence) & {
+export type BaleWorkspaceExternalProtectionCapture = ((
+  binding: BaleWorkspaceThreadBinding,
+) => BaleWorkspaceExternalProtectionEvidence) & {
   withSnapshot?: <T>(capture: () => T) => T;
 };
 
-export interface TelegramWorkspaceSlotOccupancySnapshot {
-  bindings: TelegramWorkspaceSlotOccupancy[];
+export interface BaleWorkspaceSlotOccupancySnapshot {
+  bindings: BaleWorkspaceSlotOccupancy[];
   reservedSlots: string[];
 }
 
-export type TelegramBotThreadMode = "unknown" | "enabled" | "disabled";
+export type BaleBotThreadMode = "unknown" | "enabled" | "disabled";
 
-export interface TelegramBotStateSnapshot {
-  threadMode: TelegramBotThreadMode;
+export interface BaleBotStateSnapshot {
+  threadMode: BaleBotThreadMode;
   updatedAtMs?: number;
   lastSlot?: string;
   lastReconcileAction?: string;
 }
 
-export interface TelegramWorkspaceRelocationRequest {
+export interface BaleWorkspaceRelocationRequest {
   operationId: string;
-  binding: TelegramWorkspaceThreadBinding;
-  owner: TelegramTopicTargetRecord;
-  target: TelegramTarget & { threadId: number };
+  binding: BaleWorkspaceThreadBinding;
+  owner: BaleTopicTargetRecord;
+  target: BaleTarget & { threadId: number };
 }
 
-export interface TelegramWorkspaceRestoreRequest extends TelegramWorkspaceRelocationRequest {
+export interface BaleWorkspaceRestoreRequest extends BaleWorkspaceRelocationRequest {
   source: { journalBindingKey: string; updateIds: number[] };
 }
-export interface TelegramWorkspaceRestoreExecutor {
+export interface BaleWorkspaceRestoreExecutor {
   instanceId: string;
   leaderEpoch: string;
 }
-export interface TelegramWorkspaceRestoreAuthority {
-  executor: TelegramWorkspaceRestoreExecutor;
+export interface BaleWorkspaceRestoreAuthority {
+  executor: BaleWorkspaceRestoreExecutor;
   operatorUserId: number;
   /** Exact profile, transport, session, source and Workspace-admission authority. */
   isCurrent: () => boolean;
 }
-export type TelegramWorkspaceRestoreRecipient = {
+export type BaleWorkspaceRestoreRecipient = {
   kind: "leader" | "follower";
   instanceId: string;
   sessionId: string;
   generation: string;
 };
 /** Retained queue admission is nonterminal; queue-completed requires positive journal-owner disposition. */
-export type TelegramWorkspaceRestoreSourceSettlement = {
+export type BaleWorkspaceRestoreSourceSettlement = {
   journalBindingKey: string;
   updateIds: number[];
 } & (
@@ -313,12 +313,12 @@ export type TelegramWorkspaceRestoreSourceSettlement = {
     }
 );
 /** Positive execution/recipient acceptance, retained before source disposition; never a source-removal ACK. */
-export type TelegramWorkspaceRestoreSourceAcceptance = {
+export type BaleWorkspaceRestoreSourceAcceptance = {
   journalBindingKey: string;
   updateId: number;
   /** SHA-256 of the exact journal entry captured by its worker owner, not a routed message projection. */
   sourceSha256: string;
-  recipient: TelegramWorkspaceRestoreRecipient;
+  recipient: BaleWorkspaceRestoreRecipient;
 } & (
   | { kind: "completed" }
   | { kind: "forwarded"; deliveryId: string; recipientBindingKey: string }
@@ -329,26 +329,26 @@ export type TelegramWorkspaceRestoreSourceAcceptance = {
       queueOwnerSha256: string;
     }
 );
-export interface TelegramWorkspaceRestoreIntent {
-  request: TelegramWorkspaceRestoreRequest;
+export interface BaleWorkspaceRestoreIntent {
+  request: BaleWorkspaceRestoreRequest;
   operatorUserId: number;
-  executor: TelegramWorkspaceRestoreExecutor;
+  executor: BaleWorkspaceRestoreExecutor;
   revision: number;
   createdAtMs: number;
   updatedAtMs: number;
   phase: "relocated" | "recipient-issued" | "ready";
   committedAtMs: number;
-  recipient?: TelegramWorkspaceRestoreRecipient;
-  readyRecipient?: TelegramWorkspaceRestoreRecipient;
+  recipient?: BaleWorkspaceRestoreRecipient;
+  readyRecipient?: BaleWorkspaceRestoreRecipient;
   routing?: {
-    acceptances?: TelegramWorkspaceRestoreSourceAcceptance[];
-    settlements: TelegramWorkspaceRestoreSourceSettlement[];
+    acceptances?: BaleWorkspaceRestoreSourceAcceptance[];
+    settlements: BaleWorkspaceRestoreSourceSettlement[];
     cleanup?: "issued" | "completed" | "not-issued";
   };
 }
 /** Live same-session metadata, never a legacy scoped ACK or permission to dispatch/delete. */
-export type TelegramWorkspaceLiveRebindIntent = Pick<
-  TelegramWorkspaceRestoreIntent,
+export type BaleWorkspaceLiveRebindIntent = Pick<
+  BaleWorkspaceRestoreIntent,
   | "request"
   | "operatorUserId"
   | "executor"
@@ -361,7 +361,7 @@ export type TelegramWorkspaceLiveRebindIntent = Pick<
   inputRelease?: "held" | "issued" | "accepted";
   /** A session-replacing producer must not drop earlier old-target protection or carry its delete grant forward. */
   oldTargetProtected?: true;
-  recipient: TelegramWorkspaceRestoreRecipient;
+  recipient: BaleWorkspaceRestoreRecipient;
 } & (
     | { phase: "rebound"; cleanup?: never }
     | { phase: "released"; cleanup?: "issued" }
@@ -371,70 +371,70 @@ export type TelegramWorkspaceLiveRebindIntent = Pick<
       }
   );
 /** Immutable source membership, not readiness, cancellation, or proof of complete Thread coverage. */
-export interface TelegramTemporaryThreadInput {
+export interface BaleTemporaryThreadInput {
   journalBindingKey: string;
   updateIds: number[];
 }
 /** Journal-owned donor discard evidence: retained manual cancellation or body-free chooser expiry, never recipient cancellation. */
-export interface TelegramTemporaryThreadCancellationEvidence {
+export interface BaleTemporaryThreadCancellationEvidence {
   journalBindingKey: string;
   updateId: number;
   operatorAuthorityId: string;
 }
 /** A bot-created routing tab with an exact creation source; it owns no Pi binding or slot. */
-export interface TelegramTemporaryThreadEntry {
+export interface BaleTemporaryThreadEntry {
   source: { journalBindingKey: string; updateId: number };
   /** Append-only known source groups. Missing legacy metadata never proves that the creation source was alone. */
-  inputs?: TelegramTemporaryThreadInput[];
+  inputs?: BaleTemporaryThreadInput[];
   /** Whole known groups with positively observed donor cancellation or expiry; never recipient cancellation or deletion authority. */
-  cancelledInputs?: TelegramTemporaryThreadInput[];
+  cancelledInputs?: BaleTemporaryThreadInput[];
   /** Whole known groups whose Forward was positively completed by the journal owner; never deletion authority alone. */
-  completedInputs?: TelegramTemporaryThreadInput[];
+  completedInputs?: BaleTemporaryThreadInput[];
   /** Whole known groups whose Forward was durably issued before local handling/queueing or follower RPC; never delivery proof or a retry grant. */
-  forwardedInputs?: TelegramTemporaryThreadInput[];
+  forwardedInputs?: BaleTemporaryThreadInput[];
   /** Published at creation only: every subsequent Forward path must record issuance; missing legacy coverage stays unknown. */
   forwardProtocol?: "one-shot-v1";
   /** Published before the sole cleanup attempt; uncertainty survives executor adoption and restart. */
   cleanupIssued?: true;
   operatorUserId: number;
-  executor: TelegramWorkspaceRestoreExecutor;
+  executor: BaleWorkspaceRestoreExecutor;
   /** Unique title token; the only identity an unacknowledged creation may later be matched by. */
   token: string;
   /** `creating` is published before the one creation request, so after a crash its outcome is unknown. */
   phase: "creating" | "created";
-  target?: TelegramTarget & { threadId: number };
+  target?: BaleTarget & { threadId: number };
   revision: number;
   createdAtMs: number;
   updatedAtMs: number;
 }
 /** Canonical target classification only; a bound target still needs live same-session readiness proof. */
-export type TelegramTemporaryThreadTargetObservation =
-  | { kind: "bound"; binding: TelegramWorkspaceThreadBinding }
+export type BaleTemporaryThreadTargetObservation =
+  | { kind: "bound"; binding: BaleWorkspaceThreadBinding }
   | { kind: "temporary" }
   | { kind: "unknown" };
-interface TelegramWorkspaceRestoreSnapshot {
+interface BaleWorkspaceRestoreSnapshot {
   version: 1;
   profileName: string;
   tokenSha256: string;
   revision: number;
-  operations: TelegramWorkspaceRestoreIntent[];
-  liveRebindings?: TelegramWorkspaceLiveRebindIntent[];
-  temporaryThreads?: TelegramTemporaryThreadEntry[];
+  operations: BaleWorkspaceRestoreIntent[];
+  liveRebindings?: BaleWorkspaceLiveRebindIntent[];
+  temporaryThreads?: BaleTemporaryThreadEntry[];
 }
 /** Scope-bound Workspace operations; raw snapshot mutation is private to the store. */
-export interface TelegramWorkspaceRestore {
-  list(): TelegramWorkspaceRestoreIntent[];
-  listLiveRebindings(): TelegramWorkspaceLiveRebindIntent[];
+export interface BaleWorkspaceRestore {
+  list(): BaleWorkspaceRestoreIntent[];
+  listLiveRebindings(): BaleWorkspaceLiveRebindIntent[];
   /** Caller has saved and held the selected input; this publishes the binding, not dispatch readiness. */
   commitLiveRebind(
-    request: TelegramWorkspaceRestoreRequest,
-    recipient: TelegramWorkspaceRestoreRecipient,
-    authority: TelegramWorkspaceRestoreAuthority,
+    request: BaleWorkspaceRestoreRequest,
+    recipient: BaleWorkspaceRestoreRecipient,
+    authority: BaleWorkspaceRestoreAuthority,
     options?: { holdInput: true },
-  ): Promise<TelegramWorkspaceLiveRebindIntent | undefined>;
+  ): Promise<BaleWorkspaceLiveRebindIntent | undefined>;
   /** Caller proves local apply for release or current live clearance for cleanup; unknown issuance never repeats. */
   advanceLiveRebind(
-    expected: TelegramWorkspaceLiveRebindIntent,
+    expected: BaleWorkspaceLiveRebindIntent,
     step:
       | "release"
       | "issue-cleanup"
@@ -442,170 +442,170 @@ export interface TelegramWorkspaceRestore {
       | "accept-input"
       | "protect-old-target"
       | Extract<
-          TelegramWorkspaceLiveRebindIntent,
+          BaleWorkspaceLiveRebindIntent,
           { phase: "finished" }
         >["cleanup"],
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramWorkspaceLiveRebindIntent | undefined;
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleWorkspaceLiveRebindIntent | undefined;
   commit(
-    request: TelegramWorkspaceRestoreRequest,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): Promise<TelegramWorkspaceRestoreIntent | undefined>;
+    request: BaleWorkspaceRestoreRequest,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): Promise<BaleWorkspaceRestoreIntent | undefined>;
   adopt(
-    expected: TelegramWorkspaceRestoreIntent,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramWorkspaceRestoreIntent | undefined;
+    expected: BaleWorkspaceRestoreIntent,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleWorkspaceRestoreIntent | undefined;
   issueRecipient(
-    expected: TelegramWorkspaceRestoreIntent,
-    recipient: TelegramWorkspaceRestoreRecipient,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): { issued: true; intent: TelegramWorkspaceRestoreIntent } | undefined;
+    expected: BaleWorkspaceRestoreIntent,
+    recipient: BaleWorkspaceRestoreRecipient,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): { issued: true; intent: BaleWorkspaceRestoreIntent } | undefined;
   confirmReady(
-    expected: TelegramWorkspaceRestoreIntent,
-    acknowledged: TelegramWorkspaceRestoreRecipient,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramWorkspaceRestoreIntent | undefined;
+    expected: BaleWorkspaceRestoreIntent,
+    acknowledged: BaleWorkspaceRestoreRecipient,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleWorkspaceRestoreIntent | undefined;
   confirmInspectedReady(
-    expected: TelegramWorkspaceRestoreIntent,
-    observed: TelegramWorkspaceRestoreRecipient,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramWorkspaceRestoreIntent | undefined;
+    expected: BaleWorkspaceRestoreIntent,
+    observed: BaleWorkspaceRestoreRecipient,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleWorkspaceRestoreIntent | undefined;
   issueRouting(
-    expected: TelegramWorkspaceRestoreIntent,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): { issued: true; intent: TelegramWorkspaceRestoreIntent } | undefined;
+    expected: BaleWorkspaceRestoreIntent,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): { issued: true; intent: BaleWorkspaceRestoreIntent } | undefined;
   recordSourceAcceptance(
-    expected: TelegramWorkspaceRestoreIntent,
-    evidence: TelegramWorkspaceRestoreSourceAcceptance,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramWorkspaceRestoreIntent | undefined;
+    expected: BaleWorkspaceRestoreIntent,
+    evidence: BaleWorkspaceRestoreSourceAcceptance,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleWorkspaceRestoreIntent | undefined;
   recordSourceSettlement(
-    expected: TelegramWorkspaceRestoreIntent,
-    evidence: TelegramWorkspaceRestoreSourceSettlement,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramWorkspaceRestoreIntent | undefined;
+    expected: BaleWorkspaceRestoreIntent,
+    evidence: BaleWorkspaceRestoreSourceSettlement,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleWorkspaceRestoreIntent | undefined;
   issueCleanup(
-    expected: TelegramWorkspaceRestoreIntent,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): { issued: true; intent: TelegramWorkspaceRestoreIntent } | undefined;
+    expected: BaleWorkspaceRestoreIntent,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): { issued: true; intent: BaleWorkspaceRestoreIntent } | undefined;
   recordCleanup(
-    expected: TelegramWorkspaceRestoreIntent,
+    expected: BaleWorkspaceRestoreIntent,
     result: {
-      target: TelegramWorkspaceRestoreRequest["target"];
+      target: BaleWorkspaceRestoreRequest["target"];
       kind: "completed" | "not-issued";
     },
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramWorkspaceRestoreIntent | undefined;
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleWorkspaceRestoreIntent | undefined;
   retire(
-    expected: TelegramWorkspaceRestoreIntent,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramWorkspaceRestoreIntent | undefined;
+    expected: BaleWorkspaceRestoreIntent,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleWorkspaceRestoreIntent | undefined;
   /** Caller proves exact operator abandonment of every original; no dispatch grant may exist. */
   retireAbandoned(
-    expected: TelegramWorkspaceRestoreIntent,
+    expected: BaleWorkspaceRestoreIntent,
     abandonedUpdateIds: readonly number[],
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramWorkspaceRestoreIntent | undefined;
-  listTemporaryThreads(): TelegramTemporaryThreadEntry[];
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleWorkspaceRestoreIntent | undefined;
+  listTemporaryThreads(): BaleTemporaryThreadEntry[];
   /** Caller holds admission for effectful use. Fresh exact read grants no adoption, routing, disposition or deletion. */
   inspectTemporaryThreadTarget(
-    expected: TelegramTemporaryThreadEntry,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramTemporaryThreadTargetObservation | undefined;
+    expected: BaleTemporaryThreadEntry,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleTemporaryThreadTargetObservation | undefined;
   /** Read-only veto for an already-granted in-flight attempt; never another grant, disposable classification or deletion ACK. */
   isTemporaryThreadCleanupCurrent(
-    expected: TelegramTemporaryThreadEntry,
-    authority: TelegramWorkspaceRestoreAuthority,
+    expected: BaleTemporaryThreadEntry,
+    authority: BaleWorkspaceRestoreAuthority,
   ): boolean;
   /**
    * Publishes `creating` before the caller's single creation request; an existing source entry is returned, never
    * recreated. `group` records an album as the tab's one creating input; it must start at the source update.
    */
   reserveTemporaryThread(
-    source: TelegramTemporaryThreadEntry["source"],
+    source: BaleTemporaryThreadEntry["source"],
     token: string,
-    authority: TelegramWorkspaceRestoreAuthority,
-    group?: TelegramTemporaryThreadInput,
-  ): { reserved: boolean; entry: TelegramTemporaryThreadEntry } | undefined;
-  /** Caller proves a fresh owner-authenticated implicit Telegram creation and exact live source under profile admission.
+    authority: BaleWorkspaceRestoreAuthority,
+    group?: BaleTemporaryThreadInput,
+  ): { reserved: boolean; entry: BaleTemporaryThreadEntry } | undefined;
+  /** Caller proves a fresh owner-authenticated implicit Bale creation and exact live source under profile admission.
    * Registers that observed unbound target without issuing or fabricating a Bot API creation. */
   registerImplicitTemporaryThread(
-    input: TelegramTemporaryThreadInput,
-    target: TelegramTarget & { threadId: number },
+    input: BaleTemporaryThreadInput,
+    target: BaleTarget & { threadId: number },
     token: string,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramTemporaryThreadEntry | undefined;
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleTemporaryThreadEntry | undefined;
   /** Records the exact acknowledged creation target; it never reopens a created entry. */
   acknowledgeTemporaryThread(
-    expected: TelegramTemporaryThreadEntry,
-    target: TelegramTarget & { threadId: number },
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramTemporaryThreadEntry | undefined;
+    expected: BaleTemporaryThreadEntry,
+    target: BaleTarget & { threadId: number },
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleTemporaryThreadEntry | undefined;
   adoptTemporaryThread(
-    expected: TelegramTemporaryThreadEntry,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramTemporaryThreadEntry | undefined;
+    expected: BaleTemporaryThreadEntry,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleTemporaryThreadEntry | undefined;
   /** Caller supplies exact live source/group authority; duplicate membership is read-only, never a new dispatch grant. */
   recordTemporaryThreadInput(
-    expected: TelegramTemporaryThreadEntry,
-    input: TelegramTemporaryThreadInput,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramTemporaryThreadEntry | undefined;
+    expected: BaleTemporaryThreadEntry,
+    input: BaleTemporaryThreadInput,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleTemporaryThreadEntry | undefined;
   /** Records a positively completed Forward group; the caller proves every source of the group completed. */
   /** Publishes the one-time Forward issuance fact before any RPC; a duplicate, cancelled, completed or Restore-owned group is refused. */
   recordTemporaryThreadForwardIssued(
-    expected: TelegramTemporaryThreadEntry,
-    input: TelegramTemporaryThreadInput,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramTemporaryThreadEntry | undefined;
+    expected: BaleTemporaryThreadEntry,
+    input: BaleTemporaryThreadInput,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleTemporaryThreadEntry | undefined;
   recordTemporaryThreadInputCompletion(
-    expected: TelegramTemporaryThreadEntry,
-    input: TelegramTemporaryThreadInput,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): TelegramTemporaryThreadEntry | undefined;
+    expected: BaleTemporaryThreadEntry,
+    input: BaleTemporaryThreadInput,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): BaleTemporaryThreadEntry | undefined;
   recordTemporaryThreadInputCancellation(
-    expected: TelegramTemporaryThreadEntry,
-    input: TelegramTemporaryThreadInput,
-    authority: TelegramWorkspaceRestoreAuthority,
+    expected: BaleTemporaryThreadEntry,
+    input: BaleTemporaryThreadInput,
+    authority: BaleWorkspaceRestoreAuthority,
     inspect: (
       updateId: number,
-    ) => TelegramTemporaryThreadCancellationEvidence | undefined,
-  ): TelegramTemporaryThreadEntry | undefined;
+    ) => BaleTemporaryThreadCancellationEvidence | undefined,
+  ): BaleTemporaryThreadEntry | undefined;
   /** Body-free chooser expiry may terminate an uncertain donor Forward/Restore, never accepted recipient work or a bound target. */
   recordTemporaryThreadInputExpiry(
-    expected: TelegramTemporaryThreadEntry,
-    input: TelegramTemporaryThreadInput,
-    authority: TelegramWorkspaceRestoreAuthority,
+    expected: BaleTemporaryThreadEntry,
+    input: BaleTemporaryThreadInput,
+    authority: BaleWorkspaceRestoreAuthority,
     inspect: (
       updateId: number,
-    ) => TelegramTemporaryThreadCancellationEvidence | undefined,
-  ): TelegramTemporaryThreadEntry | undefined;
+    ) => BaleTemporaryThreadCancellationEvidence | undefined,
+  ): BaleTemporaryThreadEntry | undefined;
   /** Caller holds profile admission and proves fresh source/protection clearance; publication grants one attempt, never retry. */
   issueTemporaryThreadCleanup(
-    expected: TelegramTemporaryThreadEntry,
-    authority: TelegramWorkspaceRestoreAuthority,
-  ): { issued: true; entry: TelegramTemporaryThreadEntry } | undefined;
+    expected: BaleTemporaryThreadEntry,
+    authority: BaleWorkspaceRestoreAuthority,
+  ): { issued: true; entry: BaleTemporaryThreadEntry } | undefined;
   /** Caller proves source settlement or cancellation and target disposition; this releases protection only. */
   /** `completed` names one newly completed group; every other known group must already be cancelled or completed. */
   retireTemporaryThread(
-    expected: TelegramTemporaryThreadEntry,
-    authority: TelegramWorkspaceRestoreAuthority,
-    completed?: TelegramTemporaryThreadInput,
-  ): TelegramTemporaryThreadEntry | undefined;
+    expected: BaleTemporaryThreadEntry,
+    authority: BaleWorkspaceRestoreAuthority,
+    completed?: BaleTemporaryThreadInput,
+  ): BaleTemporaryThreadEntry | undefined;
   /** New-world restart: atomically forgets this operator's Restore intents and temporary entries from previous runtime instances.
    * Caller may preserve exact unbound temporary tokens for clock-bearing sources. Committed bindings stay; nothing is rolled back, replayed or deleted here. */
   forgetPreviousWorld(
-    authority: TelegramWorkspaceRestoreAuthority,
+    authority: BaleWorkspaceRestoreAuthority,
     preserveTemporaryTokens?: readonly string[],
   ):
     | {
-        operations: TelegramWorkspaceRestoreIntent[];
-        temporaryThreads: TelegramTemporaryThreadEntry[];
-        liveRebindings?: TelegramWorkspaceLiveRebindIntent[];
+        operations: BaleWorkspaceRestoreIntent[];
+        temporaryThreads: BaleTemporaryThreadEntry[];
+        liveRebindings?: BaleWorkspaceLiveRebindIntent[];
       }
     | undefined;
 }
-export interface TelegramWorkspaceRestoreOptions {
+export interface BaleWorkspaceRestoreOptions {
   profileName: string;
   tokenSha256: string;
   isCurrentScope?: () => boolean;
@@ -617,13 +617,13 @@ export interface TelegramWorkspaceRestoreOptions {
   ) => void;
 }
 
-export interface TelegramSessionReplacementIntent {
+export interface BaleSessionReplacementIntent {
   continuity: "workspace-thread" | "classic-chat";
   cwd: string;
   profileName: string;
   sourceSessionId: string;
   sourceUpdateId: number;
-  target: TelegramTarget;
+  target: BaleTarget;
   messageId: number;
   slot?: string;
   threadName?: string;
@@ -637,27 +637,27 @@ export interface TelegramSessionReplacementIntent {
   sourceInstanceId?: string;
 }
 
-export interface TelegramTopicTargetFile {
+export interface BaleTopicTargetFile {
   version: 1;
   source: "snapshot";
   writtenAtMs: number;
-  bot: TelegramBotStateSnapshot;
-  threads: TelegramTopicTargetRecord[];
-  identities?: TelegramThreadIdentityRecord[];
-  workspaceBindings?: TelegramWorkspaceThreadBinding[];
-  workspaceRetirements?: TelegramWorkspaceRetirementIntent[];
-  workspaceRestore?: TelegramWorkspaceRestoreSnapshot;
-  sessionReplacement?: TelegramSessionReplacementIntent;
-  reservations?: TelegramThreadReservation[];
-  pendingProvisions?: TelegramThreadPendingProvision[];
-  pendingCleanups?: TelegramThreadCleanupIntent[];
-  syncObservations?: TelegramTopicSyncObservation[];
+  bot: BaleBotStateSnapshot;
+  threads: BaleTopicTargetRecord[];
+  identities?: BaleThreadIdentityRecord[];
+  workspaceBindings?: BaleWorkspaceThreadBinding[];
+  workspaceRetirements?: BaleWorkspaceRetirementIntent[];
+  workspaceRestore?: BaleWorkspaceRestoreSnapshot;
+  sessionReplacement?: BaleSessionReplacementIntent;
+  reservations?: BaleThreadReservation[];
+  pendingProvisions?: BaleThreadPendingProvision[];
+  pendingCleanups?: BaleThreadCleanupIntent[];
+  syncObservations?: BaleTopicSyncObservation[];
 }
 
 function getNextMonotonicSlot(
-  records: Map<string, TelegramTopicTargetRecord>,
-  reservations: readonly TelegramThreadReservation[],
-  pendingProvisions: readonly TelegramThreadPendingProvision[],
+  records: Map<string, BaleTopicTargetRecord>,
+  reservations: readonly BaleThreadReservation[],
+  pendingProvisions: readonly BaleThreadPendingProvision[],
   nowMs: number,
   lastSlot?: string,
 ): string | undefined {
@@ -696,7 +696,7 @@ function getNextMonotonicSlot(
   for (let attempt = 0; attempt < 26; attempt++) {
     const candidate = String.fromCharCode(code);
     if (
-      !isTelegramTopicTargetSlotOccupied(
+      !isBaleTopicTargetSlotOccupied(
         candidate,
         records,
         reservations,
@@ -712,99 +712,99 @@ function getNextMonotonicSlot(
   return undefined;
 }
 
-export interface TelegramTopicTargetStore {
+export interface BaleTopicTargetStore {
   load: () => Promise<void>;
   /** Discard process-local projections and reload owner-published state. */
   refresh?: () => Promise<void>;
   /** Optional caller fence supplements, never replaces, captured publication authority. */
   persist: (isCurrent?: () => boolean) => Promise<void>;
   invalidateTarget: (
-    target: TelegramTarget,
+    target: BaleTarget,
     isCurrent: () => boolean,
     lastSyncError: string,
   ) => Promise<boolean>;
-  /** Caller proves owner detachment; this does not assert Telegram Thread absence. */
+  /** Caller proves owner detachment; this does not assert Bale Thread absence. */
   detachTargetOwner: (
-    expected: TelegramTopicTargetRecord,
+    expected: BaleTopicTargetRecord,
     isCurrent: () => boolean,
   ) => Promise<boolean>;
   /** Caller holds Workspace admission; publication uses this store's exact transport-owner fence. */
   workspaceRestore: (
-    options: TelegramWorkspaceRestoreOptions,
-  ) => TelegramWorkspaceRestore;
+    options: BaleWorkspaceRestoreOptions,
+  ) => BaleWorkspaceRestore;
   /** Read-only precondition under caller-owned admission; not registration or transport authority. */
   assertWorkspaceRestoreRegistration: (candidate: {
-    target: TelegramTarget;
+    target: BaleTarget;
     bindingKey?: string;
     slot?: string;
   }) => void;
   /** Runs synchronous live publication under the same evidence transaction; caller retains authentication/admission. */
   commitWorkspaceRestoreRegistration: (
     candidate: Parameters<
-      TelegramTopicTargetStore["assertWorkspaceRestoreRegistration"]
+      BaleTopicTargetStore["assertWorkspaceRestoreRegistration"]
     >[0],
     publish: () => void,
   ) => void;
   /** Read-only canonical observation; the callback must finish synchronously under the snapshot transaction. */
   withWorkspaceRestoreSnapshot: (
     expected:
-      TelegramWorkspaceRestoreIntent | TelegramWorkspaceLiveRebindIntent,
+      BaleWorkspaceRestoreIntent | BaleWorkspaceLiveRebindIntent,
     observe: (
       snapshot: Readonly<
-        Pick<TelegramTopicTargetFile, "threads" | "workspaceBindings">
+        Pick<BaleTopicTargetFile, "threads" | "workspaceBindings">
       >,
     ) => undefined,
   ) => void;
   /** Exact synchronous live-operation snapshot, including a current publication frame; no mutation, lock or authority grant. */
   withWorkspaceLiveRebindSnapshot: (
-    expected: TelegramWorkspaceLiveRebindIntent,
+    expected: BaleWorkspaceLiveRebindIntent,
     observe: (
       snapshot: Readonly<
-        Pick<TelegramTopicTargetFile, "threads" | "workspaceBindings">
+        Pick<BaleTopicTargetFile, "threads" | "workspaceBindings">
       >,
     ) => undefined,
   ) => void;
   /** Current live-origin ownership veto; effect callers still require Workspace admission. False is not work/recipient/deletion authority. */
   hasPreDispatchRebindEvidence: () => boolean;
-  listProtectedLiveRebindTargets: () => TelegramTarget[];
+  listProtectedLiveRebindTargets: () => BaleTarget[];
   isWorkspaceLiveRebindCleanupTargetProtected: (
-    expected: TelegramWorkspaceLiveRebindIntent,
+    expected: BaleWorkspaceLiveRebindIntent,
   ) => boolean;
   /** Read-only captured identity with an optional exact manual-name result fence; no transport/session/admission grant or lock. */
   captureWorkspaceThreadRenameObservation: (
-    binding: TelegramWorkspaceThreadBinding,
-    owner: TelegramTopicTargetRecord,
+    binding: BaleWorkspaceThreadBinding,
+    owner: BaleTopicTargetRecord,
   ) => (expectedManualThreadName?: string) => boolean;
   /** Captured read-only identity and exact absent-manual-name/automatic-title result fences; no authority grant or lock. */
   captureWorkspaceThreadResetObservation: (
-    binding: TelegramWorkspaceThreadBinding,
-    owner: TelegramTopicTargetRecord,
+    binding: BaleWorkspaceThreadBinding,
+    owner: BaleTopicTargetRecord,
   ) => {
     isCurrent: () => boolean;
     isResultCurrent: (automaticTitle: string) => boolean;
   };
   /** Fresh strict disk read of acknowledged temporary-tab targets; throws rather than guessing absence. */
-  listTemporaryThreadTargets: () => TelegramTarget[];
-  list: () => TelegramTopicTargetRecord[];
+  listTemporaryThreadTargets: () => BaleTarget[];
+  list: () => BaleTopicTargetRecord[];
   getFollowerRecoveryHintByTarget?: (
-    target: TelegramTarget,
+    target: BaleTarget,
   ) => { slot?: string; threadName?: string } | undefined;
-  listReservations: () => TelegramThreadReservation[];
-  listPendingProvisions: () => TelegramThreadPendingProvision[];
-  resetPendingProvisionForConnect: (expected: TelegramThreadPendingProvision, isCurrent: () => boolean) => Promise<boolean>;
-  listPendingCleanups: () => TelegramThreadCleanupIntent[];
-  listSyncObservations: () => TelegramTopicSyncObservation[];
-  reserveThread: (reservation: TelegramThreadReservation) => void;
-  upsertPendingProvision: (provision: TelegramThreadPendingProvision) => void;
+  listReservations: () => BaleThreadReservation[];
+  listPendingProvisions: () => BaleThreadPendingProvision[];
+  resetPendingProvisionForConnect: (expected: BaleThreadPendingProvision, isCurrent: () => boolean) => Promise<boolean>;
+  listPendingCleanups: () => BaleThreadCleanupIntent[];
+  listSyncObservations: () => BaleTopicSyncObservation[];
+  reserveThread: (reservation: BaleThreadReservation) => void;
+  upsertPendingProvision: (provision: BaleThreadPendingProvision) => void;
   recordPendingProvisionTargetRecovery: (
-    provision: TelegramThreadPendingProvision,
-    target: TelegramTarget & { threadId: number },
+    provision: BaleThreadPendingProvision,
+    target: BaleTarget & { threadId: number },
   ) => Promise<boolean>;
   removePendingProvision: (id: string) => boolean;
-  upsertPendingCleanup: (intent: TelegramThreadCleanupIntent) => void;
+  upsertPendingCleanup: (intent: BaleThreadCleanupIntent) => void;
   removePendingCleanup: (id: string) => boolean;
-  getBotState: () => TelegramBotStateSnapshot;
-  setBotState: (state: Partial<TelegramBotStateSnapshot>) => void;
+  getBotState: () => BaleBotStateSnapshot;
+  setBotState: (state: Partial<BaleBotStateSnapshot>) => void;
   setStatusSnapshot: (snapshot: {
     runtime?: Record<string, unknown>;
     liveRoster?: Record<string, unknown>;
@@ -814,60 +814,60 @@ export interface TelegramTopicTargetStore {
   persistStatus: () => Promise<void>;
   getByProfileKey: (
     profileKey: string,
-  ) => TelegramTopicTargetRecord | undefined;
+  ) => BaleTopicTargetRecord | undefined;
   getActiveByInstanceId: (
     instanceId: string,
-  ) => TelegramTopicTargetRecord | undefined;
+  ) => BaleTopicTargetRecord | undefined;
   getIdentityByProfileKey: (
     profileKey: string,
-  ) => TelegramThreadIdentityRecord | undefined;
+  ) => BaleThreadIdentityRecord | undefined;
   forgetIdentityByProfileKey: (profileKey: string) => boolean;
-  listWorkspaceBindings: () => TelegramWorkspaceThreadBinding[];
+  listWorkspaceBindings: () => BaleWorkspaceThreadBinding[];
   getWorkspaceBindingByTarget: (
-    target: TelegramTarget,
+    target: BaleTarget,
     sessionId?: string,
-  ) => TelegramWorkspaceThreadBinding | undefined;
+  ) => BaleWorkspaceThreadBinding | undefined;
   getSessionReplacementIntent: () =>
-    TelegramSessionReplacementIntent | undefined;
+    BaleSessionReplacementIntent | undefined;
   commitSessionReplacementIntent: (
-    intent: TelegramSessionReplacementIntent,
+    intent: BaleSessionReplacementIntent,
     isCurrent: () => boolean,
   ) => Promise<boolean>;
   removeSessionReplacementIntent: (
-    expected: TelegramSessionReplacementIntent,
+    expected: BaleSessionReplacementIntent,
     isCurrent: () => boolean,
   ) => Promise<boolean>;
-  listWorkspaceRetirementIntents: () => TelegramWorkspaceRetirementIntent[];
+  listWorkspaceRetirementIntents: () => BaleWorkspaceRetirementIntent[];
   /** Metadata subset CAS only: callers prove exact-source/writer evidence; independent snapshot roots are untouched. */
   commitWorkspaceJournalEvidence: (
-    expected: TelegramWorkspaceThreadBinding,
+    expected: BaleWorkspaceThreadBinding,
     journalBindingKeys: readonly string[],
     complete: boolean,
-    journalSources?: readonly TelegramWorkspaceJournalSource[],
-  ) => TelegramWorkspaceThreadBinding | undefined;
+    journalSources?: readonly BaleWorkspaceJournalSource[],
+  ) => BaleWorkspaceThreadBinding | undefined;
   /** Acknowledge publication of the exact current metadata frame; never roll it back after an uncertain write. */
   persistWorkspaceJournalEvidence: (
-    expected: TelegramWorkspaceThreadBinding,
+    expected: BaleWorkspaceThreadBinding,
     isCurrent: () => boolean,
   ) => Promise<boolean>;
   upsertWorkspaceRetirementIntent: (
-    intent: TelegramWorkspaceRetirementIntent,
+    intent: BaleWorkspaceRetirementIntent,
   ) => boolean;
   removeWorkspaceRetirementIntent: (
-    expected: TelegramWorkspaceRetirementIntent,
+    expected: BaleWorkspaceRetirementIntent,
   ) => boolean;
   replaceWorkspaceRetirementIntent: (
-    expected: TelegramWorkspaceRetirementIntent,
-    replacement: TelegramWorkspaceRetirementIntent,
+    expected: BaleWorkspaceRetirementIntent,
+    replacement: BaleWorkspaceRetirementIntent,
     isCurrent: () => boolean,
   ) => Promise<boolean>;
   commitWorkspaceRetirement: (
-    expected: TelegramWorkspaceRetirementIntent,
+    expected: BaleWorkspaceRetirementIntent,
     isCurrent: () => boolean,
   ) => Promise<boolean>;
   commitInactiveWorkspaceCleanup: (
     expected:
-      | TelegramWorkspaceThreadBinding
+      | BaleWorkspaceThreadBinding
       | {
           cwd: string;
           workspaceKey: string;
@@ -884,9 +884,9 @@ export interface TelegramTopicTargetStore {
   ) => Promise<boolean>;
   /** Caller must separately prove no external live owner, accepted work, or delivery authority. */
   captureWorkspaceSlotOccupancy: (
-    getExternalProtection: TelegramWorkspaceExternalProtectionCapture,
-    options?: { expectedRetirement?: TelegramWorkspaceRetirementIntent },
-  ) => TelegramWorkspaceSlotOccupancySnapshot;
+    getExternalProtection: BaleWorkspaceExternalProtectionCapture,
+    options?: { expectedRetirement?: BaleWorkspaceRetirementIntent },
+  ) => BaleWorkspaceSlotOccupancySnapshot;
   /**
    * Fallback for a full A-Z pool: strips the display letter from the least recently used
    * binding (and its current Thread record) and persists, so a fresh allocation can take it.
@@ -902,19 +902,19 @@ export interface TelegramTopicTargetStore {
   >;
   hasWorkspaceBinding: (cwd: string, sessionId?: string) => boolean;
   setWorkspaceDisplayTitle: (
-    expected: TelegramWorkspaceThreadBinding,
+    expected: BaleWorkspaceThreadBinding,
     title: string,
   ) => boolean;
   markWorkspaceBindingInactiveByTarget: (
-    target: TelegramTarget,
+    target: BaleTarget,
     inactiveSinceMs?: number,
   ) => boolean;
-  markWorkspaceBindingActiveByTarget: (target: TelegramTarget) => boolean;
+  markWorkspaceBindingActiveByTarget: (target: BaleTarget) => boolean;
   getWorkspaceBinding: (
     cwd: string,
     instanceSlot?: string,
     sessionId?: string,
-  ) => TelegramWorkspaceThreadBinding | undefined;
+  ) => BaleWorkspaceThreadBinding | undefined;
   claimWorkspaceIdentity: (
     cwd: string,
     instanceId: string,
@@ -927,7 +927,7 @@ export interface TelegramTopicTargetStore {
       sessionHandoff?: boolean;
       onCapacityUnavailable?: () => void;
     },
-  ) => TelegramWorkspaceBindingIdentity | undefined;
+  ) => BaleWorkspaceBindingIdentity | undefined;
   /**
    * Re-keys one retained Thread binding from a retired session to its successor at the same slot and target,
    * so the tab keeps a single owner. Fails without mutation when the source binding or slot identity is absent.
@@ -936,43 +936,43 @@ export interface TelegramTopicTargetStore {
     cwd: string,
     sourceSessionId: string,
     sessionId: string,
-    target: TelegramTarget,
+    target: BaleTarget,
   ) => boolean;
   releaseWorkspaceClaim: (instanceId: string) => boolean;
   upsertWorkspaceBinding: (
-    binding: TelegramWorkspaceThreadBinding,
+    binding: BaleWorkspaceThreadBinding,
     claimInstanceId?: string,
-  ) => TelegramWorkspaceThreadBinding | undefined;
-  upsert: (record: TelegramTopicTargetRecord) => TelegramTopicTargetRecord;
+  ) => BaleWorkspaceThreadBinding | undefined;
+  upsert: (record: BaleTopicTargetRecord) => BaleTopicTargetRecord;
   markOfflineByInstanceId: (instanceId: string) => number;
   markStaleByTarget: (
-    target: TelegramTarget,
-    syncStatus?: TelegramTopicSyncStatus,
+    target: BaleTarget,
+    syncStatus?: BaleTopicSyncStatus,
     lastSyncError?: string,
   ) => boolean;
-  markActiveByTarget: (target: TelegramTarget) => boolean;
+  markActiveByTarget: (target: BaleTarget) => boolean;
   renameByTarget: (
-    target: TelegramTarget,
+    target: BaleTarget,
     threadName: string,
     options?: { updateDisplayTitle: boolean },
-  ) => TelegramTopicTargetRecord | undefined;
+  ) => BaleTopicTargetRecord | undefined;
   /** Publish a manual-name candidate without first retaining it in the dirty local projection. */
   renameByTargetAndPersist: (
-    target: TelegramTarget,
+    target: BaleTarget,
     threadName: string,
     options: { updateDisplayTitle: boolean },
     isCurrent: () => boolean,
-  ) => Promise<TelegramTopicTargetRecord | undefined>;
+  ) => Promise<BaleTopicTargetRecord | undefined>;
   clearManualNameByTarget: (
-    target: TelegramTarget,
+    target: BaleTarget,
     automaticTitle: string,
-  ) => TelegramTopicTargetRecord | undefined;
+  ) => BaleTopicTargetRecord | undefined;
   /** Stage exact manual-name removal and automatic display metadata in the existing publication candidate. */
   clearManualNameByTargetAndPersist: (
-    target: TelegramTarget,
+    target: BaleTarget,
     automaticTitle: string,
     isCurrent: () => boolean,
-  ) => Promise<TelegramTopicTargetRecord | undefined>;
+  ) => Promise<BaleTopicTargetRecord | undefined>;
   allocateSlot: (
     profileKey: string,
     preferredSlot?: string,
@@ -983,14 +983,14 @@ export interface TelegramTopicTargetStore {
   claimReusableTarget: (
     instanceId: string,
     threadName?: string,
-  ) => TelegramTopicTargetRecord | undefined;
+  ) => BaleTopicTargetRecord | undefined;
 }
 
-export function createTelegramCleanupTargetProtection(
-  store: Pick<TelegramTopicTargetStore, "list"> &
+export function createBaleCleanupTargetProtection(
+  store: Pick<BaleTopicTargetStore, "list"> &
     Partial<
       Pick<
-        TelegramTopicTargetStore,
+        BaleTopicTargetStore,
         | "listReservations"
         | "listPendingProvisions"
         | "listPendingCleanups"
@@ -998,7 +998,7 @@ export function createTelegramCleanupTargetProtection(
         | "listProtectedLiveRebindTargets"
       >
     >,
-  departingRecord?: TelegramTopicTargetRecord,
+  departingRecord?: BaleTopicTargetRecord,
 ): NonNullable<
   ThreadReconciler.ThreadReconciliationApplyPorts["isCleanupTargetProtected"]
 > {
@@ -1107,23 +1107,23 @@ export function createTelegramCleanupTargetProtection(
   };
 }
 
-export interface TelegramTopicTargetStoreOptions {
+export interface BaleTopicTargetStoreOptions {
   path: string | (() => string);
-  telegramProfile?: string | (() => string | undefined);
+  baleProfile?: string | (() => string | undefined);
   getNowMs?: () => number;
   canPersist?: () => boolean;
   commitPersist?: (commit: () => void) => boolean;
   consolidated?: Pick<
-    TelegramConsolidatedWorkspaceStorageOptions,
+    BaleConsolidatedWorkspaceStorageOptions,
     "captureAuthority" | "publishIfOwned"
   >;
   getExternalReservedSlots?: () => readonly string[];
 }
 
-export interface TelegramTopicTargetProvisionerDeps {
+export interface BaleTopicTargetProvisionerDeps {
   topicChatId: number;
   store: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     | "list"
     | "getByProfileKey"
     | "getActiveByInstanceId"
@@ -1145,11 +1145,11 @@ export interface TelegramTopicTargetProvisionerDeps {
   callApi: <TResponse>(
     method: string,
     body: Record<string, unknown>,
-    options?: TelegramApiCallOptions,
+    options?: BaleApiCallOptions,
   ) => Promise<TResponse>;
   topicNameTemplate?: string;
   resolveInitialWorkspaceDisplayTitle?: (
-    binding: TelegramWorkspaceDisplayBinding,
+    binding: BaleWorkspaceDisplayBinding,
   ) => string | undefined;
   getNowMs?: () => number;
   getRandom?: () => number;
@@ -1157,30 +1157,30 @@ export interface TelegramTopicTargetProvisionerDeps {
   claimPendingTargets?: boolean;
 }
 
-export interface TelegramTopicTargetRenamerDeps {
+export interface BaleTopicTargetRenamerDeps {
   store: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     "list" | "listWorkspaceBindings" | "listPendingProvisions"
   > & {
     renameByTarget: (
-      ...args: Parameters<TelegramTopicTargetStore["renameByTarget"]>
+      ...args: Parameters<BaleTopicTargetStore["renameByTarget"]>
     ) =>
-      | ReturnType<TelegramTopicTargetStore["renameByTarget"]>
-      | Promise<ReturnType<TelegramTopicTargetStore["renameByTarget"]>>;
+      | ReturnType<BaleTopicTargetStore["renameByTarget"]>
+      | Promise<ReturnType<BaleTopicTargetStore["renameByTarget"]>>;
   };
   callApi: <TResponse>(
     method: string,
     body: Record<string, unknown>,
-    options?: TelegramApiCallOptions,
+    options?: BaleApiCallOptions,
   ) => Promise<TResponse>;
   assertAuthority?: () => void;
   shouldRenameDisplayedTitle?: () => boolean;
   topicNameTemplate?: string;
 }
 
-export interface TelegramTopicTargetProvisionRequest {
+export interface BaleTopicTargetProvisionRequest {
   instanceId: string;
-  owner?: TelegramThreadOwner;
+  owner?: BaleThreadOwner;
   /** Legacy string key derived from `owner`; always present in memory. */
   profileKey: string;
   threadName?: string;
@@ -1190,12 +1190,12 @@ export interface TelegramTopicTargetProvisionRequest {
 }
 
 /** Pending creation evidence cannot bypass an exact target's unresolved cleanup or closure. */
-export function assertTelegramPendingTopicRecoveryAllowed(
+export function assertBalePendingTopicRecoveryAllowed(
   store: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     "listPendingProvisions" | "listPendingCleanups" | "listSyncObservations"
   >,
-  target: TelegramTarget,
+  target: BaleTarget,
 ): void {
   if (
     !store
@@ -1215,15 +1215,15 @@ export function assertTelegramPendingTopicRecoveryAllowed(
       )
   ) {
     throw new Error(
-      "Telegram pending topic requires reconciliation before recovery.",
+      "Bale pending topic requires reconciliation before recovery.",
     );
   }
 }
 
 /** Settle creation-title evidence with the exact Workspace claim; caller fences and persists. */
-export function commitTelegramWorkspaceProvisionBinding(input: {
+export function commitBaleWorkspaceProvisionBinding(input: {
   store: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     | "upsertWorkspaceBinding"
     | "setWorkspaceDisplayTitle"
     | "listPendingProvisions"
@@ -1231,12 +1231,12 @@ export function commitTelegramWorkspaceProvisionBinding(input: {
     | "listPendingCleanups"
     | "listSyncObservations"
   >;
-  binding: TelegramWorkspaceThreadBinding;
+  binding: BaleWorkspaceThreadBinding;
   instanceId: string;
   profileKey: string;
   displayTitle?: string;
-}): TelegramWorkspaceThreadBinding {
-  assertTelegramPendingTopicRecoveryAllowed(input.store, input.binding.target);
+}): BaleWorkspaceThreadBinding {
+  assertBalePendingTopicRecoveryAllowed(input.store, input.binding.target);
   const pending = input.store
     .listPendingProvisions()
     .filter(
@@ -1254,18 +1254,18 @@ export function commitTelegramWorkspaceProvisionBinding(input: {
   );
   if (input.displayTitle !== undefined) titles.add(input.displayTitle);
   if (titles.size > 1)
-    throw new Error("Telegram Workspace creation title evidence conflicts.");
+    throw new Error("Bale Workspace creation title evidence conflicts.");
   const displayTitle = titles.values().next().value;
   const committed = input.store.upsertWorkspaceBinding(
     input.binding,
     input.instanceId,
   );
-  if (!committed) throw new Error("Telegram Workspace binding claim changed.");
+  if (!committed) throw new Error("Bale Workspace binding claim changed.");
   if (
     displayTitle !== undefined &&
     !input.store.setWorkspaceDisplayTitle(committed, displayTitle)
   ) {
-    throw new Error("Telegram Workspace display title commit changed binding.");
+    throw new Error("Bale Workspace display title commit changed binding.");
   }
   for (const provision of pending)
     input.store.removePendingProvision(provision.id);
@@ -1274,43 +1274,43 @@ export function commitTelegramWorkspaceProvisionBinding(input: {
     : { ...committed, displayTitle };
 }
 
-export interface TelegramTopicTargetRenameRequest {
-  target: TelegramTarget & { threadId: number };
+export interface BaleTopicTargetRenameRequest {
+  target: BaleTarget & { threadId: number };
   threadName: string;
   slot?: string;
 }
 
-export interface TelegramTopicTargetProvisionResult {
-  target: TelegramTarget & { threadId: number };
+export interface BaleTopicTargetProvisionResult {
+  target: BaleTarget & { threadId: number };
   reused: boolean;
-  record: TelegramTopicTargetRecord;
+  record: BaleTopicTargetRecord;
   displayTitle?: string;
 }
 
-interface TelegramTopicResult {
+interface BaleTopicResult {
   message_thread_id?: number;
 }
 
-const TELEGRAM_LEADER_SESSION_HANDOFF_KEY = "__piTelegramLeaderSessionHandoff";
-export const TELEGRAM_LEADER_SESSION_HANDOFF_TTL_MS = 30_000;
+const BALE_LEADER_SESSION_HANDOFF_KEY = "__piBaleLeaderSessionHandoff";
+export const BALE_LEADER_SESSION_HANDOFF_TTL_MS = 30_000;
 
-export interface TelegramLeaderSessionHandoff {
+export interface BaleLeaderSessionHandoff {
   pid: number;
   instanceId: string;
   createdAtMs: number;
   profileKey: string;
-  target: TelegramTarget & { threadId: number };
+  target: BaleTarget & { threadId: number };
   slot?: string;
   threadName?: string;
 }
 
-export function getTelegramLeaderSessionHandoff():
-  TelegramLeaderSessionHandoff | undefined {
+export function getBaleLeaderSessionHandoff():
+  BaleLeaderSessionHandoff | undefined {
   const value = (globalThis as Record<string, unknown>)[
-    TELEGRAM_LEADER_SESSION_HANDOFF_KEY
+    BALE_LEADER_SESSION_HANDOFF_KEY
   ];
   if (!value || typeof value !== "object") return undefined;
-  const handoff = value as Partial<TelegramLeaderSessionHandoff>;
+  const handoff = value as Partial<BaleLeaderSessionHandoff>;
   if (
     typeof handoff.pid !== "number" ||
     typeof handoff.instanceId !== "string" ||
@@ -1321,41 +1321,41 @@ export function getTelegramLeaderSessionHandoff():
   ) {
     return undefined;
   }
-  return handoff as TelegramLeaderSessionHandoff;
+  return handoff as BaleLeaderSessionHandoff;
 }
 
-export function setTelegramLeaderSessionHandoff(
-  handoff: TelegramLeaderSessionHandoff | undefined,
+export function setBaleLeaderSessionHandoff(
+  handoff: BaleLeaderSessionHandoff | undefined,
 ): void {
   const store = globalThis as Record<string, unknown>;
-  if (!handoff) delete store[TELEGRAM_LEADER_SESSION_HANDOFF_KEY];
-  else store[TELEGRAM_LEADER_SESSION_HANDOFF_KEY] = handoff;
+  if (!handoff) delete store[BALE_LEADER_SESSION_HANDOFF_KEY];
+  else store[BALE_LEADER_SESSION_HANDOFF_KEY] = handoff;
 }
 
-function isTelegramLeaderSessionHandoffFresh(
-  handoff: TelegramLeaderSessionHandoff | undefined,
+function isBaleLeaderSessionHandoffFresh(
+  handoff: BaleLeaderSessionHandoff | undefined,
   options: { pid?: number; nowMs?: number; ttlMs?: number } = {},
-): handoff is TelegramLeaderSessionHandoff {
+): handoff is BaleLeaderSessionHandoff {
   if (!handoff) return false;
   const pid = options.pid ?? process.pid;
   const nowMs = options.nowMs ?? Date.now();
-  const ttlMs = options.ttlMs ?? TELEGRAM_LEADER_SESSION_HANDOFF_TTL_MS;
+  const ttlMs = options.ttlMs ?? BALE_LEADER_SESSION_HANDOFF_TTL_MS;
   return handoff.pid === pid && nowMs - handoff.createdAtMs <= ttlMs;
 }
 
-export function getTelegramThreadOwnerKey(owner: TelegramThreadOwner): string {
+export function getBaleThreadOwnerKey(owner: BaleThreadOwner): string {
   switch (owner.kind) {
     case "leader": {
       const base = owner.cwd
         ? `cwd:${owner.cwd}`
         : `leader:${owner.instanceId ?? "default"}`;
-      return owner.telegramProfile
-        ? `profile:${owner.telegramProfile}:${base}`
+      return owner.baleProfile
+        ? `profile:${owner.baleProfile}:${base}`
         : base;
     }
     case "manual-follower":
-      return owner.telegramProfile
-        ? `profile:${owner.telegramProfile}:manual:${owner.instanceId}`
+      return owner.baleProfile
+        ? `profile:${owner.baleProfile}:manual:${owner.instanceId}`
         : `manual:${owner.instanceId}`;
     case "pending-topic":
       return `topic:${owner.chatId}:${owner.threadId}`;
@@ -1364,18 +1364,18 @@ export function getTelegramThreadOwnerKey(owner: TelegramThreadOwner): string {
   }
 }
 
-export function getTelegramThreadOwnerFromProfileKey(
+export function getBaleThreadOwnerFromProfileKey(
   profileKey: string,
-): TelegramThreadOwner {
+): BaleThreadOwner {
   if (profileKey.startsWith("profile:")) {
-    const [, telegramProfile, ownerKind, ...rest] = profileKey.split(":");
+    const [, baleProfile, ownerKind, ...rest] = profileKey.split(":");
     const value = rest.join(":");
     if (ownerKind === "cwd")
-      return { kind: "leader", cwd: value, telegramProfile };
+      return { kind: "leader", cwd: value, baleProfile };
     if (ownerKind === "leader")
-      return { kind: "leader", instanceId: value, telegramProfile };
+      return { kind: "leader", instanceId: value, baleProfile };
     if (ownerKind === "manual")
-      return { kind: "manual-follower", instanceId: value, telegramProfile };
+      return { kind: "manual-follower", instanceId: value, baleProfile };
   }
   if (profileKey.startsWith("cwd:"))
     return { kind: "leader", cwd: profileKey.slice(4) };
@@ -1396,7 +1396,7 @@ export function getTelegramThreadOwnerFromProfileKey(
   return { kind: "legacy", key: profileKey };
 }
 
-function parseThreadOwner(value: unknown): TelegramThreadOwner | undefined {
+function parseThreadOwner(value: unknown): BaleThreadOwner | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
@@ -1406,8 +1406,8 @@ function parseThreadOwner(value: unknown): TelegramThreadOwner | undefined {
       cwd: typeof record.cwd === "string" ? record.cwd : undefined,
       instanceId:
         typeof record.instanceId === "string" ? record.instanceId : undefined,
-      ...(typeof record.telegramProfile === "string"
-        ? { telegramProfile: record.telegramProfile }
+      ...(typeof record.baleProfile === "string"
+        ? { baleProfile: record.baleProfile }
         : {}),
     };
   }
@@ -1418,8 +1418,8 @@ function parseThreadOwner(value: unknown): TelegramThreadOwner | undefined {
     return {
       kind: "manual-follower",
       instanceId: record.instanceId,
-      ...(typeof record.telegramProfile === "string"
-        ? { telegramProfile: record.telegramProfile }
+      ...(typeof record.baleProfile === "string"
+        ? { baleProfile: record.baleProfile }
         : {}),
     };
   }
@@ -1442,25 +1442,25 @@ function parseThreadOwner(value: unknown): TelegramThreadOwner | undefined {
 }
 
 function getRecordOwner(
-  record: TelegramTopicTargetRecord,
-): TelegramThreadOwner {
+  record: BaleTopicTargetRecord,
+): BaleThreadOwner {
   return (
-    record.owner ?? getTelegramThreadOwnerFromProfileKey(record.profileKey)
+    record.owner ?? getBaleThreadOwnerFromProfileKey(record.profileKey)
   );
 }
 
-function getRecordOwnerKey(record: TelegramTopicTargetRecord): string {
-  return getTelegramThreadOwnerKey(getRecordOwner(record));
+function getRecordOwnerKey(record: BaleTopicTargetRecord): string {
+  return getBaleThreadOwnerKey(getRecordOwner(record));
 }
 
 function cloneRecord(
-  record: TelegramTopicTargetRecord,
-): TelegramTopicTargetRecord {
+  record: BaleTopicTargetRecord,
+): BaleTopicTargetRecord {
   const owner = getRecordOwner(record);
   return {
     ...record,
     owner: { ...owner },
-    profileKey: getTelegramThreadOwnerKey(owner),
+    profileKey: getBaleThreadOwnerKey(owner),
     target: { ...record.target },
   };
 }
@@ -1474,12 +1474,12 @@ function getPersistedThreadName(
       : typeof record.displayName === "string"
         ? record.displayName
         : undefined;
-  return value ? normalizeTelegramTopicTargetThreadName(value) : undefined;
+  return value ? normalizeBaleTopicTargetThreadName(value) : undefined;
 }
 
 function normalizeRecord(
   value: unknown,
-): TelegramTopicTargetRecord | undefined {
+): BaleTopicTargetRecord | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
@@ -1487,7 +1487,7 @@ function normalizeRecord(
   const owner =
     parseThreadOwner(record.owner) ??
     (typeof record.profileKey === "string" && record.profileKey.length > 0
-      ? getTelegramThreadOwnerFromProfileKey(record.profileKey)
+      ? getBaleThreadOwnerFromProfileKey(record.profileKey)
       : undefined);
   if (!owner) return undefined;
   const parsedTarget = parseStoredThreadTarget(target);
@@ -1509,8 +1509,8 @@ function normalizeRecord(
   )
     return undefined;
   const threadName = getPersistedThreadName(record);
-  const normalized: TelegramTopicTargetRecord = {
-    profileKey: getTelegramThreadOwnerKey(owner),
+  const normalized: BaleTopicTargetRecord = {
+    profileKey: getBaleThreadOwnerKey(owner),
     owner,
     target: parsedTarget,
     status,
@@ -1518,9 +1518,9 @@ function normalizeRecord(
     updatedAtMs: record.updatedAtMs,
     ...(threadName !== undefined ? { threadName } : {}),
     ...(typeof record.manualThreadName === "string" &&
-    normalizeTelegramTopicTargetThreadName(record.manualThreadName)
+    normalizeBaleTopicTargetThreadName(record.manualThreadName)
       ? {
-          manualThreadName: normalizeTelegramTopicTargetThreadName(
+          manualThreadName: normalizeBaleTopicTargetThreadName(
             record.manualThreadName,
           ),
         }
@@ -1563,7 +1563,7 @@ function normalizeRecord(
   return normalized;
 }
 
-function isPersistedThreadRecord(record: TelegramTopicTargetRecord): boolean {
+function isPersistedThreadRecord(record: BaleTopicTargetRecord): boolean {
   return (
     ThreadReconciler.isCurrentThreadRecord(record) ||
     record.status === "probe-required"
@@ -1572,21 +1572,21 @@ function isPersistedThreadRecord(record: TelegramTopicTargetRecord): boolean {
 
 function normalizeIdentityRecord(
   value: unknown,
-): TelegramThreadIdentityRecord | undefined {
+): BaleThreadIdentityRecord | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
   if (typeof record.profileKey !== "string" || record.profileKey.length === 0)
     return undefined;
   if (typeof record.updatedAtMs !== "number") return undefined;
-  const identity: TelegramThreadIdentityRecord = {
+  const identity: BaleThreadIdentityRecord = {
     profileKey: record.profileKey,
     updatedAtMs: record.updatedAtMs,
   };
   const persistedThreadName = getPersistedThreadName(record);
   if (persistedThreadName) {
     const threadName =
-      normalizeTelegramTopicTargetThreadName(persistedThreadName);
+      normalizeBaleTopicTargetThreadName(persistedThreadName);
     if (threadName) identity.threadName = threadName;
   }
   if (typeof record.slot === "string" && /^[A-Z]$/.test(record.slot)) {
@@ -1596,14 +1596,14 @@ function normalizeIdentityRecord(
 }
 
 function cloneIdentityRecord(
-  identity: TelegramThreadIdentityRecord,
-): TelegramThreadIdentityRecord {
+  identity: BaleThreadIdentityRecord,
+): BaleThreadIdentityRecord {
   return { ...identity };
 }
 
 function indexWorkspaceBindings(
-  bindings: readonly TelegramWorkspaceThreadBinding[],
-): Map<string, TelegramWorkspaceThreadBinding> {
+  bindings: readonly BaleWorkspaceThreadBinding[],
+): Map<string, BaleWorkspaceThreadBinding> {
   return new Map(
     bindings.map((binding) => [
       getWorkspaceBindingMapKey(binding),
@@ -1614,7 +1614,7 @@ function indexWorkspaceBindings(
 
 function getWorkspaceBindingMapKey(
   binding: Pick<
-    TelegramWorkspaceThreadBinding,
+    BaleWorkspaceThreadBinding,
     "cwd" | "instanceSlot" | "sessionId"
   >,
 ): string {
@@ -1623,9 +1623,9 @@ function getWorkspaceBindingMapKey(
 
 function normalizeWorkspaceJournalSources(
   value: unknown,
-): TelegramWorkspaceJournalSource[] | undefined {
+): BaleWorkspaceJournalSource[] | undefined {
   if (!Array.isArray(value) || value.length > 256) return undefined;
-  const sources = new Map<string, TelegramWorkspaceJournalSource>();
+  const sources = new Map<string, BaleWorkspaceJournalSource>();
   for (const entry of value) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry))
       return undefined;
@@ -1635,7 +1635,7 @@ function normalizeWorkspaceJournalSources(
         (key) => key !== "sessionId" && key !== "recipientBindingKey",
       ) ||
       typeof source.sessionId !== "string" ||
-      normalizeTelegramSessionId(source.sessionId) !== source.sessionId ||
+      normalizeBaleSessionId(source.sessionId) !== source.sessionId ||
       typeof source.recipientBindingKey !== "string" ||
       !source.recipientBindingKey ||
       source.recipientBindingKey.length > 512
@@ -1652,7 +1652,7 @@ function normalizeWorkspaceJournalSources(
 
 function normalizeWorkspaceBindingRecord(
   value: unknown,
-): TelegramWorkspaceThreadBinding | undefined {
+): BaleWorkspaceThreadBinding | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
@@ -1665,17 +1665,17 @@ function normalizeWorkspaceBindingRecord(
   ) {
     return undefined;
   }
-  const cwd = normalizeTelegramWorkspacePath(record.cwd);
+  const cwd = normalizeBaleWorkspacePath(record.cwd);
   const sessionId =
     typeof record.sessionId === "string"
-      ? normalizeTelegramSessionId(record.sessionId)
+      ? normalizeBaleSessionId(record.sessionId)
       : undefined;
   const sessionKey =
     typeof record.sessionKey === "string" ? record.sessionKey : undefined;
   const hasSessionFields =
     record.sessionId !== undefined || record.sessionKey !== undefined;
   const expectedSessionKey = sessionId
-    ? createTelegramSessionKey(sessionId)
+    ? createBaleSessionKey(sessionId)
     : undefined;
   const legacyBindingKey =
     record.instanceSlot === "a"
@@ -1713,7 +1713,7 @@ function normalizeWorkspaceBindingRecord(
   const threadName = getPersistedThreadName(record);
   const manualThreadName =
     typeof record.manualThreadName === "string"
-      ? normalizeTelegramTopicTargetThreadName(record.manualThreadName)
+      ? normalizeBaleTopicTargetThreadName(record.manualThreadName)
       : undefined;
   const slot =
     typeof record.slot === "string" && /^[A-Z]$/u.test(record.slot)
@@ -1761,8 +1761,8 @@ function normalizeWorkspaceBindingRecord(
 }
 
 function cloneWorkspaceBinding(
-  binding: TelegramWorkspaceThreadBinding,
-): TelegramWorkspaceThreadBinding {
+  binding: BaleWorkspaceThreadBinding,
+): BaleWorkspaceThreadBinding {
   return {
     ...binding,
     target: { ...binding.target },
@@ -1780,25 +1780,25 @@ function cloneWorkspaceBinding(
 }
 
 function cloneSessionReplacementIntent(
-  intent: TelegramSessionReplacementIntent,
-): TelegramSessionReplacementIntent {
+  intent: BaleSessionReplacementIntent,
+): BaleSessionReplacementIntent {
   return { ...intent, target: { ...intent.target } };
 }
 
-export function normalizeTelegramSessionReplacementIntent(
+export function normalizeBaleSessionReplacementIntent(
   value: unknown,
-): TelegramSessionReplacementIntent | undefined {
+): BaleSessionReplacementIntent | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
   const target = record.target as Record<string, unknown> | undefined;
   if (
     typeof record.cwd !== "string" ||
-    !normalizeTelegramWorkspacePath(record.cwd) ||
+    !normalizeBaleWorkspacePath(record.cwd) ||
     typeof record.profileName !== "string" ||
     !record.profileName ||
     typeof record.sourceSessionId !== "string" ||
-    !normalizeTelegramSessionId(record.sourceSessionId) ||
+    !normalizeBaleSessionId(record.sourceSessionId) ||
     typeof record.sourceUpdateId !== "number" ||
     !Number.isSafeInteger(record.sourceUpdateId) ||
     !target ||
@@ -1831,9 +1831,9 @@ export function normalizeTelegramSessionReplacementIntent(
   }
   return {
     continuity,
-    cwd: normalizeTelegramWorkspacePath(record.cwd)!,
+    cwd: normalizeBaleWorkspacePath(record.cwd)!,
     profileName: record.profileName,
-    sourceSessionId: normalizeTelegramSessionId(record.sourceSessionId)!,
+    sourceSessionId: normalizeBaleSessionId(record.sourceSessionId)!,
     sourceUpdateId: record.sourceUpdateId,
     target: {
       chatId: target.chatId,
@@ -1856,7 +1856,7 @@ export function normalizeTelegramSessionReplacementIntent(
 
 function normalizeWorkspaceRetirementIntent(
   value: unknown,
-): TelegramWorkspaceRetirementIntent | undefined {
+): BaleWorkspaceRetirementIntent | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
@@ -1890,12 +1890,12 @@ function normalizeWorkspaceRetirementIntent(
 }
 
 function cloneWorkspaceRetirementIntent(
-  intent: TelegramWorkspaceRetirementIntent,
-): TelegramWorkspaceRetirementIntent {
+  intent: BaleWorkspaceRetirementIntent,
+): BaleWorkspaceRetirementIntent {
   return { ...intent, binding: cloneWorkspaceBinding(intent.binding) };
 }
 
-function normalizeBotStateSnapshot(value: unknown): TelegramBotStateSnapshot {
+function normalizeBotStateSnapshot(value: unknown): BaleBotStateSnapshot {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { threadMode: "unknown" };
   }
@@ -1921,7 +1921,7 @@ function normalizeBotStateSnapshot(value: unknown): TelegramBotStateSnapshot {
 
 function normalizeSyncObservation(
   value: unknown,
-): TelegramTopicSyncObservation | undefined {
+): BaleTopicSyncObservation | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
@@ -1957,7 +1957,7 @@ function normalizeSyncObservation(
 
 function normalizePendingProvision(
   value: unknown,
-): TelegramThreadPendingProvision | undefined {
+): BaleThreadPendingProvision | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
@@ -2002,7 +2002,7 @@ function normalizePendingProvision(
 
 function normalizePendingCleanup(
   value: unknown,
-): TelegramThreadCleanupIntent | undefined {
+): BaleThreadCleanupIntent | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
@@ -2035,7 +2035,7 @@ function normalizePendingCleanup(
 
 function normalizeReservation(
   value: unknown,
-): TelegramThreadReservation | undefined {
+): BaleThreadReservation | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
@@ -2062,12 +2062,12 @@ function normalizeReservation(
   };
 }
 
-function normalizeTelegramWorkspaceRelocationRequest(
+function normalizeBaleWorkspaceRelocationRequest(
   value: unknown,
-): TelegramWorkspaceRelocationRequest | undefined {
+): BaleWorkspaceRelocationRequest | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
-  const request = value as TelegramWorkspaceRelocationRequest;
+  const request = value as BaleWorkspaceRelocationRequest;
   const binding = normalizeWorkspaceBindingRecord(request.binding);
   const owner = normalizeRecord(request.owner);
   const target = request.target;
@@ -2113,29 +2113,29 @@ const restoreKeys = (
   value: Record<string, unknown>,
   allowed: string[],
 ): boolean => Object.keys(value).every((key) => allowed.includes(key));
-const isTelegramWorkspaceRestoreExecutor = (
+const isBaleWorkspaceRestoreExecutor = (
   value: unknown,
-): value is TelegramWorkspaceRestoreExecutor =>
+): value is BaleWorkspaceRestoreExecutor =>
   restoreObject(value) &&
   restoreKeys(value, ["instanceId", "leaderEpoch"]) &&
   restoreText(value.instanceId) &&
   restoreText(value.leaderEpoch);
-export const isTelegramWorkspaceRestoreRecipient = (
+export const isBaleWorkspaceRestoreRecipient = (
   value: unknown,
-): value is TelegramWorkspaceRestoreRecipient =>
+): value is BaleWorkspaceRestoreRecipient =>
   restoreObject(value) &&
   restoreKeys(value, ["kind", "instanceId", "sessionId", "generation"]) &&
   (value.kind === "leader" || value.kind === "follower") &&
   restoreText(value.instanceId) &&
   restoreText(value.sessionId) &&
   restoreText(value.generation);
-export function isTelegramWorkspaceRestoreRequest(
+export function isBaleWorkspaceRestoreRequest(
   value: unknown,
-): value is TelegramWorkspaceRestoreRequest {
+): value is BaleWorkspaceRestoreRequest {
   if (!restoreObject(value)) return false;
   const { source, ...relocation } = value;
   return (
-    !!normalizeTelegramWorkspaceRelocationRequest(relocation) &&
+    !!normalizeBaleWorkspaceRelocationRequest(relocation) &&
     restoreObject(source) &&
     restoreKeys(source, ["journalBindingKey", "updateIds"]) &&
     restoreText(source.journalBindingKey) &&
@@ -2147,10 +2147,10 @@ export function isTelegramWorkspaceRestoreRequest(
     )
   );
 }
-function isTelegramWorkspaceRestoreSettlement(
+function isBaleWorkspaceRestoreSettlement(
   value: unknown,
-  source: TelegramWorkspaceRestoreRequest["source"],
-): value is TelegramWorkspaceRestoreSourceSettlement {
+  source: BaleWorkspaceRestoreRequest["source"],
+): value is BaleWorkspaceRestoreSourceSettlement {
   if (
     !restoreObject(value) ||
     value.journalBindingKey !== source.journalBindingKey ||
@@ -2179,8 +2179,8 @@ function isTelegramWorkspaceRestoreSettlement(
 }
 function isWorkspaceRestoreSourceAcceptance(
   value: unknown,
-  operation: TelegramWorkspaceRestoreIntent,
-): value is TelegramWorkspaceRestoreSourceAcceptance {
+  operation: BaleWorkspaceRestoreIntent,
+): value is BaleWorkspaceRestoreSourceAcceptance {
   if (
     !restoreObject(value) ||
     value.journalBindingKey !== operation.request.source.journalBindingKey ||
@@ -2188,7 +2188,7 @@ function isWorkspaceRestoreSourceAcceptance(
     !operation.request.source.updateIds.includes(value.updateId) ||
     typeof value.sourceSha256 !== "string" ||
     !/^[a-f0-9]{64}$/u.test(value.sourceSha256) ||
-    !isTelegramWorkspaceRestoreRecipient(value.recipient) ||
+    !isBaleWorkspaceRestoreRecipient(value.recipient) ||
     value.recipient.sessionId !== operation.request.binding.sessionId ||
     value.recipient.kind !== operation.recipient?.kind
   )
@@ -2207,7 +2207,7 @@ function isWorkspaceRestoreSourceAcceptance(
       value.recipient.kind === "follower" &&
       restoreKeys(value, [...keys, "deliveryId", "recipientBindingKey"]) &&
       typeof value.deliveryId === "string" &&
-      /^telegram-follower-v1-[a-f0-9]{64}$/u.test(value.deliveryId) &&
+      /^bale-follower-v1-[a-f0-9]{64}$/u.test(value.deliveryId) &&
       restoreText(value.recipientBindingKey)
     );
   return (
@@ -2226,12 +2226,12 @@ function isWorkspaceRestoreSourceAcceptance(
   );
 }
 /** Stable acceptance scope, not a removal ACK; adoption and mutable progress cannot change it. */
-export function getTelegramWorkspaceRestoreSourceCompletionSha256(
-  operation: TelegramWorkspaceRestoreIntent,
-  acceptance: TelegramWorkspaceRestoreSourceAcceptance,
+export function getBaleWorkspaceRestoreSourceCompletionSha256(
+  operation: BaleWorkspaceRestoreIntent,
+  acceptance: BaleWorkspaceRestoreSourceAcceptance,
 ): string {
   if (
-    !isTelegramWorkspaceRestoreRequest(operation.request) ||
+    !isBaleWorkspaceRestoreRequest(operation.request) ||
     operation.operatorUserId !== operation.request.target.chatId ||
     !isWorkspaceRestoreSourceAcceptance(acceptance, operation) ||
     !operation.routing?.acceptances?.some((value) =>
@@ -2264,7 +2264,7 @@ export function getTelegramWorkspaceRestoreSourceCompletionSha256(
 }
 
 function workspaceRestoreAcceptancesConsistent(
-  acceptances: readonly TelegramWorkspaceRestoreSourceAcceptance[],
+  acceptances: readonly BaleWorkspaceRestoreSourceAcceptance[],
 ): boolean {
   return acceptances.every(
     (value, index) =>
@@ -2287,8 +2287,8 @@ function workspaceRestoreAcceptancesConsistent(
   );
 }
 function workspaceRestoreSettlementMatchesAcceptance(
-  evidence: TelegramWorkspaceRestoreSourceSettlement,
-  acceptances: readonly TelegramWorkspaceRestoreSourceAcceptance[],
+  evidence: BaleWorkspaceRestoreSourceSettlement,
+  acceptances: readonly BaleWorkspaceRestoreSourceAcceptance[],
 ): boolean {
   return evidence.updateIds.every((id) => {
     const accepted = acceptances.find((value) => value.updateId === id);
@@ -2301,7 +2301,7 @@ function workspaceRestoreSettlementMatchesAcceptance(
   });
 }
 function workspaceRestoreSourcesSettled(
-  operation: TelegramWorkspaceRestoreIntent,
+  operation: BaleWorkspaceRestoreIntent,
 ): boolean {
   const settled = new Set(
     operation.routing?.settlements
@@ -2312,7 +2312,7 @@ function workspaceRestoreSourcesSettled(
 }
 function isWorkspaceRestoreIntent(
   value: unknown,
-): value is TelegramWorkspaceRestoreIntent {
+): value is BaleWorkspaceRestoreIntent {
   if (
     !restoreObject(value) ||
     !restoreKeys(value, [
@@ -2328,10 +2328,10 @@ function isWorkspaceRestoreIntent(
       "readyRecipient",
       "routing",
     ]) ||
-    !isTelegramWorkspaceRestoreRequest(value.request) ||
+    !isBaleWorkspaceRestoreRequest(value.request) ||
     !restoreInteger(value.operatorUserId) ||
     value.operatorUserId !== value.request.target.chatId ||
-    !isTelegramWorkspaceRestoreExecutor(value.executor) ||
+    !isBaleWorkspaceRestoreExecutor(value.executor) ||
     !restoreInteger(value.revision) ||
     !restoreInteger(value.createdAtMs) ||
     !restoreInteger(value.updatedAtMs) ||
@@ -2347,7 +2347,7 @@ function isWorkspaceRestoreIntent(
       !restoreKeys(value.routing, ["acceptances", "settlements", "cleanup"]) ||
       !Array.isArray(value.routing.settlements) ||
       !value.routing.settlements.every((item) =>
-        isTelegramWorkspaceRestoreSettlement(item, source),
+        isBaleWorkspaceRestoreSettlement(item, source),
       )
     )
       return false;
@@ -2359,7 +2359,7 @@ function isWorkspaceRestoreIntent(
         !acceptances.every((item) =>
           isWorkspaceRestoreSourceAcceptance(
             item,
-            value as unknown as TelegramWorkspaceRestoreIntent,
+            value as unknown as BaleWorkspaceRestoreIntent,
           ),
         ) ||
         !workspaceRestoreAcceptancesConsistent(acceptances)
@@ -2367,7 +2367,7 @@ function isWorkspaceRestoreIntent(
         return false;
     }
     const acceptances = (value.routing.acceptances ??
-      []) as TelegramWorkspaceRestoreSourceAcceptance[];
+      []) as BaleWorkspaceRestoreSourceAcceptance[];
     if (
       !value.routing.settlements.every((item) =>
         workspaceRestoreSettlementMatchesAcceptance(item, acceptances),
@@ -2382,7 +2382,7 @@ function isWorkspaceRestoreIntent(
           value.routing.cleanup as string,
         ) ||
           !workspaceRestoreSourcesSettled(
-            value as unknown as TelegramWorkspaceRestoreIntent,
+            value as unknown as BaleWorkspaceRestoreIntent,
           )))
     )
       return false;
@@ -2390,20 +2390,20 @@ function isWorkspaceRestoreIntent(
   if (
     value.readyRecipient !== undefined &&
     (value.phase !== "ready" ||
-      !isTelegramWorkspaceRestoreRecipient(value.readyRecipient) ||
+      !isBaleWorkspaceRestoreRecipient(value.readyRecipient) ||
       value.readyRecipient.sessionId !== value.request.binding.sessionId)
   )
     return false;
   if (value.phase === "relocated") return value.recipient === undefined;
   return (
     (value.phase === "recipient-issued" || value.phase === "ready") &&
-    isTelegramWorkspaceRestoreRecipient(value.recipient) &&
+    isBaleWorkspaceRestoreRecipient(value.recipient) &&
     value.recipient.sessionId === value.request.binding.sessionId
   );
 }
 function isWorkspaceLiveRebindIntent(
   value: unknown,
-): value is TelegramWorkspaceLiveRebindIntent {
+): value is BaleWorkspaceLiveRebindIntent {
   if (
     !restoreObject(value) ||
     !restoreKeys(value, [
@@ -2421,15 +2421,15 @@ function isWorkspaceLiveRebindIntent(
       "oldTargetProtected",
     ]) ||
     value.kind !== "live-rebind" ||
-    !isTelegramWorkspaceRestoreRequest(value.request) ||
+    !isBaleWorkspaceRestoreRequest(value.request) ||
     !restoreInteger(value.operatorUserId) ||
     value.operatorUserId !== value.request.target.chatId ||
-    !isTelegramWorkspaceRestoreExecutor(value.executor) ||
+    !isBaleWorkspaceRestoreExecutor(value.executor) ||
     !restoreInteger(value.revision) ||
     !restoreInteger(value.createdAtMs) ||
     !restoreInteger(value.updatedAtMs) ||
     value.updatedAtMs < value.createdAtMs ||
-    !isTelegramWorkspaceRestoreRecipient(value.recipient) ||
+    !isBaleWorkspaceRestoreRecipient(value.recipient) ||
     value.recipient.sessionId !== value.request.binding.sessionId ||
     value.recipient.instanceId !== value.request.owner.instanceId ||
     value.recipient.kind !==
@@ -2453,7 +2453,7 @@ function isWorkspaceLiveRebindIntent(
 }
 function isTemporaryThreadInput(
   value: unknown,
-): value is TelegramTemporaryThreadInput {
+): value is BaleTemporaryThreadInput {
   return (
     restoreObject(value) &&
     restoreKeys(value, ["journalBindingKey", "updateIds"]) &&
@@ -2467,9 +2467,9 @@ function isTemporaryThreadInput(
     )
   );
 }
-export function getTelegramTemporaryThreadInputs(
-  entry: TelegramTemporaryThreadEntry,
-): TelegramTemporaryThreadInput[] {
+export function getBaleTemporaryThreadInputs(
+  entry: BaleTemporaryThreadEntry,
+): BaleTemporaryThreadInput[] {
   return structuredClone(
     entry.inputs ?? [
       {
@@ -2480,10 +2480,10 @@ export function getTelegramTemporaryThreadInputs(
   );
 }
 /** Every known group is durably cancelled or Forward-completed; still not deletion authority by itself. */
-export function isTelegramTemporaryThreadFullyResolved(
-  entry: TelegramTemporaryThreadEntry,
+export function isBaleTemporaryThreadFullyResolved(
+  entry: BaleTemporaryThreadEntry,
 ): boolean {
-  const inputs = getTelegramTemporaryThreadInputs(entry),
+  const inputs = getBaleTemporaryThreadInputs(entry),
     resolved = [
       ...(entry.cancelledInputs ?? []),
       ...(entry.completedInputs ?? []),
@@ -2497,18 +2497,18 @@ export function isTelegramTemporaryThreadFullyResolved(
 }
 /** One unresolved group may release protection after completion when every other group has a durable terminal fact. */
 function isTemporaryThreadReleasedByCompletion(
-  entry: TelegramTemporaryThreadEntry,
-  completed: TelegramTemporaryThreadInput | undefined,
+  entry: BaleTemporaryThreadEntry,
+  completed: BaleTemporaryThreadInput | undefined,
 ): boolean {
   if (!completed || !isTemporaryThreadInput(completed)) return false;
-  const inputs = getTelegramTemporaryThreadInputs(entry),
+  const inputs = getBaleTemporaryThreadInputs(entry),
     cancelled = [
       ...(entry.cancelledInputs ?? []),
       ...(entry.completedInputs ?? []),
     ];
   const same = (
-    left: TelegramTemporaryThreadInput,
-    right: TelegramTemporaryThreadInput,
+    left: BaleTemporaryThreadInput,
+    right: BaleTemporaryThreadInput,
   ): boolean => isDeepStrictEqual(left, right);
   return (
     inputs.some((input) => same(input, completed)) &&
@@ -2521,13 +2521,13 @@ function isTemporaryThreadReleasedByCompletion(
 }
 /** A created temporary tab may advance one recorded input only while no Restore operation claims its updates. */
 function isTemporaryThreadInputAdvanceable(
-  entry: TelegramTemporaryThreadEntry,
-  file: Pick<TelegramWorkspaceRestoreSnapshot, "operations">,
-  input: TelegramTemporaryThreadInput,
+  entry: BaleTemporaryThreadEntry,
+  file: Pick<BaleWorkspaceRestoreSnapshot, "operations">,
+  input: BaleTemporaryThreadInput,
 ): boolean {
   return (
     entry.phase === "created" &&
-    getTelegramTemporaryThreadInputs(entry).some((candidate) =>
+    getBaleTemporaryThreadInputs(entry).some((candidate) =>
       isDeepStrictEqual(candidate, input),
     ) &&
     !file.operations.some(
@@ -2560,7 +2560,7 @@ function isTemporaryThreadInputSubset(
 
 function isTemporaryThreadEntry(
   value: unknown,
-): value is TelegramTemporaryThreadEntry {
+): value is BaleTemporaryThreadEntry {
   if (
     !restoreObject(value) ||
     !restoreKeys(value, [
@@ -2586,7 +2586,7 @@ function isTemporaryThreadEntry(
     !restoreInteger(value.source.updateId) ||
     !restoreInteger(value.operatorUserId) ||
     value.operatorUserId === 0 ||
-    !isTelegramWorkspaceRestoreExecutor(value.executor) ||
+    !isBaleWorkspaceRestoreExecutor(value.executor) ||
     typeof value.token !== "string" ||
     !/^[a-f0-9]{32}$/u.test(value.token) ||
     !restoreInteger(value.revision) ||
@@ -2653,8 +2653,8 @@ function isTemporaryThreadEntry(
   if (
     value.cleanupIssued !== undefined &&
     (value.cleanupIssued !== true ||
-      !isTelegramTemporaryThreadFullyResolved(
-        value as unknown as TelegramTemporaryThreadEntry,
+      !isBaleTemporaryThreadFullyResolved(
+        value as unknown as BaleTemporaryThreadEntry,
       ))
   )
     return false;
@@ -2679,8 +2679,8 @@ function isTemporaryThreadEntry(
 }
 /** Only an exact recorded source group may Restore into its temporary tab. */
 function isTemporaryThreadRestore(
-  entry: TelegramTemporaryThreadEntry,
-  operations: readonly Pick<TelegramWorkspaceRestoreIntent, "request">[],
+  entry: BaleTemporaryThreadEntry,
+  operations: readonly Pick<BaleWorkspaceRestoreIntent, "request">[],
 ): boolean {
   return operations.some(
     ({ request }) =>
@@ -2702,8 +2702,8 @@ function isTemporaryThreadRestore(
   );
 }
 function conflictsWithTemporaryThread(
-  snapshot: TelegramWorkspaceRestoreSnapshot | undefined,
-  target: TelegramTarget | undefined,
+  snapshot: BaleWorkspaceRestoreSnapshot | undefined,
+  target: BaleTarget | undefined,
 ): boolean {
   return (
     !!target &&
@@ -2713,8 +2713,8 @@ function conflictsWithTemporaryThread(
   );
 }
 function conflictsWithWorkspaceRestoreProvision(
-  request: TelegramWorkspaceRestoreRequest,
-  provision: TelegramThreadPendingProvision | TelegramThreadReservation,
+  request: BaleWorkspaceRestoreRequest,
+  provision: BaleThreadPendingProvision | BaleThreadReservation,
 ): boolean {
   if (
     "owner" in provision &&
@@ -2734,38 +2734,38 @@ function conflictsWithWorkspaceRestoreProvision(
 }
 
 /** Canonical issuance is distinct from cleanup completion, source disposition and peer dispatch readiness. */
-export function isTelegramLiveRebindInputAuthorized(value: TelegramWorkspaceLiveRebindIntent): boolean {
+export function isBaleLiveRebindInputAuthorized(value: BaleWorkspaceLiveRebindIntent): boolean {
   return value.inputRelease === undefined
     ? value.phase === "released" && value.cleanup === undefined
     : ["issued", "accepted"].includes(value.inputRelease) &&
       ["released", "finished"].includes(value.phase) && value.cleanup !== "issued";
 }
-function liveRebindInputPending(value: TelegramWorkspaceLiveRebindIntent): boolean {
+function liveRebindInputPending(value: BaleWorkspaceLiveRebindIntent): boolean {
   return value.inputRelease !== undefined && value.inputRelease !== "accepted";
 }
-function liveRebindActive(value: TelegramWorkspaceLiveRebindIntent): boolean {
+function liveRebindActive(value: BaleWorkspaceLiveRebindIntent): boolean {
   return value.phase !== "finished" || liveRebindInputPending(value);
 }
-function liveRebindOldTargetUnknown(value: TelegramWorkspaceLiveRebindIntent): boolean {
+function liveRebindOldTargetUnknown(value: BaleWorkspaceLiveRebindIntent): boolean {
   return value.phase === "finished" && value.cleanup === "unknown" && value.inputRelease !== undefined;
 }
-function retainLiveRebind(value: TelegramWorkspaceLiveRebindIntent): boolean {
+function retainLiveRebind(value: BaleWorkspaceLiveRebindIntent): boolean {
   return liveRebindActive(value) || liveRebindOldTargetUnknown(value) || value.oldTargetProtected === true;
 }
-function provisioningProtectionIntents(snapshot: TelegramWorkspaceRestoreSnapshot): readonly Pick<TelegramWorkspaceRestoreIntent, "request">[] {
+function provisioningProtectionIntents(snapshot: BaleWorkspaceRestoreSnapshot): readonly Pick<BaleWorkspaceRestoreIntent, "request">[] {
   return [...snapshot.operations, ...(snapshot.liveRebindings ?? []).filter(retainLiveRebind)];
 }
-function protectedLiveRebindOldTargetIntents(snapshot: TelegramWorkspaceRestoreSnapshot | undefined): TelegramWorkspaceLiveRebindIntent[] {
+function protectedLiveRebindOldTargetIntents(snapshot: BaleWorkspaceRestoreSnapshot | undefined): BaleWorkspaceLiveRebindIntent[] {
   return (snapshot?.liveRebindings ?? []).filter(value =>
     value.oldTargetProtected === true || liveRebindOldTargetUnknown(value) || value.inputRelease !== undefined && value.cleanup === "issued",
   );
 }
-function protectedLiveRebindOldTargets(snapshot: TelegramWorkspaceRestoreSnapshot | undefined): TelegramTarget[] {
+function protectedLiveRebindOldTargets(snapshot: BaleWorkspaceRestoreSnapshot | undefined): BaleTarget[] {
   return protectedLiveRebindOldTargetIntents(snapshot).map(value => ({ ...value.request.binding.target }));
 }
 function pendingWorkspaceRelocationRequests(
-  snapshot: TelegramWorkspaceRestoreSnapshot | undefined,
-): TelegramWorkspaceRestoreRequest[] {
+  snapshot: BaleWorkspaceRestoreSnapshot | undefined,
+): BaleWorkspaceRestoreRequest[] {
   return [
     ...(snapshot?.operations ?? []).map((value) => value.request),
     ...(snapshot?.liveRebindings ?? [])
@@ -2775,14 +2775,14 @@ function pendingWorkspaceRelocationRequests(
 }
 function assertWorkspaceRestoreBindingProtection(
   file: Pick<
-    TelegramTopicTargetFile,
+    BaleTopicTargetFile,
     | "workspaceBindings"
     | "workspaceRestore"
     | "pendingProvisions"
     | "reservations"
   > & {
     threads?: readonly Pick<
-      TelegramTopicTargetRecord,
+      BaleTopicTargetRecord,
       "target" | "slot" | "instanceId" | "status" | "owner"
     >[];
   },
@@ -2888,8 +2888,8 @@ function assertWorkspaceRestoreBindingProtection(
 }
 
 function workspaceRestoresConflict(
-  left: TelegramWorkspaceRestoreRequest,
-  right: TelegramWorkspaceRestoreRequest,
+  left: BaleWorkspaceRestoreRequest,
+  right: BaleWorkspaceRestoreRequest,
 ): boolean {
   const targets = [left.binding.target, left.target];
   return (
@@ -2911,7 +2911,7 @@ const TEMPORARY_THREAD_INPUT_CAPACITY = 100;
 const WORKSPACE_SNAPSHOT_MAX_BYTES = 8 * WORKSPACE_RESTORE_MAX_BYTES;
 function parseWorkspaceRestore(
   value: unknown,
-): TelegramWorkspaceRestoreSnapshot | undefined {
+): BaleWorkspaceRestoreSnapshot | undefined {
   if (value === undefined) return undefined;
   const temporary = restoreObject(value) ? value.temporaryThreads : undefined;
   const live = restoreObject(value) ? value.liveRebindings : undefined;
@@ -2951,7 +2951,7 @@ function parseWorkspaceRestore(
     Buffer.byteLength(JSON.stringify(value)) > WORKSPACE_RESTORE_MAX_BYTES
   )
     throw new Error("Invalid Workspace Restore evidence.");
-  const snapshot = value as unknown as TelegramWorkspaceRestoreSnapshot;
+  const snapshot = value as unknown as BaleWorkspaceRestoreSnapshot;
   if (
     snapshot.operations.some((operation, index) =>
       snapshot.operations
@@ -2992,8 +2992,8 @@ function parseWorkspaceRestore(
         .some(
           (other) =>
             other.token === entry.token ||
-            getTelegramTemporaryThreadInputs(entry).some((input) =>
-              getTelegramTemporaryThreadInputs(other).some(
+            getBaleTemporaryThreadInputs(entry).some((input) =>
+              getBaleTemporaryThreadInputs(other).some(
                 (candidate) =>
                   input.journalBindingKey === candidate.journalBindingKey &&
                   input.updateIds.some((id) =>
@@ -3027,16 +3027,16 @@ function parseWorkspaceRestore(
  * Atomic Workspace replacement with the shared bounded Windows sharing retries: a reader, scanner or antivirus
  * briefly holding the target makes rename fail with EPERM there. A vanished staging file is still an error.
  */
-function replaceTelegramWorkspaceFile(temporary: string, path: string): void {
+function replaceBaleWorkspaceFile(temporary: string, path: string): void {
   // A real-time scan of the just-published snapshot can outlast the default budget; ~1.35 s is paid only on refusal.
   if (
-    !renameTelegramPathWithRetry(temporary, path, {
+    !renameBalePathWithRetry(temporary, path, {
       attempts: 10,
       retryDelayMs: 30,
     })
   )
     throw new Error(
-      "Telegram Workspace staging file disappeared before publication.",
+      "Bale Workspace staging file disappeared before publication.",
     );
 }
 
@@ -3060,7 +3060,7 @@ function readWorkspaceSnapshot(
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
   }
-  const privateFile = isTelegramOwnerPrivate(before);
+  const privateFile = isBaleOwnerPrivate(before);
   if (
     !before.isFile() ||
     before.isSymbolicLink() ||
@@ -3071,7 +3071,7 @@ function readWorkspaceSnapshot(
     throw new Error(
       "Workspace snapshot must be a bounded private regular file.",
     );
-  const fd = openSync(path, TELEGRAM_STRICT_READ_FLAGS);
+  const fd = openSync(path, BALE_STRICT_READ_FLAGS);
   try {
     const opened = fstatSync(fd, { bigint: true });
     if (
@@ -3100,7 +3100,7 @@ function readWorkspaceSnapshot(
   }
 }
 
-function parseTopicTargetFile(value: unknown): TelegramTopicTargetFile {
+function parseTopicTargetFile(value: unknown): BaleTopicTargetFile {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {
       version: 1,
@@ -3136,7 +3136,7 @@ function parseTopicTargetFile(value: unknown): TelegramTopicTargetFile {
   const threads = rawThreads
     .map((record) => normalizeRecord(record))
     .filter(
-      (record): record is TelegramTopicTargetRecord =>
+      (record): record is BaleTopicTargetRecord =>
         !!record && isPersistedThreadRecord(record),
     );
   return {
@@ -3171,7 +3171,7 @@ function parseTopicTargetFile(value: unknown): TelegramTopicTargetFile {
         })
       : [],
     ...(workspaceRestore ? { workspaceRestore } : {}),
-    sessionReplacement: normalizeTelegramSessionReplacementIntent(
+    sessionReplacement: normalizeBaleSessionReplacementIntent(
       file.sessionReplacement,
     ),
     reservations: Array.isArray(file.reservations)
@@ -3202,10 +3202,10 @@ function parseTopicTargetFile(value: unknown): TelegramTopicTargetFile {
 }
 
 /** The unified section accepts only lossless current-format Workspace evidence, never tolerant legacy repair. */
-export function parseTelegramWorkspaceStateSection(
+export function parseBaleWorkspaceStateSection(
   value: unknown,
   profile: string,
-): TelegramTopicTargetFile | undefined {
+): BaleTopicTargetFile | undefined {
   if (value === undefined) return undefined;
   if (
     !restoreObject(value) ||
@@ -3246,9 +3246,9 @@ export function parseTelegramWorkspaceStateSection(
     parsed.threads.some(
       (record) =>
         record.owner &&
-        "telegramProfile" in record.owner &&
-        record.owner.telegramProfile !== undefined &&
-        record.owner.telegramProfile !== profile,
+        "baleProfile" in record.owner &&
+        record.owner.baleProfile !== undefined &&
+        record.owner.baleProfile !== profile,
     )
   )
     throw new Error("Foreign consolidated Workspace profile evidence.");
@@ -3256,7 +3256,7 @@ export function parseTelegramWorkspaceStateSection(
   return parsed;
 }
 
-export function resolveTelegramWorkspaceProvisionRecoveryPath(
+export function resolveBaleWorkspaceProvisionRecoveryPath(
   statePath: string,
   profileName = "default",
   layout?: "consolidated",
@@ -3272,47 +3272,47 @@ export function resolveTelegramWorkspaceProvisionRecoveryPath(
     : `${statePath}.provision-recovery.json`;
 }
 
-export interface TelegramConsolidatedWorkspaceStorageOptions {
+export interface BaleConsolidatedWorkspaceStorageOptions {
   getPath: () => string;
   getProfile: () => string | undefined;
   /** Exact owner/context/session grant captured before the caller's first await. */
   captureAuthority: () => (() => boolean) | undefined;
   publishIfOwned: NonNullable<
-    TelegramLockRuntime<TelegramLockContext>["publishStateSectionIfOwned"]
+    BaleLockRuntime<BaleLockContext>["publishStateSectionIfOwned"]
   >;
 }
-export type TelegramWorkspaceStatePublication = <T>(
-  mutate: (current: unknown) => TelegramRuntimeStateMutation<T>,
+export type BaleWorkspaceStatePublication = <T>(
+  mutate: (current: unknown) => BaleRuntimeStateMutation<T>,
   publication?: Partial<
     Pick<
-      TelegramOwnedStatePublicationOptions,
+      BaleOwnedStatePublicationOptions,
       "onPublicationBoundary" | "publishRename" | "isCurrent"
     >
   >,
-) => TelegramOwnedStatePublicationResult<T>;
+) => BaleOwnedStatePublicationResult<T>;
 
 /** Prepared Workspace IO adapter; transition/CAS policy remains with the existing Threads owner. */
-export function createTelegramConsolidatedWorkspaceStorage(
-  options: TelegramConsolidatedWorkspaceStorageOptions,
+export function createBaleConsolidatedWorkspaceStorage(
+  options: BaleConsolidatedWorkspaceStorageOptions,
 ) {
   const { getPath, getProfile, captureAuthority, publishIfOwned } = options;
   const profileName = (): string => getProfile() ?? "default";
   const readRaw = (): unknown => {
     const path = getPath(),
       profile = profileName(),
-      root = readTelegramRuntimeState(path);
+      root = readBaleRuntimeState(path);
     const raw = Object.hasOwn(root.profiles, profile)
       ? root.profiles[profile]?.workspace
       : undefined;
-    parseTelegramWorkspaceStateSection(raw, profile);
+    parseBaleWorkspaceStateSection(raw, profile);
     if (path !== getPath() || profile !== profileName())
       throw new Error("Workspace storage scope changed during observation.");
     return raw;
   };
   return {
     readRaw,
-    read: () => parseTelegramWorkspaceStateSection(readRaw(), profileName()),
-    capturePublication(): TelegramWorkspaceStatePublication | undefined {
+    read: () => parseBaleWorkspaceStateSection(readRaw(), profileName()),
+    capturePublication(): BaleWorkspaceStatePublication | undefined {
       const path = getPath(),
         profile = profileName(),
         authority = captureAuthority();
@@ -3321,10 +3321,10 @@ export function createTelegramConsolidatedWorkspaceStorage(
         path === getPath() && profile === profileName() && authority() === true;
       if (!isCurrent()) return undefined;
       return <T>(
-        mutate: (current: unknown) => TelegramRuntimeStateMutation<T>,
+        mutate: (current: unknown) => BaleRuntimeStateMutation<T>,
         publication?: Partial<
           Pick<
-            TelegramOwnedStatePublicationOptions,
+            BaleOwnedStatePublicationOptions,
             "onPublicationBoundary" | "publishRename" | "isCurrent"
           >
         >,
@@ -3335,13 +3335,13 @@ export function createTelegramConsolidatedWorkspaceStorage(
         return publishIfOwned<T>(
           "workspace",
           (current) => {
-            parseTelegramWorkspaceStateSection(current, profile);
+            parseBaleWorkspaceStateSection(current, profile);
             const next = mutate(current);
             if (next.value === undefined && current !== undefined)
               throw new Error(
                 "Consolidated Workspace section removal is not authorized.",
               );
-            parseTelegramWorkspaceStateSection(next.value, profile);
+            parseBaleWorkspaceStateSection(next.value, profile);
             return next;
           },
           {
@@ -3355,7 +3355,7 @@ export function createTelegramConsolidatedWorkspaceStorage(
   };
 }
 
-function getTelegramStateSemanticSnapshot(
+function getBaleStateSemanticSnapshot(
   value: unknown,
 ): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -3390,7 +3390,7 @@ function parseFollowerRecoveryHints(
       continue;
     const targetRecord = target as Record<string, unknown>;
     if (typeof targetRecord.chatId !== "number") continue;
-    const normalizedTarget: TelegramTarget = {
+    const normalizedTarget: BaleTarget = {
       chatId: targetRecord.chatId,
       ...(typeof targetRecord.threadId === "number"
         ? { threadId: targetRecord.threadId }
@@ -3424,7 +3424,7 @@ function getInstanceProcessKey(
   return pid && /^\d+$/.test(pid) ? pid : undefined;
 }
 
-export function isSameTelegramProcessInstance(
+export function isSameBaleProcessInstance(
   left: string | undefined,
   right: string | undefined,
 ): boolean {
@@ -3433,7 +3433,7 @@ export function isSameTelegramProcessInstance(
 }
 
 function isPendingProvisionLiveOrTargeted(
-  provision: TelegramThreadPendingProvision,
+  provision: BaleThreadPendingProvision,
   nowMs: number,
 ): boolean {
   if (provision.status === "ambiguous") return true;
@@ -3444,10 +3444,10 @@ function isPendingProvisionLiveOrTargeted(
 }
 
 /** Resolving selects a scope-bound view of the existing Workspace owner; it creates no files. */
-export function createTelegramWorkspaceRestoreResolver(deps: {
+export function createBaleWorkspaceRestoreResolver(deps: {
   getProfileName: () => string | undefined;
   getBotToken: () => string | undefined;
-  threadStore: Pick<TelegramTopicTargetStore, "workspaceRestore">;
+  threadStore: Pick<BaleTopicTargetStore, "workspaceRestore">;
   agentDir?: string;
 }) {
   const { getProfileName, getBotToken, threadStore, agentDir } = deps;
@@ -3455,7 +3455,7 @@ export function createTelegramWorkspaceRestoreResolver(deps: {
     | {
         profileName: string;
         tokenSha256: string;
-        store: TelegramWorkspaceRestore;
+        store: BaleWorkspaceRestore;
       }
     | undefined;
   return () => {
@@ -3472,7 +3472,7 @@ export function createTelegramWorkspaceRestoreResolver(deps: {
     const store = threadStore.workspaceRestore({
       profileName,
       tokenSha256,
-      legacyPath: resolveTelegramProfileTempFilePath(
+      legacyPath: resolveBaleProfileTempFilePath(
         "workspace-restore",
         "json",
         agentDir,
@@ -3489,9 +3489,9 @@ export function createTelegramWorkspaceRestoreResolver(deps: {
   };
 }
 
-export function createTelegramTopicTargetStore(
-  options: TelegramTopicTargetStoreOptions,
-): TelegramTopicTargetStore {
+export function createBaleTopicTargetStore(
+  options: BaleTopicTargetStoreOptions,
+): BaleTopicTargetStore {
   if (options.consolidated && options.commitPersist)
     throw new Error("Workspace must select one publication backend.");
   const consolidated = options.consolidated
@@ -3513,18 +3513,18 @@ export function createTelegramTopicTargetStore(
       return undefined;
     }
   };
-  let botState: TelegramBotStateSnapshot = { threadMode: "unknown" };
-  let records = new Map<string, TelegramTopicTargetRecord>();
-  let identities = new Map<string, TelegramThreadIdentityRecord>();
-  let workspaceBindings = new Map<string, TelegramWorkspaceThreadBinding>();
-  let workspaceRetirements: TelegramWorkspaceRetirementIntent[] = [];
-  let workspaceRestore: TelegramWorkspaceRestoreSnapshot | undefined;
-  let sessionReplacement: TelegramSessionReplacementIntent | undefined;
+  let botState: BaleBotStateSnapshot = { threadMode: "unknown" };
+  let records = new Map<string, BaleTopicTargetRecord>();
+  let identities = new Map<string, BaleThreadIdentityRecord>();
+  let workspaceBindings = new Map<string, BaleWorkspaceThreadBinding>();
+  let workspaceRetirements: BaleWorkspaceRetirementIntent[] = [];
+  let workspaceRestore: BaleWorkspaceRestoreSnapshot | undefined;
+  let sessionReplacement: BaleSessionReplacementIntent | undefined;
   let workspaceRetirementCommitInFlight = false;
   const hasWorkspaceRetirementConflict = (input: {
     bindingKey?: string;
     cwd?: string;
-    target?: TelegramTarget;
+    target?: BaleTarget;
     slot?: string;
   }): boolean =>
     workspaceRetirements.some(
@@ -3539,16 +3539,16 @@ export function createTelegramTopicTargetStore(
   let workspaceClaims = new Map<
     string,
     {
-      identity: TelegramWorkspaceBindingIdentity;
+      identity: BaleWorkspaceBindingIdentity;
       instanceId: string;
     }
   >();
-  let reservations: TelegramThreadReservation[] = [];
-  let pendingProvisions: TelegramThreadPendingProvision[] = [];
-  let pendingCleanups: TelegramThreadCleanupIntent[] = [];
+  let reservations: BaleThreadReservation[] = [];
+  let pendingProvisions: BaleThreadPendingProvision[] = [];
+  let pendingCleanups: BaleThreadCleanupIntent[] = [];
   /** External reservations, an in-flight retirement or a competing claim block moving a binding onto its slot. */
   const isWorkspaceTransitionSlotBlocked = (
-    binding: Pick<TelegramWorkspaceThreadBinding, "bindingKey" | "slot">,
+    binding: Pick<BaleWorkspaceThreadBinding, "bindingKey" | "slot">,
   ): boolean => {
     const slots = captureExternalReservedSlots();
     return (
@@ -3565,13 +3565,13 @@ export function createTelegramTopicTargetStore(
   /** Current records, claims, reservations, provisions, cleanups or other retirements still holding a binding's Thread or slot. */
   const isWorkspaceBindingLocallyProtected = (
     binding: Pick<
-      TelegramWorkspaceThreadBinding,
+      BaleWorkspaceThreadBinding,
       "bindingKey" | "target" | "slot"
     >,
     nowMs: number,
     options: {
       isRetirementExcluded?: (
-        intent: TelegramWorkspaceRetirementIntent,
+        intent: BaleWorkspaceRetirementIntent,
         index: number,
       ) => boolean;
     } = {},
@@ -3579,7 +3579,7 @@ export function createTelegramTopicTargetStore(
     const slotMatches = (slot: string | undefined): boolean =>
       !!binding.slot && slot === binding.slot;
     const targetOrSlotMatches = (candidate: {
-      target?: TelegramTarget;
+      target?: BaleTarget;
       slot?: string;
     }): boolean =>
       (!!candidate.target && targetMatches(candidate.target, binding.target)) ||
@@ -3615,7 +3615,7 @@ export function createTelegramTopicTargetStore(
       )
     );
   };
-  let syncObservations: TelegramTopicSyncObservation[] = [];
+  let syncObservations: BaleTopicSyncObservation[] = [];
   let followerRecoveryHints = new Map<
     string,
     { slot?: string; threadName?: string }
@@ -3659,7 +3659,7 @@ export function createTelegramTopicTargetStore(
     if (!slot || !/^[A-Z]$/.test(slot)) return;
     botState = { ...botState, lastSlot: slot, updatedAtMs: nowMs };
   };
-  const rememberIdentity = (record: TelegramTopicTargetRecord) => {
+  const rememberIdentity = (record: BaleTopicTargetRecord) => {
     const profileKey = getRecordOwnerKey(record);
     if (!record.threadName && !record.slot) return;
     identities.set(profileKey, {
@@ -3676,7 +3676,7 @@ export function createTelegramTopicTargetStore(
     ];
     const existing = known.find((binding) => binding.cwd === cwd);
     if (existing) return existing.workspaceKey;
-    const readable = createTelegramWorkspaceDirectoryKey(cwd);
+    const readable = createBaleWorkspaceDirectoryKey(cwd);
     if (!readable) return undefined;
     const collision = known.some(
       (binding) => binding.workspaceKey === readable && binding.cwd !== cwd,
@@ -3684,11 +3684,11 @@ export function createTelegramTopicTargetStore(
     if (!collision) return readable;
     const digest = createHash("sha256").update(cwd).digest("hex").slice(0, 12);
     const prefix = readable.endsWith("--") ? readable.slice(0, -2) : readable;
-    return `${prefix.slice(0, TELEGRAM_WORKSPACE_KEY_MAX_LENGTH - digest.length - 3)}-${digest}--`;
+    return `${prefix.slice(0, BALE_WORKSPACE_KEY_MAX_LENGTH - digest.length - 3)}-${digest}--`;
   };
   const isWorkspaceTargetLive = (
-    binding: TelegramWorkspaceThreadBinding,
-  ): TelegramTopicTargetRecord | undefined =>
+    binding: BaleWorkspaceThreadBinding,
+  ): BaleTopicTargetRecord | undefined =>
     Array.from(records.values()).find(
       (record) =>
         ThreadReconciler.isCurrentThreadRecord(record) &&
@@ -3698,7 +3698,7 @@ export function createTelegramTopicTargetStore(
     cwd: string,
     instanceId: string,
     previousInstanceId?: string,
-  ): TelegramTopicTargetRecord | undefined => {
+  ): BaleTopicTargetRecord | undefined => {
     const processIds = new Set(
       [instanceId, previousInstanceId].filter(
         (value): value is string => !!value,
@@ -3710,10 +3710,10 @@ export function createTelegramTopicTargetStore(
         const belongsToWorkspace =
           owner.kind === "leader"
             ? owner.cwd
-              ? normalizeTelegramWorkspacePath(owner.cwd) === cwd
+              ? normalizeBaleWorkspacePath(owner.cwd) === cwd
               : !!record.instanceId &&
                 Array.from(processIds).some((processId) =>
-                  isSameTelegramProcessInstance(record.instanceId, processId),
+                  isSameBaleProcessInstance(record.instanceId, processId),
                 )
             : owner.kind === "manual-follower" &&
               (processIds.has(owner.instanceId) ||
@@ -3740,45 +3740,45 @@ export function createTelegramTopicTargetStore(
         : `${name}.status`,
     );
   };
-  const getTelegramProfile = () =>
-    typeof options.telegramProfile === "function"
-      ? options.telegramProfile()
-      : options.telegramProfile;
+  const getBaleProfile = () =>
+    typeof options.baleProfile === "function"
+      ? options.baleProfile()
+      : options.baleProfile;
   const scopeOwnerToActiveProfile = (
-    owner: TelegramThreadOwner,
-  ): TelegramThreadOwner => {
-    const telegramProfile = getTelegramProfile();
+    owner: BaleThreadOwner,
+  ): BaleThreadOwner => {
+    const baleProfile = getBaleProfile();
     if (
-      !telegramProfile ||
+      !baleProfile ||
       owner.kind === "pending-topic" ||
       owner.kind === "legacy" ||
-      owner.telegramProfile
+      owner.baleProfile
     ) {
       return owner;
     }
-    return { ...owner, telegramProfile };
+    return { ...owner, baleProfile };
   };
-  const activeProfile = () => getTelegramProfile() ?? "default";
+  const activeProfile = () => getBaleProfile() ?? "default";
   const scopeMatches = (path: string, profile: string) =>
     getPath() === path && activeProfile() === profile;
   const loadedScopeMatches = (path: string) =>
     loadedPath === path && (!consolidated || loadedProfile === activeProfile());
   const workspaceIO = consolidated
-    ? createTelegramConsolidatedWorkspaceStorage({
+    ? createBaleConsolidatedWorkspaceStorage({
         getPath,
-        getProfile: getTelegramProfile,
+        getProfile: getBaleProfile,
         ...consolidated,
       })
     : undefined;
   const runtimeProjection = consolidated
-    ? createTelegramRuntimeProjectionStore({
+    ? createBaleRuntimeProjectionStore({
         getPath,
-        getProfile: getTelegramProfile,
+        getProfile: getBaleProfile,
         captureAuthority: consolidated.captureAuthority,
         getNowMs,
         storage: {
           read({ path, profile }) {
-            const root = readTelegramRuntimeState(path);
+            const root = readBaleRuntimeState(path);
             return Object.hasOwn(root.profiles, profile)
               ? root.profiles[profile]?.runtime
               : undefined;
@@ -3819,10 +3819,10 @@ export function createTelegramTopicTargetStore(
   const withStoreTransaction = <T>(
     path: string,
     operation: () => T,
-    publication?: Parameters<TelegramWorkspaceStatePublication>[1],
+    publication?: Parameters<BaleWorkspaceStatePublication>[1],
   ): T => {
     if (!workspaceIO)
-      return withTelegramFileTransaction(`${path}.transaction`, operation);
+      return withBaleFileTransaction(`${path}.transaction`, operation);
     if (workspaceFrame)
       throw new Error("Nested Workspace transaction is not allowed.");
     const profile = activeProfile(),
@@ -3844,29 +3844,29 @@ export function createTelegramTopicTargetStore(
   };
   const getRecoveryPath = (path: string) =>
     consolidated
-      ? resolveTelegramWorkspaceProvisionRecoveryPath(
+      ? resolveBaleWorkspaceProvisionRecoveryPath(
           path,
           activeProfile(),
           "consolidated",
         )
-      : resolveTelegramWorkspaceProvisionRecoveryPath(path);
+      : resolveBaleWorkspaceProvisionRecoveryPath(path);
   const readProvisionRecoveries = (
     path: string,
     strict = false,
-  ): TelegramProvisionRecoveryFile => {
+  ): BaleProvisionRecoveryFile => {
     const recoveryPath = getRecoveryPath(path);
     if (strict) {
       const value = readWorkspaceSnapshot(recoveryPath);
       if (value === undefined) return {};
       if (!restoreObject(value))
         throw new Error("Invalid Workspace provisioning recovery evidence.");
-      return value as TelegramProvisionRecoveryFile;
+      return value as BaleProvisionRecoveryFile;
     }
     if (!existsSync(recoveryPath)) return {};
     try {
       const value = JSON.parse(readFileSync(recoveryPath, "utf8")) as unknown;
       return value && typeof value === "object" && !Array.isArray(value)
-        ? (value as TelegramProvisionRecoveryFile)
+        ? (value as BaleProvisionRecoveryFile)
         : {};
     } catch {
       return {};
@@ -3874,10 +3874,10 @@ export function createTelegramTopicTargetStore(
   };
   const assertRestoreRecoveryProtection = (
     path: string,
-    operations: readonly Pick<TelegramWorkspaceRestoreIntent, "request">[],
-    provisions: readonly TelegramThreadPendingProvision[],
+    operations: readonly Pick<BaleWorkspaceRestoreIntent, "request">[],
+    provisions: readonly BaleThreadPendingProvision[],
     requireKnownTargets = false,
-    recoveryEvidence?: TelegramProvisionRecoveryFile,
+    recoveryEvidence?: BaleProvisionRecoveryFile,
   ): void => {
     if (!operations.length) return;
     const recoveries = recoveryEvidence ?? readProvisionRecoveries(path, true);
@@ -3956,7 +3956,7 @@ export function createTelegramTopicTargetStore(
   };
 
   const observeWorkspaceRestore = (
-    incoming: TelegramWorkspaceRestoreSnapshot | undefined,
+    incoming: BaleWorkspaceRestoreSnapshot | undefined,
   ): void => {
     if (
       workspaceRestore &&
@@ -3973,7 +3973,7 @@ export function createTelegramTopicTargetStore(
   };
   const withRestoreRegistration = (
     candidate: Parameters<
-      TelegramTopicTargetStore["assertWorkspaceRestoreRegistration"]
+      BaleTopicTargetStore["assertWorkspaceRestoreRegistration"]
     >[0],
     publish?: () => void,
   ): void => {
@@ -4036,7 +4036,7 @@ export function createTelegramTopicTargetStore(
     )
       return;
     if (consolidated)
-      observedWorkspaceSemantic = getTelegramStateSemanticSnapshot(rawFile);
+      observedWorkspaceSemantic = getBaleStateSemanticSnapshot(rawFile);
     if (rawFile === undefined) {
       if (workspaceRestore?.revision)
         throw new Error("Workspace Restore evidence disappeared.");
@@ -4091,9 +4091,9 @@ export function createTelegramTopicTargetStore(
     identities = new Map(
       (file.identities ?? []).map((identity) => {
         const owner = scopeOwnerToActiveProfile(
-          getTelegramThreadOwnerFromProfileKey(identity.profileKey),
+          getBaleThreadOwnerFromProfileKey(identity.profileKey),
         );
-        const profileKey = getTelegramThreadOwnerKey(owner);
+        const profileKey = getBaleThreadOwnerKey(owner);
         return [profileKey, cloneIdentityRecord({ ...identity, profileKey })];
       }),
     );
@@ -4162,7 +4162,7 @@ export function createTelegramTopicTargetStore(
   };
 
   const markWorkspaceBindingInactiveByTarget = (
-    target: TelegramTarget,
+    target: BaleTarget,
     inactiveSinceMs = getNowMs(),
   ): boolean => {
     if (!Number.isFinite(inactiveSinceMs) || inactiveSinceMs < 0) return false;
@@ -4181,15 +4181,15 @@ export function createTelegramTopicTargetStore(
 
   const persistSnapshot = (
     transition?: {
-      target: TelegramTarget;
+      target: BaleTarget;
       isCurrent: () => boolean;
     } & (
       | { kind: "invalidate"; lastSyncError: string }
-      | { kind: "detach"; owner: TelegramTopicTargetRecord }
+      | { kind: "detach"; owner: BaleTopicTargetRecord }
       | ({
           kind: "manual-name";
-          owner: TelegramTopicTargetRecord;
-          bindings: TelegramWorkspaceThreadBinding[];
+          owner: BaleTopicTargetRecord;
+          bindings: BaleWorkspaceThreadBinding[];
         } & (
           | { threadName: string; updateDisplayTitle: boolean }
           | { automaticTitle: string }
@@ -4197,16 +4197,16 @@ export function createTelegramTopicTargetStore(
       | {
           kind: "relocate" | "live-rebind";
           operationId: string;
-          owner: TelegramTopicTargetRecord;
-          binding: TelegramWorkspaceThreadBinding;
-          nextTarget: TelegramTarget & { threadId: number };
-          restore: TelegramWorkspaceRestoreSnapshot;
+          owner: BaleTopicTargetRecord;
+          binding: BaleWorkspaceThreadBinding;
+          nextTarget: BaleTarget & { threadId: number };
+          restore: BaleWorkspaceRestoreSnapshot;
           maxBytes: number;
-          onPublicationBoundary?: TelegramWorkspaceRestoreOptions["onPublicationBoundary"];
+          onPublicationBoundary?: BaleWorkspaceRestoreOptions["onPublicationBoundary"];
         }
     ),
     isCurrentPublication?: () => boolean,
-    resetProvisions?: readonly TelegramThreadPendingProvision[],
+    resetProvisions?: readonly BaleThreadPendingProvision[],
   ): Promise<boolean> => {
     const submittedPath = getPath(),
       submittedProfile = activeProfile();
@@ -4250,7 +4250,7 @@ export function createTelegramTopicTargetStore(
         .map(cloneRecord);
       const manualNameMatches = (
         snapshot: Pick<
-          TelegramTopicTargetFile,
+          BaleTopicTargetFile,
           "threads" | "workspaceBindings"
         >,
       ) => {
@@ -4394,7 +4394,7 @@ export function createTelegramTopicTargetStore(
       ): void => {
         if (isCurrentPublication?.() === false)
           throw new Error(
-            "Telegram Workspace publication lost its exact frame or authority.",
+            "Bale Workspace publication lost its exact frame or authority.",
           );
         const disk = parseTopicTargetFile(
           fromTransaction
@@ -4411,7 +4411,7 @@ export function createTelegramTopicTargetStore(
           if (mutationRevision !== persistedRevision || resetProvisions.some(expected =>
             expected.target || Object.hasOwn(recoveries, expected.id) ||
             !isDeepStrictEqual(disk.pendingProvisions?.find(value => value.id === expected.id), expected)))
-            throw new Error("Telegram connection recovery provisioning evidence changed.");
+            throw new Error("Bale connection recovery provisioning evidence changed.");
         }
         if (!isDeepStrictEqual(disk.workspaceRestore, expectedRestore))
           throw new Error(
@@ -4622,7 +4622,7 @@ export function createTelegramTopicTargetStore(
               isCurrentPublication?.() === false
             )
               return { value: current, result: false };
-            const semanticCurrent = getTelegramStateSemanticSnapshot(current);
+            const semanticCurrent = getBaleStateSemanticSnapshot(current);
             if (!isDeepStrictEqual(semanticCurrent, observedWorkspaceSemantic))
               throw new Error(
                 "Workspace canonical snapshot changed before publication.",
@@ -4650,7 +4650,7 @@ export function createTelegramTopicTargetStore(
               !transition &&
               isDeepStrictEqual(
                 semanticCurrent,
-                getTelegramStateSemanticSnapshot(wire),
+                getBaleStateSemanticSnapshot(wire),
               );
             return { value: unchanged ? current : wire, result: true };
           },
@@ -4681,7 +4681,7 @@ export function createTelegramTopicTargetStore(
         loadedPath = path;
         loadedProfile = submittedProfile;
         loaded = true;
-        observedWorkspaceSemantic = getTelegramStateSemanticSnapshot(wire);
+        observedWorkspaceSemantic = getBaleStateSemanticSnapshot(wire);
         if (resetProvisions) { pendingProvisions = file.pendingProvisions; mutationRevision += 1; }
         if (transition) {
           records = new Map(
@@ -4700,7 +4700,7 @@ export function createTelegramTopicTargetStore(
       }
       let persistedSemanticSnapshot: Record<string, unknown> | undefined;
       try {
-        persistedSemanticSnapshot = getTelegramStateSemanticSnapshot(
+        persistedSemanticSnapshot = getBaleStateSemanticSnapshot(
           await readStoreSnapshot(path, !!workspaceRestore, true),
         );
       } catch {
@@ -4711,7 +4711,7 @@ export function createTelegramTopicTargetStore(
         !transition &&
         isDeepStrictEqual(
           persistedSemanticSnapshot,
-          getTelegramStateSemanticSnapshot(JSON.parse(JSON.stringify(file))),
+          getBaleStateSemanticSnapshot(JSON.parse(JSON.stringify(file))),
         ) &&
         mutationRevision === persistedRevision
       ) {
@@ -4767,7 +4767,7 @@ export function createTelegramTopicTargetStore(
               mutationRevision !== persistedRevision
             )
               return;
-            replaceTelegramWorkspaceFile(tempPath, path);
+            replaceBaleWorkspaceFile(tempPath, path);
             loadedPath = path;
             if (
               transition.kind === "relocate" ||
@@ -4807,7 +4807,7 @@ export function createTelegramTopicTargetStore(
             )
               transition.onPublicationBoundary?.("after-rename");
           };
-          withTelegramFileTransaction(`${path}.transaction`, () => {
+          withBaleFileTransaction(`${path}.transaction`, () => {
             if (commitPersist) commitPersist(commit);
             else if (!options.canPersist || options.canPersist()) commit();
           });
@@ -4818,33 +4818,33 @@ export function createTelegramTopicTargetStore(
           );
         }
         if (commitPersist) {
-          const committed = withTelegramFileTransaction(
+          const committed = withBaleFileTransaction(
             `${path}.transaction`,
             () =>
               commitPersist(() => {
                 assertRestoreEvidenceCurrent();
                 if (isCurrentPublication?.() === false)
                   throw new Error(
-                    "Telegram Workspace publication lost caller authority.",
+                    "Bale Workspace publication lost caller authority.",
                   );
-                replaceTelegramWorkspaceFile(tempPath, path);
+                replaceBaleWorkspaceFile(tempPath, path);
                 chmodSync(path, 0o600);
               }),
           );
           if (!committed) {
             await loadFromDisk();
             throw new Error(
-              "Telegram thread snapshot lost exact transport ownership before commit.",
+              "Bale thread snapshot lost exact transport ownership before commit.",
             );
           }
         } else {
-          withTelegramFileTransaction(`${path}.transaction`, () => {
+          withBaleFileTransaction(`${path}.transaction`, () => {
             assertRestoreEvidenceCurrent();
             if (isCurrentPublication?.() === false)
               throw new Error(
-                "Telegram Workspace publication lost caller authority.",
+                "Bale Workspace publication lost caller authority.",
               );
-            replaceTelegramWorkspaceFile(tempPath, path);
+            replaceBaleWorkspaceFile(tempPath, path);
             chmodSync(path, 0o600);
           });
         }
@@ -4870,14 +4870,14 @@ export function createTelegramTopicTargetStore(
   };
 
   const captureWorkspaceThreadNameObservation = (
-    binding: TelegramWorkspaceThreadBinding,
-    owner: TelegramTopicTargetRecord,
+    binding: BaleWorkspaceThreadBinding,
+    owner: BaleTopicTargetRecord,
   ) => {
     const path = getPath(),
       profile = activeProfile();
     const expectedBinding = structuredClone(binding),
       expectedOwner = structuredClone(owner);
-    const bindingIdentity = (value: TelegramWorkspaceThreadBinding) => ({
+    const bindingIdentity = (value: BaleWorkspaceThreadBinding) => ({
       cwd: value.cwd,
       workspaceKey: value.workspaceKey,
       sessionId: value.sessionId,
@@ -4888,7 +4888,7 @@ export function createTelegramTopicTargetStore(
       slot: value.slot,
       inactiveSinceMs: value.inactiveSinceMs,
     });
-    const ownerIdentity = (value: TelegramTopicTargetRecord) => ({
+    const ownerIdentity = (value: BaleTopicTargetRecord) => ({
       owner: value.owner,
       profileKey: value.profileKey,
       instanceId: value.instanceId,
@@ -4911,7 +4911,7 @@ export function createTelegramTopicTargetStore(
       targetMatches(expectedOwner.target, expectedBinding.target);
     const matches = (
       snapshot: Pick<
-        TelegramTopicTargetFile,
+        BaleTopicTargetFile,
         "threads" | "workspaceBindings" | "workspaceRetirements"
       >,
       result?:
@@ -4965,7 +4965,7 @@ export function createTelegramTopicTargetStore(
         if (
           (result?.kind === "automatic" &&
             (!result.title ||
-              normalizeTelegramTopicTargetThreadName(result.title) !==
+              normalizeBaleTopicTargetThreadName(result.title) !==
                 result.title)) ||
           !valid ||
           !scopeMatches(path, profile) ||
@@ -4982,7 +4982,7 @@ export function createTelegramTopicTargetStore(
         )
           return false;
         // This is also called inside publication guards: read the existing frame without acquiring a nested transaction.
-        const file = parseTelegramWorkspaceStateSection(
+        const file = parseBaleWorkspaceStateSection(
           readStoreSnapshot(path),
           profile,
         );
@@ -5001,7 +5001,7 @@ export function createTelegramTopicTargetStore(
     cwd: string,
     sourceSessionId: string,
     sessionId: string,
-    target: TelegramTarget,
+    target: BaleTarget,
   ): boolean => {
     const sourceEntry = Array.from(workspaceBindings.entries()).find(
       ([, binding]) =>
@@ -5012,10 +5012,10 @@ export function createTelegramTopicTargetStore(
     if (!sourceEntry) return false;
     const [sourceKey, sourceBinding] = sourceEntry;
     const replacementIdentity = Array.from({
-      length: TELEGRAM_WORKSPACE_SLOTS.length,
+      length: BALE_WORKSPACE_SLOTS.length,
     })
       .map((_, ordinal) =>
-        createTelegramWorkspaceBindingIdentityWithKey(
+        createBaleWorkspaceBindingIdentityWithKey(
           sourceBinding.cwd,
           sourceBinding.workspaceKey,
           ordinal,
@@ -5201,8 +5201,8 @@ export function createTelegramTopicTargetStore(
         const canonical = file.workspaceBindings ?? [],
           warm = Array.from(workspaceBindings.values());
         const matchesRecipient = (
-          bindings: readonly TelegramWorkspaceThreadBinding[],
-          rows: readonly TelegramTopicTargetRecord[],
+          bindings: readonly BaleWorkspaceThreadBinding[],
+          rows: readonly BaleTopicTargetRecord[],
         ) => {
           const bindingsForKey = bindings.filter(
             (binding) => binding.bindingKey === request.binding.bindingKey,
@@ -5236,17 +5236,17 @@ export function createTelegramTopicTargetStore(
           !matchesRecipient(warm, Array.from(records.values()))
         )
           return true;
-        const currentRow = (row: TelegramTopicTargetRecord) =>
+        const currentRow = (row: BaleTopicTargetRecord) =>
           row.status === "active" ||
           row.status === "starting" ||
           row.status === "pending" ||
           row.status === "probe-required";
         const protectedTarget = (
-          bindings: readonly TelegramWorkspaceThreadBinding[],
-          rows: readonly TelegramTopicTargetRecord[],
-          reserved: readonly TelegramThreadReservation[],
-          provisions: readonly TelegramThreadPendingProvision[],
-          cleanups: readonly TelegramThreadCleanupIntent[],
+          bindings: readonly BaleWorkspaceThreadBinding[],
+          rows: readonly BaleTopicTargetRecord[],
+          reserved: readonly BaleThreadReservation[],
+          provisions: readonly BaleThreadPendingProvision[],
+          cleanups: readonly BaleThreadCleanupIntent[],
         ) =>
           bindings.some((binding) => targetMatches(binding.target, old)) ||
           rows.some(
@@ -5278,7 +5278,7 @@ export function createTelegramTopicTargetStore(
           return true;
         const touchesOld = (
           other:
-            TelegramWorkspaceRestoreIntent | TelegramWorkspaceLiveRebindIntent,
+            BaleWorkspaceRestoreIntent | BaleWorkspaceLiveRebindIntent,
         ) =>
           targetMatches(other.request.binding.target, old) ||
           targetMatches(other.request.target, old);
@@ -5364,14 +5364,14 @@ export function createTelegramTopicTargetStore(
         maxBytes <= 0
       )
         throw new Error("Invalid Workspace Restore storage scope.");
-      const empty: TelegramWorkspaceRestoreSnapshot = {
+      const empty: BaleWorkspaceRestoreSnapshot = {
         version: 1,
         profileName,
         tokenSha256,
         revision: 0,
         operations: [],
       };
-      let observed: TelegramWorkspaceRestoreSnapshot | undefined;
+      let observed: BaleWorkspaceRestoreSnapshot | undefined;
       const currentScope = () =>
         getPath() === path &&
         (!consolidated || scopeMatches(path, profile)) &&
@@ -5379,7 +5379,7 @@ export function createTelegramTopicTargetStore(
         (options.canPersist?.() ?? true);
       const read = (): {
         file: Record<string, unknown>;
-        state: TelegramWorkspaceRestoreSnapshot;
+        state: BaleWorkspaceRestoreSnapshot;
       } => {
         if (legacyPath) {
           try {
@@ -5427,8 +5427,8 @@ export function createTelegramTopicTargetStore(
       };
       const inspectTemporaryOwnership = (
         before: ReturnType<typeof read>,
-        entry: TelegramTemporaryThreadEntry,
-      ): TelegramTemporaryThreadTargetObservation => {
+        entry: BaleTemporaryThreadEntry,
+      ): BaleTemporaryThreadTargetObservation => {
         if (entry.phase !== "created" || !entry.target)
           return { kind: "unknown" };
         const file = parseTopicTargetFile(before.file);
@@ -5489,8 +5489,8 @@ export function createTelegramTopicTargetStore(
       };
       const classifyTemporaryTarget = (
         before: ReturnType<typeof read>,
-        entry: TelegramTemporaryThreadEntry,
-      ): TelegramTemporaryThreadTargetObservation =>
+        entry: BaleTemporaryThreadEntry,
+      ): BaleTemporaryThreadTargetObservation =>
         entry.cleanupIssued
           ? { kind: "unknown" }
           : inspectTemporaryOwnership(before, entry);
@@ -5498,7 +5498,7 @@ export function createTelegramTopicTargetStore(
         read: () => read().state,
         async relocate(
           input:
-            TelegramWorkspaceRestoreIntent | TelegramWorkspaceLiveRebindIntent,
+            BaleWorkspaceRestoreIntent | BaleWorkspaceLiveRebindIntent,
           isCurrent: () => boolean,
         ) {
           if (!currentScope() || !isCurrent()) return false;
@@ -5534,20 +5534,20 @@ export function createTelegramTopicTargetStore(
           const pendingLive = (state.liveRebindings ?? []).filter(retainLiveRebind);
           if ((live ? pendingLive.length : state.operations.length) >= 26)
             throw new Error("Workspace Restore operation capacity reached.");
-          const restore: TelegramWorkspaceRestoreSnapshot = {
+          const restore: BaleWorkspaceRestoreSnapshot = {
             ...state,
             revision: state.revision + 1,
             ...(live
               ? {
                   liveRebindings: [
                     ...pendingLive,
-                    intent as TelegramWorkspaceLiveRebindIntent,
+                    intent as BaleWorkspaceLiveRebindIntent,
                   ],
                 }
               : {
                   operations: [
                     ...state.operations,
-                    intent as TelegramWorkspaceRestoreIntent,
+                    intent as BaleWorkspaceRestoreIntent,
                   ],
                 }),
           };
@@ -5584,8 +5584,8 @@ export function createTelegramTopicTargetStore(
           });
         },
         update(
-          expectedInput: TelegramWorkspaceRestoreSnapshot,
-          nextInput: TelegramWorkspaceRestoreSnapshot,
+          expectedInput: BaleWorkspaceRestoreSnapshot,
+          nextInput: BaleWorkspaceRestoreSnapshot,
           isCurrent: () => boolean,
         ) {
           const expected = structuredClone(expectedInput),
@@ -5683,7 +5683,7 @@ export function createTelegramTopicTargetStore(
                     provisions,
                   );
                   if (!currentScope() || !isCurrent()) return;
-                  replaceTelegramWorkspaceFile(temporary, path);
+                  replaceBaleWorkspaceFile(temporary, path);
                   observed = structuredClone(next);
                   // A read-only Restore view must never bless a stale binding/owner projection.
                   if (
@@ -5732,11 +5732,11 @@ export function createTelegramTopicTargetStore(
             if (
               isDeepStrictEqual(
                 observedWorkspaceSemantic,
-                getTelegramStateSemanticSnapshot(committedBefore.file),
+                getBaleStateSemanticSnapshot(committedBefore.file),
               )
             )
               observedWorkspaceSemantic =
-                getTelegramStateSemanticSnapshot(committedAfter);
+                getBaleStateSemanticSnapshot(committedAfter);
             mutationRevision += 1;
           }
           return committed;
@@ -5744,14 +5744,14 @@ export function createTelegramTopicTargetStore(
       };
       const mutate = <
         T extends
-          | TelegramWorkspaceRestoreIntent
-          | TelegramWorkspaceLiveRebindIntent
-          | TelegramTemporaryThreadEntry,
+          | BaleWorkspaceRestoreIntent
+          | BaleWorkspaceLiveRebindIntent
+          | BaleTemporaryThreadEntry,
       >(
-        authority: TelegramWorkspaceRestoreAuthority,
+        authority: BaleWorkspaceRestoreAuthority,
         change: (
-          file: TelegramWorkspaceRestoreSnapshot,
-          executor: TelegramWorkspaceRestoreExecutor,
+          file: BaleWorkspaceRestoreSnapshot,
+          executor: BaleWorkspaceRestoreExecutor,
           operatorUserId: number,
         ) => T | undefined,
       ): T | undefined => {
@@ -5759,7 +5759,7 @@ export function createTelegramTopicTargetStore(
         const executor = structuredClone(authority.executor);
         const operator = authority.operatorUserId;
         if (
-          !isTelegramWorkspaceRestoreExecutor(executor) ||
+          !isBaleWorkspaceRestoreExecutor(executor) ||
           !restoreInteger(operator)
         )
           return undefined;
@@ -5780,13 +5780,13 @@ export function createTelegramTopicTargetStore(
           : undefined;
       };
       const advance = (
-        expected: TelegramWorkspaceRestoreIntent,
-        authority: TelegramWorkspaceRestoreAuthority,
+        expected: BaleWorkspaceRestoreIntent,
+        authority: BaleWorkspaceRestoreAuthority,
         change: (
-          operation: TelegramWorkspaceRestoreIntent,
+          operation: BaleWorkspaceRestoreIntent,
         ) => boolean | "unchanged",
         adopt = false,
-      ): TelegramWorkspaceRestoreIntent | undefined =>
+      ): BaleWorkspaceRestoreIntent | undefined =>
         mutate(authority, (file, executor, operator) => {
           const operation = file.operations.find(
             (candidate) =>
@@ -5813,16 +5813,16 @@ export function createTelegramTopicTargetStore(
           return operation;
         });
       const advanceTemporary = (
-        expected: TelegramTemporaryThreadEntry,
-        authority: TelegramWorkspaceRestoreAuthority,
+        expected: BaleTemporaryThreadEntry,
+        authority: BaleWorkspaceRestoreAuthority,
         change: (
-          entry: TelegramTemporaryThreadEntry,
-          file: TelegramWorkspaceRestoreSnapshot,
-          executor: TelegramWorkspaceRestoreExecutor,
+          entry: BaleTemporaryThreadEntry,
+          file: BaleWorkspaceRestoreSnapshot,
+          executor: BaleWorkspaceRestoreExecutor,
         ) => boolean | "unchanged",
         adopt = false,
-      ): TelegramTemporaryThreadEntry | undefined =>
-        mutate<TelegramTemporaryThreadEntry>(
+      ): BaleTemporaryThreadEntry | undefined =>
+        mutate<BaleTemporaryThreadEntry>(
           authority,
           (file, executor, operator) => {
             const entry = file.temporaryThreads?.find((value) =>
@@ -5865,7 +5865,7 @@ export function createTelegramTopicTargetStore(
             authority.operatorUserId === operatorUserId &&
             isDeepStrictEqual(authority.executor, executor);
           const at = now();
-          const intent: TelegramWorkspaceLiveRebindIntent = {
+          const intent: BaleWorkspaceLiveRebindIntent = {
             kind: "live-rebind",
             request,
             recipient,
@@ -5909,7 +5909,7 @@ export function createTelegramTopicTargetStore(
           return committed;
         },
         advanceLiveRebind(expected, step, authority) {
-          return mutate<TelegramWorkspaceLiveRebindIntent>(
+          return mutate<BaleWorkspaceLiveRebindIntent>(
             authority,
             (file, executor, operator) => {
               const index =
@@ -5931,7 +5931,7 @@ export function createTelegramTopicTargetStore(
                 !isDeepStrictEqual(entry.executor, executor)
               )
                 return undefined;
-              let next: TelegramWorkspaceLiveRebindIntent;
+              let next: BaleWorkspaceLiveRebindIntent;
               if (step === "issue-input" || step === "accept-input") {
                 if (!["released", "finished"].includes(entry.phase) || entry.cleanup === "issued" || entry.inputRelease !== (step === "issue-input" ? "held" : "issued")) return undefined;
                 next = { ...entry, inputRelease: step === "issue-input" ? "issued" : "accepted" };
@@ -5977,7 +5977,7 @@ export function createTelegramTopicTargetStore(
             authority.operatorUserId === operator &&
             isDeepStrictEqual(authority.executor, executor);
           if (
-            !isTelegramWorkspaceRestoreExecutor(executor) ||
+            !isBaleWorkspaceRestoreExecutor(executor) ||
             !restoreInteger(operator) ||
             !current()
           )
@@ -6006,7 +6006,7 @@ export function createTelegramTopicTargetStore(
             !expected.cleanupIssued ||
             expected.operatorUserId !== operator ||
             !isDeepStrictEqual(expected.executor, executor) ||
-            !isTelegramWorkspaceRestoreExecutor(executor) ||
+            !isBaleWorkspaceRestoreExecutor(executor) ||
             !restoreInteger(operator) ||
             !current()
           )
@@ -6036,13 +6036,13 @@ export function createTelegramTopicTargetStore(
             isDeepStrictEqual(authority.executor, executor);
           if (
             !current() ||
-            !isTelegramWorkspaceRestoreRequest(request) ||
-            !isTelegramWorkspaceRestoreExecutor(executor) ||
+            !isBaleWorkspaceRestoreRequest(request) ||
+            !isBaleWorkspaceRestoreExecutor(executor) ||
             !restoreInteger(operatorUserId) ||
             request.target.chatId !== operatorUserId
           )
             return undefined;
-          const retained = (): TelegramWorkspaceRestoreIntent | undefined => {
+          const retained = (): BaleWorkspaceRestoreIntent | undefined => {
             if (!current()) return undefined;
             const operation = storage
               .read()
@@ -6064,7 +6064,7 @@ export function createTelegramTopicTargetStore(
           const at = now();
           if (!restoreInteger(at))
             throw new Error("Invalid Workspace Restore clock.");
-          const intent: TelegramWorkspaceRestoreIntent = {
+          const intent: BaleWorkspaceRestoreIntent = {
             request,
             executor,
             operatorUserId,
@@ -6099,7 +6099,7 @@ export function createTelegramTopicTargetStore(
           const intent = advance(expected, authority, (operation) => {
             if (
               operation.phase !== "relocated" ||
-              !isTelegramWorkspaceRestoreRecipient(recipient) ||
+              !isBaleWorkspaceRestoreRecipient(recipient) ||
               recipient.sessionId !== operation.request.binding.sessionId
             )
               return false;
@@ -6162,7 +6162,7 @@ export function createTelegramTopicTargetStore(
           return advance(expected, authority, (operation) => {
             if (
               !operation.routing ||
-              !isTelegramWorkspaceRestoreSettlement(
+              !isBaleWorkspaceRestoreSettlement(
                 evidence,
                 operation.request.source,
               ) ||
@@ -6256,7 +6256,7 @@ export function createTelegramTopicTargetStore(
           structuredClone(storage.read().temporaryThreads ?? []),
         reserveTemporaryThread(sourceInput, token, authority, groupInput) {
           const source = structuredClone(sourceInput);
-          const group: TelegramTemporaryThreadInput = groupInput
+          const group: BaleTemporaryThreadInput = groupInput
             ? structuredClone(groupInput)
             : {
                 journalBindingKey: source.journalBindingKey,
@@ -6269,7 +6269,7 @@ export function createTelegramTopicTargetStore(
           )
             return undefined;
           let reserved = false;
-          const entry = mutate<TelegramTemporaryThreadEntry>(
+          const entry = mutate<BaleTemporaryThreadEntry>(
             authority,
             (file, executor, operator) => {
               const entries = file.temporaryThreads ?? [];
@@ -6286,7 +6286,7 @@ export function createTelegramTopicTargetStore(
               const at = now();
               if (!restoreInteger(at))
                 throw new Error("Invalid Workspace Restore clock.");
-              const next: TelegramTemporaryThreadEntry = {
+              const next: BaleTemporaryThreadEntry = {
                 source,
                 inputs: [group],
                 operatorUserId: operator,
@@ -6303,7 +6303,7 @@ export function createTelegramTopicTargetStore(
                 entries.some(
                   (value) =>
                     value.token === token ||
-                    getTelegramTemporaryThreadInputs(value).some(
+                    getBaleTemporaryThreadInputs(value).some(
                       (input) =>
                         input.journalBindingKey === source.journalBindingKey &&
                         input.updateIds.some((id) =>
@@ -6339,7 +6339,7 @@ export function createTelegramTopicTargetStore(
             target.threadId <= 0
           )
             return undefined;
-          return mutate<TelegramTemporaryThreadEntry>(
+          return mutate<BaleTemporaryThreadEntry>(
             authority,
             (file, executor, operator) => {
               const entries = file.temporaryThreads ?? [];
@@ -6349,7 +6349,7 @@ export function createTelegramTopicTargetStore(
                   (value) =>
                     value.token === token ||
                     (value.target && targetMatches(value.target, target)) ||
-                    getTelegramTemporaryThreadInputs(value).some(
+                    getBaleTemporaryThreadInputs(value).some(
                       (other) =>
                         other.journalBindingKey === input.journalBindingKey &&
                         other.updateIds.some((id) =>
@@ -6362,7 +6362,7 @@ export function createTelegramTopicTargetStore(
               const at = now();
               if (!restoreInteger(at))
                 throw new Error("Invalid Workspace Restore clock.");
-              const entry: TelegramTemporaryThreadEntry = {
+              const entry: BaleTemporaryThreadEntry = {
                 source: {
                   journalBindingKey: input.journalBindingKey,
                   updateId: input.updateIds[0]!,
@@ -6434,7 +6434,7 @@ export function createTelegramTopicTargetStore(
               )
             )
               return false;
-            const inputs = getTelegramTemporaryThreadInputs(entry);
+            const inputs = getBaleTemporaryThreadInputs(entry);
             if (inputs.some((value) => isDeepStrictEqual(value, input)))
               return "unchanged";
             if (
@@ -6445,7 +6445,7 @@ export function createTelegramTopicTargetStore(
               file.temporaryThreads!.some(
                 (value) =>
                   value !== entry &&
-                  getTelegramTemporaryThreadInputs(value).some(
+                  getBaleTemporaryThreadInputs(value).some(
                     (other) =>
                       other.journalBindingKey === input.journalBindingKey &&
                       other.updateIds.some((id) =>
@@ -6485,7 +6485,7 @@ export function createTelegramTopicTargetStore(
                 evidence?.journalBindingKey === input.journalBindingKey &&
                 evidence.updateId === updateId &&
                 evidence.operatorAuthorityId ===
-                  `telegram-owner:${operatorUserId}`
+                  `bale-owner:${operatorUserId}`
               );
             }) &&
             owned();
@@ -6539,7 +6539,7 @@ export function createTelegramTopicTargetStore(
               return (
                 evidence?.journalBindingKey === input.journalBindingKey &&
                 evidence.updateId === updateId &&
-                evidence.operatorAuthorityId === `telegram-owner:${operator}`
+                evidence.operatorAuthorityId === `bale-owner:${operator}`
               );
             }) &&
             authority.isCurrent();
@@ -6549,7 +6549,7 @@ export function createTelegramTopicTargetStore(
             (entry, file) => {
               if (
                 entry.phase !== "created" ||
-                !getTelegramTemporaryThreadInputs(entry).some((value) =>
+                !getBaleTemporaryThreadInputs(entry).some((value) =>
                   isDeepStrictEqual(value, input),
                 ) ||
                 entry.completedInputs?.some((value) =>
@@ -6642,7 +6642,7 @@ export function createTelegramTopicTargetStore(
             if (
               value.phase !== "created" ||
               value.cleanupIssued ||
-              !isTelegramTemporaryThreadFullyResolved(value)
+              !isBaleTemporaryThreadFullyResolved(value)
             )
               return false;
             value.cleanupIssued = true;
@@ -6651,7 +6651,7 @@ export function createTelegramTopicTargetStore(
           return entry ? { issued: true, entry } : undefined;
         },
         retireTemporaryThread(expected, authority, completed) {
-          return mutate<TelegramTemporaryThreadEntry>(
+          return mutate<BaleTemporaryThreadEntry>(
             authority,
             (file, executor, operator) => {
               const entries = file.temporaryThreads ?? [];
@@ -6663,8 +6663,8 @@ export function createTelegramTopicTargetStore(
                 !entry ||
                 entry.operatorUserId !== operator ||
                 !isDeepStrictEqual(entry.executor, executor) ||
-                (getTelegramTemporaryThreadInputs(entry).length > 1 &&
-                  !isTelegramTemporaryThreadFullyResolved(entry) &&
+                (getBaleTemporaryThreadInputs(entry).length > 1 &&
+                  !isBaleTemporaryThreadFullyResolved(entry) &&
                   !isTemporaryThreadReleasedByCompletion(entry, completed))
               )
                 return undefined;
@@ -6682,7 +6682,7 @@ export function createTelegramTopicTargetStore(
           const executor = structuredClone(authority.executor),
             operator = authority.operatorUserId;
           if (
-            !isTelegramWorkspaceRestoreExecutor(executor) ||
+            !isBaleWorkspaceRestoreExecutor(executor) ||
             !restoreInteger(operator)
           )
             return undefined;
@@ -6692,15 +6692,15 @@ export function createTelegramTopicTargetStore(
             isDeepStrictEqual(authority.executor, executor);
           const previous = (value: {
             operatorUserId: number;
-            executor: TelegramWorkspaceRestoreExecutor;
+            executor: BaleWorkspaceRestoreExecutor;
           }) =>
             value.operatorUserId === operator &&
             value.executor.instanceId !== executor.instanceId;
           const before = storage.read(),
             file = structuredClone(before);
-          const forgetTemporary = (value: TelegramTemporaryThreadEntry) =>
+          const forgetTemporary = (value: BaleTemporaryThreadEntry) =>
             previous(value) && !preserveTemporaryTokens.includes(value.token);
-          const forgetLive = (value: TelegramWorkspaceLiveRebindIntent) =>
+          const forgetLive = (value: BaleWorkspaceLiveRebindIntent) =>
             previous(value);
           const liveRebindings = (file.liveRebindings ?? []).filter(forgetLive);
           const operations = file.operations.filter(previous),
@@ -6768,7 +6768,7 @@ export function createTelegramTopicTargetStore(
             if (
               (operation.phase !== "recipient-issued" &&
                 operation.phase !== "ready") ||
-              !isTelegramWorkspaceRestoreRecipient(observed) ||
+              !isBaleWorkspaceRestoreRecipient(observed) ||
               observed.sessionId !== operation.request.binding.sessionId
             )
               return false;
@@ -6944,7 +6944,7 @@ export function createTelegramTopicTargetStore(
     getBotState() {
       return Object.fromEntries(
         Object.entries(botState).filter(([, value]) => value !== undefined),
-      ) as TelegramBotStateSnapshot;
+      ) as BaleBotStateSnapshot;
     },
     setBotState(state) {
       botState = { ...botState, ...state };
@@ -6988,7 +6988,7 @@ export function createTelegramTopicTargetStore(
           { encoding: "utf8", flag: "wx", mode: 0o600 },
         );
         try {
-          replaceTelegramWorkspaceFile(tempPath, statusPath);
+          replaceBaleWorkspaceFile(tempPath, statusPath);
           chmodSync(statusPath, 0o600);
         } catch (error) {
           await unlink(tempPath).catch(() => undefined);
@@ -7004,8 +7004,8 @@ export function createTelegramTopicTargetStore(
       return write;
     },
     getByProfileKey(profileKey) {
-      const ownerKey = getTelegramThreadOwnerKey(
-        getTelegramThreadOwnerFromProfileKey(profileKey),
+      const ownerKey = getBaleThreadOwnerKey(
+        getBaleThreadOwnerFromProfileKey(profileKey),
       );
       const record = records.get(ownerKey) ?? records.get(profileKey);
       return record ? cloneRecord(record) : undefined;
@@ -7020,15 +7020,15 @@ export function createTelegramTopicTargetStore(
       return undefined;
     },
     getIdentityByProfileKey(profileKey) {
-      const ownerKey = getTelegramThreadOwnerKey(
-        getTelegramThreadOwnerFromProfileKey(profileKey),
+      const ownerKey = getBaleThreadOwnerKey(
+        getBaleThreadOwnerFromProfileKey(profileKey),
       );
       const identity = identities.get(ownerKey) ?? identities.get(profileKey);
       return identity ? cloneIdentityRecord(identity) : undefined;
     },
     forgetIdentityByProfileKey(profileKey) {
-      const ownerKey = getTelegramThreadOwnerKey(
-        getTelegramThreadOwnerFromProfileKey(profileKey),
+      const ownerKey = getBaleThreadOwnerKey(
+        getBaleThreadOwnerFromProfileKey(profileKey),
       );
       const removedOwner = identities.delete(ownerKey);
       const removedProfile = identities.delete(profileKey);
@@ -7053,7 +7053,7 @@ export function createTelegramTopicTargetStore(
         : undefined;
     },
     async commitSessionReplacementIntent(intent, isCurrent) {
-      const next = normalizeTelegramSessionReplacementIntent(intent);
+      const next = normalizeBaleSessionReplacementIntent(intent);
       if (!next || !isCurrent()) return false;
       await loadFromDisk();
       if (!isCurrent()) return false;
@@ -7275,9 +7275,9 @@ export function createTelegramTopicTargetStore(
       const cleanupSessionId =
         cleanupSnapshot?.sessionId === undefined
           ? undefined
-          : normalizeTelegramSessionId(cleanupSnapshot.sessionId);
+          : normalizeBaleSessionId(cleanupSnapshot.sessionId);
       const cleanupSessionKey = cleanupSessionId
-        ? createTelegramSessionKey(cleanupSessionId)
+        ? createBaleSessionKey(cleanupSessionId)
         : undefined;
       if (
         cleanupSnapshot &&
@@ -7456,7 +7456,7 @@ export function createTelegramTopicTargetStore(
           Number.isFinite(binding.inactiveSinceMs) &&
           binding.inactiveSinceMs >= 0 &&
           binding.inactiveSinceMs <= nowMs;
-        const protection: TelegramWorkspaceSlotOccupancy["protection"] =
+        const protection: BaleWorkspaceSlotOccupancy["protection"] =
           locallyProtected || externalStates.includes("protected")
             ? "protected"
             : externalStates.every((state) => state === "clear") &&
@@ -7539,7 +7539,7 @@ export function createTelegramTopicTargetStore(
         ...currentRecords.flatMap((record) => (record.slot ? [record.slot] : [])),
       ]);
       if (
-        Array.from(TELEGRAM_WORKSPACE_SLOTS, (slot) => slot.toUpperCase()).some(
+        Array.from(BALE_WORKSPACE_SLOTS, (slot) => slot.toUpperCase()).some(
           (slot) => !occupied.has(slot),
         )
       )
@@ -7588,7 +7588,7 @@ export function createTelegramTopicTargetStore(
           ];
         },
       );
-      const selected = selectTelegramWorkspaceReusableSlot(candidates);
+      const selected = selectBaleWorkspaceReusableSlot(candidates);
       if (!selected) return undefined;
       const mapKey = Array.from(workspaceBindings.entries()).find(
         ([, binding]) => binding.bindingKey === selected.bindingKey,
@@ -7648,11 +7648,11 @@ export function createTelegramTopicTargetStore(
       }
     },
     hasWorkspaceBinding(cwd, sessionId) {
-      const normalizedCwd = normalizeTelegramWorkspacePath(cwd);
+      const normalizedCwd = normalizeBaleWorkspacePath(cwd);
       const normalizedSessionId =
         sessionId === undefined
           ? undefined
-          : normalizeTelegramSessionId(sessionId);
+          : normalizeBaleSessionId(sessionId);
       if (!normalizedCwd || (sessionId !== undefined && !normalizedSessionId)) {
         return false;
       }
@@ -7696,11 +7696,11 @@ export function createTelegramTopicTargetStore(
       return false;
     },
     getWorkspaceBinding(cwd, instanceSlot = "a", sessionId) {
-      const normalizedCwd = normalizeTelegramWorkspacePath(cwd);
+      const normalizedCwd = normalizeBaleWorkspacePath(cwd);
       const normalizedSessionId =
         sessionId === undefined
           ? undefined
-          : normalizeTelegramSessionId(sessionId);
+          : normalizeBaleSessionId(sessionId);
       if (
         !normalizedCwd ||
         !/^[a-z]+$/u.test(instanceSlot) ||
@@ -7722,9 +7722,9 @@ export function createTelegramTopicTargetStore(
       target,
     ) {
       if (workspaceRetirementCommitInFlight) return false;
-      const normalizedCwd = normalizeTelegramWorkspacePath(cwd);
-      const normalizedSource = normalizeTelegramSessionId(sourceSessionId);
-      const normalizedSession = normalizeTelegramSessionId(sessionId);
+      const normalizedCwd = normalizeBaleWorkspacePath(cwd);
+      const normalizedSource = normalizeBaleSessionId(sourceSessionId);
+      const normalizedSession = normalizeBaleSessionId(sessionId);
       if (
         !normalizedCwd ||
         !normalizedSource ||
@@ -7742,11 +7742,11 @@ export function createTelegramTopicTargetStore(
     },
     claimWorkspaceIdentity(cwd, instanceId, previousInstanceId, options) {
       if (workspaceRetirementCommitInFlight) return undefined;
-      const normalizedCwd = normalizeTelegramWorkspacePath(cwd);
+      const normalizedCwd = normalizeBaleWorkspacePath(cwd);
       const normalizedSessionId =
         options?.sessionId === undefined
           ? undefined
-          : normalizeTelegramSessionId(options.sessionId);
+          : normalizeBaleSessionId(options.sessionId);
       if (
         !normalizedCwd ||
         !instanceId ||
@@ -7760,7 +7760,7 @@ export function createTelegramTopicTargetStore(
         replacement?.continuity === "workspace-thread" &&
         normalizedSessionId &&
         replacement.expiresAtMs > getNowMs() &&
-        replacement.profileName === (getTelegramProfile() ?? "default") &&
+        replacement.profileName === (getBaleProfile() ?? "default") &&
         replacement.cwd === normalizedCwd &&
         replacement.sourceSessionId !== normalizedSessionId &&
         (replacement.sourceInstanceId === undefined ||
@@ -7834,8 +7834,8 @@ export function createTelegramTopicTargetStore(
         : undefined;
       let capacityUnavailable = false;
       const claimIdentity = (
-        identity: TelegramWorkspaceBindingIdentity,
-      ): TelegramWorkspaceBindingIdentity | undefined => {
+        identity: BaleWorkspaceBindingIdentity,
+      ): BaleWorkspaceBindingIdentity | undefined => {
         const mapKey = getWorkspaceBindingMapKey(identity);
         const existingClaim = workspaceClaims.get(mapKey);
         if (existingClaim) {
@@ -7871,7 +7871,7 @@ export function createTelegramTopicTargetStore(
           ownProvision ||
           !options?.sessionHandoff ||
           !previousInstanceId ||
-          !isSameTelegramProcessInstance(previousInstanceId, instanceId)
+          !isSameBaleProcessInstance(previousInstanceId, instanceId)
             ? []
             : Array.from(workspaceBindings.values()).filter(
                 (candidate) =>
@@ -7937,7 +7937,7 @@ export function createTelegramTopicTargetStore(
           !!retainedSlotKey &&
           otherBindings.some((other) => other.slot === retainedSlotKey);
         let slot = retainedSlotConflicts
-          ? Array.from(TELEGRAM_WORKSPACE_SLOTS)
+          ? Array.from(BALE_WORKSPACE_SLOTS)
               .find(
                 (candidate) =>
                   !reservedSlots.includes(candidate) &&
@@ -7946,7 +7946,7 @@ export function createTelegramTopicTargetStore(
               ?.toUpperCase()
           : retainedSlot;
         if (!slot) {
-          const allocation = planTelegramWorkspaceSlotAllocation({
+          const allocation = planBaleWorkspaceSlotAllocation({
             bindings: otherBindings,
             reservedSlots,
             nowMs,
@@ -8011,7 +8011,7 @@ export function createTelegramTopicTargetStore(
       }
       const attemptLimit = workspaceBindings.size + workspaceClaims.size + 1;
       for (let ordinal = 0; ordinal < attemptLimit; ordinal += 1) {
-        const identity = createTelegramWorkspaceBindingIdentityWithKey(
+        const identity = createBaleWorkspaceBindingIdentityWithKey(
           normalizedCwd,
           workspaceKey,
           ordinal,
@@ -8286,7 +8286,7 @@ export function createTelegramTopicTargetStore(
       if (hasWorkspaceRetirementConflict({ target })) return undefined;
       const nowMs = getNowMs();
       const normalizedThreadName =
-        normalizeTelegramTopicTargetThreadName(threadName);
+        normalizeBaleTopicTargetThreadName(threadName);
       if (!normalizedThreadName) return undefined;
       for (const record of records.values()) {
         if (!targetMatches(record.target, target)) continue;
@@ -8311,7 +8311,7 @@ export function createTelegramTopicTargetStore(
       return undefined;
     },
     async renameByTargetAndPersist(target, threadName, options, isCurrent) {
-      const name = normalizeTelegramTopicTargetThreadName(threadName);
+      const name = normalizeBaleTopicTargetThreadName(threadName);
       const path = getPath(),
         profile = activeProfile();
       const capturedTarget = { ...target };
@@ -8344,12 +8344,12 @@ export function createTelegramTopicTargetStore(
         renamed.manualThreadName !== name
       )
         throw new Error(
-          "Telegram Workspace manual-name publication lost its exact frame or authority.",
+          "Bale Workspace manual-name publication lost its exact frame or authority.",
         );
       return cloneRecord(renamed);
     },
     async clearManualNameByTargetAndPersist(target, automaticTitle, isCurrent) {
-      const title = normalizeTelegramTopicTargetThreadName(automaticTitle);
+      const title = normalizeBaleTopicTargetThreadName(automaticTitle);
       const path = getPath(),
         profile = activeProfile(),
         capturedTarget = { ...target };
@@ -8388,13 +8388,13 @@ export function createTelegramTopicTargetStore(
         binding.displayTitle !== title
       )
         throw new Error(
-          "Telegram Workspace manual-name reset publication lost its exact frame or authority.",
+          "Bale Workspace manual-name reset publication lost its exact frame or authority.",
         );
       return cloneRecord(reset);
     },
     clearManualNameByTarget(target, automaticTitle) {
       if (hasWorkspaceRetirementConflict({ target })) return undefined;
-      const title = normalizeTelegramTopicTargetThreadName(automaticTitle);
+      const title = normalizeBaleTopicTargetThreadName(automaticTitle);
       if (!title) return undefined;
       const nowMs = getNowMs();
       for (const record of records.values()) {
@@ -8441,7 +8441,7 @@ export function createTelegramTopicTargetStore(
       if (
         !record.threadName &&
         threadName &&
-        isTelegramTopicThreadNameValidForSlot(threadName, record.slot)
+        isBaleTopicThreadNameValidForSlot(threadName, record.slot)
       )
         record.threadName = threadName;
       delete record.lastError;
@@ -8455,8 +8455,8 @@ export function createTelegramTopicTargetStore(
       if (!externalReservedSlots) return undefined;
       const isExternalSlotOccupied = (slot: string): boolean =>
         externalReservedSlots.includes(slot);
-      const ownerKey = getTelegramThreadOwnerKey(
-        getTelegramThreadOwnerFromProfileKey(profileKey),
+      const ownerKey = getBaleThreadOwnerKey(
+        getBaleThreadOwnerFromProfileKey(profileKey),
       );
       const existing = records.get(ownerKey) ?? records.get(profileKey);
       const nowMs = getNowMs();
@@ -8511,7 +8511,7 @@ export function createTelegramTopicTargetStore(
           foreignClaim ||
           foreignBinding ||
           isExternalSlotOccupied(slot) ||
-          isTelegramTopicTargetSlotOccupied(
+          isBaleTopicTargetSlotOccupied(
             slot,
             records,
             reservations,
@@ -8527,7 +8527,7 @@ export function createTelegramTopicTargetStore(
         !isExternalSlotOccupied(preferredSlot) &&
         !isWorkspaceSlotOccupied(preferredSlot) &&
         !isWorkspaceClaimSlotOccupied(preferredSlot) &&
-        !isTelegramTopicTargetSlotOccupied(
+        !isBaleTopicTargetSlotOccupied(
           preferredSlot,
           records,
           reservations,
@@ -8551,14 +8551,14 @@ export function createTelegramTopicTargetStore(
         !isWorkspaceClaimSlotOccupied(next)
       )
         return next;
-      return Array.from(TELEGRAM_WORKSPACE_SLOTS, (slot) =>
+      return Array.from(BALE_WORKSPACE_SLOTS, (slot) =>
         slot.toUpperCase(),
       ).find(
         (slot) =>
           !isExternalSlotOccupied(slot) &&
           !isWorkspaceSlotOccupied(slot) &&
           !isWorkspaceClaimSlotOccupied(slot) &&
-          !isTelegramTopicTargetSlotOccupied(
+          !isBaleTopicTargetSlotOccupied(
             slot,
             records,
             reservations,
@@ -8570,11 +8570,11 @@ export function createTelegramTopicTargetStore(
   };
 }
 
-function isTelegramTopicTargetSlotOccupied(
+function isBaleTopicTargetSlotOccupied(
   slot: string,
-  records: Map<string, TelegramTopicTargetRecord>,
-  reservations: readonly TelegramThreadReservation[] = [],
-  pendingProvisions: readonly TelegramThreadPendingProvision[] = [],
+  records: Map<string, BaleTopicTargetRecord>,
+  reservations: readonly BaleThreadReservation[] = [],
+  pendingProvisions: readonly BaleThreadPendingProvision[] = [],
   nowMs = Date.now(),
 ): boolean {
   for (const record of records.values()) {
@@ -8601,17 +8601,17 @@ function isTelegramTopicTargetSlotOccupied(
   return false;
 }
 
-function listOccupiedTelegramThreadIdentities(input: {
-  records: readonly TelegramTopicTargetRecord[];
-  workspaceBindings?: readonly TelegramWorkspaceThreadBinding[];
-  pendingProvisions?: readonly TelegramThreadPendingProvision[];
-  exceptTarget?: TelegramTarget;
+function listOccupiedBaleThreadIdentities(input: {
+  records: readonly BaleTopicTargetRecord[];
+  workspaceBindings?: readonly BaleWorkspaceThreadBinding[];
+  pendingProvisions?: readonly BaleThreadPendingProvision[];
+  exceptTarget?: BaleTarget;
   exceptWorkspaceBindingKey?: string;
 }): string[] {
   const occupied = new Set<string>();
   const add = (threadName: string | undefined): void => {
     if (!threadName) return;
-    occupied.add(getTelegramTopicIdentityName(threadName));
+    occupied.add(getBaleTopicIdentityName(threadName));
   };
   for (const record of input.records) {
     if (!ThreadReconciler.isCurrentThreadRecord(record)) continue;
@@ -8640,15 +8640,15 @@ function listOccupiedTelegramThreadIdentities(input: {
   return Array.from(occupied);
 }
 
-function getNextTelegramThreadNamePaletteSlot(
-  records: readonly TelegramTopicTargetRecord[],
+function getNextBaleThreadNamePaletteSlot(
+  records: readonly BaleTopicTargetRecord[],
   fallbackSlot: string | undefined,
 ): string | undefined {
   let maxCode = "A".charCodeAt(0) - 1;
   for (const record of records) {
     if (!ThreadReconciler.isCurrentThreadRecord(record) || !record.threadName)
       continue;
-    const identity = getTelegramTopicIdentityName(record.threadName);
+    const identity = getBaleTopicIdentityName(record.threadName);
     const first = identity[0];
     if (!first || !/^[A-Z]$/.test(first)) continue;
     maxCode = Math.max(maxCode, first.charCodeAt(0));
@@ -8662,7 +8662,7 @@ function getNextTelegramThreadNamePaletteSlot(
 /** Pure stored Thread target: a numeric chat and integer Thread id; any other shape is absent. */
 function parseStoredThreadTarget(
   value: unknown,
-): (TelegramTarget & { threadId: number }) | undefined {
+): (BaleTarget & { threadId: number }) | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const { chatId, threadId } = value as Record<string, unknown>;
@@ -8673,21 +8673,21 @@ function parseStoredThreadTarget(
     : undefined;
 }
 
-export interface TelegramPromoteFollowerBindingToLeaderDeps {
-  store: TelegramTopicTargetStore;
+export interface BalePromoteFollowerBindingToLeaderDeps {
+  store: BaleTopicTargetStore;
   instanceId: string;
   cwd?: string;
   sessionId?: string;
-  telegramProfile?: string;
-  target?: TelegramTarget;
+  baleProfile?: string;
+  target?: BaleTarget;
   slot?: string;
   threadName?: string;
   nowMs?: number;
 }
 
-export async function promoteTelegramFollowerBindingToLeader(
-  deps: TelegramPromoteFollowerBindingToLeaderDeps,
-): Promise<TelegramTopicTargetRecord | undefined> {
+export async function promoteBaleFollowerBindingToLeader(
+  deps: BalePromoteFollowerBindingToLeaderDeps,
+): Promise<BaleTopicTargetRecord | undefined> {
   const target = deps.target;
   if (typeof target?.threadId !== "number") return undefined;
   await deps.store.load();
@@ -8745,14 +8745,14 @@ export async function promoteTelegramFollowerBindingToLeader(
     }
     await deps.store.persist();
   }
-  const owner: TelegramThreadOwner = {
+  const owner: BaleThreadOwner = {
     kind: "leader",
     cwd: deps.cwd,
     instanceId: deps.instanceId,
-    ...(deps.telegramProfile ? { telegramProfile: deps.telegramProfile } : {}),
+    ...(deps.baleProfile ? { baleProfile: deps.baleProfile } : {}),
   };
   const record = deps.store.upsert({
-    profileKey: getTelegramThreadOwnerKey(owner),
+    profileKey: getBaleThreadOwnerKey(owner),
     owner,
     target: { chatId: target.chatId, threadId: target.threadId },
     status: "active",
@@ -8777,16 +8777,16 @@ export async function promoteTelegramFollowerBindingToLeader(
   return record;
 }
 
-export interface TelegramOwnTopicProvisionDeps {
+export interface BaleOwnTopicProvisionDeps {
   getAllowedUserId: () => number | undefined;
   instanceId: string;
   cwd?: string;
-  telegramProfile?: string;
+  baleProfile?: string;
   requestedThreadName?: string;
   preferredSlot?: string;
   workspaceBindingKey?: string;
   resolveInitialWorkspaceDisplayTitle?: (
-    binding: TelegramWorkspaceDisplayBinding,
+    binding: BaleWorkspaceDisplayBinding,
   ) => string | undefined;
   getNowMs?: () => number;
   getRandom?: () => number;
@@ -8796,7 +8796,7 @@ export interface TelegramOwnTopicProvisionDeps {
   recordThreadReconciliationPlan?: (
     plan: ThreadReconciler.ThreadReconciliationPlan,
   ) => void;
-  store: TelegramTopicTargetStore;
+  store: BaleTopicTargetStore;
   callApi: <TResponse>(
     method: string,
     body: Record<string, unknown>,
@@ -8808,8 +8808,8 @@ export interface TelegramOwnTopicProvisionDeps {
   ) => void;
 }
 
-export interface TelegramOwnTopicProvisionResult {
-  target: TelegramTarget & { threadId: number };
+export interface BaleOwnTopicProvisionResult {
+  target: BaleTarget & { threadId: number };
   slot: string;
   threadName?: string;
   displayTitle?: string;
@@ -8822,22 +8822,22 @@ export interface TelegramOwnTopicProvisionResult {
  * should call it to ensure the leader has a visible working thread.
  */
 export async function provisionOwnBusTopic(
-  deps: TelegramOwnTopicProvisionDeps,
-): Promise<TelegramOwnTopicProvisionResult | undefined> {
+  deps: BaleOwnTopicProvisionDeps,
+): Promise<BaleOwnTopicProvisionResult | undefined> {
   const chatId = deps.getAllowedUserId();
-  let profileKey = getTelegramThreadOwnerKey({
+  let profileKey = getBaleThreadOwnerKey({
     kind: "leader",
     cwd: deps.cwd,
     instanceId: deps.instanceId,
-    telegramProfile: deps.telegramProfile,
+    baleProfile: deps.baleProfile,
   });
   if (typeof chatId !== "number") return undefined;
   await deps.store.load();
   const reservationCleanupPorts = {
-    isCleanupTargetProtected: createTelegramCleanupTargetProtection(deps.store),
+    isCleanupTargetProtected: createBaleCleanupTargetProtection(deps.store),
     callApi: deps.callApi,
     markStaleByTarget: (
-      target: TelegramTarget & { threadId: number },
+      target: BaleTarget & { threadId: number },
       syncStatus?: "closed" | "deleted",
       lastSyncError?: string,
     ) => deps.store.markStaleByTarget(target, syncStatus, lastSyncError),
@@ -8880,15 +8880,15 @@ export async function provisionOwnBusTopic(
     actions: reservationCleanupPlan.actions.length,
   });
   const nowMs = Date.now();
-  const currentLeaderOwner: TelegramThreadOwner = {
+  const currentLeaderOwner: BaleThreadOwner = {
     kind: "leader",
     cwd: deps.cwd,
     instanceId: deps.instanceId,
-    ...(deps.telegramProfile ? { telegramProfile: deps.telegramProfile } : {}),
+    ...(deps.baleProfile ? { baleProfile: deps.baleProfile } : {}),
   };
-  const leaderSessionHandoff = getTelegramLeaderSessionHandoff();
+  const leaderSessionHandoff = getBaleLeaderSessionHandoff();
   if (
-    isTelegramLeaderSessionHandoffFresh(leaderSessionHandoff) &&
+    isBaleLeaderSessionHandoffFresh(leaderSessionHandoff) &&
     leaderSessionHandoff.profileKey === profileKey
   ) {
     const existingHandoffRecord = deps.store
@@ -8919,7 +8919,7 @@ export async function provisionOwnBusTopic(
       lastReconcileAction: "leader-session-handoff-restored",
     });
     await deps.store.persist();
-    setTelegramLeaderSessionHandoff(undefined);
+    setBaleLeaderSessionHandoff(undefined);
     deps.recordEvent("bus", "Bus leader session handoff restored", {
       phase: "leader-session-handoff-restore",
       chatId: leaderSessionHandoff.target.chatId,
@@ -8931,7 +8931,7 @@ export async function provisionOwnBusTopic(
       instanceId: deps.instanceId,
     });
   } else if (leaderSessionHandoff) {
-    setTelegramLeaderSessionHandoff(undefined);
+    setBaleLeaderSessionHandoff(undefined);
   }
   const recordsBeforePreviousLeaderCleanup = deps.store.list();
   const previousLeaderCleanupPlan = ThreadReconciler.planThreadReconciliation({
@@ -8965,7 +8965,7 @@ export async function provisionOwnBusTopic(
       });
       continue;
     }
-    if (isSameTelegramProcessInstance(record.instanceId, deps.instanceId)) {
+    if (isSameBaleProcessInstance(record.instanceId, deps.instanceId)) {
       deps.store.upsert({
         ...record,
         profileKey,
@@ -8988,7 +8988,7 @@ export async function provisionOwnBusTopic(
       continue;
     }
     const previousLeaderCleanupStartedAtMs = Date.now();
-    const isCleanupTargetProtected = createTelegramCleanupTargetProtection(
+    const isCleanupTargetProtected = createBaleCleanupTargetProtection(
       deps.store,
       record,
     );
@@ -9036,12 +9036,12 @@ export async function provisionOwnBusTopic(
         },
       );
       throw new Error(
-        "Telegram leader ownership changed during topic reconciliation.",
+        "Bale leader ownership changed during topic reconciliation.",
       );
     }
     if (cleanup.incompleteActions?.length) {
       throw new Error(
-        "Previous Telegram leader topic deletion was not confirmed.",
+        "Previous Bale leader topic deletion was not confirmed.",
       );
     }
     if (isCleanupTargetProtected(action.target, action)) continue;
@@ -9053,7 +9053,7 @@ export async function provisionOwnBusTopic(
         reason: "previous-process-cleaned-without-visible-probe",
         createdAtMs: nowMs,
         updatedAtMs: nowMs,
-        expiresAtMs: nowMs + TELEGRAM_THREAD_RESERVATION_TTL_MS,
+        expiresAtMs: nowMs + BALE_THREAD_RESERVATION_TTL_MS,
         instanceId: record.instanceId,
         lastReconcileAction: "leader-topic-previous-instance-cleaned-no-probe",
       });
@@ -9076,7 +9076,7 @@ export async function provisionOwnBusTopic(
       },
     );
   }
-  const provision = createTelegramTopicTargetProvisioner({
+  const provision = createBaleTopicTargetProvisioner({
     topicChatId: chatId,
     store: deps.store,
     callApi: deps.callApi,
@@ -9103,7 +9103,7 @@ export async function provisionOwnBusTopic(
       : {}),
   });
   if (result.reused) {
-    // Reused topics may already have a human-chosen Telegram title. Do not edit
+    // Reused topics may already have a human-chosen Bale title. Do not edit
     // them during leader startup: startup reconciliation must not reset a named
     // topic back to its bare slot or create redundant "renamed the thread" service
     // messages. Also do not probe with Bot API chat actions: every chat action is
@@ -9136,7 +9136,7 @@ export async function provisionOwnBusTopic(
     reused: result.reused,
   });
   if (!result.record.slot) {
-    throw new Error("Telegram Thread slot authority is unavailable.");
+    throw new Error("Bale Thread slot authority is unavailable.");
   }
   return {
     target: result.target,
@@ -9149,20 +9149,20 @@ export async function provisionOwnBusTopic(
   };
 }
 
-export interface TelegramInstanceThreadIdentityCandidate {
-  target?: TelegramTarget;
+export interface BaleInstanceThreadIdentityCandidate {
+  target?: BaleTarget;
   slot?: string;
   threadName?: string;
 }
 
-export function resolveTelegramInstanceThreadIdentity(options: {
-  target?: TelegramTarget;
-  follower?: TelegramInstanceThreadIdentityCandidate;
-  leader?: TelegramInstanceThreadIdentityCandidate;
-  record?: TelegramTopicTargetRecord;
-}): TelegramInstanceThreadIdentityCandidate {
+export function resolveBaleInstanceThreadIdentity(options: {
+  target?: BaleTarget;
+  follower?: BaleInstanceThreadIdentityCandidate;
+  leader?: BaleInstanceThreadIdentityCandidate;
+  record?: BaleTopicTargetRecord;
+}): BaleInstanceThreadIdentityCandidate {
   const targetMatchesCandidate = (
-    candidate: TelegramInstanceThreadIdentityCandidate | undefined,
+    candidate: BaleInstanceThreadIdentityCandidate | undefined,
   ) => {
     if (!candidate) return false;
     if (!options.target) return true;
@@ -9193,7 +9193,7 @@ export function resolveTelegramInstanceThreadIdentity(options: {
   };
 }
 
-export interface TelegramWorkspaceThreadRenameAuthority {
+export interface BaleWorkspaceThreadRenameAuthority {
   context: unknown;
   sessionId?: string;
   sessionGeneration: number;
@@ -9204,20 +9204,20 @@ export interface TelegramWorkspaceThreadRenameAuthority {
   leaderEpoch?: string | number;
   ownsDirectDelivery: boolean;
   followerRegistered: boolean;
-  localTarget?: TelegramTarget;
+  localTarget?: BaleTarget;
   localSlot?: string;
 }
 
-interface TelegramWorkspaceThreadNameRecipientDeps {
-  store: TelegramTopicTargetStore;
+interface BaleWorkspaceThreadNameRecipientDeps {
+  store: BaleTopicTargetStore;
   instanceId: string;
-  target: TelegramTarget;
+  target: BaleTarget;
   assertAuthority: () => void;
-  getAuthority: () => TelegramWorkspaceThreadRenameAuthority;
+  getAuthority: () => BaleWorkspaceThreadRenameAuthority;
 }
 
-function captureTelegramWorkspaceThreadNameRecipient(
-  deps: TelegramWorkspaceThreadNameRecipientDeps,
+function captureBaleWorkspaceThreadNameRecipient(
+  deps: BaleWorkspaceThreadNameRecipientDeps,
   operation: "rename" | "reset",
 ) {
   const {
@@ -9240,7 +9240,7 @@ function captureTelegramWorkspaceThreadNameRecipient(
   };
   const captured = capture(),
     authority = captured.identity;
-  const record = findCurrentTelegramInstanceThreadRecord({
+  const record = findCurrentBaleInstanceThreadRecord({
     records: store.list(),
     instanceId,
   });
@@ -9271,7 +9271,7 @@ function captureTelegramWorkspaceThreadNameRecipient(
     !targetMatches(authority.localTarget, target)
   )
     throw new Error(
-      `Telegram Workspace Thread ${operation} recipient authority is unavailable.`,
+      `Bale Workspace Thread ${operation} recipient authority is unavailable.`,
     );
   const observation =
     operation === "reset"
@@ -9292,7 +9292,7 @@ function captureTelegramWorkspaceThreadNameRecipient(
       !observeIdentity()
     )
       throw new Error(
-        `Telegram Workspace Thread ${operation} lost recipient authority.`,
+        `Bale Workspace Thread ${operation} lost recipient authority.`,
       );
     // Canonical/supplied observations may synchronously revoke the captured caller or Pi recipient.
     const after = capture();
@@ -9302,7 +9302,7 @@ function captureTelegramWorkspaceThreadNameRecipient(
       !isDeepStrictEqual(after.identity, captured.identity)
     )
       throw new Error(
-        `Telegram Workspace Thread ${operation} lost recipient authority.`,
+        `Bale Workspace Thread ${operation} lost recipient authority.`,
       );
   };
   assertAuthority();
@@ -9315,14 +9315,14 @@ function captureTelegramWorkspaceThreadNameRecipient(
 }
 
 /** Prepared recipient identity/result fences; callers retain Workspace admission and transport effects. */
-export function createTelegramWorkspaceThreadRenameRecipient(
-  deps: TelegramWorkspaceThreadNameRecipientDeps,
+export function createBaleWorkspaceThreadRenameRecipient(
+  deps: BaleWorkspaceThreadNameRecipientDeps,
 ): {
   assertAuthority: () => void;
-  assertResult: (result: TelegramTopicTargetRecord) => void;
+  assertResult: (result: BaleTopicTargetRecord) => void;
 } {
   const { assertAuthority, target, slot, observeResult } =
-    captureTelegramWorkspaceThreadNameRecipient(deps, "rename");
+    captureBaleWorkspaceThreadNameRecipient(deps, "rename");
   return {
     assertAuthority,
     assertResult(result) {
@@ -9334,7 +9334,7 @@ export function createTelegramWorkspaceThreadRenameRecipient(
         !observeResult(result.manualThreadName)
       )
         throw new Error(
-          "Telegram Workspace Thread rename result is no longer current.",
+          "Bale Workspace Thread rename result is no longer current.",
         );
       assertAuthority();
     },
@@ -9342,39 +9342,39 @@ export function createTelegramWorkspaceThreadRenameRecipient(
 }
 
 /** Exact automatic-title/absent-name result fences, separate from recipient identity and issued effects. */
-export function createTelegramWorkspaceThreadResetRecipient(
-  deps: TelegramWorkspaceThreadNameRecipientDeps,
+export function createBaleWorkspaceThreadResetRecipient(
+  deps: BaleWorkspaceThreadNameRecipientDeps,
 ): {
   assertAuthority: () => void;
   assertResult: (automaticTitle: string) => void;
 } {
   const { assertAuthority, observeResult } =
-    captureTelegramWorkspaceThreadNameRecipient(deps, "reset");
+    captureBaleWorkspaceThreadNameRecipient(deps, "reset");
   return {
     assertAuthority,
     assertResult(title) {
       assertAuthority();
       if (!observeResult(title))
         throw new Error(
-          "Telegram Workspace Thread reset result is no longer current.",
+          "Bale Workspace Thread reset result is no longer current.",
         );
       assertAuthority();
     },
   };
 }
 
-export interface TelegramLeaderThreadStateRuntime {
-  getTarget(): TelegramTarget | undefined;
-  getIdentity(): TelegramInstanceThreadIdentityCandidate | undefined;
+export interface BaleLeaderThreadStateRuntime {
+  getTarget(): BaleTarget | undefined;
+  getIdentity(): BaleInstanceThreadIdentityCandidate | undefined;
   set(
-    input: TelegramInstanceThreadIdentityCandidate & { target: TelegramTarget },
+    input: BaleInstanceThreadIdentityCandidate & { target: BaleTarget },
   ): void;
   clear(): void;
 }
 
-export function createTelegramLeaderThreadStateRuntime(): TelegramLeaderThreadStateRuntime {
+export function createBaleLeaderThreadStateRuntime(): BaleLeaderThreadStateRuntime {
   let identity:
-    | (TelegramInstanceThreadIdentityCandidate & { target: TelegramTarget })
+    | (BaleInstanceThreadIdentityCandidate & { target: BaleTarget })
     | undefined;
   return {
     getTarget: () => identity?.target,
@@ -9388,34 +9388,34 @@ export function createTelegramLeaderThreadStateRuntime(): TelegramLeaderThreadSt
   };
 }
 
-export interface TelegramCurrentInstanceThreadRuntime {
-  findRecord(): TelegramTopicTargetRecord | undefined;
-  getRecord(): TelegramTopicTargetRecord | undefined;
-  getIdentity(target?: TelegramTarget): TelegramInstanceThreadIdentityCandidate;
-  getRestorationIdentity(): TelegramInstanceThreadIdentityCandidate;
+export interface BaleCurrentInstanceThreadRuntime {
+  findRecord(): BaleTopicTargetRecord | undefined;
+  getRecord(): BaleTopicTargetRecord | undefined;
+  getIdentity(target?: BaleTarget): BaleInstanceThreadIdentityCandidate;
+  getRestorationIdentity(): BaleInstanceThreadIdentityCandidate;
 }
 
-export interface TelegramCurrentInstanceThreadRuntimeDeps {
+export interface BaleCurrentInstanceThreadRuntimeDeps {
   instanceId: string;
-  listRecords(): readonly TelegramTopicTargetRecord[];
-  getPreferredTarget(): TelegramTarget | undefined;
+  listRecords(): readonly BaleTopicTargetRecord[];
+  getPreferredTarget(): BaleTarget | undefined;
   getFollower():
-    | (TelegramInstanceThreadIdentityCandidate & { registered: boolean })
+    | (BaleInstanceThreadIdentityCandidate & { registered: boolean })
     | undefined;
-  getLeader(): TelegramInstanceThreadIdentityCandidate | undefined;
+  getLeader(): BaleInstanceThreadIdentityCandidate | undefined;
 }
 
-export function createTelegramCurrentInstanceThreadRuntime(
-  deps: TelegramCurrentInstanceThreadRuntimeDeps,
-): TelegramCurrentInstanceThreadRuntime {
-  const findRecord = function (): TelegramTopicTargetRecord | undefined {
-    return findCurrentTelegramInstanceThreadRecord({
+export function createBaleCurrentInstanceThreadRuntime(
+  deps: BaleCurrentInstanceThreadRuntimeDeps,
+): BaleCurrentInstanceThreadRuntime {
+  const findRecord = function (): BaleTopicTargetRecord | undefined {
+    return findCurrentBaleInstanceThreadRecord({
       records: deps.listRecords(),
       instanceId: deps.instanceId,
       preferredTarget: deps.getPreferredTarget(),
     });
   };
-  const getRecord = function (): TelegramTopicTargetRecord | undefined {
+  const getRecord = function (): BaleTopicTargetRecord | undefined {
     const record = findRecord();
     const follower = deps.getFollower();
     if (record?.owner?.kind === "manual-follower" && !follower?.registered) {
@@ -9429,13 +9429,13 @@ export function createTelegramCurrentInstanceThreadRuntime(
     getIdentity(target) {
       const follower = deps.getFollower();
       const record = target
-        ? findCurrentTelegramInstanceThreadRecord({
+        ? findCurrentBaleInstanceThreadRecord({
             records: deps.listRecords(),
             instanceId: deps.instanceId,
             preferredTarget: target,
           })
         : getRecord();
-      return resolveTelegramInstanceThreadIdentity({
+      return resolveBaleInstanceThreadIdentity({
         target,
         follower: follower?.registered ? follower : undefined,
         leader: deps.getLeader(),
@@ -9444,7 +9444,7 @@ export function createTelegramCurrentInstanceThreadRuntime(
     },
     getRestorationIdentity() {
       const follower = deps.getFollower();
-      return resolveTelegramInstanceThreadIdentity({
+      return resolveBaleInstanceThreadIdentity({
         follower: follower?.registered ? follower : undefined,
         leader: deps.getLeader(),
         record: findRecord(),
@@ -9453,11 +9453,11 @@ export function createTelegramCurrentInstanceThreadRuntime(
   };
 }
 
-export function findCurrentTelegramInstanceThreadRecord(options: {
-  records: readonly TelegramTopicTargetRecord[];
+export function findCurrentBaleInstanceThreadRecord(options: {
+  records: readonly BaleTopicTargetRecord[];
   instanceId: string;
-  preferredTarget?: TelegramTarget;
-}): TelegramTopicTargetRecord | undefined {
+  preferredTarget?: BaleTarget;
+}): BaleTopicTargetRecord | undefined {
   const target = options.preferredTarget;
   if (typeof target?.threadId === "number") {
     const targetRecord = options.records.find((record) => {
@@ -9475,16 +9475,16 @@ export function findCurrentTelegramInstanceThreadRecord(options: {
   });
 }
 
-export interface TelegramThreadStatusProjectionRuntime {
+export interface BaleThreadStatusProjectionRuntime {
   getBusRole(): "leader" | "follower" | undefined;
-  getBusFollowers(): ReturnType<typeof listTelegramThreadStatusFollowers>;
+  getBusFollowers(): ReturnType<typeof listBaleThreadStatusFollowers>;
   getLocalBus(): {
     leaderSocketPath: string;
     leaderTransport: "socket" | "pipe";
     followerSocketPath: string;
     followerTransport: "socket" | "pipe";
     followerRegistered: boolean;
-    followerTarget?: TelegramTarget;
+    followerTarget?: BaleTarget;
     followerSlot?: string;
     followerThreadName?: string;
     leaderProtocol?: {
@@ -9493,29 +9493,29 @@ export interface TelegramThreadStatusProjectionRuntime {
       capabilities: string[];
     };
   };
-  getTopicTargets(): ReturnType<typeof listTelegramThreadStatusTargets>;
+  getTopicTargets(): ReturnType<typeof listBaleThreadStatusTargets>;
   getThreadReservations(): ReturnType<
-    typeof listTelegramThreadStatusReservations
+    typeof listBaleThreadStatusReservations
   >;
   getTopicSyncObservations(): ReturnType<
-    typeof listTelegramThreadStatusObservations
+    typeof listBaleThreadStatusObservations
   >;
   getInstanceSlot(): string | undefined;
   getInstanceThreadName(): string | undefined;
 }
 
-export interface TelegramThreadStatusProjectionRuntimeDeps {
+export interface BaleThreadStatusProjectionRuntimeDeps {
   getThreadMode(): "unknown" | "enabled" | "disabled";
   isBusPollingStarted(): boolean;
   isFollowerRegistered(): boolean;
-  listFollowers(): readonly TelegramThreadStatusFollowerView[];
-  listRecords(): readonly TelegramTopicTargetRecord[];
-  listReservations(): readonly TelegramThreadReservation[];
-  listSyncObservations(): readonly TelegramTopicSyncObservation[];
+  listFollowers(): readonly BaleThreadStatusFollowerView[];
+  listRecords(): readonly BaleTopicTargetRecord[];
+  listReservations(): readonly BaleThreadReservation[];
+  listSyncObservations(): readonly BaleTopicSyncObservation[];
   getLeaderSocketPath(): string;
   getFollowerSocketPath(): string;
   getTransportKind(path: string): "socket" | "pipe";
-  getFollowerTarget(): TelegramTarget | undefined;
+  getFollowerTarget(): BaleTarget | undefined;
   getFollowerSlot(): string | undefined;
   getFollowerThreadName(): string | undefined;
   getLeaderProtocol?():
@@ -9525,13 +9525,13 @@ export interface TelegramThreadStatusProjectionRuntimeDeps {
         capabilities: string[];
       }
     | undefined;
-  getCurrentIdentity(): TelegramInstanceThreadIdentityCandidate;
-  getDisplayTitle?: (target: TelegramTarget) => string | undefined;
+  getCurrentIdentity(): BaleInstanceThreadIdentityCandidate;
+  getDisplayTitle?: (target: BaleTarget) => string | undefined;
 }
 
-export function createTelegramThreadStatusProjectionRuntime(
-  deps: TelegramThreadStatusProjectionRuntimeDeps,
-): TelegramThreadStatusProjectionRuntime {
+export function createBaleThreadStatusProjectionRuntime(
+  deps: BaleThreadStatusProjectionRuntimeDeps,
+): BaleThreadStatusProjectionRuntime {
   return {
     getBusRole() {
       if (deps.getThreadMode() === "disabled") return undefined;
@@ -9539,7 +9539,7 @@ export function createTelegramThreadStatusProjectionRuntime(
       return deps.isFollowerRegistered() ? "follower" : undefined;
     },
     getBusFollowers() {
-      return listTelegramThreadStatusFollowers({
+      return listBaleThreadStatusFollowers({
         followers: deps.listFollowers(),
         records: deps.listRecords(),
       }).map((follower) => ({
@@ -9571,14 +9571,14 @@ export function createTelegramThreadStatusProjectionRuntime(
       };
     },
     getTopicTargets: () =>
-      listTelegramThreadStatusTargets(deps.listRecords()).map((record) => ({
+      listBaleThreadStatusTargets(deps.listRecords()).map((record) => ({
         ...record,
         threadName: deps.getDisplayTitle?.(record.target) ?? record.threadName,
       })),
     getThreadReservations: () =>
-      listTelegramThreadStatusReservations(deps.listReservations()),
+      listBaleThreadStatusReservations(deps.listReservations()),
     getTopicSyncObservations: () =>
-      listTelegramThreadStatusObservations(deps.listSyncObservations()),
+      listBaleThreadStatusObservations(deps.listSyncObservations()),
     getInstanceSlot() {
       if (deps.getThreadMode() === "disabled") return undefined;
       return deps.getCurrentIdentity().slot;
@@ -9590,25 +9590,25 @@ export function createTelegramThreadStatusProjectionRuntime(
   };
 }
 
-export interface TelegramCurrentThreadAssemblyDeps {
+export interface BaleCurrentThreadAssemblyDeps {
   instanceId: string;
-  listRecords: TelegramCurrentInstanceThreadRuntimeDeps["listRecords"];
-  listWorkspaceBindings?: () => readonly TelegramWorkspaceThreadBinding[];
+  listRecords: BaleCurrentInstanceThreadRuntimeDeps["listRecords"];
+  listWorkspaceBindings?: () => readonly BaleWorkspaceThreadBinding[];
   /** Display-mode title for a binding whose tab has no acknowledged title yet (fresh, moved or reclaimed). */
   resolveAutomaticDisplayTitle?: (
-    binding: TelegramWorkspaceThreadBinding,
+    binding: BaleWorkspaceThreadBinding,
   ) => string | undefined;
   getFollowerDisplayTitle?: () => string | undefined;
-  getActiveTurnTarget(): TelegramTarget | undefined;
-  getFollowerTarget(): TelegramTarget | undefined;
+  getActiveTurnTarget(): BaleTarget | undefined;
+  getFollowerTarget(): BaleTarget | undefined;
   isFollowerRegistered(): boolean;
   getFollowerSlot(): string | undefined;
   getFollowerThreadName(): string | undefined;
-  getLeaderIdentity(): TelegramInstanceThreadIdentityCandidate | undefined;
-  getLeaderTarget(): TelegramTarget | undefined;
-  getLeaderProtocol?: TelegramThreadStatusProjectionRuntimeDeps["getLeaderProtocol"];
+  getLeaderIdentity(): BaleInstanceThreadIdentityCandidate | undefined;
+  getLeaderTarget(): BaleTarget | undefined;
+  getLeaderProtocol?: BaleThreadStatusProjectionRuntimeDeps["getLeaderProtocol"];
   status: Pick<
-    TelegramThreadStatusProjectionRuntimeDeps,
+    BaleThreadStatusProjectionRuntimeDeps,
     | "getThreadMode"
     | "isBusPollingStarted"
     | "listFollowers"
@@ -9620,16 +9620,16 @@ export interface TelegramCurrentThreadAssemblyDeps {
   >;
 }
 
-export interface TelegramCurrentThreadAssembly {
-  getDisplayTitle: (target: TelegramTarget) => string | undefined;
-  current: TelegramCurrentInstanceThreadRuntime;
-  status: TelegramThreadStatusProjectionRuntime;
+export interface BaleCurrentThreadAssembly {
+  getDisplayTitle: (target: BaleTarget) => string | undefined;
+  current: BaleCurrentInstanceThreadRuntime;
+  status: BaleThreadStatusProjectionRuntime;
 }
 
 /** Own current-thread preference and its matching status projection. */
-export function createTelegramCurrentThreadAssembly(
-  deps: TelegramCurrentThreadAssemblyDeps,
-): TelegramCurrentThreadAssembly {
+export function createBaleCurrentThreadAssembly(
+  deps: BaleCurrentThreadAssemblyDeps,
+): BaleCurrentThreadAssembly {
   const getFollower = () => {
     const target = deps.getFollowerTarget();
     if (!target) return undefined;
@@ -9640,7 +9640,7 @@ export function createTelegramCurrentThreadAssembly(
       threadName: deps.getFollowerThreadName(),
     };
   };
-  const namedCurrent = createTelegramCurrentInstanceThreadRuntime({
+  const namedCurrent = createBaleCurrentInstanceThreadRuntime({
     instanceId: deps.instanceId,
     listRecords: deps.listRecords,
     getPreferredTarget: () =>
@@ -9650,7 +9650,7 @@ export function createTelegramCurrentThreadAssembly(
     getFollower,
     getLeader: deps.getLeaderIdentity,
   });
-  const getDisplayTitle = (target: TelegramTarget): string | undefined => {
+  const getDisplayTitle = (target: BaleTarget): string | undefined => {
     const followerTarget = deps.getFollowerTarget();
     if (
       followerTarget &&
@@ -9668,7 +9668,7 @@ export function createTelegramCurrentThreadAssembly(
     );
   };
   const displayIdentity = (
-    identity: TelegramInstanceThreadIdentityCandidate,
+    identity: BaleInstanceThreadIdentityCandidate,
   ) => {
     const title = identity.target
       ? getDisplayTitle(identity.target)
@@ -9677,13 +9677,13 @@ export function createTelegramCurrentThreadAssembly(
   };
   const current = {
     ...namedCurrent,
-    getIdentity: (target?: TelegramTarget) =>
+    getIdentity: (target?: BaleTarget) =>
       displayIdentity(namedCurrent.getIdentity(target)),
   };
   return {
     getDisplayTitle,
     current,
-    status: createTelegramThreadStatusProjectionRuntime({
+    status: createBaleThreadStatusProjectionRuntime({
       ...deps.status,
       isFollowerRegistered: deps.isFollowerRegistered,
       listRecords: deps.listRecords,
@@ -9698,11 +9698,11 @@ export function createTelegramCurrentThreadAssembly(
   };
 }
 
-export interface TelegramThreadStatusFollowerView {
+export interface BaleThreadStatusFollowerView {
   instanceId: string;
   cwd?: string;
   lastHeartbeatMs: number;
-  target?: TelegramTarget;
+  target?: BaleTarget;
   protocol?: {
     protocolVersion: number;
     runtimeBuild: string;
@@ -9710,26 +9710,26 @@ export interface TelegramThreadStatusFollowerView {
   };
 }
 
-function getTelegramThreadStatusName(
-  record: TelegramTopicTargetRecord | undefined,
+function getBaleThreadStatusName(
+  record: BaleTopicTargetRecord | undefined,
 ): string | undefined {
   if (!record) return undefined;
   if (
     record.threadName &&
-    isTelegramTopicThreadNameValidForSlot(record.threadName, record.slot)
+    isBaleTopicThreadNameValidForSlot(record.threadName, record.slot)
   )
     return record.threadName;
-  return chooseTelegramThreadName({ slot: record.slot });
+  return chooseBaleThreadName({ slot: record.slot });
 }
 
-export function listTelegramThreadStatusFollowers(options: {
-  followers: readonly TelegramThreadStatusFollowerView[];
-  records: readonly TelegramTopicTargetRecord[];
+export function listBaleThreadStatusFollowers(options: {
+  followers: readonly BaleThreadStatusFollowerView[];
+  records: readonly BaleTopicTargetRecord[];
 }): Array<{
   instanceId: string;
   cwd?: string;
   lastHeartbeatMs: number;
-  target?: TelegramTarget;
+  target?: BaleTarget;
   protocol?: {
     protocolVersion: number;
     runtimeBuild: string;
@@ -9753,21 +9753,21 @@ export function listTelegramThreadStatusFollowers(options: {
       target: follower.target,
       ...(follower.protocol ? { protocol: follower.protocol } : {}),
       slot: record?.slot,
-      threadName: getTelegramThreadStatusName(record),
+      threadName: getBaleThreadStatusName(record),
       status: record?.status,
     };
   });
 }
 
-export function listTelegramThreadStatusTargets(
-  records: readonly TelegramTopicTargetRecord[],
+export function listBaleThreadStatusTargets(
+  records: readonly BaleTopicTargetRecord[],
 ): Array<{
   instanceId?: string;
-  status: TelegramTopicTargetStatus;
-  target: TelegramTarget & { threadId: number };
+  status: BaleTopicTargetStatus;
+  target: BaleTarget & { threadId: number };
   slot?: string;
   threadName?: string;
-  syncStatus?: TelegramTopicSyncStatus;
+  syncStatus?: BaleTopicSyncStatus;
   lastSyncObservedAtMs?: number;
   lastSyncProbeAtMs?: number;
   lastSyncError?: string;
@@ -9779,7 +9779,7 @@ export function listTelegramThreadStatusTargets(
       status: record.status,
       target: record.target,
       slot: record.slot,
-      threadName: getTelegramThreadStatusName(record),
+      threadName: getBaleThreadStatusName(record),
       syncStatus: record.syncStatus,
       lastSyncObservedAtMs: record.lastSyncObservedAtMs,
       lastSyncProbeAtMs: record.lastSyncProbeAtMs,
@@ -9789,10 +9789,10 @@ export function listTelegramThreadStatusTargets(
   });
 }
 
-export function listTelegramThreadStatusReservations(
-  reservations: readonly TelegramThreadReservation[],
+export function listBaleThreadStatusReservations(
+  reservations: readonly BaleThreadReservation[],
 ): Array<{
-  target: TelegramTarget & { threadId: number };
+  target: BaleTarget & { threadId: number };
   slot: string;
   reason: string;
   instanceId?: string;
@@ -9811,11 +9811,11 @@ export function listTelegramThreadStatusReservations(
   });
 }
 
-export function listTelegramThreadStatusObservations(
-  observations: readonly TelegramTopicSyncObservation[],
+export function listBaleThreadStatusObservations(
+  observations: readonly BaleTopicSyncObservation[],
 ): Array<{
-  target: TelegramTarget & { threadId: number };
-  syncStatus: TelegramTopicSyncStatus;
+  target: BaleTarget & { threadId: number };
+  syncStatus: BaleTopicSyncStatus;
   observedAtMs: number;
   instanceId?: string;
   slot?: string;
@@ -9835,9 +9835,9 @@ export function listTelegramThreadStatusObservations(
   });
 }
 
-export function getTelegramTargetFromApiBody(
+export function getBaleTargetFromApiBody(
   body: unknown,
-): (TelegramTarget & { threadId: number }) | undefined {
+): (BaleTarget & { threadId: number }) | undefined {
   if (!body || typeof body !== "object" || Array.isArray(body))
     return undefined;
   const record = body as Record<string, unknown>;
@@ -9848,7 +9848,7 @@ export function getTelegramTargetFromApiBody(
     : undefined;
 }
 
-export function isTelegramTopicTargetStaleError(error: unknown): boolean {
+export function isBaleTopicTargetStaleError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const status =
     "status" in error && typeof error.status === "number"
@@ -9856,12 +9856,12 @@ export function isTelegramTopicTargetStaleError(error: unknown): boolean {
       : undefined;
   if (status !== undefined && status !== 400) return false;
   return (
-    ThreadReconciler.isTelegramTopicDeletedErrorMessage(error.message) ||
-    ThreadReconciler.isTelegramTopicClosedErrorMessage(error.message)
+    ThreadReconciler.isBaleTopicDeletedErrorMessage(error.message) ||
+    ThreadReconciler.isBaleTopicClosedErrorMessage(error.message)
   );
 }
 
-export function isTelegramTopicModeUnavailableError(error: unknown): boolean {
+export function isBaleTopicModeUnavailableError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
   return (
@@ -9873,11 +9873,11 @@ export function isTelegramTopicModeUnavailableError(error: unknown): boolean {
   );
 }
 
-export function createTelegramTopicTargetRenamer(
-  deps: TelegramTopicTargetRenamerDeps,
+export function createBaleTopicTargetRenamer(
+  deps: BaleTopicTargetRenamerDeps,
 ): (
-  request: TelegramTopicTargetRenameRequest,
-) => Promise<TelegramTopicTargetRecord | undefined> {
+  request: BaleTopicTargetRenameRequest,
+) => Promise<BaleTopicTargetRecord | undefined> {
   const {
     store,
     callApi,
@@ -9892,26 +9892,26 @@ export function createTelegramTopicTargetRenamer(
       threadId: request.target.threadId,
     };
     const slot = request.slot;
-    const threadName = normalizeTelegramTopicTargetThreadName(
+    const threadName = normalizeBaleTopicTargetThreadName(
       request.threadName,
     );
     assertAuthority?.();
     if (
       !threadName ||
-      getTelegramManualThreadDisplayNameValidationError(threadName)
+      getBaleManualThreadDisplayNameValidationError(threadName)
     )
       return undefined;
     const occupied = new Set(
-      listOccupiedTelegramThreadIdentities({
+      listOccupiedBaleThreadIdentities({
         records: store.list(),
         workspaceBindings: store.listWorkspaceBindings(),
         pendingProvisions: store.listPendingProvisions(),
         exceptTarget: target,
       }),
     );
-    if (occupied.has(getTelegramTopicIdentityName(threadName)))
+    if (occupied.has(getBaleTopicIdentityName(threadName)))
       return undefined;
-    const name = getTelegramTopicTitleForThreadName(
+    const name = getBaleTopicTitleForThreadName(
       threadName,
       slot ?? "",
       topicNameTemplate,
@@ -9931,7 +9931,7 @@ export function createTelegramTopicTargetRenamer(
     }
     assertAuthority?.();
     if ((shouldRenameDisplayedTitle?.() ?? true) !== updateDisplayTitle) {
-      throw new Error("Telegram display mode changed during Workspace rename.");
+      throw new Error("Bale display mode changed during Workspace rename.");
     }
     assertAuthority?.();
     const renamed = await renameByTarget(target, threadName, {
@@ -9943,36 +9943,36 @@ export function createTelegramTopicTargetRenamer(
 }
 
 /** Caller holds profile Workspace admission; only an explicit connect grants a fresh creation attempt. */
-export async function resetTelegramConnectionProvisioning(input: {
-  store: TelegramTopicTargetStore;
-  owner: TelegramThreadPendingProvision["owner"];
+export async function resetBaleConnectionProvisioning(input: {
+  store: BaleTopicTargetStore;
+  owner: BaleThreadPendingProvision["owner"];
   instanceId: string;
   profileKey: string;
   isCurrent: () => boolean;
   recordEvent: (category: string, message: unknown, details?: Record<string, unknown>) => void;
 }): Promise<void> {
-  if (!input.isCurrent()) throw new Error("Telegram connection recovery authority changed.");
-  const removed: TelegramThreadPendingProvision[] = [];
+  if (!input.isCurrent()) throw new Error("Bale connection recovery authority changed.");
+  const removed: BaleThreadPendingProvision[] = [];
   for (const pending of input.store.listPendingProvisions()) {
     if (pending.owner !== input.owner || pending.target ||
         (pending.profileKey !== input.profileKey && pending.instanceId !== input.instanceId)) continue;
-    if (!input.isCurrent()) throw new Error("Telegram connection recovery authority changed.");
+    if (!input.isCurrent()) throw new Error("Bale connection recovery authority changed.");
     if (!await input.store.resetPendingProvisionForConnect(pending, input.isCurrent))
-      throw new Error("Telegram connection recovery lost publication authority.");
-    if (!input.isCurrent()) throw new Error("Telegram connection recovery authority changed.");
+      throw new Error("Bale connection recovery lost publication authority.");
+    if (!input.isCurrent()) throw new Error("Bale connection recovery authority changed.");
     removed.push(pending);
   }
   if (removed.length === 0) return;
-  input.recordEvent("connection", "Explicit connect reset unfinished Thread creation; an unconfirmed Telegram Thread may remain.", {
+  input.recordEvent("connection", "Explicit connect reset unfinished Thread creation; an unconfirmed Bale Thread may remain.", {
     phase: "connect-provision-reset", count: removed.length, owner: input.owner,
   });
 }
 
-export function createTelegramTopicTargetProvisioner(
-  deps: TelegramTopicTargetProvisionerDeps,
+export function createBaleTopicTargetProvisioner(
+  deps: BaleTopicTargetProvisionerDeps,
 ): (
-  request: TelegramTopicTargetProvisionRequest,
-) => Promise<TelegramTopicTargetProvisionResult> {
+  request: BaleTopicTargetProvisionRequest,
+) => Promise<BaleTopicTargetProvisionResult> {
   const getNowMs = deps.getNowMs ?? (() => 0);
   const getRandom = deps.getRandom;
   return async (request) => {
@@ -9984,7 +9984,7 @@ export function createTelegramTopicTargetProvisioner(
           deps.getCurrentLeaderEpoch() !== leaderEpoch)
       ) {
         throw new Error(
-          `Telegram topic provisioning lost leader ownership (${phase}).`,
+          `Bale topic provisioning lost leader ownership (${phase}).`,
         );
       }
     };
@@ -10016,7 +10016,7 @@ export function createTelegramTopicTargetProvisioner(
       )
     ) {
       throw new Error(
-        "Telegram unfinished Thread creation does not match this session binding.",
+        "Bale unfinished Thread creation does not match this session binding.",
       );
     }
     if (pendingForRequest?.target) {
@@ -10024,7 +10024,7 @@ export function createTelegramTopicTargetProvisioner(
       const observation = deps.store
         .listSyncObservations()
         .find((entry) => targetMatches(entry.target, target));
-      assertTelegramPendingTopicRecoveryAllowed(deps.store, target);
+      assertBalePendingTopicRecoveryAllowed(deps.store, target);
       if (observation?.syncStatus === "deleted") {
         assertLeaderEpoch("before-deleted-provision-settlement");
         deps.store.markStaleByTarget(target, "deleted");
@@ -10033,7 +10033,7 @@ export function createTelegramTopicTargetProvisioner(
         pendingForRequest = undefined;
       }
     }
-    const matchesWorkspace = (target: TelegramTarget): boolean =>
+    const matchesWorkspace = (target: BaleTarget): boolean =>
       !request.workspaceBindingKey ||
       deps.store
         .listWorkspaceBindings()
@@ -10052,9 +10052,9 @@ export function createTelegramTopicTargetProvisioner(
     ) {
       const slot = existing.slot ?? deps.store.allocateSlot(request.profileKey);
       if (!slot) {
-        throw new TelegramWorkspaceSlotUnavailableError();
+        throw new BaleWorkspaceSlotUnavailableError();
       }
-      const occupied = listOccupiedTelegramThreadIdentities({
+      const occupied = listOccupiedBaleThreadIdentities({
         records: deps.store.list(),
         workspaceBindings: deps.store.listWorkspaceBindings(),
         pendingProvisions: deps.store.listPendingProvisions(),
@@ -10063,12 +10063,12 @@ export function createTelegramTopicTargetProvisioner(
       });
       const identityThreadName =
         identity?.threadName &&
-        isTelegramTopicThreadNameValidForSlot(identity.threadName, slot) &&
-        !occupied.includes(getTelegramTopicIdentityName(identity.threadName))
+        isBaleTopicThreadNameValidForSlot(identity.threadName, slot) &&
+        !occupied.includes(getBaleTopicIdentityName(identity.threadName))
           ? identity.threadName
           : undefined;
-      const bakedThreadName = chooseTelegramThreadName({
-        slot: getNextTelegramThreadNamePaletteSlot(deps.store.list(), slot),
+      const bakedThreadName = chooseBaleThreadName({
+        slot: getNextBaleThreadNamePaletteSlot(deps.store.list(), slot),
         entropy: nowMs,
         getRandom,
         occupied,
@@ -10107,7 +10107,7 @@ export function createTelegramTopicTargetProvisioner(
     }
     if (pendingForRequest?.target) {
       if (!pendingForRequest.slot) {
-        throw new Error("Telegram Workspace slot reservation is unavailable.");
+        throw new Error("Bale Workspace slot reservation is unavailable.");
       }
       const record = deps.store.upsert({
         profileKey: request.profileKey,
@@ -10135,7 +10135,7 @@ export function createTelegramTopicTargetProvisioner(
     }
     if (pendingForRequest) {
       throw new Error(
-        `Telegram topic provisioning remains ${pendingForRequest.status ?? "in-flight"} for this instance.`,
+        `Bale topic provisioning remains ${pendingForRequest.status ?? "in-flight"} for this instance.`,
       );
     }
     const activeForInstance = deps.store.getActiveByInstanceId(
@@ -10143,7 +10143,7 @@ export function createTelegramTopicTargetProvisioner(
     );
     if (activeForInstance && matchesWorkspace(activeForInstance.target)) {
       if (!activeForInstance.slot) {
-        throw new Error("Telegram Workspace slot reservation is unavailable.");
+        throw new Error("Bale Workspace slot reservation is unavailable.");
       }
       return {
         target: activeForInstance.target,
@@ -10151,7 +10151,7 @@ export function createTelegramTopicTargetProvisioner(
         record: activeForInstance,
       };
     }
-    // No profileKey match — try to claim an existing inactive thread before creating another Telegram tab.
+    // No profileKey match — try to claim an existing inactive thread before creating another Bale tab.
     if (deps.claimPendingTargets !== false) {
       const claimed = deps.store.claimReusableTarget(
         request.instanceId,
@@ -10161,7 +10161,7 @@ export function createTelegramTopicTargetProvisioner(
         return { target: claimed.target, reused: true, record: claimed };
       }
     }
-    const occupied = listOccupiedTelegramThreadIdentities({
+    const occupied = listOccupiedBaleThreadIdentities({
       records: deps.store.list(),
       workspaceBindings: deps.store.listWorkspaceBindings(),
       pendingProvisions: deps.store.listPendingProvisions(),
@@ -10169,14 +10169,14 @@ export function createTelegramTopicTargetProvisioner(
     });
     const requestedThreadName =
       request.threadName &&
-      isTelegramTopicThreadNameValidForSlot(request.threadName, undefined) &&
-      !occupied.includes(getTelegramTopicIdentityName(request.threadName))
-        ? normalizeTelegramTopicTargetThreadName(request.threadName)
+      isBaleTopicThreadNameValidForSlot(request.threadName, undefined) &&
+      !occupied.includes(getBaleTopicIdentityName(request.threadName))
+        ? normalizeBaleTopicTargetThreadName(request.threadName)
         : undefined;
     const candidateThreadName = requestedThreadName ?? identity?.threadName;
     const preferredNameSlot =
-      getTelegramThreadNameLeadingSlot(candidateThreadName) ??
-      getNextTelegramThreadNamePaletteSlot(deps.store.list(), undefined) ??
+      getBaleThreadNameLeadingSlot(candidateThreadName) ??
+      getNextBaleThreadNamePaletteSlot(deps.store.list(), undefined) ??
       request.preferredSlot;
     const slot =
       (existing && matchesWorkspace(existing.target)
@@ -10196,17 +10196,17 @@ export function createTelegramTopicTargetProvisioner(
         },
       );
     if (!slot) {
-      throw new TelegramWorkspaceSlotUnavailableError();
+      throw new BaleWorkspaceSlotUnavailableError();
     }
     const uniqueCandidate =
       candidateThreadName &&
-      isTelegramTopicThreadNameValidForSlot(candidateThreadName, slot) &&
-      !occupied.includes(getTelegramTopicIdentityName(candidateThreadName))
+      isBaleTopicThreadNameValidForSlot(candidateThreadName, slot) &&
+      !occupied.includes(getBaleTopicIdentityName(candidateThreadName))
         ? candidateThreadName
         : undefined;
     const requestThreadName =
       uniqueCandidate ??
-      chooseTelegramThreadName({ slot, entropy: nowMs, getRandom, occupied });
+      chooseBaleThreadName({ slot, entropy: nowMs, getRandom, occupied });
     let displayTitle: string | undefined;
     if (
       deps.resolveInitialWorkspaceDisplayTitle &&
@@ -10221,10 +10221,10 @@ export function createTelegramTopicTargetProvisioner(
       });
       if (!projectedTitle?.trim()) {
         throw new Error(
-          "Telegram Thread display identity is missing or ambiguous.",
+          "Bale Thread display identity is missing or ambiguous.",
         );
       }
-      displayTitle = buildTelegramTopicName(
+      displayTitle = buildBaleTopicName(
         { ...request, threadName: projectedTitle },
         "{threadName}",
         slot,
@@ -10234,7 +10234,7 @@ export function createTelegramTopicTargetProvisioner(
     const pendingOwner =
       request.owner?.kind === "leader" ? "leader" : "manual-follower";
     assertLeaderEpoch("before-pending-intent");
-    const pendingBase: TelegramThreadPendingProvision = {
+    const pendingBase: BaleThreadPendingProvision = {
       id: pendingId,
       owner: pendingOwner,
       instanceId: request.instanceId,
@@ -10254,13 +10254,13 @@ export function createTelegramTopicTargetProvisioner(
     let threadId: number | undefined;
     try {
       assertLeaderEpoch("before-createForumTopic");
-      const topic = await deps.callApi<TelegramTopicResult>(
+      const topic = await deps.callApi<BaleTopicResult>(
         "createForumTopic",
         {
           chat_id: deps.topicChatId,
           name:
             displayTitle ??
-            buildTelegramTopicName(
+            buildBaleTopicName(
               {
                 ...request,
                 ...(requestThreadName ? { threadName: requestThreadName } : {}),
@@ -10274,9 +10274,9 @@ export function createTelegramTopicTargetProvisioner(
       );
       threadId = topic.message_thread_id;
       if (typeof threadId !== "number" || !Number.isInteger(threadId)) {
-        throw new TelegramApiCommitUnknownError(
+        throw new BaleApiCommitUnknownError(
           "createForumTopic",
-          new Error("Telegram createForumTopic returned no message_thread_id."),
+          new Error("Bale createForumTopic returned no message_thread_id."),
         );
       }
       assertLeaderEpoch("after-createForumTopic");
@@ -10333,7 +10333,7 @@ export function createTelegramTopicTargetProvisioner(
       }
       assertLeaderEpoch("failure-cleanup");
       if (threadId === undefined) {
-        if (isTelegramApiCommitUnknownError(error)) {
+        if (isBaleApiCommitUnknownError(error)) {
           deps.store.upsertPendingProvision({
             ...pendingBase,
             status: "ambiguous",

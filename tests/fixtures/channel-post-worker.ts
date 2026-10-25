@@ -1,10 +1,10 @@
-import { createTelegramChannelPostJournalStore } from "../../lib/channel-posts.ts";
+import { createBaleChannelPostJournalStore } from "../../lib/channel-posts.ts";
 
 const [path, profileName, tokenSha256, action, operationId, mutationId, markdown, runtimeDir] = process.argv.slice(2);
 if (!path || !profileName || !tokenSha256 || !action || !operationId) {
   throw new Error("Channel post worker arguments are required.");
 }
-const store = createTelegramChannelPostJournalStore({ path, profileName, tokenSha256, ...(runtimeDir ? { runtimeDir } : {}) });
+const store = createBaleChannelPostJournalStore({ path, profileName, tokenSha256, ...(runtimeDir ? { runtimeDir } : {}) });
 if (action === "begin") {
   process.stdout.write(`${JSON.stringify(store.beginPublication(operationId))}\n`);
 } else if (action === "begin-edit") {

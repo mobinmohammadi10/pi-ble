@@ -1,21 +1,21 @@
 /**
- * Telegram preview streaming helpers
- * Zones: telegram outbound, native rich markdown drafts
+ * Bale preview streaming helpers
+ * Zones: bale outbound, native rich markdown drafts
  * Owns safe draft preview selection, runtime updates, and preview finalization
  * The streaming state machine is a pure transition function driven by one imperative shell per runtime.
  */
 import * as Machine from "./machine.js";
-import { stripTelegramCommentMarkupForPreview } from "./outbound-markup.js";
-import { isTelegramMarkdownFenceClosing, normalizeTelegramNativeMarkdown, parseTelegramMarkdownFenceOpening, } from "./replies.js";
-import { getTelegramTargetThreadParams, } from "./target.js";
+import { stripBaleCommentMarkupForPreview } from "./outbound-markup.js";
+import { isBaleMarkdownFenceClosing, normalizeBaleNativeMarkdown, parseBaleMarkdownFenceOpening, } from "./replies.js";
+import { getBaleTargetThreadParams, } from "./target.js";
 import { shouldSuppressPreviewForVoice } from "./voice.js";
-const TELEGRAM_DRAFT_ID_MAX = 2_147_483_647;
-const TELEGRAM_DRAFT_PREVIEW_MAX_CHARS = 4096;
+const BALE_DRAFT_ID_MAX = 2_147_483_647;
+const BALE_DRAFT_PREVIEW_MAX_CHARS = 4096;
 // Native draft cadence: at most one frame per interval, and a fresh preview
 // segment holds its first frame for one full interval so the opening frame is
 // an accumulated passage rather than a single streamed word.
-const TELEGRAM_DRAFT_INTERVAL_MS = 2_000;
-export function createTelegramPreviewMachineState() {
+const BALE_DRAFT_INTERVAL_MS = 2_000;
+export function createBalePreviewMachineState() {
     return {
         segment: null,
         generation: 0,
@@ -62,11 +62,11 @@ function attemptFlush(state, request, clock, config) {
         return step({ ...state, timerSegmentId: segment.id }, { type: "armTimer", delay, request, segmentId: segment.id });
     }
     const idle = withoutTimer(state);
-    const snapshot = buildTelegramNativeMarkdownPreviewSnapshot(segment, config.maxMessageLength);
+    const snapshot = buildBaleNativeMarkdownPreviewSnapshot(segment, config.maxMessageLength);
     if (!snapshot)
         return idle;
     const draftId = segment.draftId ??
-        allocateTelegramDraftId(state.nextDraftId, config.maxDraftId);
+        allocateBaleDraftId(state.nextDraftId, config.maxDraftId);
     return {
         state: {
             ...idle.state,
@@ -104,7 +104,7 @@ function drainPending(state, clock, config) {
         return step(state);
     return attemptFlush({ ...state, pending: null }, request, clock, config);
 }
-export function transitionTelegramPreview(state, event, config) {
+export function transitionBalePreview(state, event, config) {
     switch (event.type) {
         case "reset":
         case "invalidated": {
@@ -188,21 +188,21 @@ export function transitionTelegramPreview(state, event, config) {
     }
 }
 /** True while a draft request is in flight, or, when publications block, a pending request waits behind one. */
-export function isTelegramPreviewBusy(state, blockedByPublication = true) {
+export function isBalePreviewBusy(state, blockedByPublication = true) {
     return (state.inFlight !== null ||
         (blockedByPublication &&
             state.pending !== null &&
             state.publications.length > 0));
 }
 /**
- * The imperative shell around `transitionTelegramPreview`: it samples the clock and send gate into events, runs
+ * The imperative shell around `transitionBalePreview`: it samples the clock and send gate into events, runs
  * effects, records every transport failure in one place and resolves promise-shaped ports through `waitFor`.
  */
-function createTelegramPreviewModel(deps) {
+function createBalePreviewModel(deps) {
     const config = {
-        maxDraftId: deps.maxDraftId ?? TELEGRAM_DRAFT_ID_MAX,
-        maxMessageLength: deps.maxMessageLength ?? TELEGRAM_DRAFT_PREVIEW_MAX_CHARS,
-        minDraftIntervalMs: deps.minDraftIntervalMs ?? TELEGRAM_DRAFT_INTERVAL_MS,
+        maxDraftId: deps.maxDraftId ?? BALE_DRAFT_ID_MAX,
+        maxMessageLength: deps.maxMessageLength ?? BALE_DRAFT_PREVIEW_MAX_CHARS,
+        minDraftIntervalMs: deps.minDraftIntervalMs ?? BALE_DRAFT_INTERVAL_MS,
     };
     let timer;
     let publicationIds = 0;
@@ -210,15 +210,15 @@ function createTelegramPreviewModel(deps) {
         now: Date.now(),
         canSend: deps.canSend?.() !== false,
     });
-    const machine = Machine.createTelegramMachineRunner({
-        initial: createTelegramPreviewMachineState(),
-        transition: (state, event) => transitionTelegramPreview(state, event, config),
+    const machine = Machine.createBaleMachineRunner({
+        initial: createBalePreviewMachineState(),
+        transition: (state, event) => transitionBalePreview(state, event, config),
         run: (effect) => run(effect),
     });
     const { dispatch, waitFor } = machine;
     const whenIdle = () => {
         const generation = machine.state.generation;
-        return waitFor((current) => current.generation !== generation || !isTelegramPreviewBusy(current));
+        return waitFor((current) => current.generation !== generation || !isBalePreviewBusy(current));
     };
     /** Captures predecessors only: a later draft/publication must never extend the boundary that blocks it. */
     const whenBoundarySettles = (includePublications = true) => {
@@ -233,7 +233,7 @@ function createTelegramPreviewModel(deps) {
     const callTransport = async (phase, request, draftId, text) => {
         try {
             return await deps.sendDraft(request.chatId, draftId, text, {
-                ...getTelegramTargetThreadParams(request.target ?? { chatId: request.chatId }),
+                ...getBaleTargetThreadParams(request.target ?? { chatId: request.chatId }),
             });
         }
         catch (error) {
@@ -246,7 +246,7 @@ function createTelegramPreviewModel(deps) {
         }
     };
     const sendDraft = async (effect) => {
-        const delivered = await callTransport("draft", effect.request, effect.draftId, normalizeTelegramNativeMarkdown(effect.text));
+        const delivered = await callTransport("draft", effect.request, effect.draftId, normalizeBaleNativeMarkdown(effect.text));
         dispatch({
             type: "draftSettled",
             segmentId: effect.segmentId,
@@ -337,7 +337,7 @@ function createTelegramPreviewModel(deps) {
     };
     const controller = {
         getState: () => machine.state.segment ?? undefined,
-        isFlushing: () => isTelegramPreviewBusy(machine.state),
+        isFlushing: () => isBalePreviewBusy(machine.state),
         seal,
         setPendingText: (text) => dispatch({ type: "textSet", text }),
         resetState: () => dispatch({ type: "reset" }),
@@ -391,7 +391,7 @@ function createTelegramPreviewModel(deps) {
             const current = machine.state.segment;
             if (current?.id !== segment.id)
                 return false;
-            const finalText = buildTelegramPreviewFinalText(current);
+            const finalText = buildBalePreviewFinalText(current);
             if (!finalText) {
                 await clear(chatId, options);
                 return false;
@@ -418,19 +418,19 @@ function createTelegramPreviewModel(deps) {
         },
     };
 }
-export function createTelegramPreviewController(deps) {
-    return createTelegramPreviewModel(deps).controller;
+export function createBalePreviewController(deps) {
+    return createBalePreviewModel(deps).controller;
 }
 /**
- * Returns true when the active turn is a Telegram Guest Mode query. A guest
- * query allows exactly one answer within a limited Telegram response window,
+ * Returns true when the active turn is a Bale Guest Mode query. A guest
+ * query allows exactly one answer within a limited Bale response window,
  * so it must never emit streaming draft previews.
  */
 export function shouldSuppressPreviewForGuestTurn(turn) {
     return !!turn?.guestQueryId;
 }
-export function createTelegramAssistantPreviewRuntime(deps) {
-    const model = createTelegramPreviewModel(deps);
+export function createBaleAssistantPreviewRuntime(deps) {
+    const model = createBalePreviewModel(deps);
     const { controller } = model;
     const suppressed = (turn) => shouldSuppressPreviewForVoice(turn) ||
         shouldSuppressPreviewForGuestTurn(turn);
@@ -484,14 +484,14 @@ export function createTelegramAssistantPreviewRuntime(deps) {
             if (segment.sealed)
                 return;
             const hadVisibleText = segment.pendingText.length > 0;
-            const pendingText = stripTelegramCommentMarkupForPreview(deps.getMessageText(message));
+            const pendingText = stripBaleCommentMarkupForPreview(deps.getMessageText(message));
             controller.setPendingText(pendingText);
             // The first visible text of a preview segment opens an initial accumulation
             // window, so the segment's first frame cannot ship as a single word even
             // when the previous cadence boundary has already passed (fresh turn, slow
             // first token, or message rollover after tool work). Later deltas keep the
             // trailing deadline instead of sliding it on every update.
-            const interval = deps.minDraftIntervalMs ?? TELEGRAM_DRAFT_INTERVAL_MS;
+            const interval = deps.minDraftIntervalMs ?? BALE_DRAFT_INTERVAL_MS;
             if (interval > 0 &&
                 !hadVisibleText &&
                 !segment.lastSentText &&
@@ -501,16 +501,16 @@ export function createTelegramAssistantPreviewRuntime(deps) {
         },
     };
 }
-export function buildTelegramPreviewFinalText(state) {
+export function buildBalePreviewFinalText(state) {
     const finalText = state.pendingText.trim();
     if (finalText)
         return finalText;
     return state.lastSentText.trim() || undefined;
 }
-export function allocateTelegramDraftId(currentDraftId, maxDraftId) {
+export function allocateBaleDraftId(currentDraftId, maxDraftId) {
     return currentDraftId >= maxDraftId ? 1 : currentDraftId + 1;
 }
-function createTelegramDraftInlineState() {
+function createBaleDraftInlineState() {
     return {
         codeTicks: 0,
         htmlComment: false,
@@ -524,7 +524,7 @@ function createTelegramDraftInlineState() {
         linkDestination: false,
     };
 }
-function isTelegramDraftInlineStateClosed(state) {
+function isBaleDraftInlineStateClosed(state) {
     return (state.codeTicks === 0 &&
         !state.htmlComment &&
         !state.displayMath &&
@@ -559,7 +559,7 @@ function isInlineDelimiterCandidate(text, index, length) {
         return true;
     return /[\p{P}\p{S}]/u.test(previous) || /[\p{P}\p{S}]/u.test(next);
 }
-function updateTelegramDraftInlineStateForLine(line, state) {
+function updateBaleDraftInlineStateForLine(line, state) {
     if (state.fence || state.displayMath)
         return;
     for (let index = 0; index < line.length; index += 1) {
@@ -637,9 +637,9 @@ function updateTelegramDraftInlineStateForLine(line, state) {
         }
     }
 }
-function updateTelegramDraftBlockStateForLine(line, state) {
+function updateBaleDraftBlockStateForLine(line, state) {
     if (state.fence) {
-        if (isTelegramMarkdownFenceClosing(line, state.fence)) {
+        if (isBaleMarkdownFenceClosing(line, state.fence)) {
             state.fence = undefined;
         }
         return true;
@@ -649,7 +649,7 @@ function updateTelegramDraftBlockStateForLine(line, state) {
             state.displayMath = false;
         return true;
     }
-    const openingFence = parseTelegramMarkdownFenceOpening(line);
+    const openingFence = parseBaleMarkdownFenceOpening(line);
     if (openingFence) {
         state.fence = openingFence;
         return true;
@@ -660,38 +660,38 @@ function updateTelegramDraftBlockStateForLine(line, state) {
     }
     return false;
 }
-function findSafeTelegramRichMarkdownDraftEnd(markdown) {
-    const state = createTelegramDraftInlineState();
+function findSafeBaleRichMarkdownDraftEnd(markdown) {
+    const state = createBaleDraftInlineState();
     let offset = 0;
     let safeEnd = 0;
     for (const line of markdown.split("\n")) {
         const lineEnd = offset + line.length;
-        const consumedAsBlock = updateTelegramDraftBlockStateForLine(line, state);
+        const consumedAsBlock = updateBaleDraftBlockStateForLine(line, state);
         if (!consumedAsBlock)
-            updateTelegramDraftInlineStateForLine(line, state);
+            updateBaleDraftInlineStateForLine(line, state);
         const nextOffset = lineEnd + 1;
-        if (isTelegramDraftInlineStateClosed(state))
+        if (isBaleDraftInlineStateClosed(state))
             safeEnd = lineEnd;
         offset = nextOffset;
     }
-    if (isTelegramDraftInlineStateClosed(state))
+    if (isBaleDraftInlineStateClosed(state))
         return markdown.length;
     return safeEnd;
 }
-function hasTelegramPreviewVisibleContent(markdown) {
+function hasBalePreviewVisibleContent(markdown) {
     return /[\p{L}\p{N}]/u.test(markdown);
 }
-export function getSafeTelegramRichMarkdownDraftPrefix(markdown, maxMessageLength) {
+export function getSafeBaleRichMarkdownDraftPrefix(markdown, maxMessageLength) {
     const source = markdown.trim();
     if (!source)
         return undefined;
     const limited = source.length > maxMessageLength
         ? source.slice(0, maxMessageLength)
         : source;
-    const safeEnd = findSafeTelegramRichMarkdownDraftEnd(limited);
+    const safeEnd = findSafeBaleRichMarkdownDraftEnd(limited);
     if (safeEnd > 0) {
         const safePrefix = limited.slice(0, safeEnd).trimEnd();
-        return hasTelegramPreviewVisibleContent(safePrefix)
+        return hasBalePreviewVisibleContent(safePrefix)
             ? safePrefix
             : undefined;
     }
@@ -701,15 +701,15 @@ export function getSafeTelegramRichMarkdownDraftPrefix(markdown, maxMessageLengt
         if (candidateEnd <= 0)
             return undefined;
         const candidate = limited.slice(0, candidateEnd).trimEnd();
-        if (hasTelegramPreviewVisibleContent(candidate) &&
-            findSafeTelegramRichMarkdownDraftEnd(candidate) === candidate.length) {
+        if (hasBalePreviewVisibleContent(candidate) &&
+            findSafeBaleRichMarkdownDraftEnd(candidate) === candidate.length) {
             return candidate || undefined;
         }
     }
     return undefined;
 }
-function buildTelegramNativeMarkdownPreviewSnapshot(state, maxMessageLength) {
-    const safeText = getSafeTelegramRichMarkdownDraftPrefix(state.pendingText, maxMessageLength);
+function buildBaleNativeMarkdownPreviewSnapshot(state, maxMessageLength) {
+    const safeText = getSafeBaleRichMarkdownDraftPrefix(state.pendingText, maxMessageLength);
     if (!safeText || safeText === state.lastSentText)
         return undefined;
     return { text: safeText };

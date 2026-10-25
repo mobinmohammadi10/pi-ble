@@ -1,14 +1,14 @@
 /**
- * Telegram inbound handler pipeline
- * Zones: telegram inbound, command templates, prompt preparation
+ * Bale inbound handler pipeline
+ * Zones: bale inbound, command templates, prompt preparation
  * Owns MIME/type matching, command-template execution, fallback handling, and prompt injection before prompt enqueueing
  */
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { buildCommandTemplateInvocation, createCommandTemplateRecovery, getCommandTemplateCompositionSteps, getCommandTemplateConfiguredTimeout, getCommandTemplateStepTimeout, normalizeCommandTemplateConfig, resolveCommandTemplateNumericField, shouldRunCommandTemplateConfig, } from "./command-templates.js";
-import { getTelegramVoiceTranscriptionProviders } from "./voice.js";
+import { getBaleVoiceTranscriptionProviders } from "./voice.js";
 const DEFAULT_INBOUND_HANDLER_TIMEOUT_MS = 120_000;
-const INBOUND_HANDLER_REGISTRY_KEY = "__piTelegramInboundHandlers__";
+const INBOUND_HANDLER_REGISTRY_KEY = "__piBaleInboundHandlers__";
 const MAX_INBOUND_HANDLER_OUTPUT_LENGTH = 24_000;
 const MAX_INBOUND_HANDLER_FAILURE_STREAM_LENGTH = 4_000;
 const BUILT_IN_TEXT_ATTACHMENT_MAX_BYTES = 1_000_000;
@@ -28,7 +28,7 @@ function getOrCreateInboundHandlerRegistry() {
         registry;
     return registry;
 }
-export function registerTelegramInboundHandler(kind, handler) {
+export function registerBaleInboundHandler(kind, handler) {
     const normalizedKind = kind.trim() || "*";
     const registry = getOrCreateInboundHandlerRegistry();
     const list = registry.handlers.get(normalizedKind) ?? [];
@@ -43,31 +43,31 @@ export function registerTelegramInboundHandler(kind, handler) {
         }
     };
 }
-function getTelegramInboundProgrammaticHandlers(kind) {
+function getBaleInboundProgrammaticHandlers(kind) {
     const registry = getOrCreateInboundHandlerRegistry();
     return [
         ...(registry.handlers.get(kind) ?? []),
         ...(kind === "*" ? [] : (registry.handlers.get("*") ?? [])),
     ];
 }
-export function clearTelegramInboundHandlers() {
+export function clearBaleInboundHandlers() {
     getOrCreateInboundHandlerRegistry().handlers.clear();
 }
-function truncateTelegramInboundText(text, maxLength) {
+function truncateBaleInboundText(text, maxLength) {
     if (text.length <= maxLength)
         return text;
     return `${text.slice(0, maxLength).trimEnd()}… [truncated ${text.length - maxLength} chars]`;
 }
-function truncateTelegramInboundOutput(text) {
-    return truncateTelegramInboundText(text, MAX_INBOUND_HANDLER_OUTPUT_LENGTH);
+function truncateBaleInboundOutput(text) {
+    return truncateBaleInboundText(text, MAX_INBOUND_HANDLER_OUTPUT_LENGTH);
 }
-function truncateTelegramInboundFailureStream(text) {
-    return truncateTelegramInboundText(text.trimEnd(), MAX_INBOUND_HANDLER_FAILURE_STREAM_LENGTH);
+function truncateBaleInboundFailureStream(text) {
+    return truncateBaleInboundText(text.trimEnd(), MAX_INBOUND_HANDLER_FAILURE_STREAM_LENGTH);
 }
 function normalizeInboundProgrammaticHandlerText(result) {
     const text = typeof result === "string" ? result : result?.text;
     const normalized = text?.trim();
-    return normalized ? truncateTelegramInboundOutput(normalized) : undefined;
+    return normalized ? truncateBaleInboundOutput(normalized) : undefined;
 }
 function normalizeStringList(value) {
     if (Array.isArray(value)) {
@@ -100,10 +100,10 @@ function handlerHasSelectors(handler) {
 function matchesAnyPattern(patterns, value) {
     return patterns.some((pattern) => matchesWildcard(pattern, value));
 }
-function isTelegramTextMimeType(mimeType) {
+function isBaleTextMimeType(mimeType) {
     return matchesWildcard("text/*", mimeType);
 }
-export function telegramInboundHandlerMatchesFile(handler, file) {
+export function baleInboundHandlerMatchesFile(handler, file) {
     if (!handlerHasSelectors(handler))
         return true;
     const matchPatterns = normalizeStringList(handler.match);
@@ -117,17 +117,17 @@ export function telegramInboundHandlerMatchesFile(handler, file) {
         return true;
     return matchesAnyPattern(matchPatterns, file.kind);
 }
-function findTelegramInboundHandlers(handlers, file) {
+function findBaleInboundHandlers(handlers, file) {
     if (!Array.isArray(handlers))
         return [];
     return handlers.filter((handler) => !!handler &&
         typeof handler === "object" &&
-        telegramInboundHandlerMatchesFile(handler, file));
+        baleInboundHandlerMatchesFile(handler, file));
 }
 function hasInboundFilePlaceholder(value) {
     return /\{file\}/.test(value);
 }
-function getTelegramInboundHandlerTemplateValues(file, text = "") {
+function getBaleInboundHandlerTemplateValues(file, text = "") {
     return {
         file: file.path,
         mime: file.mimeType ?? "",
@@ -135,8 +135,8 @@ function getTelegramInboundHandlerTemplateValues(file, text = "") {
         type: file.kind ?? "",
     };
 }
-function buildTelegramInboundTemplateInvocation(handler, file, cwd, appendFileIfMissing = true) {
-    const values = getTelegramInboundHandlerTemplateValues(file);
+function buildBaleInboundTemplateInvocation(handler, file, cwd, appendFileIfMissing = true) {
+    const values = getBaleInboundHandlerTemplateValues(file);
     const templateConfig = normalizeCommandTemplateConfig(handler);
     const hadFilePlaceholder = typeof templateConfig.template === "string"
         ? hasInboundFilePlaceholder(templateConfig.template)
@@ -149,34 +149,34 @@ function buildTelegramInboundTemplateInvocation(handler, file, cwd, appendFileIf
         invocation.args.push(file.path);
     return invocation;
 }
-export function buildTelegramInboundHandlerInvocation(handler, file, cwd, appendFileIfMissing = true) {
+export function buildBaleInboundHandlerInvocation(handler, file, cwd, appendFileIfMissing = true) {
     const { template } = normalizeCommandTemplateConfig(handler);
     if (!template)
         throw new Error("Inbound handler template is required");
-    return buildTelegramInboundTemplateInvocation(handler, file, cwd, appendFileIfMissing);
+    return buildBaleInboundTemplateInvocation(handler, file, cwd, appendFileIfMissing);
 }
-function getTelegramInboundHandlerTimeout(handler) {
+function getBaleInboundHandlerTimeout(handler) {
     return (getCommandTemplateConfiguredTimeout(handler) ??
         DEFAULT_INBOUND_HANDLER_TIMEOUT_MS);
 }
-function getTelegramInboundHandlerKind(handler) {
+function getBaleInboundHandlerKind(handler) {
     if (Array.isArray(handler.template))
         return "composition";
     if (handler.template)
         return "template";
     return "unknown";
 }
-function formatTelegramInboundHandlerFailure(result) {
+function formatBaleInboundHandlerFailure(result) {
     const parts = [
         `Inbound handler exited with code ${result.code}${result.killed ? " (killed)" : ""}`,
     ];
     if (result.stderr.trim())
-        parts.push(`stderr:\n${truncateTelegramInboundFailureStream(result.stderr)}`);
+        parts.push(`stderr:\n${truncateBaleInboundFailureStream(result.stderr)}`);
     if (result.stdout.trim())
-        parts.push(`stdout:\n${truncateTelegramInboundFailureStream(result.stdout)}`);
+        parts.push(`stdout:\n${truncateBaleInboundFailureStream(result.stdout)}`);
     return parts.join("\n\n");
 }
-function getTelegramInboundHandlerRetryOptions(handler, values, cwd, timeout, deps) {
+function getBaleInboundHandlerRetryOptions(handler, values, cwd, timeout, deps) {
     if (typeof handler !== "object" || handler.retry === undefined)
         return {};
     const recover = createCommandTemplateRecovery(handler, values, {
@@ -189,19 +189,19 @@ function getTelegramInboundHandlerRetryOptions(handler, values, cwd, timeout, de
         ...(recover ? { recover } : {}),
     };
 }
-async function executeTelegramInboundHandlerInvocation(handler, file, cwd, deps, appendFileIfMissing = true, timeout = getTelegramInboundHandlerTimeout(handler), stdin) {
-    const invocation = buildTelegramInboundHandlerInvocation(handler, file, cwd, appendFileIfMissing);
+async function executeBaleInboundHandlerInvocation(handler, file, cwd, deps, appendFileIfMissing = true, timeout = getBaleInboundHandlerTimeout(handler), stdin) {
+    const invocation = buildBaleInboundHandlerInvocation(handler, file, cwd, appendFileIfMissing);
     const result = await deps.execCommand(invocation.command, invocation.args, {
         cwd,
         timeout,
-        ...getTelegramInboundHandlerRetryOptions(handler, getTelegramInboundHandlerTemplateValues(file), cwd, timeout, deps),
+        ...getBaleInboundHandlerRetryOptions(handler, getBaleInboundHandlerTemplateValues(file), cwd, timeout, deps),
         ...(stdin !== undefined ? { stdin } : {}),
     });
     if (result.code !== 0)
-        throw new Error(formatTelegramInboundHandlerFailure(result));
-    return truncateTelegramInboundOutput(result.stdout);
+        throw new Error(formatBaleInboundHandlerFailure(result));
+    return truncateBaleInboundOutput(result.stdout);
 }
-function getTelegramTextHandlerFile() {
+function getBaleTextHandlerFile() {
     return {
         path: "",
         fileName: "message.txt",
@@ -210,17 +210,17 @@ function getTelegramTextHandlerFile() {
         isImage: false,
     };
 }
-function findTelegramTextHandlers(handlers) {
+function findBaleTextHandlers(handlers) {
     if (!Array.isArray(handlers))
         return [];
-    const textFile = getTelegramTextHandlerFile();
+    const textFile = getBaleTextHandlerFile();
     return handlers.filter((handler) => !!handler &&
         typeof handler === "object" &&
         handlerHasSelectors(handler) &&
-        telegramInboundHandlerMatchesFile(handler, textFile));
+        baleInboundHandlerMatchesFile(handler, textFile));
 }
-function buildTelegramTextHandlerInvocation(handler, text, cwd) {
-    const values = getTelegramInboundHandlerTemplateValues(getTelegramTextHandlerFile(), text);
+function buildBaleTextHandlerInvocation(handler, text, cwd) {
+    const values = getBaleInboundHandlerTemplateValues(getBaleTextHandlerFile(), text);
     const { template } = normalizeCommandTemplateConfig(handler);
     if (!template)
         throw new Error("Text handler template is required");
@@ -229,30 +229,30 @@ function buildTelegramTextHandlerInvocation(handler, text, cwd) {
         missingLabel: "text handler template",
     });
 }
-async function executeTelegramTextHandlerInvocation(handler, text, cwd, deps, timeout = getTelegramInboundHandlerTimeout(handler)) {
-    const invocation = buildTelegramTextHandlerInvocation(handler, text, cwd);
+async function executeBaleTextHandlerInvocation(handler, text, cwd, deps, timeout = getBaleInboundHandlerTimeout(handler)) {
+    const invocation = buildBaleTextHandlerInvocation(handler, text, cwd);
     const result = await deps.execCommand(invocation.command, invocation.args, {
         cwd,
         timeout,
         stdin: text,
-        ...getTelegramInboundHandlerRetryOptions(handler, getTelegramInboundHandlerTemplateValues(getTelegramTextHandlerFile(), text), cwd, timeout, deps),
+        ...getBaleInboundHandlerRetryOptions(handler, getBaleInboundHandlerTemplateValues(getBaleTextHandlerFile(), text), cwd, timeout, deps),
     });
     if (result.code !== 0)
-        throw new Error(formatTelegramInboundHandlerFailure(result));
-    return truncateTelegramInboundOutput(result.stdout);
+        throw new Error(formatBaleInboundHandlerFailure(result));
+    return truncateBaleInboundOutput(result.stdout);
 }
-async function executeTelegramTextHandler(handler, text, cwd, deps) {
+async function executeBaleTextHandler(handler, text, cwd, deps) {
     const steps = getCommandTemplateCompositionSteps(handler);
     if (steps.length === 0) {
-        return (await executeTelegramTextHandlerInvocation(handler, text, cwd, deps)).trim();
+        return (await executeBaleTextHandlerInvocation(handler, text, cwd, deps)).trim();
     }
     const startedAt = Date.now();
     let output = text;
     for (const [index, step] of steps.entries()) {
-        if (!shouldRunCommandTemplateConfig(step, getTelegramInboundHandlerTemplateValues(getTelegramTextHandlerFile(), output)))
+        if (!shouldRunCommandTemplateConfig(step, getBaleInboundHandlerTemplateValues(getBaleTextHandlerFile(), output)))
             continue;
         try {
-            output = await executeTelegramTextHandlerInvocation(step, output, cwd, deps, getCommandTemplateStepTimeout(getTelegramInboundHandlerTimeout(handler), step, index === 0 ? undefined : Date.now() - startedAt));
+            output = await executeBaleTextHandlerInvocation(step, output, cwd, deps, getCommandTemplateStepTimeout(getBaleInboundHandlerTimeout(handler), step, index === 0 ? undefined : Date.now() - startedAt));
         }
         catch (error) {
             if (typeof step === "object" && step.failure === "root")
@@ -264,26 +264,26 @@ async function executeTelegramTextHandler(handler, text, cwd, deps) {
     }
     return output.trim();
 }
-async function processTelegramTextHandlers(options) {
+async function processBaleTextHandlers(options) {
     if (!options.rawText)
         return options.rawText;
     let text = options.rawText;
-    for (const handler of findTelegramTextHandlers(options.handlers)) {
+    for (const handler of findBaleTextHandlers(options.handlers)) {
         try {
             // An unresolvable guard fails only this handler, like its command would.
-            if (!shouldRunCommandTemplateConfig(handler, getTelegramInboundHandlerTemplateValues(getTelegramTextHandlerFile(), text)))
+            if (!shouldRunCommandTemplateConfig(handler, getBaleInboundHandlerTemplateValues(getBaleTextHandlerFile(), text)))
                 continue;
-            const output = await executeTelegramTextHandler(handler, text, options.cwd, options);
+            const output = await executeBaleTextHandler(handler, text, options.cwd, options);
             if (output)
                 text = output;
         }
         catch (error) {
             options.recordRuntimeEvent?.("inbound-text-handler", error, {
-                handler: getTelegramInboundHandlerKind(handler),
+                handler: getBaleInboundHandlerKind(handler),
             });
         }
     }
-    for (const handler of getTelegramInboundProgrammaticHandlers("text")) {
+    for (const handler of getBaleInboundProgrammaticHandlers("text")) {
         try {
             const output = normalizeInboundProgrammaticHandlerText(await handler({ kind: "text", text, mimeType: "text/plain" }, { cwd: options.cwd }));
             if (output)
@@ -297,14 +297,14 @@ async function processTelegramTextHandlers(options) {
     }
     return text;
 }
-function isTelegramVoiceLikeFile(file) {
+function isBaleVoiceLikeFile(file) {
     return (file.kind === "voice" ||
         file.kind === "audio" ||
         matchesWildcard("audio/*", file.mimeType));
 }
-async function processTelegramFileWithProgrammaticHandlers(file, options) {
+async function processBaleFileWithProgrammaticHandlers(file, options) {
     const kind = file.kind || "*";
-    for (const handler of getTelegramInboundProgrammaticHandlers(kind)) {
+    for (const handler of getBaleInboundProgrammaticHandlers(kind)) {
         try {
             const output = normalizeInboundProgrammaticHandlerText(await handler({
                 kind,
@@ -323,15 +323,15 @@ async function processTelegramFileWithProgrammaticHandlers(file, options) {
     }
     return undefined;
 }
-async function transcribeTelegramVoiceFileWithProviders(file, options) {
-    if (!isTelegramVoiceLikeFile(file))
+async function transcribeBaleVoiceFileWithProviders(file, options) {
+    if (!isBaleVoiceLikeFile(file))
         return undefined;
-    for (const provider of getTelegramVoiceTranscriptionProviders()) {
+    for (const provider of getBaleVoiceTranscriptionProviders()) {
         try {
             const result = await provider(file, {});
             const text = typeof result === "string" ? result : result?.text;
             if (text?.trim())
-                return truncateTelegramInboundOutput(text.trim());
+                return truncateBaleInboundOutput(text.trim());
         }
         catch (error) {
             options.recordRuntimeEvent?.("voice-transcription-provider", error, {
@@ -341,8 +341,8 @@ async function transcribeTelegramVoiceFileWithProviders(file, options) {
     }
     return undefined;
 }
-async function readBuiltInTelegramTextAttachment(file) {
-    if (!isTelegramTextMimeType(file.mimeType))
+async function readBuiltInBaleTextAttachment(file) {
+    if (!isBaleTextMimeType(file.mimeType))
         return undefined;
     const content = await readFile(file.path, "utf8");
     const normalized = content.trim();
@@ -351,16 +351,16 @@ async function readBuiltInTelegramTextAttachment(file) {
         return undefined;
     }
     const name = file.fileName || basename(file.path);
-    return truncateTelegramInboundOutput(`[${name}]\n${normalized}`);
+    return truncateBaleInboundOutput(`[${name}]\n${normalized}`);
 }
-async function executeTelegramInboundHandler(handler, file, cwd, deps) {
+async function executeBaleInboundHandler(handler, file, cwd, deps) {
     const steps = getCommandTemplateCompositionSteps(handler);
     if (steps.length === 0) {
-        const output = await executeTelegramInboundHandlerInvocation(handler, file, cwd, deps);
+        const output = await executeBaleInboundHandlerInvocation(handler, file, cwd, deps);
         return output.trim();
     }
     const startedAt = Date.now();
-    const values = getTelegramInboundHandlerTemplateValues(file);
+    const values = getBaleInboundHandlerTemplateValues(file);
     let output = "";
     let started = false;
     for (const step of steps) {
@@ -369,7 +369,7 @@ async function executeTelegramInboundHandler(handler, file, cwd, deps) {
         const first = !started;
         started = true;
         try {
-            output = await executeTelegramInboundHandlerInvocation(step, file, cwd, deps, false, getCommandTemplateStepTimeout(getTelegramInboundHandlerTimeout(handler), step, first ? undefined : Date.now() - startedAt), first ? undefined : output);
+            output = await executeBaleInboundHandlerInvocation(step, file, cwd, deps, false, getCommandTemplateStepTimeout(getBaleInboundHandlerTimeout(handler), step, first ? undefined : Date.now() - startedAt), first ? undefined : output);
         }
         catch (error) {
             if (typeof step === "object" && step.failure === "root")
@@ -379,8 +379,8 @@ async function executeTelegramInboundHandler(handler, file, cwd, deps) {
     }
     return output.trim();
 }
-export async function processTelegramInboundHandlers(options) {
-    const rawText = await processTelegramTextHandlers({
+export async function processBaleInboundHandlers(options) {
+    const rawText = await processBaleTextHandlers({
         rawText: options.rawText,
         handlers: options.handlers,
         cwd: options.cwd,
@@ -391,12 +391,12 @@ export async function processTelegramInboundHandlers(options) {
     const outputs = [];
     for (const file of options.files) {
         let hasOutput = false;
-        const handlers = findTelegramInboundHandlers(options.handlers, file);
+        const handlers = findBaleInboundHandlers(options.handlers, file);
         for (const handler of handlers) {
             try {
-                if (!shouldRunCommandTemplateConfig(handler, getTelegramInboundHandlerTemplateValues(file)))
+                if (!shouldRunCommandTemplateConfig(handler, getBaleInboundHandlerTemplateValues(file)))
                     continue;
-                const output = await executeTelegramInboundHandler(handler, file, options.cwd, options);
+                const output = await executeBaleInboundHandler(handler, file, options.cwd, options);
                 if (output) {
                     outputs.push({ file, output, handler });
                     hasOutput = true;
@@ -406,13 +406,13 @@ export async function processTelegramInboundHandlers(options) {
             catch (error) {
                 options.recordRuntimeEvent?.("inbound-handler", error, {
                     fileName: file.fileName || basename(file.path),
-                    handler: getTelegramInboundHandlerKind(handler),
+                    handler: getBaleInboundHandlerKind(handler),
                 });
             }
         }
         if (!hasOutput) {
             try {
-                const output = await processTelegramFileWithProgrammaticHandlers(file, {
+                const output = await processBaleFileWithProgrammaticHandlers(file, {
                     cwd: options.cwd,
                     recordRuntimeEvent: options.recordRuntimeEvent,
                 });
@@ -429,7 +429,7 @@ export async function processTelegramInboundHandlers(options) {
         }
         if (!hasOutput) {
             try {
-                const output = await transcribeTelegramVoiceFileWithProviders(file, {
+                const output = await transcribeBaleVoiceFileWithProviders(file, {
                     recordRuntimeEvent: options.recordRuntimeEvent,
                 });
                 if (output) {
@@ -445,7 +445,7 @@ export async function processTelegramInboundHandlers(options) {
         }
         if (!hasOutput) {
             try {
-                const output = await readBuiltInTelegramTextAttachment(file);
+                const output = await readBuiltInBaleTextAttachment(file);
                 if (output)
                     outputs.push({ file, output, handler: { type: "text" } });
             }
@@ -464,9 +464,9 @@ export async function processTelegramInboundHandlers(options) {
         handledFiles: outputs,
     };
 }
-export function createTelegramInboundHandlerRuntime(deps) {
+export function createBaleInboundHandlerRuntime(deps) {
     return {
-        process: (files, rawText, ctx) => processTelegramInboundHandlers({
+        process: (files, rawText, ctx) => processBaleInboundHandlers({
             files,
             rawText,
             handlers: deps.getHandlers(),

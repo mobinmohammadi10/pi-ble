@@ -1,7 +1,7 @@
 /**
  * Regression tests for project architecture invariants
  * Guards import graph shape, shared-bucket bans, and polling SDK boundary rules
- * Zones: shared utils, telegram, pi agent
+ * Zones: shared utils, bale, pi agent
  */
 
 import assert from "node:assert/strict";
@@ -125,10 +125,10 @@ test("Release CI validates exact tags and publishes through npm Trusted Publishe
     releaseWorkflowSource,
     /npm pack "\$PACKAGE_NAME@\$VERSION" --dry-run --json/,
   );
-  assert.match(releaseWorkflowSource, /\.\/dist\/pi-telegram\/index\.js/);
+  assert.match(releaseWorkflowSource, /\.\/dist\/pi-bale\/index\.js/);
   assert.match(releaseWorkflowSource, /\.\/dist\/skills/);
   assert.match(releaseWorkflowSource, /dist\/index\.d\.ts/);
-  assert.match(releaseWorkflowSource, /dist\/skills\/telegram-bridge\/SKILL\.md/);
+  assert.match(releaseWorkflowSource, /dist\/skills\/bale-bridge\/SKILL\.md/);
   assert.match(
     releaseWorkflowSource,
     /gh release view[\s\S]*gh release edit[\s\S]*gh release create/,
@@ -326,7 +326,7 @@ test("Supported package boundaries do not expose journal mutation factories", ()
     .filter(file => file.endsWith(".ts")).map(file => join("api", file))]
     .map(file => readFileSync(join(PROJECT_ROOT, file), "utf8")).join("\n");
   assert.doesNotMatch(publicSources,
-    /createTelegram(?:Input|Update)JournalStore|Telegram(?:Input|Update)JournalStore/u);
+    /createBale(?:Input|Update)JournalStore|Bale(?:Input|Update)JournalStore/u);
 });
 
 test("Project TypeScript files start with responsibility headers", () => {
@@ -384,18 +384,18 @@ test("Entrypoint stays free of direct Node runtime imports", () => {
 test("Production journal writers remain scoped or lifecycle-owned", () => {
   const source = readFileSync(join(PROJECT_ROOT, "lib/extension.ts"), "utf8");
   assert.equal((source.match(/binding\.journal\.appendBatch\(/gu) ?? []).length, 1);
-  assert.match(source, /withTelegramResolvedUpdateJournalReference\(\{[\s\S]*?publishJournalCursor[\s\S]*?binding\.journal\.appendBatch/u);
+  assert.match(source, /withBaleResolvedUpdateJournalReference\(\{[\s\S]*?publishJournalCursor[\s\S]*?binding\.journal\.appendBatch/u);
   assert.match(source, /followerAdmissionLifecycleRuntime\.appendBatch\(updates\)/u);
-  assert.doesNotMatch(source, /createTelegram(?:Input|Update)JournalStore\(/u);
+  assert.doesNotMatch(source, /createBale(?:Input|Update)JournalStore\(/u);
 });
 
 test("Production profile-only storage callbacks cannot reinterpret profile names as agent directories", () => {
   const source = readFileSync(join(PROJECT_ROOT, "lib/extension.ts"), "utf8");
-  assert.match(source, /getStatePath: Paths\.resolveTelegramStatePath,/u);
-  assert.match(source, /path: Paths\.resolveTelegramStatePath,/u);
-  assert.match(source, /getLeaderJournalPath: telegramLeaderJournalPath\.resolve,/u);
-  assert.doesNotMatch(source, /getPath: Paths\.resolveTelegramWorkspaceAdmissionPath[,\n]/u);
-  assert.doesNotMatch(source, /getLeaderJournalPath: Paths\.resolveTelegramUpdateJournalPath[,\n]/u);
+  assert.match(source, /getStatePath: Paths\.resolveBaleStatePath,/u);
+  assert.match(source, /path: Paths\.resolveBaleStatePath,/u);
+  assert.match(source, /getLeaderJournalPath: baleLeaderJournalPath\.resolve,/u);
+  assert.doesNotMatch(source, /getPath: Paths\.resolveBaleWorkspaceAdmissionPath[,\n]/u);
+  assert.doesNotMatch(source, /getLeaderJournalPath: Paths\.resolveBaleUpdateJournalPath[,\n]/u);
 });
 
 test("Production keeps custody cutover and operator authority disconnected", () => {
@@ -403,19 +403,19 @@ test("Production keeps custody cutover and operator authority disconnected", () 
   for (const forbidden of [
     "acquireJournalWriterClosure",
     "installJournalWriterProtocolMode",
-    "executeTelegramInputCustodyWriterCutover",
-    "executeTelegramInputCustodyMigrationCompletion",
+    "executeBaleInputCustodyWriterCutover",
+    "executeBaleInputCustodyMigrationCompletion",
     "authorizeLegacyCustodyDisposition",
     "authorizeJournalWriterProtocolClosure",
-    "createTelegramInputCustodyLegacyDispositionRuntime",
+    "createBaleInputCustodyLegacyDispositionRuntime",
   ]) assert.equal(source.includes(forbidden), false, forbidden);
 });
 
 test("Production journal resolver reads remain scoped or lifecycle-owned", () => {
   const source = readFileSync(join(PROJECT_ROOT, "lib/extension.ts"), "utf8");
   assert.doesNotMatch(source,
-    /resolveTelegram\w*JournalBinding\(\)\?\.journal\.read/u);
-  assert.ok((source.match(/withTelegramResolvedUpdateJournalReference\(/gu) ?? []).length >= 4);
+    /resolveBale\w*JournalBinding\(\)\?\.journal\.read/u);
+  assert.ok((source.match(/withBaleResolvedUpdateJournalReference\(/gu) ?? []).length >= 4);
   assert.match(source, /withJournalReference\(binding, operation\)/u);
   assert.match(source, /acquireSourceReference\(role, binding\)/u);
 });
@@ -436,20 +436,20 @@ test("Extension composition stays free of local runtime adapters", () => {
   assert.equal(source.includes("new Set"), false);
   assert.equal(source.includes("!."), false);
   assert.equal(/\bpi\./.test(source), false);
-  assert.equal(source.includes("Threads.createTelegramTopicTargetRenamer"), false);
-  assert.match(source, /telegramBusLeaderRuntime\.renameLeaderThreadAdmitted\s*\(/u);
+  assert.equal(source.includes("Threads.createBaleTopicTargetRenamer"), false);
+  assert.match(source, /baleBusLeaderRuntime\.renameLeaderThreadAdmitted\s*\(/u);
   assert.deepEqual(
     [
-      "Queue.createTelegramQueueMutationController",
-      "Queue.createTelegramQueueDispatchRuntime",
-      "Queue.createTelegramQueueDispatchWatchdogRuntime",
-      "Threads.createTelegramCurrentInstanceThreadRuntime",
-      "Threads.createTelegramThreadStatusProjectionRuntime",
-      "Sync.createTelegramManualThreadDisconnectHandler",
-      "Sync.createTelegramSessionRestartThreadCleanupHandler",
-      "Updates.createTelegramQueueHandoffReconciler",
-      "Updates.createTelegramUpdateWorkerOwnerRuntime",
-      "Updates.createTelegramUpdateAdmissionLifecycleAssembly",
+      "Queue.createBaleQueueMutationController",
+      "Queue.createBaleQueueDispatchRuntime",
+      "Queue.createBaleQueueDispatchWatchdogRuntime",
+      "Threads.createBaleCurrentInstanceThreadRuntime",
+      "Threads.createBaleThreadStatusProjectionRuntime",
+      "Sync.createBaleManualThreadDisconnectHandler",
+      "Sync.createBaleSessionRestartThreadCleanupHandler",
+      "Updates.createBaleQueueHandoffReconciler",
+      "Updates.createBaleUpdateWorkerOwnerRuntime",
+      "Updates.createBaleUpdateAdmissionLifecycleAssembly",
     ].filter((factory) => source.includes(factory)),
     [],
   );
@@ -492,7 +492,7 @@ test("Automatic Workspace retirement stays disconnected from production composit
   );
   assert.match(
     compositionSource,
-    /createTelegramWorkspaceAdmissionRuntimeBinding\s*\(/u,
+    /createBaleWorkspaceAdmissionRuntimeBinding\s*\(/u,
   );
   assert.match(
     compositionSource,
@@ -500,7 +500,7 @@ test("Automatic Workspace retirement stays disconnected from production composit
   );
   assert.match(
     compositionSource,
-    /createTelegramBusFollowerPromotionHandler[\s\S]*?getWorkspaceAdmission:\s*workspaceAdmissionRuntime\.resolve[\s\S]*?startLeader/u,
+    /createBaleBusFollowerPromotionHandler[\s\S]*?getWorkspaceAdmission:\s*workspaceAdmissionRuntime\.resolve[\s\S]*?startLeader/u,
   );
   assert.match(
     compositionSource,
@@ -512,18 +512,18 @@ test("Automatic Workspace retirement stays disconnected from production composit
   );
   assert.match(
     compositionSource,
-    /createTelegramWorkspaceOperationRuntime[\s\S]*?getWorkspaceAdmission:\s*workspaceAdmissionRuntime\.resolve/u,
+    /createBaleWorkspaceOperationRuntime[\s\S]*?getWorkspaceAdmission:\s*workspaceAdmissionRuntime\.resolve/u,
   );
   for (const factory of [
-    "createTelegramObservedTopicLifecycleSyncHandler",
-    "createTelegramInboundRouteRuntime",
-    "createTelegramBusLeaderRuntimeAssembly",
-    "createTelegramThreadDisconnectAssembly",
+    "createBaleObservedTopicLifecycleSyncHandler",
+    "createBaleInboundRouteRuntime",
+    "createBaleBusLeaderRuntimeAssembly",
+    "createBaleThreadDisconnectAssembly",
   ]) {
     assert.match(
       compositionSource,
       new RegExp(
-        `${factory}[\\s\\S]*?runWorkspaceOperation:\\s*telegramWorkspaceOperationRuntime\\.run`,
+        `${factory}[\\s\\S]*?runWorkspaceOperation:\\s*baleWorkspaceOperationRuntime\\.run`,
         "u",
       ),
     );
@@ -552,11 +552,11 @@ test("Automatic Workspace retirement stays disconnected from production composit
   assert.match(retirementSource, /input\.deleteForumTopic\s*\(/u);
   assert.match(
     retirementSource,
-    /pruneTelegramWorkspaceJournalEvidence[\s\S]*?admission:\s*Pick<[\s\S]*?operationKind:\s*"workspace\.prune-journal-evidence"/u,
+    /pruneBaleWorkspaceJournalEvidence[\s\S]*?admission:\s*Pick<[\s\S]*?operationKind:\s*"workspace\.prune-journal-evidence"/u,
   );
   const productionRetirementEntrypoints = [
-    "runTelegramWorkspaceRetirementLifecycle",
-    "executeTelegramWorkspaceRetirement",
+    "runBaleWorkspaceRetirementLifecycle",
+    "executeBaleWorkspaceRetirement",
   ];
   const productionConsumers = getProjectSourceFiles().filter((file) => {
     if (file === join("lib", "workspace-retirement.ts")) return false;
@@ -568,8 +568,8 @@ test("Automatic Workspace retirement stays disconnected from production composit
     );
   });
   assert.deepEqual(productionConsumers, []);
-  assert.match(compositionSource, /workspaceRotation:\s*\{[\s\S]*?getAdmission:\s*workspaceAdmissionRuntime\.resolve,[\s\S]*?runExclusive:\s*telegramWorkspaceOperationRuntime\.runExclusive,[\s\S]*?deleteThread:\s*directTelegramApiRuntime\.deleteWorkspaceThread/u);
-  assert.match(busLeaderSource, /createTelegramWorkspaceSlotRotation\s*\(/u);
+  assert.match(compositionSource, /workspaceRotation:\s*\{[\s\S]*?getAdmission:\s*workspaceAdmissionRuntime\.resolve,[\s\S]*?runExclusive:\s*baleWorkspaceOperationRuntime\.runExclusive,[\s\S]*?deleteThread:\s*directBaleApiRuntime\.deleteWorkspaceThread/u);
+  assert.match(busLeaderSource, /createBaleWorkspaceSlotRotation\s*\(/u);
   assert.match(busLeaderSource, /!restoringWorkspace && deps\.runWithWorkspaceCapacity/u);
 });
 
@@ -612,8 +612,8 @@ test("Menu domain stays on structural ports and does not re-export model", () =>
   );
 });
 
-test("Telegram API transport stays decoupled from persisted config defaults", () => {
-  const apiImports = getImportSpecifiers(join("lib", "telegram-api.ts"));
+test("Bale API transport stays decoupled from persisted config defaults", () => {
+  const apiImports = getImportSpecifiers(join("lib", "bale-api.ts"));
   assert.equal(apiImports.includes("./config.ts"), false);
 });
 
@@ -622,7 +622,7 @@ test("Structural update and media domains stay decoupled from concrete API trans
   const apiImportsByFile = Object.fromEntries(
     structuralFiles.map((file) => [
       join("lib", file),
-      getImportSpecifiers(join("lib", file)).includes("./telegram-api.ts"),
+      getImportSpecifiers(join("lib", file)).includes("./bale-api.ts"),
     ]),
   );
   assert.deepEqual(apiImportsByFile, {
@@ -631,7 +631,7 @@ test("Structural update and media domains stay decoupled from concrete API trans
   });
 });
 
-test("Core assistant output never constructs Telegram Thinking blocks", () => {
+test("Core assistant output never constructs Bale Thinking blocks", () => {
   for (const file of [
     "replies.ts",
     "preview.ts",
@@ -642,7 +642,7 @@ test("Core assistant output never constructs Telegram Thinking blocks", () => {
     assert.doesNotMatch(
       source,
       /tg-thinking|InputRichBlockThinking|type\s*:\s*["']thinking["']/,
-      `${file} must not project hidden reasoning into Telegram Thinking blocks`,
+      `${file} must not project hidden reasoning into Bale Thinking blocks`,
     );
   }
 });
@@ -653,13 +653,13 @@ test("Outbound attachment delivery stays decoupled from queue, inbound media, an
   );
   assert.equal(attachmentImports.includes("./queue.ts"), false);
   assert.equal(attachmentImports.includes("./media.ts"), false);
-  assert.equal(attachmentImports.includes("./telegram-api.ts"), false);
+  assert.equal(attachmentImports.includes("./bale-api.ts"), false);
 });
 
 test("Live-rebind command channel has no per-command wire or follower-owner aliases", () => {
   for (const file of ["bus.ts", "bus-follower.ts", "routing.ts", "bindings.ts", "extension.ts"]) {
     const source = readFileSync(join(PROJECT_ROOT, "lib", file), "utf8");
-    assert.doesNotMatch(source, /\b(selectedStatus|TelegramBusSelectedStatusInput|TelegramBusLiveRebindStatusObservation|getStatusOwner|isSelectedStatusAvailable|isLiveRebindStatusEnabled|isLiveRebindHeldCommandEnabled)\b|live-thread-rebind-(status|held-command)-v1|observe-status|status-observed/,
+    assert.doesNotMatch(source, /\b(selectedStatus|BaleBusSelectedStatusInput|BaleBusLiveRebindStatusObservation|getStatusOwner|isSelectedStatusAvailable|isLiveRebindStatusEnabled|isLiveRebindHeldCommandEnabled)\b|live-thread-rebind-(status|held-command)-v1|observe-status|status-observed/,
       `${file} must use only the unified command marker, observation, capability and owner`);
   }
 });
@@ -682,7 +682,7 @@ test("Weakened live-rebind cleanup protection stays confined to its own origin",
 });
 
 await test("Export audit resolves aliases, namespace access, public stars and JS consumers", async () => {
-  const root = await mkdtemp(join(tmpdir(), "telegram-export-audit-"));
+  const root = await mkdtemp(join(tmpdir(), "bale-export-audit-"));
   try {
     for (const name of ["lib", "api", "tests", "scripts"]) await mkdir(join(root, name));
     await writeFile(join(root, "tsconfig.json"), JSON.stringify({

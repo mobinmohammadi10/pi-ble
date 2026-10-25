@@ -1,111 +1,111 @@
 /**
- * Telegram preview streaming helpers
- * Zones: telegram outbound, native rich markdown drafts
+ * Bale preview streaming helpers
+ * Zones: bale outbound, native rich markdown drafts
  * Owns safe draft preview selection, runtime updates, and preview finalization
  * The streaming state machine is a pure transition function driven by one imperative shell per runtime.
  */
-import type { TelegramAssistantOutputPreparation } from "./activity.ts";
-import { type TelegramTarget } from "./target.ts";
-export interface TelegramPreviewState {
+import type { BaleAssistantOutputPreparation } from "./activity.ts";
+import { type BaleTarget } from "./target.ts";
+export interface BalePreviewState {
     mode: "draft";
     draftId?: number;
     pendingText: string;
     lastSentText: string;
 }
 /** One immutable preview segment; a replacement segment gets a new id, so late results for an old one are dropped. */
-export interface TelegramPreviewSegment extends Readonly<TelegramPreviewState> {
+export interface BalePreviewSegment extends Readonly<BalePreviewState> {
     readonly id: number;
     readonly sealed: boolean;
 }
-export type TelegramPreviewReplyMarkup = unknown;
-type TelegramDraftSender = (chatId: number, draftId: number, text?: string, options?: {
+export type BalePreviewReplyMarkup = unknown;
+type BaleDraftSender = (chatId: number, draftId: number, text?: string, options?: {
     parse_mode?: string;
     entities?: unknown[];
     message_thread_id?: number;
 }) => Promise<unknown>;
-type TelegramPreviewEventRecorder = (category: string, error: unknown, details?: Record<string, unknown>) => void;
-export interface TelegramPreviewActiveTurn {
+type BalePreviewEventRecorder = (category: string, error: unknown, details?: Record<string, unknown>) => void;
+export interface BalePreviewActiveTurn {
     chatId: number;
     replyToMessageId?: number;
-    target?: TelegramTarget;
+    target?: BaleTarget;
     voiceReplyPreferred?: boolean;
     voiceReplyRequired?: boolean;
     guestQueryId?: string;
 }
-export interface TelegramAssistantMessagePreviewHookEvent<TMessage> {
+export interface BaleAssistantMessagePreviewHookEvent<TMessage> {
     message: TMessage;
 }
-export interface TelegramAssistantMessagePreviewHooks<TMessage> {
-    onMessageStart: (event: TelegramAssistantMessagePreviewHookEvent<TMessage>) => Promise<void>;
-    onMessageUpdate: (event: TelegramAssistantMessagePreviewHookEvent<TMessage>) => Promise<void>;
+export interface BaleAssistantMessagePreviewHooks<TMessage> {
+    onMessageStart: (event: BaleAssistantMessagePreviewHookEvent<TMessage>) => Promise<void>;
+    onMessageUpdate: (event: BaleAssistantMessagePreviewHookEvent<TMessage>) => Promise<void>;
 }
-export interface TelegramPreviewControllerDeps {
+export interface BalePreviewControllerDeps {
     getDefaultReplyToMessageId?: () => number | undefined;
     maxMessageLength?: number;
-    sendDraft: TelegramDraftSender;
+    sendDraft: BaleDraftSender;
     canSend?: () => boolean;
     maxDraftId?: number;
     /** Throttle between draft frames; defaults to the native draft cadence. */
     minDraftIntervalMs?: number;
-    recordRuntimeEvent?: TelegramPreviewEventRecorder;
+    recordRuntimeEvent?: BalePreviewEventRecorder;
 }
-type TelegramPreviewTargetOptions = {
-    target?: TelegramTarget;
+type BalePreviewTargetOptions = {
+    target?: BaleTarget;
 };
-export interface TelegramPreviewController {
+export interface BalePreviewController {
     /** Read-only view of the current segment; it never grants mutation. */
-    getState: () => TelegramPreviewSegment | undefined;
+    getState: () => BalePreviewSegment | undefined;
     /** True while a draft request is in flight or a pending request waits behind a publication. */
     isFlushing: () => boolean;
     seal: () => void;
-    preparePublication: () => TelegramAssistantOutputPreparation | undefined;
-    prepareClear: (chatId: number, options?: TelegramPreviewTargetOptions & {
+    preparePublication: () => BaleAssistantOutputPreparation | undefined;
+    prepareClear: (chatId: number, options?: BalePreviewTargetOptions & {
         isDeliveryActive?: () => boolean;
     }) => () => Promise<void>;
     setPendingText: (text: string) => void;
     resetState: () => void;
     invalidate: () => void;
-    clear: (chatId: number, options?: TelegramPreviewTargetOptions & {
+    clear: (chatId: number, options?: BalePreviewTargetOptions & {
         awaitFlush?: boolean;
     }) => Promise<void>;
-    flush: (chatId: number, options?: TelegramPreviewTargetOptions) => Promise<void>;
-    scheduleFlush: (chatId: number, options?: TelegramPreviewTargetOptions) => void;
-    finalize: (chatId: number, replyToMessageId?: number, options?: TelegramPreviewTargetOptions) => Promise<boolean>;
+    flush: (chatId: number, options?: BalePreviewTargetOptions) => Promise<void>;
+    scheduleFlush: (chatId: number, options?: BalePreviewTargetOptions) => void;
+    finalize: (chatId: number, replyToMessageId?: number, options?: BalePreviewTargetOptions) => Promise<boolean>;
 }
-export interface TelegramAssistantPreviewRuntimeDeps<TMessage, TReplyMarkup = TelegramPreviewReplyMarkup> extends TelegramPreviewControllerDeps {
-    getActiveTurn: () => TelegramPreviewActiveTurn | undefined;
+export interface BaleAssistantPreviewRuntimeDeps<TMessage, TReplyMarkup = BalePreviewReplyMarkup> extends BalePreviewControllerDeps {
+    getActiveTurn: () => BalePreviewActiveTurn | undefined;
     isAssistantMessage: (message: TMessage) => boolean;
     getMessageText: (message: TMessage) => string;
     sendMarkdownReply: (chatId: number, replyToMessageId: number | undefined, markdown: string, options?: {
         replyMarkup?: TReplyMarkup;
-        target?: TelegramTarget;
+        target?: BaleTarget;
     }) => Promise<number | undefined>;
 }
-type TelegramMarkdownFinalizer<TReplyMarkup> = (chatId: number, markdown: string, replyToMessageId?: number, options?: {
+type BaleMarkdownFinalizer<TReplyMarkup> = (chatId: number, markdown: string, replyToMessageId?: number, options?: {
     replyMarkup?: TReplyMarkup;
-    target?: TelegramTarget;
+    target?: BaleTarget;
 }) => Promise<boolean>;
-export interface TelegramPreparedPreviewDelivery<TReplyMarkup = unknown> {
-    clearPreview: TelegramPreviewController["clear"];
-    setPreviewPendingText: TelegramPreviewController["setPendingText"];
-    finalizeMarkdownPreview: TelegramMarkdownFinalizer<TReplyMarkup>;
+export interface BalePreparedPreviewDelivery<TReplyMarkup = unknown> {
+    clearPreview: BalePreviewController["clear"];
+    setPreviewPendingText: BalePreviewController["setPendingText"];
+    finalizeMarkdownPreview: BaleMarkdownFinalizer<TReplyMarkup>;
 }
-export type TelegramAssistantPreviewRuntime<TMessage, TReplyMarkup = TelegramPreviewReplyMarkup> = TelegramPreviewController & TelegramAssistantMessagePreviewHooks<TMessage> & {
-    prepareDelivery: (isDeliveryActive: () => boolean) => TelegramPreparedPreviewDelivery<TReplyMarkup>;
-    finalizeMarkdown: TelegramMarkdownFinalizer<TReplyMarkup>;
+export type BaleAssistantPreviewRuntime<TMessage, TReplyMarkup = BalePreviewReplyMarkup> = BalePreviewController & BaleAssistantMessagePreviewHooks<TMessage> & {
+    prepareDelivery: (isDeliveryActive: () => boolean) => BalePreparedPreviewDelivery<TReplyMarkup>;
+    finalizeMarkdown: BaleMarkdownFinalizer<TReplyMarkup>;
 };
-interface TelegramPreviewFlushRequest {
+interface BalePreviewFlushRequest {
     chatId: number;
-    target?: TelegramTarget;
+    target?: BaleTarget;
 }
-interface TelegramPreviewMachineConfig {
+interface BalePreviewMachineConfig {
     maxDraftId: number;
     maxMessageLength: number;
     minDraftIntervalMs: number;
 }
-/** The whole preview state; only `transitionTelegramPreview` produces a new one. */
-export interface TelegramPreviewMachineState {
-    readonly segment: TelegramPreviewSegment | null;
+/** The whole preview state; only `transitionBalePreview` produces a new one. */
+export interface BalePreviewMachineState {
+    readonly segment: BalePreviewSegment | null;
     /** Bumped by reset and invalidation; a result issued under an older generation is inert. */
     readonly generation: number;
     readonly nextSegmentId: number;
@@ -114,17 +114,17 @@ export interface TelegramPreviewMachineState {
     /** Segment that owns the current generation's issued draft; old-generation requests do not block it. */
     readonly inFlight: number | null;
     /** The one coalesced flush request waiting behind an in-flight draft or an open publication. */
-    readonly pending: TelegramPreviewFlushRequest | null;
+    readonly pending: BalePreviewFlushRequest | null;
     readonly publications: readonly number[];
     /** The segment the throttle timer is armed for; the timer belongs to that segment alone. */
     readonly timerSegmentId: number | null;
 }
 /** Impure inputs the runner samples at dispatch time, so transitions stay pure. */
-interface TelegramPreviewClock {
+interface BalePreviewClock {
     now: number;
     canSend: boolean;
 }
-export type TelegramPreviewEvent = {
+export type BalePreviewEvent = {
     type: "reset";
 } | {
     type: "invalidated";
@@ -144,27 +144,27 @@ export type TelegramPreviewEvent = {
     at: number;
 } | ({
     type: "flushRequested";
-    request: TelegramPreviewFlushRequest;
-} & TelegramPreviewClock) | ({
+    request: BalePreviewFlushRequest;
+} & BalePreviewClock) | ({
     type: "timerFired";
-    request: TelegramPreviewFlushRequest;
+    request: BalePreviewFlushRequest;
     segmentId: number;
-} & TelegramPreviewClock) | ({
+} & BalePreviewClock) | ({
     type: "draftSettled";
     segmentId: number;
     generation: number;
-    /** Present only when Telegram accepted the draft. */
+    /** Present only when Bale accepted the draft. */
     text?: string;
-} & TelegramPreviewClock) | {
+} & BalePreviewClock) | {
     type: "publicationOpened";
     id: number;
 } | ({
     type: "publicationSettled";
     id: number;
-} & TelegramPreviewClock);
-export type TelegramPreviewEffect = {
+} & BalePreviewClock);
+export type BalePreviewEffect = {
     type: "sendDraft";
-    request: TelegramPreviewFlushRequest;
+    request: BalePreviewFlushRequest;
     draftId: number;
     text: string;
     segmentId: number;
@@ -172,33 +172,33 @@ export type TelegramPreviewEffect = {
 } | {
     type: "armTimer";
     delay: number;
-    request: TelegramPreviewFlushRequest;
+    request: BalePreviewFlushRequest;
     segmentId: number;
 } | {
     type: "cancelTimer";
 } | {
     type: "clearClosedGate";
-    request: TelegramPreviewFlushRequest;
+    request: BalePreviewFlushRequest;
 };
-export interface TelegramPreviewStep {
-    state: TelegramPreviewMachineState;
-    effects: readonly TelegramPreviewEffect[];
+export interface BalePreviewStep {
+    state: BalePreviewMachineState;
+    effects: readonly BalePreviewEffect[];
 }
-export declare function createTelegramPreviewMachineState(): TelegramPreviewMachineState;
-export declare function transitionTelegramPreview(state: TelegramPreviewMachineState, event: TelegramPreviewEvent, config: TelegramPreviewMachineConfig): TelegramPreviewStep;
+export declare function createBalePreviewMachineState(): BalePreviewMachineState;
+export declare function transitionBalePreview(state: BalePreviewMachineState, event: BalePreviewEvent, config: BalePreviewMachineConfig): BalePreviewStep;
 /** True while a draft request is in flight, or, when publications block, a pending request waits behind one. */
-export declare function isTelegramPreviewBusy(state: TelegramPreviewMachineState, blockedByPublication?: boolean): boolean;
-export declare function createTelegramPreviewController(deps: TelegramPreviewControllerDeps): TelegramPreviewController;
+export declare function isBalePreviewBusy(state: BalePreviewMachineState, blockedByPublication?: boolean): boolean;
+export declare function createBalePreviewController(deps: BalePreviewControllerDeps): BalePreviewController;
 /**
- * Returns true when the active turn is a Telegram Guest Mode query. A guest
- * query allows exactly one answer within a limited Telegram response window,
+ * Returns true when the active turn is a Bale Guest Mode query. A guest
+ * query allows exactly one answer within a limited Bale response window,
  * so it must never emit streaming draft previews.
  */
 export declare function shouldSuppressPreviewForGuestTurn(turn: {
     guestQueryId?: string;
 } | null | undefined): boolean;
-export declare function createTelegramAssistantPreviewRuntime<TMessage, TReplyMarkup = TelegramPreviewReplyMarkup>(deps: TelegramAssistantPreviewRuntimeDeps<TMessage, TReplyMarkup>): TelegramAssistantPreviewRuntime<TMessage, TReplyMarkup>;
-export declare function buildTelegramPreviewFinalText(state: TelegramPreviewState): string | undefined;
-export declare function allocateTelegramDraftId(currentDraftId: number, maxDraftId: number): number;
-export declare function getSafeTelegramRichMarkdownDraftPrefix(markdown: string, maxMessageLength: number): string | undefined;
+export declare function createBaleAssistantPreviewRuntime<TMessage, TReplyMarkup = BalePreviewReplyMarkup>(deps: BaleAssistantPreviewRuntimeDeps<TMessage, TReplyMarkup>): BaleAssistantPreviewRuntime<TMessage, TReplyMarkup>;
+export declare function buildBalePreviewFinalText(state: BalePreviewState): string | undefined;
+export declare function allocateBaleDraftId(currentDraftId: number, maxDraftId: number): number;
+export declare function getSafeBaleRichMarkdownDraftPrefix(markdown: string, maxMessageLength: number): string | undefined;
 export {};

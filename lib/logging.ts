@@ -1,6 +1,6 @@
 /**
- * Telegram diagnostics logs
- * Zones: telegram diagnostics, filesystem, session observability
+ * Bale diagnostics logs
+ * Zones: bale diagnostics, filesystem, session observability
  * Owns bounded JSONL runtime evidence files, previous-log preservation, and profile-aware log paths without becoming routing state
  */
 
@@ -14,52 +14,52 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { withTelegramFileTransaction } from "./locks.ts";
+import { withBaleFileTransaction } from "./locks.ts";
 import {
   resolveAgentDir,
-  resolveTelegramPreviousSharedRuntimeLogPath,
-  resolveTelegramProfileTempFilePath,
-  resolveTelegramRuntimeLogPath,
+  resolveBalePreviousSharedRuntimeLogPath,
+  resolveBaleProfileTempFilePath,
+  resolveBaleRuntimeLogPath,
 } from "./paths.ts";
 import * as Status from "./status.ts";
 
 /** Sink shape shared with the runtime event recorder this domain already owns. */
-export type TelegramFailureRecordSink = (
+export type BaleFailureRecordSink = (
   category: string,
   errorOrMessage: unknown,
   details: Record<string, unknown>,
 ) => void;
 
-export interface TelegramFailureRunSummary {
+export interface BaleFailureRunSummary {
   signature: string;
   failedAttempts: number;
   suppressedFailures: number;
   failedForMs: number;
 }
 
-export interface TelegramFailureRunLog {
+export interface BaleFailureRunLog {
   /** Records one failure; a repeated identical failure only extends the current run and returns false. */
   record: (error: unknown, details?: Record<string, unknown>) => boolean;
   /** Closes the run after a success, emitting its single outcome record. */
-  settled: () => TelegramFailureRunSummary | undefined;
+  settled: () => BaleFailureRunSummary | undefined;
   /** Ends the run without an outcome record, for a stop or replacement that reports its own outcome. */
   reset: () => void;
 }
 
-export interface TelegramFailureRunLogInput {
+export interface BaleFailureRunLogInput {
   category: string;
   failurePhase: string;
   outcomePhase: string;
   /** Human-readable subject for the outcome record, e.g. `follower heartbeat`. */
   label: string;
-  record?: TelegramFailureRecordSink;
+  record?: BaleFailureRecordSink;
   /** Static context reapplied to every record of this phase, e.g. a session or profile key. */
   context?: () => Record<string, unknown>;
   getNowMs?: () => number;
 }
 
 /** Stable identity of one failure kind: errno when present, otherwise the failure text. */
-export function getTelegramFailureSignature(error: unknown): string {
+export function getBaleFailureSignature(error: unknown): string {
   const code = (error as NodeJS.ErrnoException | undefined)?.code;
   if (typeof code === "string" && code) return code;
   return error instanceof Error ? error.message : String(error);
@@ -69,9 +69,9 @@ export function getTelegramFailureSignature(error: unknown): string {
  * Consecutive identical failure runs for one diagnostic phase: a repeat extends the run instead of logging again,
  * and a closing success or reset emits at most one outcome record. This never gates detection or recovery.
  */
-export function createTelegramFailureRunLog(
-  input: TelegramFailureRunLogInput,
-): TelegramFailureRunLog {
+export function createBaleFailureRunLog(
+  input: BaleFailureRunLogInput,
+): BaleFailureRunLog {
   const getNowMs = input.getNowMs ?? Date.now;
   let run: { signature: string; suppressed: number; startedAtMs: number; details: Record<string, unknown> } | undefined;
   const emit = (errorOrMessage: unknown, details: Record<string, unknown>): void => {
@@ -86,7 +86,7 @@ export function createTelegramFailureRunLog(
   };
   return {
     record(error, details) {
-      const signature = getTelegramFailureSignature(error);
+      const signature = getBaleFailureSignature(error);
       const admitted = { ...(details ?? {}) };
       if (run?.signature === signature) {
         run.suppressed += 1;
@@ -113,13 +113,13 @@ export function createTelegramFailureRunLog(
       const closed = run;
       if (!closed) return undefined;
       run = undefined;
-      const summary: TelegramFailureRunSummary = {
+      const summary: BaleFailureRunSummary = {
         signature: closed.signature,
         failedAttempts: closed.suppressed + 1,
         suppressedFailures: closed.suppressed,
         failedForMs: getNowMs() - closed.startedAtMs,
       };
-      emit(`Telegram ${input.label} recovered after ${summary.failedAttempts} failed attempts.`, {
+      emit(`Bale ${input.label} recovered after ${summary.failedAttempts} failed attempts.`, {
         ...closed.details,
         phase: input.outcomePhase,
         failureSignature: summary.signature,
@@ -135,18 +135,18 @@ export function createTelegramFailureRunLog(
   };
 }
 
-type TelegramLogPathInput = string | (() => string);
+type BaleLogPathInput = string | (() => string);
 
-interface TelegramRuntimeJsonlEvent {
+interface BaleRuntimeJsonlEvent {
   at: number;
   category: string;
   message: string;
   details?: Record<string, unknown>;
 }
 
-interface TelegramRuntimeJsonlLogOptions {
-  path?: TelegramLogPathInput;
-  previousPath?: TelegramLogPathInput;
+interface BaleRuntimeJsonlLogOptions {
+  path?: BaleLogPathInput;
+  previousPath?: BaleLogPathInput;
   maxBytes?: number;
   getNowMs?: () => number;
   canReset?: () => boolean;
@@ -158,7 +158,7 @@ interface TelegramRuntimeJsonlLogOptions {
   };
 }
 
-interface TelegramRuntimeJsonlLog {
+interface BaleRuntimeJsonlLog {
   getPath: () => string;
   reset: (reason: string, scope?: Record<string, unknown>) => void;
   resetIfScopeChanged: (
@@ -166,16 +166,16 @@ interface TelegramRuntimeJsonlLog {
     reason: string,
     scope?: Record<string, unknown>,
   ) => void;
-  record: (event: TelegramRuntimeJsonlEvent) => void;
+  record: (event: BaleRuntimeJsonlEvent) => void;
 }
 
 const DEFAULT_MAX_LOG_BYTES = 5 * 1024 * 1024;
 
-export function getTelegramRuntimeLogPath(
+export function getBaleRuntimeLogPath(
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
-  return resolveTelegramProfileTempFilePath(
+  return resolveBaleProfileTempFilePath(
     "logs",
     "jsonl",
     agentDir,
@@ -183,11 +183,11 @@ export function getTelegramRuntimeLogPath(
   );
 }
 
-export function getTelegramPreviousRuntimeLogPath(
+export function getBalePreviousRuntimeLogPath(
   agentDir = resolveAgentDir(),
   profileName?: string,
 ): string {
-  return resolveTelegramProfileTempFilePath(
+  return resolveBaleProfileTempFilePath(
     "logs",
     "_prev.jsonl",
     agentDir,
@@ -205,9 +205,9 @@ function safeJsonLine(value: unknown): string {
   });
 }
 
-export function createTelegramRuntimeJsonlLog(
-  options: TelegramRuntimeJsonlLogOptions = {},
-): TelegramRuntimeJsonlLog {
+export function createBaleRuntimeJsonlLog(
+  options: BaleRuntimeJsonlLogOptions = {},
+): BaleRuntimeJsonlLog {
   const shared = options.sharedProfiles
     ? { ...options.sharedProfiles }
     : undefined;
@@ -218,7 +218,7 @@ export function createTelegramRuntimeJsonlLog(
   const resolvePath = () =>
     typeof pathSource === "function"
       ? pathSource()
-      : (pathSource ?? getTelegramRuntimeLogPath());
+      : (pathSource ?? getBaleRuntimeLogPath());
   const resolvePreviousPath = () => {
     if (typeof previousSource === "function") return previousSource();
     if (previousSource) return previousSource;
@@ -308,7 +308,7 @@ export function createTelegramRuntimeJsonlLog(
     const isCurrent = captureRotation(path, previousPath, profile);
     if (canReset && !canReset()) return false;
     let didReset = false;
-    withTelegramFileTransaction(transactionPath(path), () => {
+    withBaleFileTransaction(transactionPath(path), () => {
       const commit = () => {
         if (shared && !isCurrent?.()) return;
         if (shared) {
@@ -349,7 +349,7 @@ export function createTelegramRuntimeJsonlLog(
     return didReset && (!shared || isCurrent?.() === true);
   };
 
-  const appendEvent = (event: TelegramRuntimeJsonlEvent) => {
+  const appendEvent = (event: BaleRuntimeJsonlEvent) => {
     const path = resolvePath(),
       previousPath = resolvePreviousPath(),
       profile = getProfile();
@@ -386,7 +386,7 @@ export function createTelegramRuntimeJsonlLog(
         for (const group of groups.values()) {
           try {
             ensureParent(group.path);
-            withTelegramFileTransaction(transactionPath(group.path), () => {
+            withBaleFileTransaction(transactionPath(group.path), () => {
               let currentSize = existsSync(group.path)
                 ? statSync(group.path).size
                 : 0;
@@ -457,7 +457,7 @@ export function createTelegramRuntimeJsonlLog(
           );
         }
       } catch {
-        // Diagnostics must never break Telegram runtime behavior.
+        // Diagnostics must never break Bale runtime behavior.
       }
     },
     resetIfScopeChanged(nextScopeKey, reason, scope) {
@@ -469,25 +469,25 @@ export function createTelegramRuntimeJsonlLog(
         if (writeReset(reason, scope, path, profile))
           scopeKeys.set(key, nextScopeKey);
       } catch {
-        // Diagnostics must never break Telegram runtime behavior.
+        // Diagnostics must never break Bale runtime behavior.
       }
     },
     record(event) {
       try {
         appendEvent(event);
       } catch {
-        // Diagnostics must never break Telegram runtime behavior.
+        // Diagnostics must never break Bale runtime behavior.
       }
     },
   };
 }
 
-interface TelegramRuntimeDiagnosticsStatusPorts<TContext> {
+interface BaleRuntimeDiagnosticsStatusPorts<TContext> {
   instanceId: string;
   updateStatus(ctx: TContext, error?: string): void;
-  getStatusState(): Status.TelegramBridgeStatusLineState;
+  getStatusState(): Status.BaleBridgeStatusLineState;
   persistSnapshot(
-    snapshot: ReturnType<typeof Status.createTelegramStatusSnapshot>,
+    snapshot: ReturnType<typeof Status.createBaleStatusSnapshot>,
   ): Promise<void>;
   session?: {
     get(): TContext | undefined;
@@ -496,8 +496,8 @@ interface TelegramRuntimeDiagnosticsStatusPorts<TContext> {
   };
 }
 
-interface TelegramRuntimeDiagnosticsRuntime<TContext> {
-  events: Status.TelegramRuntimeEventRecorder;
+interface BaleRuntimeDiagnosticsRuntime<TContext> {
+  events: Status.BaleRuntimeEventRecorder;
   recordRuntimeEvent(
     category: string,
     error: unknown,
@@ -505,8 +505,8 @@ interface TelegramRuntimeDiagnosticsRuntime<TContext> {
   ): void;
   /** A phase-scoped failure log whose records travel through this runtime's own event pipeline. */
   createFailureLog(
-    input: Omit<TelegramFailureRunLogInput, "record">,
-  ): TelegramFailureRunLog;
+    input: Omit<BaleFailureRunLogInput, "record">,
+  ): BaleFailureRunLog;
   bindStorage(ports: {
     getBotToken(): string | undefined;
     getProfileName(): string | undefined;
@@ -514,44 +514,44 @@ interface TelegramRuntimeDiagnosticsRuntime<TContext> {
     commitReset(commit: () => void): boolean;
     captureAuthority?: () => (() => boolean) | undefined;
   }): void;
-  bindStatus(ports: TelegramRuntimeDiagnosticsStatusPorts<TContext>): void;
+  bindStatus(ports: BaleRuntimeDiagnosticsStatusPorts<TContext>): void;
   onSessionStart(): void;
   onSessionShutdown(): Promise<void>;
   updateStatus(ctx: TContext, error?: string): void;
-  getStatusLines(options?: Status.TelegramBridgeStatusLineOptions): string[];
+  getStatusLines(options?: Status.BaleBridgeStatusLineOptions): string[];
   scheduleSnapshotPersist(): void;
 }
 
-export function createTelegramRuntimeDiagnosticsRuntime<TContext>(
+export function createBaleRuntimeDiagnosticsRuntime<TContext>(
   options: {
     sharedFile?: boolean;
     snapshotTimer?: Pick<
       Parameters<
-        typeof Status.createTelegramRuntimeDiagnosticsSnapshotScheduler
+        typeof Status.createBaleRuntimeDiagnosticsSnapshotScheduler
       >[0],
       "setTimer" | "clearTimer"
     >;
   } = {},
-): TelegramRuntimeDiagnosticsRuntime<TContext> {
+): BaleRuntimeDiagnosticsRuntime<TContext> {
   const sharedFile = options.sharedFile === true;
   let getBotToken = (): string | undefined => undefined;
   let getProfileName = (): string | undefined => undefined;
   let canReset = (): boolean => false;
   let commitReset = (_commit: () => void): boolean => false;
   let captureAuthority = (): (() => boolean) | undefined => undefined;
-  let statusPorts: TelegramRuntimeDiagnosticsStatusPorts<TContext> | undefined;
-  const events = Status.createTelegramRuntimeEventRecorder({
+  let statusPorts: BaleRuntimeDiagnosticsStatusPorts<TContext> | undefined;
+  const events = Status.createBaleRuntimeEventRecorder({
     getBotToken: () => getBotToken(),
   });
-  const jsonl = createTelegramRuntimeJsonlLog({
+  const jsonl = createBaleRuntimeJsonlLog({
     path: () =>
       sharedFile
-        ? resolveTelegramRuntimeLogPath()
-        : getTelegramRuntimeLogPath(undefined, getProfileName()),
+        ? resolveBaleRuntimeLogPath()
+        : getBaleRuntimeLogPath(undefined, getProfileName()),
     previousPath: () =>
       sharedFile
-        ? resolveTelegramPreviousSharedRuntimeLogPath()
-        : getTelegramPreviousRuntimeLogPath(undefined, getProfileName()),
+        ? resolveBalePreviousSharedRuntimeLogPath()
+        : getBalePreviousRuntimeLogPath(undefined, getProfileName()),
     ...(sharedFile
       ? {
           sharedProfiles: {
@@ -585,28 +585,28 @@ export function createTelegramRuntimeDiagnosticsRuntime<TContext>(
     return () => statusPorts === ports && session.isCurrent(ctx, generation);
   };
   const requestSnapshotPersist =
-    Status.createTelegramRuntimeDiagnosticsSnapshotScheduler({
+    Status.createBaleRuntimeDiagnosticsSnapshotScheduler({
       ...options.snapshotTimer,
       captureScope: captureSnapshotScope,
       async persistSnapshot(isCurrent) {
         const ports = statusPorts;
         // Projection may acquire journal guards or recover a snapshot: fence before reading it.
         if (!ports || !isCurrent()) return;
-        const snapshot = Status.createTelegramStatusSnapshot(
+        const snapshot = Status.createBaleStatusSnapshot(
           ports.getStatusState(),
         );
         if (!isCurrent()) return;
         await ports.persistSnapshot(snapshot);
       },
       recordError(error) {
-        events.record("telegram", error, {
+        events.record("bale", error, {
           phase: "runtime-diagnostics-snapshot-persist",
         });
       },
     });
   const updateRuntimeLogScope = function (reason: string): void {
     if (!statusPorts) return;
-    const scope = Status.createTelegramRuntimeLogScope({
+    const scope = Status.createBaleRuntimeLogScope({
       state: statusPorts.getStatusState(),
       instanceId: statusPorts.instanceId,
     });
@@ -615,7 +615,7 @@ export function createTelegramRuntimeDiagnosticsRuntime<TContext>(
   return {
     events,
     createFailureLog: (input) =>
-      createTelegramFailureRunLog({
+      createBaleFailureRunLog({
         ...input,
         record: (category, errorOrMessage, details) =>
           recordRuntimeEvent(category, errorOrMessage, details),
@@ -642,7 +642,7 @@ export function createTelegramRuntimeDiagnosticsRuntime<TContext>(
     getStatusLines(options) {
       if (!statusPorts) return [];
       requestSnapshotPersist();
-      return Status.buildTelegramBridgeStatusLines(
+      return Status.buildBaleBridgeStatusLines(
         statusPorts.getStatusState(),
         options,
       );

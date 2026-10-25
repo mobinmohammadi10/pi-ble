@@ -1,15 +1,15 @@
 /**
  * Workspace slot allocation policy
- * Zones: telegram, workspace identity
+ * Zones: bale, workspace identity
  * Owns bounded profile-wide letter selection and inactivity ordering.
- * Excludes liveness discovery, persistence, routing, and Telegram deletion;
+ * Excludes liveness discovery, persistence, routing, and Bale deletion;
  * a selection is a proposal, never authority to retire a binding.
  */
-export const TELEGRAM_WORKSPACE_SLOTS = "abcdefghijklmnopqrstuvwxyz";
-export class TelegramWorkspaceSlotUnavailableError extends Error {
+export const BALE_WORKSPACE_SLOTS = "abcdefghijklmnopqrstuvwxyz";
+export class BaleWorkspaceSlotUnavailableError extends Error {
     constructor() {
-        super("Telegram Workspace slot reservation is unavailable.");
-        this.name = "TelegramWorkspaceSlotUnavailableError";
+        super("Bale Workspace slot reservation is unavailable.");
+        this.name = "BaleWorkspaceSlotUnavailableError";
     }
 }
 /**
@@ -18,7 +18,7 @@ export class TelegramWorkspaceSlotUnavailableError extends Error {
  * ignores accepted-work protection because reuse deletes nothing.
  * Returns undefined for an empty or malformed candidate set.
  */
-export function selectTelegramWorkspaceReusableSlot(candidates) {
+export function selectBaleWorkspaceReusableSlot(candidates) {
     const slots = new Set();
     const keys = new Set();
     for (const candidate of candidates) {
@@ -69,7 +69,7 @@ function eligibleByInactivity(bindings, reservedSlots, nowMs) {
         left.slot.charCodeAt(0) - right.slot.charCodeAt(0));
 }
 /** Caller must recheck exact ownership and protected work before retirement. */
-export function planTelegramWorkspaceSlotAllocation(input) {
+export function planBaleWorkspaceSlotAllocation(input) {
     const { bindings, reservedSlots, nowMs } = input;
     if (!isValidSnapshot(bindings, reservedSlots, nowMs)) {
         return { kind: "blocked", reason: "invalid-state" };
@@ -78,7 +78,7 @@ export function planTelegramWorkspaceSlotAllocation(input) {
         ...bindings.map((binding) => binding.slot),
         ...reservedSlots,
     ]);
-    for (const slot of TELEGRAM_WORKSPACE_SLOTS) {
+    for (const slot of BALE_WORKSPACE_SLOTS) {
         if (!occupied.has(slot))
             return { kind: "free", slot };
     }

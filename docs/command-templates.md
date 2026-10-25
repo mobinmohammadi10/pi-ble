@@ -1,3 +1,5 @@
+> Bale port: only the supported subset in [Bale compatibility](bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
 # Command Template Standard
 
 Command templates are the portable integration format for deterministic local automation.

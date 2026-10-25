@@ -1,12 +1,12 @@
 /**
- * Regression tests for Telegram settings menu helpers
+ * Regression tests for Bale settings menu helpers
  * Exercises settings text/markup, callback mutations, stale-message fallback, and runtime wiring
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { TelegramThreadDisplayMode } from "../lib/config.ts";
+import type { BaleThreadDisplayMode } from "../lib/config.ts";
 import {
   buildActivityVerbositySettingsReplyMarkup,
   buildActivityVerbositySettingsText,
@@ -17,17 +17,17 @@ import {
   buildDraftPreviewsSettingsReplyMarkup,
   buildDraftPreviewsSettingsText,
   buildInactiveThreadReviewReplyMarkup,
-  buildTelegramSettingsMenuReplyMarkup,
+  buildBaleSettingsMenuReplyMarkup,
   buildThreadDisplaySettingsReplyMarkup,
   buildThreadDisplaySettingsText,
-  type TelegramSettingsMenuCallbackDeps,
-  buildTelegramSettingsMenuText,
+  type BaleSettingsMenuCallbackDeps,
+  buildBaleSettingsMenuText,
   buildTimeInjectionModeSettingsReplyMarkup,
   buildTimeInjectionModeSettingsText,
   buildVoiceReplyModeSettingsReplyMarkup,
   buildVoiceReplyModeSettingsText,
-  createTelegramSettingsMenuRuntime,
-  handleTelegramSettingsMenuCallbackAction,
+  createBaleSettingsMenuRuntime,
+  handleBaleSettingsMenuCallbackAction,
 } from "../lib/menu-settings.ts";
 
 function getSettingsDescriptionOrder(text: string): string[] {
@@ -51,19 +51,19 @@ function getSettingsControlOrder(markup: {
 
 test("Thread display Settings offer all automatic modes and gate mutation", async () => {
   const markup = buildThreadDisplaySettingsReplyMarkup("letters");
-  const root = buildTelegramSettingsMenuReplyMarkup(true, "rich", "manual", "hidden", undefined, false, false, "verbose", "names");
+  const root = buildBaleSettingsMenuReplyMarkup(true, "rich", "manual", "hidden", undefined, false, false, "verbose", "names");
   assert.ok(root.inline_keyboard.flat().some((button) => button.callback_data === "settings:open:thread-display"));
-  const classic = buildTelegramSettingsMenuReplyMarkup(true, "rich", "manual", "hidden");
+  const classic = buildBaleSettingsMenuReplyMarkup(true, "rich", "manual", "hidden");
   assert.equal(classic.inline_keyboard.flat().some((button) => button.callback_data === "settings:open:thread-display"), false);
   assert.deepEqual(getSettingsControlOrder(markup),
     ["letters", "names", "directory-title", "directory-snake"]);
   assert.deepEqual(markup.inline_keyboard.slice(1).map((row) => row[0].text),
     ["🟢 letters", "names", "directory-title", "directory-snake"]);
   const calls: string[] = [];
-  let currentMode: TelegramThreadDisplayMode = "names";
+  let currentMode: BaleThreadDisplayMode = "names";
   let renderedText = "";
   let fail = false;
-  const deps: TelegramSettingsMenuCallbackDeps = {
+  const deps: BaleSettingsMenuCallbackDeps = {
     getThreadDisplayMode: () => currentMode,
     async setThreadDisplayMode(mode) {
       calls.push(`set:${mode}`);
@@ -80,27 +80,27 @@ test("Thread display Settings offer all automatic modes and gate mutation", asyn
     async updateSettingsMessage(text) { renderedText = text; calls.push("update"); },
     async answerCallbackQuery(_id, text) { calls.push(text ?? "ack"); },
   };
-  await handleTelegramSettingsMenuCallbackAction("q", "settings:open:thread-display", deps);
+  await handleBaleSettingsMenuCallbackAction("q", "settings:open:thread-display", deps);
   assert.deepEqual(calls, ["update", "ack"]);
   assert.equal(renderedText, buildThreadDisplaySettingsText("names"));
   calls.length = 0;
-  await handleTelegramSettingsMenuCallbackAction("q", "settings:set:thread-display:directory-snake", deps);
+  await handleBaleSettingsMenuCallbackAction("q", "settings:set:thread-display:directory-snake", deps);
   assert.deepEqual(calls, ["set:directory-snake", "update", "ack"]);
   assert.equal(renderedText, buildThreadDisplaySettingsText("directory-snake"));
   calls.length = 0;
-  await handleTelegramSettingsMenuCallbackAction("q", "settings:set:thread-display:names", deps);
+  await handleBaleSettingsMenuCallbackAction("q", "settings:set:thread-display:names", deps);
   assert.deepEqual(calls, ["set:names", "update", "ack"]);
   assert.equal(renderedText, buildThreadDisplaySettingsText("names"));
   calls.length = 0;
   fail = true;
-  await handleTelegramSettingsMenuCallbackAction("q", "settings:set:thread-display:letters", deps);
+  await handleBaleSettingsMenuCallbackAction("q", "settings:set:thread-display:letters", deps);
   assert.equal(calls.includes("update"), false);
   assert.match(calls.at(-1)!, /not fully applied/);
   calls.length = 0;
-  await handleTelegramSettingsMenuCallbackAction("q", "settings:set:thread-display:invalid", deps);
+  await handleBaleSettingsMenuCallbackAction("q", "settings:set:thread-display:invalid", deps);
   assert.deepEqual(calls, ["Unknown Thread display mode"]);
   calls.length = 0;
-  await handleTelegramSettingsMenuCallbackAction("q", "settings:set:thread-display:letters", {
+  await handleBaleSettingsMenuCallbackAction("q", "settings:set:thread-display:letters", {
     ...deps, getThreadDisplayMode: () => undefined,
   });
   assert.equal(calls.length, 1);
@@ -152,7 +152,7 @@ test("Thread display detail follows the setting-card style and marks only the cu
     assert.ok(text.startsWith(`<b>🧵 Thread display:</b> <code>${label}</code>\n`));
     assert.deepEqual(getSettingsDescriptionOrder(text), labels);
     assert.equal((text.match(/\(default\)/gu) ?? []).length, 1);
-    assert.match(text, /Choose how this bot profile labels Telegram tabs and Pi terminal status\. Each slot is unique across this bot profile\./u);
+    assert.match(text, /Choose how this bot profile labels Bale tabs and Pi terminal status\. Each slot is unique across this bot profile\./u);
     assert.match(text, /<code>letters<\/code> \(default\):/u);
     assert.doesNotMatch(text, /manual <code>\/name Name<\/code>/u);
     for (const example of ["A", "B", "Anchor", "Briar", "api_tools", "frontend_extensions_a", "Api Tools", "Frontend \/ Extensions A"]) {
@@ -186,9 +186,9 @@ test("Draft preview settings identify on as the default without changing the cur
 });
 
 test("Settings menu text and reply markup expose built-in controls", () => {
-  assert.equal(buildTelegramSettingsMenuText(), "<b>⚙️ Settings:</b>");
+  assert.equal(buildBaleSettingsMenuText(), "<b>⚙️ Settings:</b>");
 
-  const markup = buildTelegramSettingsMenuReplyMarkup(
+  const markup = buildBaleSettingsMenuReplyMarkup(
     false,
     "manual",
     "hidden",
@@ -219,7 +219,7 @@ test("Settings menu text and reply markup expose built-in controls", () => {
   assert.equal(markup.inline_keyboard[4]?.[0]?.text, "🔬 Activity: quiet");
   assert.equal(markup.inline_keyboard[5]?.[0]?.text, "🕒 Time injection: hidden");
   assert.equal(markup.inline_keyboard.length, 6);
-  const customMarkup = buildTelegramSettingsMenuReplyMarkup(
+  const customMarkup = buildBaleSettingsMenuReplyMarkup(
     false,
     "rich",
     "manual",
@@ -240,7 +240,7 @@ test("Settings detail markups show active values", () => {
   assert.match(cleanupText, /<code>on<\/code>/);
   assert.match(
     cleanupText,
-    /manual <code>\/telegram-disconnect<\/code> still confirms/,
+    /manual <code>\/bale-disconnect<\/code> still confirms/,
   );
   assert.match(cleanupText, /Review never deletes tabs\./);
   assert.equal(
@@ -358,7 +358,7 @@ test("Settings callback action mutates live settings and retires stale proactive
   };
 
   assert.equal(
-    await handleTelegramSettingsMenuCallbackAction(
+    await handleBaleSettingsMenuCallbackAction(
       "q1",
       "settings:set:voice-reply:manual",
       deps,
@@ -366,7 +366,7 @@ test("Settings callback action mutates live settings and retires stale proactive
     true,
   );
   assert.equal(
-    await handleTelegramSettingsMenuCallbackAction(
+    await handleBaleSettingsMenuCallbackAction(
       "q2",
       "settings:set:time:off",
       deps,
@@ -374,7 +374,7 @@ test("Settings callback action mutates live settings and retires stale proactive
     true,
   );
   assert.equal(
-    await handleTelegramSettingsMenuCallbackAction(
+    await handleBaleSettingsMenuCallbackAction(
       "q3",
       "settings:set:draft-previews:on",
       deps,
@@ -382,7 +382,7 @@ test("Settings callback action mutates live settings and retires stale proactive
     true,
   );
   assert.equal(
-    await handleTelegramSettingsMenuCallbackAction(
+    await handleBaleSettingsMenuCallbackAction(
       "q4",
       "settings:set:assistant-rendering:html",
       deps,
@@ -390,7 +390,7 @@ test("Settings callback action mutates live settings and retires stale proactive
     true,
   );
   assert.equal(
-    await handleTelegramSettingsMenuCallbackAction(
+    await handleBaleSettingsMenuCallbackAction(
       "q5",
       "settings:set:activity-verbosity:verbose",
       deps,
@@ -398,7 +398,7 @@ test("Settings callback action mutates live settings and retires stale proactive
     true,
   );
   assert.equal(
-    await handleTelegramSettingsMenuCallbackAction(
+    await handleBaleSettingsMenuCallbackAction(
       "q6",
       "settings:set:proactive:on",
       deps,
@@ -406,23 +406,23 @@ test("Settings callback action mutates live settings and retires stale proactive
     true,
   );
   assert.equal(
-    await handleTelegramSettingsMenuCallbackAction(
+    await handleBaleSettingsMenuCallbackAction(
       "q7",
       "settings:set:automatic-thread-cleanup:off",
       deps,
     ),
     true,
   );
-  assert.equal(await handleTelegramSettingsMenuCallbackAction(
+  assert.equal(await handleBaleSettingsMenuCallbackAction(
     "q8", "settings:review:inactive-threads", deps), true);
   assert.equal(calls.some(call => call.startsWith("clean:")), false, "preview is not confirmation");
-  assert.match(bodies.at(-1)!, /deletes these Telegram tabs and all their messages/);
+  assert.match(bodies.at(-1)!, /deletes these Bale tabs and all their messages/);
   assert.match(bodies.at(-1)!, /Pi session history and project files are not removed/);
   assert.match(bodies.at(-1)!, /Choose Back to leave without deleting anything/);
-  assert.equal(await handleTelegramSettingsMenuCallbackAction("q9",
+  assert.equal(await handleBaleSettingsMenuCallbackAction("q9",
     `settings:clean:thread-cleanup:${"a".repeat(32)}`, deps), true);
   assert.equal(
-    await handleTelegramSettingsMenuCallbackAction("q10", "other", deps),
+    await handleBaleSettingsMenuCallbackAction("q10", "other", deps),
     false,
   );
 
@@ -443,7 +443,7 @@ test("Settings callback action mutates live settings and retires stale proactive
     "update:<b>🔬 Activity:</b> <code>quiet</code>",
     "answer:Activity: verbose",
     "update:<b>⚙️ Settings:</b>",
-    "answer:Public assistant output is always delivered while Telegram is connected",
+    "answer:Public assistant output is always delivered while Bale is connected",
     "automatic-thread-cleanup:false",
     "update:<b>🧹 Thread cleanup:</b> <code>on</code>",
     "answer:Thread cleanup disabled",
@@ -467,7 +467,7 @@ test("Settings runtime opens menus and rehydrates stale callback state", async (
   const calls: string[] = [];
   let storedState: typeof state | undefined;
   let editedActivityLabel = "";
-  const runtime = createTelegramSettingsMenuRuntime({
+  const runtime = createBaleSettingsMenuRuntime({
     reloadConfig: async () => {
       calls.push("reload-config");
     },

@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram thread lifecycle reconciliation planning
+ * Regression tests for Bale thread lifecycle reconciliation planning
  * Covers pure proof-before-delete decisions before runtime side effects are wired
  */
 
@@ -14,11 +14,11 @@ import {
   planThreadReconciliation,
   type ThreadReconciliationAction,
 } from "../lib/thread-reconciler.ts";
-import { createTelegramCleanupTargetProtection } from "../lib/threads.ts";
+import { createBaleCleanupTargetProtection } from "../lib/threads.ts";
 import type {
-  TelegramThreadReservation,
-  TelegramTopicSyncObservation,
-  TelegramTopicTargetRecord,
+  BaleThreadReservation,
+  BaleTopicSyncObservation,
+  BaleTopicTargetRecord,
 } from "../lib/threads.ts";
 
 for (const fault of ["clear", "busy", "queued", "delivery", "unknown", "missing-work", "malformed-work", "protected", "missing-protection", "same-target", "foreign-chat", "invalid-target", "missing-operation", "missing-epoch"] as const) {
@@ -90,9 +90,9 @@ test(`Every destructive cleanup origin preserves a target acquired before or dur
   ];
   for (const action of actions) {
     for (const acquireBefore of [true, false]) {
-      const replacement: TelegramTopicTargetRecord = { profileKey: "live", target, instanceId: "new", status: "active", createdAtMs: 2, updatedAtMs: 2 };
-      let records: TelegramTopicTargetRecord[] = [];
-      const isCleanupTargetProtected = createTelegramCleanupTargetProtection({ list: () => records });
+      const replacement: BaleTopicTargetRecord = { profileKey: "live", target, instanceId: "new", status: "active", createdAtMs: 2, updatedAtMs: 2 };
+      let records: BaleTopicTargetRecord[] = [];
+      const isCleanupTargetProtected = createBaleCleanupTargetProtection({ list: () => records });
       if (acquireBefore) records = [replacement];
       const calls: string[] = [];
       await applyThreadReconciliationPlan({ actions: [action] }, {
@@ -116,12 +116,12 @@ test(`Every destructive cleanup origin preserves a target acquired before or dur
 
 test("Cleanup ownership survives equivalent record reconstruction but rejects changed binding identity", () => {
   const target = { chatId: 100, threadId: 42 };
-  const original: TelegramTopicTargetRecord = { profileKey: "leader", instanceId: "owner", target, status: "active", createdAtMs: 1, updatedAtMs: 1, lastError: undefined };
+  const original: BaleTopicTargetRecord = { profileKey: "leader", instanceId: "owner", target, status: "active", createdAtMs: 1, updatedAtMs: 1, lastError: undefined };
   let records = [original];
   const intent = { id: "cleanup", owner: "leader" as const, instanceId: "owner", runtimeGeneration: "generation", target, requestedAtMs: 2 };
-  const guard = createTelegramCleanupTargetProtection({ list: () => records, listPendingCleanups: () => [intent] }, original);
+  const guard = createBaleCleanupTargetProtection({ list: () => records, listPendingCleanups: () => [intent] }, original);
   const action: ThreadReconciliationAction = { kind: "close-delete-graceful-shutdown-topic", reason: "graceful-shutdown", target, cleanupIntentId: intent.id, instanceId: intent.instanceId, runtimeGeneration: intent.runtimeGeneration };
-  records = [JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(original).reverse()))) as TelegramTopicTargetRecord];
+  records = [JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(original).reverse()))) as BaleTopicTargetRecord];
   assert.equal(guard(target, action), false, "key order is not a binding replacement");
   records = [{ ...records[0]!, instanceId: "replacement" }];
   assert.equal(guard(target, action), true, "a replacement remains protected");
@@ -131,8 +131,8 @@ const nowMs = 10_000;
 
 function record(
   threadId: number,
-  status: TelegramTopicTargetRecord["status"] = "active",
-): TelegramTopicTargetRecord {
+  status: BaleTopicTargetRecord["status"] = "active",
+): BaleTopicTargetRecord {
   return {
     profileKey: `profile:${threadId}`,
     target: { chatId: 7, threadId },
@@ -144,7 +144,7 @@ function record(
   };
 }
 
-function reservation(threadId: number): TelegramThreadReservation {
+function reservation(threadId: number): BaleThreadReservation {
   return {
     target: { chatId: 7, threadId },
     slot: "B",
@@ -157,9 +157,9 @@ function reservation(threadId: number): TelegramThreadReservation {
 
 function observation(
   threadId: number,
-  syncStatus: TelegramTopicSyncObservation["syncStatus"],
+  syncStatus: BaleTopicSyncObservation["syncStatus"],
   observedAtMs = nowMs,
-): TelegramTopicSyncObservation {
+): BaleTopicSyncObservation {
   return {
     target: { chatId: 7, threadId },
     syncStatus,
@@ -817,7 +817,7 @@ test("Thread reconciler apply skips destructive actions from stale leader epochs
   assert.deepEqual(calls, []);
   assert.deepEqual(runtimeEvents, [
     {
-      category: "telegram",
+      category: "bale",
       error: "Skipped stale-epoch thread reconciliation action",
       details: {
         phase: "thread-reconciler-stale-epoch-skip",
@@ -1064,7 +1064,7 @@ test("Thread reconciler apply reports incomplete cleanup API failures", async ()
   assert.equal(
     runtimeEvents.some(
       (event) =>
-        event.error === "Unbound Telegram topic deleted" ||
+        event.error === "Unbound Bale topic deleted" ||
         event.details?.phase === "thread-reconciler-unbound-topic-delete",
     ),
     false,
@@ -1182,7 +1182,7 @@ test("Thread reconciler fails closed when destructive action lacks leader epoch"
 
   assert.equal(calls, 0);
   assert.deepEqual(runtimeEvents.at(0), {
-    category: "telegram",
+    category: "bale",
     error: "Thread reconciliation destructive action has no leader epoch",
     details: {
       phase: "thread-reconciler-missing-leader-epoch",

@@ -1,19 +1,19 @@
 /**
- * Telegram outbound attachment helpers
- * Zones: telegram outbound, pi agent tool, filesystem
- * Owns telegram_attach registration, outbound attachment queueing, and delivery so Telegram file output stays in one domain module
+ * Bale outbound attachment helpers
+ * Zones: bale outbound, pi agent tool, filesystem
+ * Owns bale_attach registration, outbound attachment queueing, and delivery so Bale file output stays in one domain module
  */
 import { stat } from "node:fs/promises";
 import { basename } from "node:path";
 import { Type } from "@sinclair/typebox";
-import { isTelegramChannelPostValidationError, TelegramChannelPostValidationError, } from "./channel-posts.js";
-import { TELEGRAM_ATTACH_PROMPT_GUIDELINES, TELEGRAM_ATTACH_PROMPT_SNIPPET, TELEGRAM_MESSAGE_PROMPT_GUIDELINES, TELEGRAM_MESSAGE_PROMPT_SNIPPET, } from "./prompts.js";
-import { normalizeTelegramNativeMarkdown, withTelegramReplyParameters, } from "./replies.js";
-import { getTelegramTargetThreadParams, } from "./target.js";
+import { isBaleChannelPostValidationError, BaleChannelPostValidationError, } from "./channel-posts.js";
+import { BALE_ATTACH_PROMPT_GUIDELINES, BALE_ATTACH_PROMPT_SNIPPET, BALE_MESSAGE_PROMPT_GUIDELINES, BALE_MESSAGE_PROMPT_SNIPPET, } from "./prompts.js";
+import { normalizeBaleNativeMarkdown, withBaleReplyParameters, } from "./replies.js";
+import { getBaleTargetThreadParams, } from "./target.js";
 const MAX_ATTACHMENTS_PER_TURN = 10;
-export const TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
+export const BALE_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
 // Deliberately local: outbound attachment delivery stays decoupled from Bot API helpers.
-export function getTelegramOutboundAttachmentByteLimitFromEnv(env, names, defaultValue = TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES) {
+export function getBaleOutboundAttachmentByteLimitFromEnv(env, names, defaultValue = BALE_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES) {
     for (const name of names) {
         const rawValue = env[name]?.trim();
         if (!rawValue)
@@ -24,25 +24,25 @@ export function getTelegramOutboundAttachmentByteLimitFromEnv(env, names, defaul
     }
     return defaultValue;
 }
-const TELEGRAM_OUTBOUND_ATTACHMENT_MAX_BYTES = getTelegramOutboundAttachmentByteLimitFromEnv(process.env, [
-    "PI_TELEGRAM_OUTBOUND_ATTACHMENT_MAX_BYTES",
-    "TELEGRAM_MAX_ATTACHMENT_SIZE_BYTES",
+const BALE_OUTBOUND_ATTACHMENT_MAX_BYTES = getBaleOutboundAttachmentByteLimitFromEnv(process.env, [
+    "PI_BALE_OUTBOUND_ATTACHMENT_MAX_BYTES",
+    "BALE_MAX_ATTACHMENT_SIZE_BYTES",
 ]);
-class TelegramRichAttachmentCommitUnknownError extends Error {
+class BaleRichAttachmentCommitUnknownError extends Error {
     kind = "commit-unknown";
     constructor(cause) {
-        super("Telegram Rich media upload may have committed without a message id.");
-        this.name = "TelegramRichAttachmentCommitUnknownError";
+        super("Bale Rich media upload may have committed without a message id.");
+        this.name = "BaleRichAttachmentCommitUnknownError";
         this.cause = cause;
     }
 }
-function isTelegramRichAttachmentCommitUnknownError(error) {
-    return (error instanceof TelegramRichAttachmentCommitUnknownError ||
+function isBaleRichAttachmentCommitUnknownError(error) {
+    return (error instanceof BaleRichAttachmentCommitUnknownError ||
         (typeof error === "object" &&
             error !== null &&
             error.kind === "commit-unknown"));
 }
-export function planTelegramRichOutboundAttachment(options) {
+export function planBaleRichOutboundAttachment(options) {
     if (options.renderingMode !== "rich")
         return undefined;
     if (!options.markdown.trim())
@@ -64,7 +64,7 @@ export function planTelegramRichOutboundAttachment(options) {
         return undefined;
     const mediaId = "artifact";
     const richMessage = {
-        markdown: `![](tg://${mediaType}?id=${mediaId})\n\n${normalizeTelegramNativeMarkdown(options.markdown)}`,
+        markdown: `![](tg://${mediaType}?id=${mediaId})\n\n${normalizeBaleNativeMarkdown(options.markdown)}`,
         media: [
             {
                 id: mediaId,
@@ -79,7 +79,7 @@ export function planTelegramRichOutboundAttachment(options) {
         method: "sendRichMessage",
         fields: {
             chat_id: String(options.turn.chatId),
-            ...getTelegramMultipartTargetFields(options.turn.target),
+            ...getBaleMultipartTargetFields(options.turn.target),
             rich_message: JSON.stringify(richMessage),
             ...(options.replyMarkup
                 ? { reply_markup: JSON.stringify(options.replyMarkup) }
@@ -90,11 +90,11 @@ export function planTelegramRichOutboundAttachment(options) {
         fileName: attachment.fileName,
     };
 }
-export function createTelegramRichOutboundAttachmentSender(deps) {
+export function createBaleRichOutboundAttachmentSender(deps) {
     return async (turn, markdown, options) => {
         if (options?.isDeliveryActive?.() === false)
             return false;
-        const plan = planTelegramRichOutboundAttachment({
+        const plan = planBaleRichOutboundAttachment({
             turn,
             markdown,
             renderingMode: deps.getRenderingMode(),
@@ -103,7 +103,7 @@ export function createTelegramRichOutboundAttachmentSender(deps) {
         if (!plan)
             return false;
         try {
-            const result = await withTelegramReplyParameters(turn.chatId, turn.replyToMessageId, turn.target, (replyParameters) => deps.sendMultipart(plan.method, {
+            const result = await withBaleReplyParameters(turn.chatId, turn.replyToMessageId, turn.target, (replyParameters) => deps.sendMultipart(plan.method, {
                 ...plan.fields,
                 ...(replyParameters
                     ? { reply_parameters: JSON.stringify(replyParameters) }
@@ -115,7 +115,7 @@ export function createTelegramRichOutboundAttachmentSender(deps) {
                 ? result.message_id
                 : undefined;
             if (messageId === undefined) {
-                throw new TelegramRichAttachmentCommitUnknownError(new Error("Successful Rich media upload omitted message_id."));
+                throw new BaleRichAttachmentCommitUnknownError(new Error("Successful Rich media upload omitted message_id."));
             }
             if (options?.isDeliveryActive?.() !== false) {
                 deps.recordOwnership?.({
@@ -127,7 +127,7 @@ export function createTelegramRichOutboundAttachmentSender(deps) {
             return true;
         }
         catch (error) {
-            if (isTelegramRichAttachmentCommitUnknownError(error))
+            if (isBaleRichAttachmentCommitUnknownError(error))
                 throw error;
             deps.recordRuntimeEvent?.("attachment", error, {
                 phase: "rich-media-known-failure",
@@ -137,7 +137,7 @@ export function createTelegramRichOutboundAttachmentSender(deps) {
         }
     };
 }
-function isTelegramOutboundPhotoAttachmentPath(path) {
+function isBaleOutboundPhotoAttachmentPath(path) {
     const normalized = path.toLowerCase();
     return (normalized.endsWith(".jpg") ||
         normalized.endsWith(".jpeg") ||
@@ -145,7 +145,7 @@ function isTelegramOutboundPhotoAttachmentPath(path) {
         normalized.endsWith(".webp") ||
         normalized.endsWith(".gif"));
 }
-function getTelegramGuestAttachmentTransport(path) {
+function getBaleGuestAttachmentTransport(path) {
     const normalized = path.toLowerCase();
     if (normalized.endsWith(".jpg") ||
         normalized.endsWith(".jpeg") ||
@@ -160,37 +160,37 @@ function getTelegramGuestAttachmentTransport(path) {
     }
     return { method: "sendDocument", fileField: "document" };
 }
-function formatTelegramOutboundAttachmentSizeLimitError(size, maxSize, path) {
+function formatBaleOutboundAttachmentSizeLimitError(size, maxSize, path) {
     const message = `Attachment exceeds size limit (${size} bytes > ${maxSize} bytes)`;
     return path ? `${message}: ${path}` : message;
 }
-function formatTelegramOutboundAttachmentToolResultText(count, mode = "queued") {
+function formatBaleOutboundAttachmentToolResultText(count, mode = "queued") {
     // Pi's compact tool rows need one leading newline to visually separate header and result.
     const verb = mode === "queued" ? "Queued" : "Sent";
-    return ["", `${verb} ${count} Telegram attachment(s).`].join("\n");
+    return ["", `${verb} ${count} Bale attachment(s).`].join("\n");
 }
-function buildTelegramOutboundMessageToolResult(chatId, messageId) {
+function buildBaleOutboundMessageToolResult(chatId, messageId) {
     return {
         content: [
             {
                 type: "text",
-                text: ["", `Sent Telegram message to ${chatId}.`].join("\n"),
+                text: ["", `Sent Bale message to ${chatId}.`].join("\n"),
             },
         ],
         details: { chatId, messageId },
     };
 }
-function getTelegramMultipartTargetFields(target) {
+function getBaleMultipartTargetFields(target) {
     if (!target)
         return {};
-    return Object.fromEntries(Object.entries(getTelegramTargetThreadParams(target)).map(([key, value]) => [key, String(value)]));
+    return Object.fromEntries(Object.entries(getBaleTargetThreadParams(target)).map(([key, value]) => [key, String(value)]));
 }
-function assertTelegramDirectDeliveryAllowed(canSendDirect) {
+function assertBaleDirectDeliveryAllowed(canSendDirect) {
     if (canSendDirect?.())
         return;
-    throw new Error("Telegram direct delivery requires this Pi instance to own /telegram-connect or be registered with the Telegram multi-instance bus");
+    throw new Error("Bale direct delivery requires this Pi instance to own /bale-connect or be registered with the Bale multi-instance bus");
 }
-function resolveTelegramOutboundTarget(options) {
+function resolveBaleOutboundTarget(options) {
     if (options.target)
         return { chatId: options.target.chatId, target: options.target };
     if (options.chatId !== undefined) {
@@ -207,11 +207,11 @@ function resolveTelegramOutboundTarget(options) {
     }
     const defaultChatId = options.getDefaultChatId?.();
     if (defaultChatId === undefined) {
-        throw new Error("Telegram chat_id is required when no paired/default Telegram chat is available");
+        throw new Error("Bale chat_id is required when no paired/default Bale chat is available");
     }
     return { chatId: defaultChatId };
 }
-async function buildTelegramOutboundAttachmentViews(options) {
+async function buildBaleOutboundAttachmentViews(options) {
     const pendingAttachments = [];
     for (const inputPath of options.paths) {
         const stats = await (options.statPath ?? stat)(inputPath);
@@ -221,7 +221,7 @@ async function buildTelegramOutboundAttachmentViews(options) {
         if (options.maxAttachmentSizeBytes !== undefined &&
             stats.size !== undefined &&
             stats.size > options.maxAttachmentSizeBytes) {
-            throw new Error(formatTelegramOutboundAttachmentSizeLimitError(stats.size, options.maxAttachmentSizeBytes, inputPath));
+            throw new Error(formatBaleOutboundAttachmentSizeLimitError(stats.size, options.maxAttachmentSizeBytes, inputPath));
         }
         pendingAttachments.push({
             path: inputPath,
@@ -230,26 +230,26 @@ async function buildTelegramOutboundAttachmentViews(options) {
     }
     return pendingAttachments;
 }
-function formatTelegramOutboundToolError(error) {
+function formatBaleOutboundToolError(error) {
     const message = error instanceof Error ? error.message : String(error);
-    return new Error(`\n${message.replace(/^\n+/u, "") || "Telegram outbound operation failed."}`);
+    return new Error(`\n${message.replace(/^\n+/u, "") || "Bale outbound operation failed."}`);
 }
-export function registerTelegramOutboundAttachmentTool(pi, deps) {
+export function registerBaleOutboundAttachmentTool(pi, deps) {
     const maxAttachmentsPerTurn = deps.maxAttachmentsPerTurn ?? MAX_ATTACHMENTS_PER_TURN;
-    const maxAttachmentSizeBytes = deps.maxAttachmentSizeBytes ?? TELEGRAM_OUTBOUND_ATTACHMENT_MAX_BYTES;
+    const maxAttachmentSizeBytes = deps.maxAttachmentSizeBytes ?? BALE_OUTBOUND_ATTACHMENT_MAX_BYTES;
     pi.registerTool({
-        name: "telegram_attach",
-        label: "Telegram Attach",
-        description: "Queue one or more local files for the active Telegram reply, or send them immediately to Telegram when no Telegram turn is active.",
-        promptSnippet: TELEGRAM_ATTACH_PROMPT_SNIPPET,
-        promptGuidelines: [...TELEGRAM_ATTACH_PROMPT_GUIDELINES],
+        name: "bale_attach",
+        label: "Bale Attach",
+        description: "Queue one or more local files for the active Bale reply, or send them immediately to Bale when no Bale turn is active.",
+        promptSnippet: BALE_ATTACH_PROMPT_SNIPPET,
+        promptGuidelines: [...BALE_ATTACH_PROMPT_GUIDELINES],
         parameters: Type.Object({
             paths: Type.Array(Type.String({ description: "Local file path to attach" }), { minItems: 1, maxItems: maxAttachmentsPerTurn }),
             chat_id: Type.Optional(Type.Number({
-                description: "Optional Telegram chat id for immediate delivery when no Telegram turn is active",
+                description: "Optional Bale chat id for immediate delivery when no Bale turn is active",
             })),
             thread_id: Type.Optional(Type.Number({
-                description: "Optional Telegram topic thread id for immediate delivery with chat_id",
+                description: "Optional Bale topic thread id for immediate delivery with chat_id",
             })),
             caption: Type.Optional(Type.String({
                 description: "Optional caption for immediate delivery; ignored when queued for an active turn",
@@ -257,7 +257,7 @@ export function registerTelegramOutboundAttachmentTool(pi, deps) {
         }),
         async execute(_toolCallId, params) {
             try {
-                return await queueTelegramOutboundAttachments({
+                return await queueBaleOutboundAttachments({
                     activeTurn: deps.getActiveTurn(),
                     paths: params.paths,
                     chatId: params.chat_id,
@@ -277,18 +277,18 @@ export function registerTelegramOutboundAttachmentTool(pi, deps) {
                     phase: "queue",
                     count: params.paths.length,
                 });
-                throw formatTelegramOutboundToolError(error);
+                throw formatBaleOutboundToolError(error);
             }
         },
     });
 }
-export function registerTelegramOutboundMessageTool(pi, deps) {
+export function registerBaleOutboundMessageTool(pi, deps) {
     pi.registerTool({
-        name: "telegram_message",
-        label: "Telegram Message",
-        description: "Send Markdown text directly to the paired/default Telegram chat, an exact channel chat_id, or an explicit live target. Channel delivery supports one optional local photo or video upload with the text as its caption. Channel posting requires Telegram-granted bot permission. Hidden telegram_button comments become inline prompt buttons.",
-        promptSnippet: TELEGRAM_MESSAGE_PROMPT_SNIPPET,
-        promptGuidelines: [...TELEGRAM_MESSAGE_PROMPT_GUIDELINES],
+        name: "bale_message",
+        label: "Bale Message",
+        description: "Send Markdown text directly to the paired/default Bale chat, an exact channel chat_id, or an explicit live target. Channel delivery supports one optional local photo or video upload with the text as its caption. Channel posting requires Bale-granted bot permission. Hidden bale_button comments become inline prompt buttons.",
+        promptSnippet: BALE_MESSAGE_PROMPT_SNIPPET,
+        promptGuidelines: [...BALE_MESSAGE_PROMPT_GUIDELINES],
         parameters: Type.Object({
             text: Type.String({ description: "Message text to send" }),
             media: Type.Optional(Type.String({
@@ -296,10 +296,10 @@ export function registerTelegramOutboundMessageTool(pi, deps) {
                 description: "Local single-file channel upload: .jpg/.jpeg/.png/.webp photo or .mp4 video; the text becomes its caption (max 1024 characters). Albums and other media types are rejected.",
             })),
             chat_id: Type.Optional(Type.Union([Type.Number(), Type.String({ pattern: "^@[A-Za-z0-9_]{5,32}$" })], {
-                description: "Optional exact Telegram chat id or public channel @username",
+                description: "Optional exact Bale chat id or public channel @username",
             })),
             thread_id: Type.Optional(Type.Number({
-                description: "Optional Telegram topic thread id with chat_id",
+                description: "Optional Bale topic thread id with chat_id",
             })),
             channel: Type.Optional(Type.Boolean({
                 description: "Set true only when a numeric chat_id is explicitly intended as a channel",
@@ -310,7 +310,7 @@ export function registerTelegramOutboundMessageTool(pi, deps) {
         }),
         async execute(toolCallId, params) {
             try {
-                return await sendTelegramOutboundMessage({
+                return await sendBaleOutboundMessage({
                     text: params.text,
                     media: params.media,
                     operationId: toolCallId,
@@ -332,23 +332,23 @@ export function registerTelegramOutboundMessageTool(pi, deps) {
             }
             catch (error) {
                 const isChannelTarget = typeof params.chat_id === "string" || params.channel === true;
-                const reportableError = isChannelTarget && !isTelegramChannelPostValidationError(error)
-                    ? new Error("Telegram channel publication failed; inspect the retained local record before retrying.")
+                const reportableError = isChannelTarget && !isBaleChannelPostValidationError(error)
+                    ? new Error("Bale channel publication failed; inspect the retained local record before retrying.")
                     : error;
                 deps.recordRuntimeEvent?.("message", reportableError, {
                     phase: "direct",
                 });
-                throw formatTelegramOutboundToolError(reportableError);
+                throw formatBaleOutboundToolError(reportableError);
             }
         },
     });
 }
-export async function queueTelegramOutboundAttachments(options) {
+export async function queueBaleOutboundAttachments(options) {
     if (!options.activeTurn) {
         if (!options.sendMultipart) {
-            throw new Error("telegram_attach can only queue files while replying to an active Telegram turn; provide Telegram send ports for immediate delivery");
+            throw new Error("bale_attach can only queue files while replying to an active Bale turn; provide Bale send ports for immediate delivery");
         }
-        return sendTelegramOutboundFiles({
+        return sendBaleOutboundFiles({
             paths: options.paths,
             chatId: options.chatId,
             threadId: options.threadId,
@@ -364,19 +364,19 @@ export async function queueTelegramOutboundAttachments(options) {
     }
     if (options.activeTurn.guestQueryId &&
         options.activeTurn.queuedAttachments.length + options.paths.length > 1) {
-        throw new Error("Telegram Guest Mode supports one attachment per reply; no attachment was queued");
+        throw new Error("Bale Guest Mode supports one attachment per reply; no attachment was queued");
     }
     if (options.activeTurn.queuedAttachments.length + options.paths.length >
         options.maxAttachmentsPerTurn) {
         throw new Error(`Attachment limit reached (${options.maxAttachmentsPerTurn})`);
     }
-    const pendingAttachments = await buildTelegramOutboundAttachmentViews({
+    const pendingAttachments = await buildBaleOutboundAttachmentViews({
         paths: options.paths,
         maxAttachmentSizeBytes: options.maxAttachmentSizeBytes,
         statPath: options.statPath,
     });
-    if (options.activeTurn.guestInlineMessageId && pendingAttachments.some((attachment) => getTelegramGuestAttachmentTransport(attachment.path).fileField === "voice")) {
-        throw new Error("Telegram Guest Mode cannot replace an inline placeholder with a voice note; no attachment was queued. Use MP3 audio or a normal bot chat.");
+    if (options.activeTurn.guestInlineMessageId && pendingAttachments.some((attachment) => getBaleGuestAttachmentTransport(attachment.path).fileField === "voice")) {
+        throw new Error("Bale Guest Mode cannot replace an inline placeholder with a voice note; no attachment was queued. Use MP3 audio or a normal bot chat.");
     }
     options.activeTurn.queuedAttachments.push(...pendingAttachments);
     const added = pendingAttachments.map((attachment) => attachment.path);
@@ -384,14 +384,14 @@ export async function queueTelegramOutboundAttachments(options) {
         content: [
             {
                 type: "text",
-                text: formatTelegramOutboundAttachmentToolResultText(added.length),
+                text: formatBaleOutboundAttachmentToolResultText(added.length),
             },
         ],
         details: { paths: added },
     };
 }
-export async function deliverTelegramGuestCachedAttachment(options) {
-    const transport = getTelegramGuestAttachmentTransport(options.attachment.path);
+export async function deliverBaleGuestCachedAttachment(options) {
+    const transport = getBaleGuestAttachmentTransport(options.attachment.path);
     const isActive = () => options.isDeliveryActive?.() !== false;
     const assertActive = () => {
         if (!isActive())
@@ -407,7 +407,7 @@ export async function deliverTelegramGuestCachedAttachment(options) {
     try {
         const message = (await options.sendMultipart(transport.method, {
             chat_id: String(options.stagingChatId),
-            ...getTelegramMultipartTargetFields(options.stagingTarget),
+            ...getBaleMultipartTargetFields(options.stagingTarget),
         }, transport.fileField, options.attachment.path, options.attachment.fileName));
         stagingMessageId = message.message_id;
         if (!isActive())
@@ -503,8 +503,8 @@ export async function deliverTelegramGuestCachedAttachment(options) {
         }
     }
 }
-export async function sendTelegramOutboundMessage(options) {
-    assertTelegramDirectDeliveryAllowed(options.canSendDirect);
+export async function sendBaleOutboundMessage(options) {
+    assertBaleDirectDeliveryAllowed(options.canSendDirect);
     const activeTurn = options.getActiveTurn?.();
     if (typeof options.chatId === "string" || options.channel === true) {
         if (!((typeof options.chatId === "string" &&
@@ -515,24 +515,24 @@ export async function sendTelegramOutboundMessage(options) {
             options.threadId !== undefined ||
             options.target !== undefined ||
             options.agentThread !== undefined) {
-            throw new Error("Telegram channel delivery requires one exact @username or negative numeric channel ID without a thread target.");
+            throw new Error("Bale channel delivery requires one exact @username or negative numeric channel ID without a thread target.");
         }
         const plan = options.planMessage(options.text);
         if (options.media !== undefined) {
             if (!options.sendChannelMediaMessage || !options.operationId) {
-                throw new TelegramChannelPostValidationError("Telegram channel media delivery requires direct leader transport ownership and operation identity.");
+                throw new BaleChannelPostValidationError("Bale channel media delivery requires direct leader transport ownership and operation identity.");
             }
             const messageId = await options.sendChannelMediaMessage(options.chatId, options.media, plan.markdown, { operationId: options.operationId, replyMarkup: plan.replyMarkup });
-            return buildTelegramOutboundMessageToolResult(options.chatId, messageId);
+            return buildBaleOutboundMessageToolResult(options.chatId, messageId);
         }
         if (!options.sendChannelMarkdownMessage || !options.operationId) {
-            throw new Error("Telegram channel delivery requires direct leader transport ownership and operation identity.");
+            throw new Error("Bale channel delivery requires direct leader transport ownership and operation identity.");
         }
         const messageId = await options.sendChannelMarkdownMessage(options.chatId, plan.markdown, { operationId: options.operationId, replyMarkup: plan.replyMarkup });
-        return buildTelegramOutboundMessageToolResult(options.chatId, messageId);
+        return buildBaleOutboundMessageToolResult(options.chatId, messageId);
     }
     if (options.media !== undefined) {
-        throw new TelegramChannelPostValidationError("telegram_message media uploads require channel delivery with an exact @username or negative numeric channel ID and channel: true.");
+        throw new BaleChannelPostValidationError("bale_message media uploads require channel delivery with an exact @username or negative numeric channel ID and channel: true.");
     }
     const requestedAgentSelector = options.agentThread !== undefined
         ? typeof options.agentThread === "number"
@@ -551,11 +551,11 @@ export async function sendTelegramOutboundMessage(options) {
     let agentTarget;
     if (requestedAgentSelector) {
         if (!options.resolveAgentTarget || !options.routeAgentMessage) {
-            throw new Error("Telegram agent turn routing is unavailable.");
+            throw new Error("Bale agent turn routing is unavailable.");
         }
         agentTarget = await options.resolveAgentTarget(requestedAgentSelector);
     }
-    const { chatId, target } = resolveTelegramOutboundTarget({
+    const { chatId, target } = resolveBaleOutboundTarget({
         chatId: agentTarget?.chatId ?? options.chatId,
         threadId: agentTarget?.threadId ?? options.threadId,
         target: agentTarget ?? options.target,
@@ -571,7 +571,7 @@ export async function sendTelegramOutboundMessage(options) {
         const targetsMatch = activeTarget.chatId === requestedTarget.chatId &&
             activeTarget.threadId === requestedTarget.threadId;
         if (!hasExplicitTarget || targetsMatch) {
-            throw new Error("telegram_message cannot send directly to the active Telegram turn target; return the text normally so the bridge can deliver it once");
+            throw new Error("bale_message cannot send directly to the active Bale turn target; return the text normally so the bridge can deliver it once");
         }
     }
     const plan = options.planMessage(options.text);
@@ -581,7 +581,7 @@ export async function sendTelegramOutboundMessage(options) {
     });
     if (agentTarget) {
         if (messageId === undefined) {
-            throw new Error("Telegram message was sent but no message id was returned for agent routing.");
+            throw new Error("Bale message was sent but no message id was returned for agent routing.");
         }
         await options.routeAgentMessage({
             target: agentTarget,
@@ -589,33 +589,33 @@ export async function sendTelegramOutboundMessage(options) {
             text: options.text,
         });
     }
-    return buildTelegramOutboundMessageToolResult(chatId, messageId);
+    return buildBaleOutboundMessageToolResult(chatId, messageId);
 }
-export async function sendTelegramOutboundFiles(options) {
-    assertTelegramDirectDeliveryAllowed(options.canSendDirect);
+export async function sendBaleOutboundFiles(options) {
+    assertBaleDirectDeliveryAllowed(options.canSendDirect);
     if (options.paths.length > options.maxAttachmentsPerTurn) {
         throw new Error(`Attachment limit reached (${options.maxAttachmentsPerTurn})`);
     }
-    const { chatId, target } = resolveTelegramOutboundTarget({
+    const { chatId, target } = resolveBaleOutboundTarget({
         chatId: options.chatId,
         threadId: options.threadId,
         target: options.target,
         getDefaultChatId: options.getDefaultChatId,
         getDefaultTarget: options.getDefaultTarget,
     });
-    const pendingAttachments = await buildTelegramOutboundAttachmentViews({
+    const pendingAttachments = await buildBaleOutboundAttachmentViews({
         paths: options.paths,
         maxAttachmentSizeBytes: options.maxAttachmentSizeBytes,
         statPath: options.statPath,
     });
     for (const [index, attachment] of pendingAttachments.entries()) {
-        const isPhoto = isTelegramOutboundPhotoAttachmentPath(attachment.path);
+        const isPhoto = isBaleOutboundPhotoAttachmentPath(attachment.path);
         const method = isPhoto ? "sendPhoto" : "sendDocument";
         const fieldName = isPhoto ? "photo" : "document";
         await options.sendMultipart(method, {
             chat_id: String(chatId),
             ...(options.caption && index === 0 ? { caption: options.caption } : {}),
-            ...getTelegramMultipartTargetFields(target),
+            ...getBaleMultipartTargetFields(target),
         }, fieldName, attachment.path, attachment.fileName);
     }
     const added = pendingAttachments.map((attachment) => attachment.path);
@@ -623,23 +623,23 @@ export async function sendTelegramOutboundFiles(options) {
         content: [
             {
                 type: "text",
-                text: formatTelegramOutboundAttachmentToolResultText(added.length, "sent"),
+                text: formatBaleOutboundAttachmentToolResultText(added.length, "sent"),
             },
         ],
         details: { paths: added, chatId },
     };
 }
-export function createTelegramQueuedOutboundAttachmentSender(deps) {
+export function createBaleQueuedOutboundAttachmentSender(deps) {
     return async (turn, options) => {
-        await sendQueuedTelegramOutboundAttachments(turn, {
+        await sendQueuedBaleOutboundAttachments(turn, {
             ...deps,
             isDeliveryActive: () => deps.isDeliveryActive?.() !== false &&
                 options?.isDeliveryActive?.() !== false,
-            maxAttachmentSizeBytes: deps.maxAttachmentSizeBytes ?? TELEGRAM_OUTBOUND_ATTACHMENT_MAX_BYTES,
+            maxAttachmentSizeBytes: deps.maxAttachmentSizeBytes ?? BALE_OUTBOUND_ATTACHMENT_MAX_BYTES,
         });
     };
 }
-export async function sendQueuedTelegramOutboundAttachments(turn, deps) {
+export async function sendQueuedBaleOutboundAttachments(turn, deps) {
     for (const attachment of turn.queuedAttachments) {
         if (deps.isDeliveryActive?.() === false)
             return;
@@ -649,18 +649,18 @@ export async function sendQueuedTelegramOutboundAttachments(turn, deps) {
                 if (deps.isDeliveryActive?.() === false)
                     return;
                 if (stats.size > deps.maxAttachmentSizeBytes) {
-                    throw new Error(formatTelegramOutboundAttachmentSizeLimitError(stats.size, deps.maxAttachmentSizeBytes));
+                    throw new Error(formatBaleOutboundAttachmentSizeLimitError(stats.size, deps.maxAttachmentSizeBytes));
                 }
             }
-            const isPhoto = isTelegramOutboundPhotoAttachmentPath(attachment.path);
+            const isPhoto = isBaleOutboundPhotoAttachmentPath(attachment.path);
             const method = isPhoto ? "sendPhoto" : "sendDocument";
             const fieldName = isPhoto ? "photo" : "document";
-            await withTelegramReplyParameters(turn.chatId, turn.replyToMessageId, turn.target, (replyParameters) => deps.sendMultipart(method, {
+            await withBaleReplyParameters(turn.chatId, turn.replyToMessageId, turn.target, (replyParameters) => deps.sendMultipart(method, {
                 chat_id: String(turn.chatId),
                 ...(replyParameters
                     ? { reply_parameters: JSON.stringify(replyParameters) }
                     : {}),
-                ...getTelegramMultipartTargetFields(turn.target),
+                ...getBaleMultipartTargetFields(turn.target),
             }, fieldName, attachment.path, attachment.fileName));
         }
         catch (error) {

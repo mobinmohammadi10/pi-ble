@@ -1,18 +1,18 @@
 /**
- * Telegram queue menu UI helpers
- * Zones: telegram ui, queue controls, menu composition
+ * Bale queue menu UI helpers
+ * Zones: bale ui, queue controls, menu composition
  * Owns queue-menu rendering, queue item callbacks, and queue-menu runtime adapters while core queue mechanics stay in queue
  */
 
-import type { TelegramInlineKeyboardMarkup } from "./keyboard.ts";
+import type { BaleInlineKeyboardMarkup } from "./keyboard.ts";
 import {
-  createTelegramMenuDelivery,
-  type TelegramMenuMessageRuntimeDeps,
-  type TelegramModelMenuState,
+  createBaleMenuDelivery,
+  type BaleMenuMessageRuntimeDeps,
+  type BaleModelMenuState,
 } from "./menu-model.ts";
 import type { MenuModel } from "./model.ts";
 import * as Queue from "./queue.ts";
-import type { TelegramApiCallOptions } from "./telegram-api.ts";
+import type { BaleApiCallOptions } from "./bale-api.ts";
 
 const QUEUE_ITEM_PROMPT_HTML_LIMIT = 3600;
 const QUEUE_ITEM_PROMPT_TRUNCATION_SUFFIX = "\n… [truncated]";
@@ -30,14 +30,14 @@ const EMPTY_QUEUE_REFRESH_TITLES = [
   "<b>🫧 Queue bubbles: none</b>",
   "<b>🛸 No queued signals detected</b>",
 ] as const;
-type TelegramQueueMenuReplyMarkup = TelegramInlineKeyboardMarkup;
-interface TelegramQueueMenuItem {
+type BaleQueueMenuReplyMarkup = BaleInlineKeyboardMarkup;
+interface BaleQueueMenuItem {
   chatId: number;
   replyToMessageId: number;
   queueOrder: number;
   isGuest: boolean;
   queuePosition: number;
-  queueLane: Queue.TelegramQueueLane;
+  queueLane: Queue.BaleQueueLane;
   canSelectLane: boolean;
   canSelectDisposition: boolean;
   dispatchProtected: boolean;
@@ -50,8 +50,8 @@ interface TelegramQueueMenuItem {
   promptText: string;
 }
 
-function getTelegramQueueItemPromptText<Context>(
-  item: Queue.TelegramQueueItem<Context>,
+function getBaleQueueItemPromptText<Context>(
+  item: Queue.BaleQueueItem<Context>,
 ): string {
   if (item.kind !== "prompt") return item.statusSummary;
   return (
@@ -63,14 +63,14 @@ function getTelegramQueueItemPromptText<Context>(
   );
 }
 
-function toTelegramQueueMenuItems<Context>(
-  items: readonly Queue.TelegramQueueItem<Context>[],
+function toBaleQueueMenuItems<Context>(
+  items: readonly Queue.BaleQueueItem<Context>[],
   pendingDispatch = false,
-): TelegramQueueMenuItem[] {
+): BaleQueueMenuItem[] {
   const head = items[0];
   return items.map((item, index) => {
     const dispatchProtected = pendingDispatch && (item === head ||
-      (head?.kind === "prompt" && head.steerPacketTail?.includes(item as Queue.PendingTelegramTurn) === true));
+      (head?.kind === "prompt" && head.steerPacketTail?.includes(item as Queue.PendingBaleTurn) === true));
     const attemptFrozen = item.kind === "prompt" && item.steerAttempted === true && !dispatchProtected;
     const editable = item.kind === "prompt" && item.guestQueryId === undefined && item.guestInlineMessageId === undefined && !dispatchProtected && !attemptFrozen;
     return {
@@ -84,26 +84,26 @@ function toTelegramQueueMenuItems<Context>(
       canSelectDisposition: editable && (item.queueLane !== "control" || item.sourceMessageIds.includes(item.replyToMessageId)),
       dispatchProtected, attemptFrozen,
       exceedsIdleCapacity: item.kind === "prompt" && item.queueLane === "steer" && !item.steerAttempted &&
-        !Queue.isTelegramSteerItemWithinIdleCapacity(item),
+        !Queue.isBaleSteerItemWithinIdleCapacity(item),
       priorityEmoji: item.kind === "prompt" ? item.priorityEmoji : undefined,
       reactionSuppressionEmoji:
         item.kind === "prompt" ? item.reactionSuppressionEmoji : undefined,
       hasAttachments:
         item.kind === "prompt" && item.queuedAttachments.length > 0,
       statusSummary: item.statusSummary,
-      promptText: getTelegramQueueItemPromptText(item),
+      promptText: getBaleQueueItemPromptText(item),
     };
   });
 }
 
-function formatSkippedTelegramQueuePosition(position: number): string {
+function formatSkippedBaleQueuePosition(position: number): string {
   return Array.from(String(position), (char) => `${char}\u0335`).join("");
 }
 
-function buildTelegramQueueMenuReplyMarkup(
-  items: readonly TelegramQueueMenuItem[],
+function buildBaleQueueMenuReplyMarkup(
+  items: readonly BaleQueueMenuItem[],
   emptyRefreshIndex = 0,
-): TelegramQueueMenuReplyMarkup {
+): BaleQueueMenuReplyMarkup {
   const backRow = [{ text: "⬆️ Main menu", callback_data: "menu:back" }];
   const nextEmptyRefreshIndex =
     (emptyRefreshIndex + 1) % EMPTY_QUEUE_REFRESH_TITLES.length;
@@ -114,11 +114,11 @@ function buildTelegramQueueMenuReplyMarkup(
   const refreshRow = [{ text: "🔄 Refresh", callback_data: refreshData }];
   if (items.length === 0) return { inline_keyboard: [backRow, refreshRow] };
   const rows = items.map((item) => {
-    const badge = getTelegramQueueMenuLaneBadge(item);
+    const badge = getBaleQueueMenuLaneBadge(item);
     const prefix = item.reactionSuppressionEmoji ? "👎 " :
       badge ? `${badge} ` : item.hasAttachments ? "📎 " : "";
     const position = item.reactionSuppressionEmoji
-      ? formatSkippedTelegramQueuePosition(item.queuePosition)
+      ? formatSkippedBaleQueuePosition(item.queuePosition)
       : String(item.queuePosition);
     const ordinalSeparator = item.reactionSuppressionEmoji ? "\u200A" : "";
     const state = item.attemptFrozen ? " · frozen" : item.dispatchProtected ? " · dispatch protected" :
@@ -136,7 +136,7 @@ function buildTelegramQueueMenuReplyMarkup(
   return { inline_keyboard: [backRow, refreshRow, ...rows] };
 }
 
-function findTelegramQueueItem<
+function findBaleQueueItem<
   TItem extends { chatId: number; replyToMessageId: number },
 >(
   items: readonly TItem[],
@@ -148,25 +148,25 @@ function findTelegramQueueItem<
   });
 }
 
-function escapeTelegramQueueMenuHtmlChar(char: string): string {
+function escapeBaleQueueMenuHtmlChar(char: string): string {
   if (char === "&") return "&amp;";
   if (char === "<") return "&lt;";
   if (char === ">") return "&gt;";
   return char;
 }
 
-function escapeTelegramQueueMenuHtml(text: string): string {
-  return Array.from(text).map(escapeTelegramQueueMenuHtmlChar).join("");
+function escapeBaleQueueMenuHtml(text: string): string {
+  return Array.from(text).map(escapeBaleQueueMenuHtmlChar).join("");
 }
 
-function escapeTelegramQueueMenuHtmlPreview(text: string): string {
-  const suffix = escapeTelegramQueueMenuHtml(
+function escapeBaleQueueMenuHtmlPreview(text: string): string {
+  const suffix = escapeBaleQueueMenuHtml(
     QUEUE_ITEM_PROMPT_TRUNCATION_SUFFIX,
   );
   let escaped = "";
   let truncated = false;
   for (const char of text) {
-    const next = escapeTelegramQueueMenuHtmlChar(char);
+    const next = escapeBaleQueueMenuHtmlChar(char);
     if (
       escaped.length + next.length + suffix.length >
       QUEUE_ITEM_PROMPT_HTML_LIMIT
@@ -179,21 +179,21 @@ function escapeTelegramQueueMenuHtmlPreview(text: string): string {
   return truncated ? escaped + suffix : escaped;
 }
 
-function getTelegramQueueMenuLaneBadge(item: Pick<TelegramQueueMenuItem, "queueLane">): string {
+function getBaleQueueMenuLaneBadge(item: Pick<BaleQueueMenuItem, "queueLane">): string {
   if (item.queueLane === "control") return "⚡";
   if (item.queueLane === "steer") return "🔥";
   if (item.queueLane !== "priority") return "";
   return "👍";
 }
 
-function getTelegramQueueMenuItemText(item: TelegramQueueMenuItem): string {
-  const marker = item.reactionSuppressionEmoji ? "👎" : getTelegramQueueMenuLaneBadge(item);
+function getBaleQueueMenuItemText(item: BaleQueueMenuItem): string {
+  const marker = item.reactionSuppressionEmoji ? "👎" : getBaleQueueMenuLaneBadge(item);
   const badge = marker ? ` ${marker}` : "";
   const position = item.reactionSuppressionEmoji
     ? `<s>${item.queuePosition}</s>.`
     : `<b>${item.queuePosition}.</b>`;
   const heading = `${position}${badge}`;
-  const preview = `<pre>${escapeTelegramQueueMenuHtmlPreview(item.promptText)}</pre>`;
+  const preview = `<pre>${escapeBaleQueueMenuHtmlPreview(item.promptText)}</pre>`;
   const note = item.attemptFrozen ? "\n<b>⚠️ Attempt frozen.</b>\nSDK/model use is unconfirmed; not editable or automatically retried." :
     item.dispatchProtected ? "\n<b>⏳ Dispatch protected.</b>\nWaiting for agent_start; SDK/model use is unconfirmed." :
     item.exceedsIdleCapacity ? "\n<b>⚠️ Idle Steer capacity exceeded.</b>\nEdit the source or choose Priority/Normal; source groups are never split." :
@@ -201,9 +201,9 @@ function getTelegramQueueMenuItemText(item: TelegramQueueMenuItem): string {
   return `${heading}\n${preview}${note}`;
 }
 
-function buildTelegramGuestQueueItemSubmenuReplyMarkup(
+function buildBaleGuestQueueItemSubmenuReplyMarkup(
   queueOrder: number,
-): TelegramQueueMenuReplyMarkup {
+): BaleQueueMenuReplyMarkup {
   return {
     inline_keyboard: [
       [{ text: "⬆️ Back", callback_data: "queue:list" }],
@@ -217,8 +217,8 @@ function buildTelegramGuestQueueItemSubmenuReplyMarkup(
   };
 }
 
-function buildTelegramQueueItemSubmenuReplyMarkup(item: TelegramQueueMenuItem): TelegramQueueMenuReplyMarkup {
-  const rows: TelegramQueueMenuReplyMarkup["inline_keyboard"] = [[{ text: "⬆️ Back", callback_data: "queue:list" }]];
+function buildBaleQueueItemSubmenuReplyMarkup(item: BaleQueueMenuItem): BaleQueueMenuReplyMarkup {
+  const rows: BaleQueueMenuReplyMarkup["inline_keyboard"] = [[{ text: "⬆️ Back", callback_data: "queue:list" }]];
   if (item.canSelectLane) rows.push([
     { text: item.queueLane === "default" ? "🔵 Normal" : "⚫️ Normal", callback_data: `queue:lane-set:${item.chatId}:${item.replyToMessageId}:normal` },
     { text: item.queueLane === "priority" ? "🟣 Priority" : "⚫️ Priority", callback_data: `queue:lane-set:${item.chatId}:${item.replyToMessageId}:priority` },
@@ -231,15 +231,15 @@ function buildTelegramQueueItemSubmenuReplyMarkup(item: TelegramQueueMenuItem): 
   return { inline_keyboard: rows };
 }
 
-interface TelegramQueueMenuCallbackDeps<Context = unknown> {
-  getQueuedItems: () => TelegramQueueMenuItem[];
+interface BaleQueueMenuCallbackDeps<Context = unknown> {
+  getQueuedItems: () => BaleQueueMenuItem[];
   findItem: (
     chatId: number,
     replyToMessageId: number,
-  ) => TelegramQueueMenuItem | undefined;
-  findGuestItem: (queueOrder: number) => TelegramQueueMenuItem | undefined;
+  ) => BaleQueueMenuItem | undefined;
+  findGuestItem: (queueOrder: number) => BaleQueueMenuItem | undefined;
   skipGuest: (queueOrder: number, ctx: Context) => Promise<boolean>;
-  setLane: (chatId: number, replyToMessageId: number, lane: Exclude<Queue.TelegramQueueLane, "control">) => boolean;
+  setLane: (chatId: number, replyToMessageId: number, lane: Exclude<Queue.BaleQueueLane, "control">) => boolean;
   setSkipped: (
     chatId: number,
     replyToMessageId: number,
@@ -249,7 +249,7 @@ interface TelegramQueueMenuCallbackDeps<Context = unknown> {
     chatId: number,
     messageId: number,
     text: string,
-    replyMarkup: TelegramQueueMenuReplyMarkup,
+    replyMarkup: BaleQueueMenuReplyMarkup,
   ) => Promise<number | undefined>;
   answerCallbackQuery: (
     callbackQueryId: string,
@@ -258,13 +258,13 @@ interface TelegramQueueMenuCallbackDeps<Context = unknown> {
   updateStatus: (ctx: Context) => void;
 }
 
-async function handleTelegramQueueMenuCallback<Context>(
+async function handleBaleQueueMenuCallback<Context>(
   callbackQueryId: string,
   data: string,
   replyChatId: number,
   replyMessageId: number,
   ctx: Context,
-  deps: TelegramQueueMenuCallbackDeps<Context>,
+  deps: BaleQueueMenuCallbackDeps<Context>,
 ): Promise<boolean> {
   if (!data.startsWith("queue:")) return false;
   if (data === "queue:noop") {
@@ -272,7 +272,7 @@ async function handleTelegramQueueMenuCallback<Context>(
     return true;
   }
   if (data === "queue:list") {
-    await updateTelegramQueueMenuList(
+    await updateBaleQueueMenuList(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -282,7 +282,7 @@ async function handleTelegramQueueMenuCallback<Context>(
   }
   const refreshMatch = data.match(/^queue:refresh(?::(\d+))?$/);
   if (refreshMatch) {
-    await updateTelegramQueueMenuList(
+    await updateBaleQueueMenuList(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -294,7 +294,7 @@ async function handleTelegramQueueMenuCallback<Context>(
   }
   const guestPickMatch = data.match(/^queue:guest-pick:(\d+)$/);
   if (guestPickMatch) {
-    await handleTelegramGuestQueueMenuPick(
+    await handleBaleGuestQueueMenuPick(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -313,7 +313,7 @@ async function handleTelegramQueueMenuCallback<Context>(
     }
     const skipped = await deps.skipGuest(queueOrder, ctx);
     if (!skipped) {
-      await refreshStaleTelegramQueueMenuItem(
+      await refreshStaleBaleQueueMenuItem(
         callbackQueryId,
         replyChatId,
         replyMessageId,
@@ -321,7 +321,7 @@ async function handleTelegramQueueMenuCallback<Context>(
       );
       return true;
     }
-    await updateTelegramQueueMenuList(
+    await updateBaleQueueMenuList(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -332,7 +332,7 @@ async function handleTelegramQueueMenuCallback<Context>(
   }
   const pickMatch = data.match(/^queue:pick:(\d+):(\d+)$/);
   if (pickMatch) {
-    await handleTelegramQueueMenuPick(
+    await handleBaleQueueMenuPick(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -346,7 +346,7 @@ async function handleTelegramQueueMenuCallback<Context>(
     /^queue:(?:lane-set|prio-set):(\d+):(\d+):(steer|priority|normal)$/,
   );
   if (prioSetMatch) {
-    await handleTelegramQueueMenuLaneSet(
+    await handleBaleQueueMenuLaneSet(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -360,7 +360,7 @@ async function handleTelegramQueueMenuCallback<Context>(
   }
   const prioMatch = data.match(/^queue:prio:(\d+):(\d+)$/);
   if (prioMatch) {
-    await handleTelegramQueueMenuPriority(
+    await handleBaleQueueMenuPriority(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -373,7 +373,7 @@ async function handleTelegramQueueMenuCallback<Context>(
   }
   const skipSetMatch = data.match(/^queue:skip-set:(\d+):(\d+):(skip|keep)$/);
   if (skipSetMatch) {
-    await handleTelegramQueueMenuSkipSet(
+    await handleBaleQueueMenuSkipSet(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -388,8 +388,8 @@ async function handleTelegramQueueMenuCallback<Context>(
   return false;
 }
 
-function getTelegramQueueMenuListText(
-  items: readonly TelegramQueueMenuItem[],
+function getBaleQueueMenuListText(
+  items: readonly BaleQueueMenuItem[],
   emptyRefreshIndex?: number,
 ): string {
   if (items.length > 0) return "<b>⏳ Queue:</b>";
@@ -399,11 +399,11 @@ function getTelegramQueueMenuListText(
   ];
 }
 
-async function updateTelegramQueueMenuList<Context>(
+async function updateBaleQueueMenuList<Context>(
   callbackQueryId: string,
   replyChatId: number,
   replyMessageId: number,
-  deps: TelegramQueueMenuCallbackDeps<Context>,
+  deps: BaleQueueMenuCallbackDeps<Context>,
   notice?: string,
   emptyRefreshIndex?: number,
 ): Promise<void> {
@@ -411,19 +411,19 @@ async function updateTelegramQueueMenuList<Context>(
   await deps.updateQueueMessage(
     replyChatId,
     replyMessageId,
-    getTelegramQueueMenuListText(items, emptyRefreshIndex),
-    buildTelegramQueueMenuReplyMarkup(items, emptyRefreshIndex),
+    getBaleQueueMenuListText(items, emptyRefreshIndex),
+    buildBaleQueueMenuReplyMarkup(items, emptyRefreshIndex),
   );
   await deps.answerCallbackQuery(callbackQueryId, notice);
 }
 
-async function refreshStaleTelegramQueueMenuItem<Context>(
+async function refreshStaleBaleQueueMenuItem<Context>(
   callbackQueryId: string,
   replyChatId: number,
   replyMessageId: number,
-  deps: TelegramQueueMenuCallbackDeps<Context>,
+  deps: BaleQueueMenuCallbackDeps<Context>,
 ): Promise<void> {
-  await updateTelegramQueueMenuList(
+  await updateBaleQueueMenuList(
     callbackQueryId,
     replyChatId,
     replyMessageId,
@@ -432,16 +432,16 @@ async function refreshStaleTelegramQueueMenuItem<Context>(
   );
 }
 
-async function handleTelegramGuestQueueMenuPick<Context>(
+async function handleBaleGuestQueueMenuPick<Context>(
   callbackQueryId: string,
   replyChatId: number,
   replyMessageId: number,
   queueOrder: number,
-  deps: TelegramQueueMenuCallbackDeps<Context>,
+  deps: BaleQueueMenuCallbackDeps<Context>,
 ): Promise<void> {
   const item = deps.findGuestItem(queueOrder);
   if (!item) {
-    return refreshStaleTelegramQueueMenuItem(
+    return refreshStaleBaleQueueMenuItem(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -451,25 +451,25 @@ async function handleTelegramGuestQueueMenuPick<Context>(
   await deps.updateQueueMessage(
     replyChatId,
     replyMessageId,
-    getTelegramQueueMenuItemText(item),
+    getBaleQueueMenuItemText(item),
     item.dispatchProtected || item.attemptFrozen
-      ? buildTelegramQueueItemSubmenuReplyMarkup(item)
-      : buildTelegramGuestQueueItemSubmenuReplyMarkup(queueOrder),
+      ? buildBaleQueueItemSubmenuReplyMarkup(item)
+      : buildBaleGuestQueueItemSubmenuReplyMarkup(queueOrder),
   );
   await deps.answerCallbackQuery(callbackQueryId);
 }
 
-async function handleTelegramQueueMenuPick<Context>(
+async function handleBaleQueueMenuPick<Context>(
   callbackQueryId: string,
   replyChatId: number,
   replyMessageId: number,
   chatId: number,
   msgId: number,
-  deps: TelegramQueueMenuCallbackDeps<Context>,
+  deps: BaleQueueMenuCallbackDeps<Context>,
 ): Promise<void> {
   const item = deps.findItem(chatId, msgId);
   if (!item) {
-    return refreshStaleTelegramQueueMenuItem(
+    return refreshStaleBaleQueueMenuItem(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -479,31 +479,31 @@ async function handleTelegramQueueMenuPick<Context>(
   await deps.updateQueueMessage(
     replyChatId,
     replyMessageId,
-    getTelegramQueueMenuItemText(item),
-    buildTelegramQueueItemSubmenuReplyMarkup(item),
+    getBaleQueueMenuItemText(item),
+    buildBaleQueueItemSubmenuReplyMarkup(item),
   );
   await deps.answerCallbackQuery(callbackQueryId);
 }
 
-async function handleTelegramQueueMenuPriority<Context>(
+async function handleBaleQueueMenuPriority<Context>(
   callbackQueryId: string,
   replyChatId: number,
   replyMessageId: number,
   chatId: number,
   msgId: number,
   ctx: Context,
-  deps: TelegramQueueMenuCallbackDeps<Context>,
+  deps: BaleQueueMenuCallbackDeps<Context>,
 ): Promise<void> {
   const item = deps.findItem(chatId, msgId);
   if (!item) {
-    return refreshStaleTelegramQueueMenuItem(
+    return refreshStaleBaleQueueMenuItem(
       callbackQueryId,
       replyChatId,
       replyMessageId,
       deps,
     );
   }
-  await updateTelegramQueueMenuLane(
+  await updateBaleQueueMenuLane(
     callbackQueryId,
     replyChatId,
     replyMessageId,
@@ -515,26 +515,26 @@ async function handleTelegramQueueMenuPriority<Context>(
   );
 }
 
-async function handleTelegramQueueMenuLaneSet<Context>(
+async function handleBaleQueueMenuLaneSet<Context>(
   callbackQueryId: string,
   replyChatId: number,
   replyMessageId: number,
   chatId: number,
   msgId: number,
-  lane: Exclude<Queue.TelegramQueueLane, "control">,
+  lane: Exclude<Queue.BaleQueueLane, "control">,
   ctx: Context,
-  deps: TelegramQueueMenuCallbackDeps<Context>,
+  deps: BaleQueueMenuCallbackDeps<Context>,
 ): Promise<void> {
   const item = deps.findItem(chatId, msgId);
   if (!item) {
-    return refreshStaleTelegramQueueMenuItem(
+    return refreshStaleBaleQueueMenuItem(
       callbackQueryId,
       replyChatId,
       replyMessageId,
       deps,
     );
   }
-  await updateTelegramQueueMenuLane(
+  await updateBaleQueueMenuLane(
     callbackQueryId,
     replyChatId,
     replyMessageId,
@@ -546,15 +546,15 @@ async function handleTelegramQueueMenuLaneSet<Context>(
   );
 }
 
-async function updateTelegramQueueMenuLane<Context>(
+async function updateBaleQueueMenuLane<Context>(
   callbackQueryId: string,
   replyChatId: number,
   replyMessageId: number,
   chatId: number,
   msgId: number,
-  lane: Exclude<Queue.TelegramQueueLane, "control">,
+  lane: Exclude<Queue.BaleQueueLane, "control">,
   ctx: Context,
-  deps: TelegramQueueMenuCallbackDeps<Context>,
+  deps: BaleQueueMenuCallbackDeps<Context>,
 ): Promise<void> {
   if (!deps.setLane(chatId, msgId, lane)) {
     await deps.answerCallbackQuery(callbackQueryId, "Queue item is protected");
@@ -563,7 +563,7 @@ async function updateTelegramQueueMenuLane<Context>(
   deps.updateStatus(ctx);
   const updated = deps.findItem(chatId, msgId);
   if (!updated) {
-    return refreshStaleTelegramQueueMenuItem(
+    return refreshStaleBaleQueueMenuItem(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -573,8 +573,8 @@ async function updateTelegramQueueMenuLane<Context>(
   await deps.updateQueueMessage(
     replyChatId,
     replyMessageId,
-    getTelegramQueueMenuItemText(updated),
-    buildTelegramQueueItemSubmenuReplyMarkup(updated),
+    getBaleQueueMenuItemText(updated),
+    buildBaleQueueItemSubmenuReplyMarkup(updated),
   );
   await deps.answerCallbackQuery(
     callbackQueryId,
@@ -582,7 +582,7 @@ async function updateTelegramQueueMenuLane<Context>(
   );
 }
 
-async function handleTelegramQueueMenuSkipSet<Context>(
+async function handleBaleQueueMenuSkipSet<Context>(
   callbackQueryId: string,
   replyChatId: number,
   replyMessageId: number,
@@ -590,11 +590,11 @@ async function handleTelegramQueueMenuSkipSet<Context>(
   msgId: number,
   skipped: boolean,
   ctx: Context,
-  deps: TelegramQueueMenuCallbackDeps<Context>,
+  deps: BaleQueueMenuCallbackDeps<Context>,
 ): Promise<void> {
   const item = deps.findItem(chatId, msgId);
   if (!item) {
-    return refreshStaleTelegramQueueMenuItem(
+    return refreshStaleBaleQueueMenuItem(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -608,7 +608,7 @@ async function handleTelegramQueueMenuSkipSet<Context>(
   deps.updateStatus(ctx);
   const updated = deps.findItem(chatId, msgId);
   if (!updated) {
-    return refreshStaleTelegramQueueMenuItem(
+    return refreshStaleBaleQueueMenuItem(
       callbackQueryId,
       replyChatId,
       replyMessageId,
@@ -618,44 +618,44 @@ async function handleTelegramQueueMenuSkipSet<Context>(
   await deps.updateQueueMessage(
     replyChatId,
     replyMessageId,
-    getTelegramQueueMenuItemText(updated),
-    buildTelegramQueueItemSubmenuReplyMarkup(updated),
+    getBaleQueueMenuItemText(updated),
+    buildBaleQueueItemSubmenuReplyMarkup(updated),
   );
   await deps.answerCallbackQuery(callbackQueryId);
 }
 
-interface TelegramQueueMenuCallbackQuery {
+interface BaleQueueMenuCallbackQuery {
   id: string;
   data?: string;
   message?: { chat?: { id?: number }; message_id?: number };
 }
-interface TelegramQueueMenuRuntime<Context> {
+interface BaleQueueMenuRuntime<Context> {
   openQueueMenu: (
     chatId: number,
     replyToMessageId: number,
     ctx: Context,
     threadId?: number,
-    options?: Pick<TelegramApiCallOptions, "assertAuthority">,
+    options?: Pick<BaleApiCallOptions, "assertAuthority">,
   ) => Promise<void>;
   handleCallbackQuery: (
-    query: TelegramQueueMenuCallbackQuery,
+    query: BaleQueueMenuCallbackQuery,
     ctx: Context,
   ) => Promise<boolean>;
 }
-export function createTelegramQueueMenuRuntime<
+export function createBaleQueueMenuRuntime<
   Context,
   TModel extends MenuModel = MenuModel,
 >(deps: {
   hasPendingDispatch?: () => boolean;
-  telegramQueueStore: Queue.TelegramQueueStateStore<Context>;
-  queueMutationRuntime: Queue.TelegramQueueMutationController<Context>;
-  sendInteractiveMessage: TelegramMenuMessageRuntimeDeps["sendInteractiveMessage"];
+  baleQueueStore: Queue.BaleQueueStateStore<Context>;
+  queueMutationRuntime: Queue.BaleQueueMutationController<Context>;
+  sendInteractiveMessage: BaleMenuMessageRuntimeDeps["sendInteractiveMessage"];
   editInteractiveMessage: (
     chatId: number,
     messageId: number,
     text: string,
     mode: "html",
-    replyMarkup: TelegramQueueMenuReplyMarkup,
+    replyMarkup: BaleQueueMenuReplyMarkup,
   ) => Promise<void>;
   answerCallbackQuery: (
     callbackQueryId: string,
@@ -665,19 +665,19 @@ export function createTelegramQueueMenuRuntime<
     chatId: number,
     ctx: Context,
     threadId?: number,
-  ) => Promise<TelegramModelMenuState<TModel>>;
+  ) => Promise<BaleModelMenuState<TModel>>;
   getStoredModelMenuState: (
     messageId: number | undefined,
     chatId?: number,
-  ) => TelegramModelMenuState<TModel> | undefined;
-  storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
+  ) => BaleModelMenuState<TModel> | undefined;
+  storeModelMenuState: (state: BaleModelMenuState<TModel>) => void;
   updateStatusMessage: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     ctx: Context,
   ) => Promise<void>;
   updateStatus: (ctx: Context) => void;
   dismissGuestPlaceholder?: (inlineMessageId: string) => Promise<void>;
-}): TelegramQueueMenuRuntime<Context> {
+}): BaleQueueMenuRuntime<Context> {
   const sendQueueMenuMessage = createQueueMenuSendMessageAdapter(
     deps.sendInteractiveMessage,
   );
@@ -686,13 +686,13 @@ export function createTelegramQueueMenuRuntime<
   );
   return {
     openQueueMenu: (chatId, replyToMessageId, ctx, threadId, options) => {
-      const delivery = createTelegramMenuDelivery(
+      const delivery = createBaleMenuDelivery(
         { chatId, threadId },
         options,
         deps,
       );
       return createOpenQueueMenu<Context, TModel>({
-        getQueuedItems: deps.telegramQueueStore.getQueuedItems,
+        getQueuedItems: deps.baleQueueStore.getQueuedItems,
         hasPendingDispatch: deps.hasPendingDispatch,
         getModelMenuState: (chat, context) =>
           deps.getModelMenuState(chat, context, threadId),
@@ -704,7 +704,7 @@ export function createTelegramQueueMenuRuntime<
     },
     handleCallbackQuery: createQueueMenuCallbackHandler<Context, TModel>({
       hasPendingDispatch: deps.hasPendingDispatch,
-      telegramQueueStore: deps.telegramQueueStore,
+      baleQueueStore: deps.baleQueueStore,
       queueMutationRuntime: deps.queueMutationRuntime,
       editInteractiveMessage: editQueueMenuMessage,
       getStoredModelMenuState: deps.getStoredModelMenuState,
@@ -720,18 +720,18 @@ function createOpenQueueMenu<
   Context,
   TModel extends MenuModel = MenuModel,
 >(deps: {
-  getQueuedItems: () => Queue.TelegramQueueItem<Context>[];
+  getQueuedItems: () => Queue.BaleQueueItem<Context>[];
   hasPendingDispatch?: () => boolean;
   getModelMenuState: (
     chatId: number,
     ctx: Context,
-  ) => Promise<TelegramModelMenuState<TModel>>;
-  storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
+  ) => Promise<BaleModelMenuState<TModel>>;
+  storeModelMenuState: (state: BaleModelMenuState<TModel>) => void;
   sendInteractiveMessage: (
     chatId: number,
     replyToMessageId: number,
     text: string,
-    replyMarkup: TelegramQueueMenuReplyMarkup,
+    replyMarkup: BaleQueueMenuReplyMarkup,
   ) => Promise<number | undefined>;
 }) {
   return async (
@@ -740,13 +740,13 @@ function createOpenQueueMenu<
     ctx: Context,
   ): Promise<void> => {
     const state = await deps.getModelMenuState(chatId, ctx);
-    const menuItems = toTelegramQueueMenuItems(deps.getQueuedItems(), deps.hasPendingDispatch?.());
-    const text = getTelegramQueueMenuListText(menuItems);
+    const menuItems = toBaleQueueMenuItems(deps.getQueuedItems(), deps.hasPendingDispatch?.());
+    const text = getBaleQueueMenuListText(menuItems);
     const messageId = await deps.sendInteractiveMessage(
       chatId,
       replyToMessageId,
       text,
-      buildTelegramQueueMenuReplyMarkup(menuItems),
+      buildBaleQueueMenuReplyMarkup(menuItems),
     );
     if (messageId === undefined) return;
     state.messageId = messageId;
@@ -760,20 +760,20 @@ function createQueueMenuCallbackHandler<
   TModel extends MenuModel = MenuModel,
 >(deps: {
   hasPendingDispatch?: () => boolean;
-  telegramQueueStore: Queue.TelegramQueueStateStore<Context>;
-  queueMutationRuntime: Queue.TelegramQueueMutationController<Context>;
+  baleQueueStore: Queue.BaleQueueStateStore<Context>;
+  queueMutationRuntime: Queue.BaleQueueMutationController<Context>;
   editInteractiveMessage: (
     chatId: number,
     messageId: number,
     text: string,
-    replyMarkup: TelegramQueueMenuReplyMarkup,
+    replyMarkup: BaleQueueMenuReplyMarkup,
   ) => Promise<number | undefined>;
   getStoredModelMenuState: (
     messageId: number | undefined,
     chatId?: number,
-  ) => TelegramModelMenuState<TModel> | undefined;
+  ) => BaleModelMenuState<TModel> | undefined;
   updateStatusMessage: (
-    state: TelegramModelMenuState<TModel>,
+    state: BaleModelMenuState<TModel>,
     ctx: Context,
   ) => Promise<void>;
   answerCallbackQuery: (
@@ -784,7 +784,7 @@ function createQueueMenuCallbackHandler<
   dismissGuestPlaceholder?: (inlineMessageId: string) => Promise<void>;
 }) {
   return async (
-    query: TelegramQueueMenuCallbackQuery,
+    query: BaleQueueMenuCallbackQuery,
     ctx: Context,
   ): Promise<boolean> => {
     const data = query.data;
@@ -798,14 +798,14 @@ function createQueueMenuCallbackHandler<
         await deps.answerCallbackQuery(query.id, "Interactive message expired");
         return true;
       }
-      const menuItems = toTelegramQueueMenuItems(
-        deps.telegramQueueStore.getQueuedItems(), deps.hasPendingDispatch?.(),
+      const menuItems = toBaleQueueMenuItems(
+        deps.baleQueueStore.getQueuedItems(), deps.hasPendingDispatch?.(),
       );
       await deps.editInteractiveMessage(
         chatId,
         messageId,
-        getTelegramQueueMenuListText(menuItems),
-        buildTelegramQueueMenuReplyMarkup(menuItems),
+        getBaleQueueMenuListText(menuItems),
+        buildBaleQueueMenuReplyMarkup(menuItems),
       );
       state.mode = "queue";
       await deps.answerCallbackQuery(query.id);
@@ -813,13 +813,13 @@ function createQueueMenuCallbackHandler<
     }
     if (!data.startsWith("queue:")) return false;
     const getQueueSnapshot = () => {
-      return deps.telegramQueueStore.getQueuedItems();
+      return deps.baleQueueStore.getQueuedItems();
     };
     const toMenuItems = () => {
-      return toTelegramQueueMenuItems(getQueueSnapshot(), deps.hasPendingDispatch?.());
+      return toBaleQueueMenuItems(getQueueSnapshot(), deps.hasPendingDispatch?.());
     };
     const findItem = (cId: number, rId: number) => {
-      return findTelegramQueueItem(toMenuItems(), cId, rId);
+      return findBaleQueueItem(toMenuItems(), cId, rId);
     };
     const findGuestItem = (queueOrder: number) => {
       return toMenuItems().find((item) => {
@@ -831,7 +831,7 @@ function createQueueMenuCallbackHandler<
       queueMutationRuntime: deps.queueMutationRuntime,
       hasPendingDispatch: deps.hasPendingDispatch,
     };
-    return handleTelegramQueueMenuCallback(
+    return handleBaleQueueMenuCallback(
       query.id,
       data,
       chatId,
@@ -842,16 +842,16 @@ function createQueueMenuCallbackHandler<
         findItem,
         findGuestItem,
         skipGuest: (queueOrder, callbackContext) => {
-          return skipQueuedTelegramGuestPrompt(queueOrder, callbackContext, {
+          return skipQueuedBaleGuestPrompt(queueOrder, callbackContext, {
             getQueueSnapshot,
             queueMutationRuntime: deps.queueMutationRuntime,
             dismissGuestPlaceholder: deps.dismissGuestPlaceholder,
           });
         },
         setLane: (cId, rId, lane) =>
-          applyQueuedTelegramPromptMenuFlags(cId, rId, ctx, flagDeps, () => ({ lane })),
+          applyQueuedBalePromptMenuFlags(cId, rId, ctx, flagDeps, () => ({ lane })),
         setSkipped: (cId, rId, skipped) =>
-          applyQueuedTelegramPromptMenuFlags(cId, rId, ctx, flagDeps, () => ({ skipped })),
+          applyQueuedBalePromptMenuFlags(cId, rId, ctx, flagDeps, () => ({ skipped })),
         updateQueueMessage: deps.editInteractiveMessage,
         answerCallbackQuery: deps.answerCallbackQuery,
         updateStatus: deps.updateStatus,
@@ -860,12 +860,12 @@ function createQueueMenuCallbackHandler<
   };
 }
 
-async function skipQueuedTelegramGuestPrompt<Context>(
+async function skipQueuedBaleGuestPrompt<Context>(
   queueOrder: number,
   ctx: Context,
   deps: {
-    getQueueSnapshot: () => Queue.TelegramQueueItem<Context>[];
-    queueMutationRuntime: Queue.TelegramQueueMutationController<Context>;
+    getQueueSnapshot: () => Queue.BaleQueueItem<Context>[];
+    queueMutationRuntime: Queue.BaleQueueMutationController<Context>;
     dismissGuestPlaceholder?: (inlineMessageId: string) => Promise<void>;
   },
 ): Promise<boolean> {
@@ -890,33 +890,33 @@ async function skipQueuedTelegramGuestPrompt<Context>(
   return true;
 }
 
-interface TelegramQueueMenuFlags {
-  lane?: Exclude<Queue.TelegramQueueLane, "control">;
+interface BaleQueueMenuFlags {
+  lane?: Exclude<Queue.BaleQueueLane, "control">;
   skipped?: boolean;
 }
 
 /** Each menu selection changes one dimension through the existing Queue owner. */
-function applyQueuedTelegramPromptMenuFlags<Context>(
+function applyQueuedBalePromptMenuFlags<Context>(
   chatId: number,
   replyToMessageId: number,
   ctx: Context,
   deps: {
-    getQueueSnapshot: () => Queue.TelegramQueueItem<Context>[];
-    queueMutationRuntime: Queue.TelegramQueueMutationController<Context>;
+    getQueueSnapshot: () => Queue.BaleQueueItem<Context>[];
+    queueMutationRuntime: Queue.BaleQueueMutationController<Context>;
     hasPendingDispatch?: () => boolean;
   },
-  chooseFlags: (item: Queue.TelegramQueueItem<Context>) => TelegramQueueMenuFlags | undefined,
+  chooseFlags: (item: Queue.BaleQueueItem<Context>) => BaleQueueMenuFlags | undefined,
 ): boolean {
-  const item = findTelegramQueueItem(
+  const item = findBaleQueueItem(
     deps.getQueueSnapshot(),
     chatId,
     replyToMessageId,
   );
   const flags = item ? chooseFlags(item) : undefined;
   if (!item || item.kind !== "prompt" || !flags) return false;
-  const view = findTelegramQueueItem(toTelegramQueueMenuItems(deps.getQueueSnapshot(), deps.hasPendingDispatch?.()), chatId, replyToMessageId);
+  const view = findBaleQueueItem(toBaleQueueMenuItems(deps.getQueueSnapshot(), deps.hasPendingDispatch?.()), chatId, replyToMessageId);
   if (!view || (flags.lane !== undefined && !view.canSelectLane) || (flags.skipped !== undefined && !view.canSelectDisposition)) return false;
-  const disposition: Extract<Queue.TelegramQueueReactionDisposition, { kind: "reaction-transition" }> = { kind: "reaction-transition" };
+  const disposition: Extract<Queue.BaleQueueReactionDisposition, { kind: "reaction-transition" }> = { kind: "reaction-transition" };
   if (flags.lane !== undefined) {
     disposition.promptLane = flags.lane;
     disposition.priorityEmoji = flags.lane === "steer" ? "🔥" : flags.lane === "priority" ? "👍" : null;
@@ -932,14 +932,14 @@ function createQueueMenuSendMessageAdapter(
     chatId: number,
     text: string,
     mode: "html",
-    replyMarkup: TelegramQueueMenuReplyMarkup,
+    replyMarkup: BaleQueueMenuReplyMarkup,
   ) => Promise<number | undefined>,
 ) {
   return (
     chatId: number,
     _replyToMessageId: number,
     text: string,
-    replyMarkup: TelegramQueueMenuReplyMarkup,
+    replyMarkup: BaleQueueMenuReplyMarkup,
   ): Promise<number | undefined> => {
     return sendInteractiveMessage(chatId, text, "html", replyMarkup);
   };
@@ -951,14 +951,14 @@ function createQueueMenuEditMessageAdapter(
     messageId: number,
     text: string,
     mode: "html",
-    replyMarkup: TelegramQueueMenuReplyMarkup,
+    replyMarkup: BaleQueueMenuReplyMarkup,
   ) => Promise<void>,
 ) {
   return (
     chatId: number,
     messageId: number,
     text: string,
-    replyMarkup: TelegramQueueMenuReplyMarkup,
+    replyMarkup: BaleQueueMenuReplyMarkup,
   ): Promise<number | undefined> => {
     return editInteractiveMessage(
       chatId,

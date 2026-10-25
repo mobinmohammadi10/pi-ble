@@ -1,79 +1,79 @@
 /**
- * Telegram bridge runtime-state helpers
- * Zones: pi agent runtime state, telegram session, shared coordination
- * Owns small session-local runtime primitives that are shared by orchestration but are not specific to queueing, rendering, polling, or Telegram transport
+ * Bale bridge runtime-state helpers
+ * Zones: pi agent runtime state, bale session, shared coordination
+ * Owns small session-local runtime primitives that are shared by orchestration but are not specific to queueing, rendering, polling, or Bale transport
  */
 import * as Machine from "./machine.js";
-const TELEGRAM_TYPING_ACTION_INTERVAL_MS = 3_000;
-const TELEGRAM_TYPING_IDLE_DRAIN_MAX_MS = 250;
-export function createTelegramBridgeRuntimeState() {
+const BALE_TYPING_ACTION_INTERVAL_MS = 3_000;
+const BALE_TYPING_IDLE_DRAIN_MAX_MS = 250;
+export function createBaleBridgeRuntimeState() {
     return {
-        nextQueuedTelegramItemOrder: 0,
-        nextQueuedTelegramControlOrder: 0,
-        activeTelegramToolExecutions: 0,
-        telegramTurnDispatchPending: false,
+        nextQueuedBaleItemOrder: 0,
+        nextQueuedBaleControlOrder: 0,
+        activeBaleToolExecutions: 0,
+        baleTurnDispatchPending: false,
         compactionInProgress: false,
         foldQueuedPromptsIntoHistory: false,
         setupInProgress: false,
     };
 }
-export function createTelegramBridgeRuntime(state = createTelegramBridgeRuntimeState(), typing = createTelegramTypingLoop()) {
+export function createBaleBridgeRuntime(state = createBaleBridgeRuntimeState(), typing = createBaleTypingLoop()) {
     return {
         state,
         queue: {
-            syncCounters: (counters) => syncTelegramQueueRuntimeCounters(state, counters),
-            allocateItemOrder: () => allocateTelegramQueueItemOrder(state),
-            allocateControlOrder: () => allocateTelegramQueueControlOrder(state),
+            syncCounters: (counters) => syncBaleQueueRuntimeCounters(state, counters),
+            allocateItemOrder: () => allocateBaleQueueItemOrder(state),
+            allocateControlOrder: () => allocateBaleQueueControlOrder(state),
         },
         lifecycle: {
-            syncFlags: (flags) => syncTelegramLifecycleRuntimeFlags(state, flags),
-            getActiveToolExecutions: () => getActiveTelegramToolExecutions(state),
-            setActiveToolExecutions: (count) => setActiveTelegramToolExecutions(state, count),
-            resetActiveToolExecutions: () => resetActiveTelegramToolExecutions(state),
-            hasDispatchPending: () => hasTelegramDispatchPending(state),
-            setDispatchPending: (pending) => setTelegramDispatchPending(state, pending),
-            clearDispatchPending: () => clearTelegramDispatchPending(state),
-            isCompactionInProgress: () => isTelegramCompactionInProgress(state),
-            setCompactionInProgress: (inProgress) => setTelegramCompactionInProgress(state, inProgress),
+            syncFlags: (flags) => syncBaleLifecycleRuntimeFlags(state, flags),
+            getActiveToolExecutions: () => getActiveBaleToolExecutions(state),
+            setActiveToolExecutions: (count) => setActiveBaleToolExecutions(state, count),
+            resetActiveToolExecutions: () => resetActiveBaleToolExecutions(state),
+            hasDispatchPending: () => hasBaleDispatchPending(state),
+            setDispatchPending: (pending) => setBaleDispatchPending(state, pending),
+            clearDispatchPending: () => clearBaleDispatchPending(state),
+            isCompactionInProgress: () => isBaleCompactionInProgress(state),
+            setCompactionInProgress: (inProgress) => setBaleCompactionInProgress(state, inProgress),
             shouldFoldQueuedPromptsIntoHistory: () => shouldFoldQueuedPromptsIntoHistory(state),
             setFoldQueuedPromptsIntoHistory: (fold) => setFoldQueuedPromptsIntoHistory(state, fold),
         },
         setup: {
-            isInProgress: () => isTelegramSetupInProgress(state),
-            start: () => startTelegramSetup(state),
-            finish: () => finishTelegramSetup(state),
+            isInProgress: () => isBaleSetupInProgress(state),
+            start: () => startBaleSetup(state),
+            finish: () => finishBaleSetup(state),
         },
         abort: {
-            hasHandler: () => hasTelegramAbortHandler(state),
-            setHandler: (abortHandler) => setTelegramAbortHandler(state, abortHandler),
-            clearHandler: () => clearTelegramAbortHandler(state),
-            getHandler: () => getTelegramAbortHandler(state),
-            abortTurn: () => abortTelegramTurn(state),
+            hasHandler: () => hasBaleAbortHandler(state),
+            setHandler: (abortHandler) => setBaleAbortHandler(state, abortHandler),
+            clearHandler: () => clearBaleAbortHandler(state),
+            getHandler: () => getBaleAbortHandler(state),
+            abortTurn: () => abortBaleTurn(state),
         },
         typing,
     };
 }
-export function syncTelegramQueueRuntimeCounters(state, counters) {
-    if (counters.nextQueuedTelegramItemOrder !== undefined) {
-        state.nextQueuedTelegramItemOrder = counters.nextQueuedTelegramItemOrder;
+export function syncBaleQueueRuntimeCounters(state, counters) {
+    if (counters.nextQueuedBaleItemOrder !== undefined) {
+        state.nextQueuedBaleItemOrder = counters.nextQueuedBaleItemOrder;
     }
-    if (counters.nextQueuedTelegramControlOrder !== undefined) {
-        state.nextQueuedTelegramControlOrder =
-            counters.nextQueuedTelegramControlOrder;
+    if (counters.nextQueuedBaleControlOrder !== undefined) {
+        state.nextQueuedBaleControlOrder =
+            counters.nextQueuedBaleControlOrder;
     }
 }
-export function allocateTelegramQueueItemOrder(state) {
-    return state.nextQueuedTelegramItemOrder++;
+export function allocateBaleQueueItemOrder(state) {
+    return state.nextQueuedBaleItemOrder++;
 }
-export function allocateTelegramQueueControlOrder(state) {
-    return state.nextQueuedTelegramControlOrder++;
+export function allocateBaleQueueControlOrder(state) {
+    return state.nextQueuedBaleControlOrder++;
 }
-export function syncTelegramLifecycleRuntimeFlags(state, flags) {
-    if (flags.activeTelegramToolExecutions !== undefined) {
-        state.activeTelegramToolExecutions = flags.activeTelegramToolExecutions;
+export function syncBaleLifecycleRuntimeFlags(state, flags) {
+    if (flags.activeBaleToolExecutions !== undefined) {
+        state.activeBaleToolExecutions = flags.activeBaleToolExecutions;
     }
-    if (flags.telegramTurnDispatchPending !== undefined) {
-        state.telegramTurnDispatchPending = flags.telegramTurnDispatchPending;
+    if (flags.baleTurnDispatchPending !== undefined) {
+        state.baleTurnDispatchPending = flags.baleTurnDispatchPending;
     }
     if (flags.compactionInProgress !== undefined) {
         state.compactionInProgress = flags.compactionInProgress;
@@ -85,28 +85,28 @@ export function syncTelegramLifecycleRuntimeFlags(state, flags) {
         state.setupInProgress = flags.setupInProgress;
     }
 }
-export function getActiveTelegramToolExecutions(state) {
-    return state.activeTelegramToolExecutions;
+export function getActiveBaleToolExecutions(state) {
+    return state.activeBaleToolExecutions;
 }
-export function setActiveTelegramToolExecutions(state, count) {
-    state.activeTelegramToolExecutions = count;
+export function setActiveBaleToolExecutions(state, count) {
+    state.activeBaleToolExecutions = count;
 }
-export function resetActiveTelegramToolExecutions(state) {
-    state.activeTelegramToolExecutions = 0;
+export function resetActiveBaleToolExecutions(state) {
+    state.activeBaleToolExecutions = 0;
 }
-export function hasTelegramDispatchPending(state) {
-    return state.telegramTurnDispatchPending;
+export function hasBaleDispatchPending(state) {
+    return state.baleTurnDispatchPending;
 }
-function setTelegramDispatchPending(state, pending) {
-    state.telegramTurnDispatchPending = pending;
+function setBaleDispatchPending(state, pending) {
+    state.baleTurnDispatchPending = pending;
 }
-export function clearTelegramDispatchPending(state) {
-    state.telegramTurnDispatchPending = false;
+export function clearBaleDispatchPending(state) {
+    state.baleTurnDispatchPending = false;
 }
-export function isTelegramCompactionInProgress(state) {
+export function isBaleCompactionInProgress(state) {
     return state.compactionInProgress;
 }
-export function setTelegramCompactionInProgress(state, inProgress) {
+export function setBaleCompactionInProgress(state, inProgress) {
     state.compactionInProgress = inProgress;
 }
 export function shouldFoldQueuedPromptsIntoHistory(state) {
@@ -115,37 +115,37 @@ export function shouldFoldQueuedPromptsIntoHistory(state) {
 export function setFoldQueuedPromptsIntoHistory(state, fold) {
     state.foldQueuedPromptsIntoHistory = fold;
 }
-export function isTelegramSetupInProgress(state) {
+export function isBaleSetupInProgress(state) {
     return state.setupInProgress;
 }
-export function startTelegramSetup(state) {
+export function startBaleSetup(state) {
     if (state.setupInProgress)
         return false;
     state.setupInProgress = true;
     return true;
 }
-export function finishTelegramSetup(state) {
+export function finishBaleSetup(state) {
     state.setupInProgress = false;
 }
-export function hasTelegramAbortHandler(state) {
+export function hasBaleAbortHandler(state) {
     return !!state.abortHandler;
 }
-export function setTelegramAbortHandler(state, abortHandler) {
+export function setBaleAbortHandler(state, abortHandler) {
     state.abortHandler = abortHandler;
 }
-export function clearTelegramAbortHandler(state) {
+export function clearBaleAbortHandler(state) {
     state.abortHandler = undefined;
 }
-export function getTelegramAbortHandler(state) {
+export function getBaleAbortHandler(state) {
     return state.abortHandler;
 }
-export function abortTelegramTurn(state) {
+export function abortBaleTurn(state) {
     if (!state.abortHandler)
         return false;
     state.abortHandler();
     return true;
 }
-function updateTelegramRuntimeStatusSafely(updateStatus, ctx, options) {
+function updateBaleRuntimeStatusSafely(updateStatus, ctx, options) {
     try {
         updateStatus(ctx, options.error);
     }
@@ -160,7 +160,7 @@ function updateTelegramRuntimeStatusSafely(updateStatus, ctx, options) {
         }
     }
 }
-export function createTelegramTypingLoopStarter(deps) {
+export function createBaleTypingLoopStarter(deps) {
     let currentOwner;
     // An unreachable transport repeats one identical presence failure every tick; the port collapses the run.
     // Running it through one guard keeps a faulty diagnostics port from escaping the in-flight action owner.
@@ -225,7 +225,7 @@ export function createTelegramTypingLoopStarter(deps) {
         return deps.typing.start({
             chatId: resolvedChatId,
             target,
-            intervalMs: deps.intervalMs ?? TELEGRAM_TYPING_ACTION_INTERVAL_MS,
+            intervalMs: deps.intervalMs ?? BALE_TYPING_ACTION_INTERVAL_MS,
             sendTypingAction: async (targetChatId, actionOptions) => {
                 if (!active)
                     return;
@@ -264,11 +264,11 @@ export function createTelegramTypingLoopStarter(deps) {
         });
     };
 }
-function getTelegramTypingLoopKey(deps) {
+function getBaleTypingLoopKey(deps) {
     const threadId = deps.target?.threadId;
     return `${deps.chatId ?? 0}:${Number.isInteger(threadId) ? threadId : "all"}`;
 }
-export function createTelegramTypingMachineState() {
+export function createBaleTypingMachineState() {
     return { loop: null, inFlight: null, nextSendId: 0 };
 }
 const typingStep = (state, result, ...effects) => ({ state, effects, result });
@@ -299,7 +299,7 @@ function sendTypingAction(state, continues) {
  * Pure typing-loop transition. Every start replaces the caller's callbacks, even on the same target, and forgets the
  * old in-flight action; only a new target sends at once on a running loop, whose interval keeps its phase.
  */
-export function transitionTelegramTypingLoop(state, event) {
+export function transitionBaleTypingLoop(state, event) {
     switch (event.type) {
         case "started": {
             if (event.chatId === undefined || event.chatId === 0)
@@ -342,19 +342,19 @@ export function transitionTelegramTypingLoop(state, event) {
     }
 }
 /**
- * The shell around `transitionTelegramTypingLoop`: it holds each loop's callbacks, samples `shouldContinue` into
+ * The shell around `transitionBaleTypingLoop`: it holds each loop's callbacks, samples `shouldContinue` into
  * events, owns the interval and turns every action outcome into `sendSettled`.
  */
-export function createTelegramTypingLoop() {
+export function createBaleTypingLoop() {
     const callbacks = new Map();
     let interval;
     let loopIds = 0;
     const continues = (loopId) => loopId === undefined
         ? false
         : callbacks.get(loopId)?.shouldContinue?.() !== false;
-    const machine = Machine.createTelegramMachineRunner({
-        initial: createTelegramTypingMachineState(),
-        transition: transitionTelegramTypingLoop,
+    const machine = Machine.createBaleMachineRunner({
+        initial: createBaleTypingMachineState(),
+        transition: transitionBaleTypingLoop,
         run(effect) {
             switch (effect.type) {
                 case "send": {
@@ -395,7 +395,7 @@ export function createTelegramTypingLoop() {
                 type: "started",
                 loopId,
                 chatId: deps.chatId,
-                key: getTelegramTypingLoopKey(deps),
+                key: getBaleTypingLoopKey(deps),
                 ...(Number.isInteger(threadId)
                     ? { threadParams: { message_thread_id: threadId } }
                     : {}),
@@ -407,7 +407,7 @@ export function createTelegramTypingLoop() {
             return started.result;
         },
         stop: () => machine.dispatch({ type: "stopRequested" }).result,
-        async waitForIdle(timeoutMs = TELEGRAM_TYPING_IDLE_DRAIN_MAX_MS) {
+        async waitForIdle(timeoutMs = BALE_TYPING_IDLE_DRAIN_MAX_MS) {
             if (machine.state.inFlight === null)
                 return;
             const idle = machine.waitFor((state) => state.inFlight === null);
@@ -420,12 +420,12 @@ export function createTelegramTypingLoop() {
         },
     };
 }
-export function createTelegramContextAbortHandlerSetter(abort) {
+export function createBaleContextAbortHandlerSetter(abort) {
     return (ctx) => {
         abort.setHandler(() => ctx.abort());
     };
 }
-export function createTelegramAgentEndResetter(deps) {
+export function createBaleAgentEndResetter(deps) {
     return () => {
         deps.abort.clearHandler();
         deps.typing.stop();
@@ -435,11 +435,11 @@ export function createTelegramAgentEndResetter(deps) {
         deps.clearDispatchPending();
     };
 }
-export function createTelegramPromptDispatchRuntime(deps) {
-    const startTypingLoop = createTelegramTypingLoopStarter(deps);
+export function createBalePromptDispatchRuntime(deps) {
+    const startTypingLoop = createBaleTypingLoopStarter(deps);
     return {
         startTypingLoop,
-        ...createTelegramPromptDispatchLifecycle({
+        ...createBalePromptDispatchLifecycle({
             lifecycle: deps.lifecycle,
             typing: deps.typing,
             startTypingLoop,
@@ -448,12 +448,12 @@ export function createTelegramPromptDispatchRuntime(deps) {
         }),
     };
 }
-export function createTelegramPromptDispatchLifecycle(deps) {
+export function createBalePromptDispatchLifecycle(deps) {
     return {
         onPromptDispatchStart: (ctx, chatId, target) => {
             deps.lifecycle.setDispatchPending(true);
             deps.startTypingLoop(ctx, chatId, { target });
-            updateTelegramRuntimeStatusSafely(deps.updateStatus, ctx, {
+            updateBaleRuntimeStatusSafely(deps.updateStatus, ctx, {
                 category: "dispatch",
                 phase: "status-update",
                 recordRuntimeEvent: deps.recordRuntimeEvent,
@@ -463,7 +463,7 @@ export function createTelegramPromptDispatchLifecycle(deps) {
             deps.lifecycle.clearDispatchPending();
             deps.typing.stop();
             deps.recordRuntimeEvent?.("dispatch", new Error(message));
-            updateTelegramRuntimeStatusSafely(deps.updateStatus, ctx, {
+            updateBaleRuntimeStatusSafely(deps.updateStatus, ctx, {
                 error: `dispatch failed: ${message}`,
                 category: "dispatch",
                 phase: "status-update",

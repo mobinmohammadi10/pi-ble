@@ -1,7 +1,7 @@
 /**
- * Cross-domain integration tests for the Telegram extension
+ * Cross-domain integration tests for the Bale extension
  * Exercises extension-level polling, queue/lifecycle wiring, previews, reactions, compaction, and model switching
- * Zones: telegram, pi agent, shared utils
+ * Zones: bale, pi agent, shared utils
  */
 
 import assert from "node:assert/strict";
@@ -25,10 +25,10 @@ import { setTimeout as waitForTimeout } from "node:timers/promises";
 import testRoot, { after, mock, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { registerTelegramActivityHandler } from "../api/activity.ts";
+import { registerBaleActivityHandler } from "../api/activity.ts";
 import { runNodeEval } from "./fixtures/node-eval.ts";
 import * as RoutingFixture from "./fixtures/routing.ts";
-import { createTelegramActivityVerbosityRuntime } from "../lib/activity-verbosity.ts";
+import { createBaleActivityVerbosityRuntime } from "../lib/activity-verbosity.ts";
 import * as AgentMessages from "../lib/agent-messages.ts";
 import * as Bindings from "../lib/bindings.ts";
 import * as BusApi from "../lib/bus-api.ts";
@@ -58,13 +58,13 @@ import * as Paths from "../lib/paths.ts";
 import * as Sync from "../lib/sync.ts";
 import * as Updates from "../lib/updates.ts";
 import {
-  createTelegramBridgeApiRuntime,
-  createTelegramApiClient,
-  type TelegramApiClient,
-  type TelegramBridgeApiRuntime,
-} from "../lib/telegram-api.ts";
+  createBaleBridgeApiRuntime,
+  createBaleApiClient,
+  type BaleApiClient,
+  type BaleBridgeApiRuntime,
+} from "../lib/bale-api.ts";
 import { createPassthroughFailureLog } from "./fixtures/failure-log.ts";
-import { createTelegramFailureRunLog } from "../lib/logging.ts";
+import { createBaleFailureRunLog } from "../lib/logging.ts";
 
 // Production timers are unref'd so they never hold Pi open; a live Pi process keeps the loop alive. Mirror that so
 // Node 22's runner does not abort runtime tests that await those timers.
@@ -72,7 +72,7 @@ const eventLoopKeepAlive = setInterval(() => {}, 60_000);
 after(() => { clearInterval(eventLoopKeepAlive); });
 
 type RuntimeTestHandler = (context: TestContext) => void | Promise<void>;
-type RuntimeTelegramExtension = (typeof import("../index.ts"))["default"];
+type RuntimeBaleExtension = (typeof import("../index.ts"))["default"];
 
 function test(
   name: string,
@@ -92,14 +92,14 @@ for (const removedFamily of ["sessions", "snapshot-with-segments"] as const) tes
     const sessions = join(dir, "sessions"), path = removedFamily === "sessions"
       ? join(sessions, "old-session", "inbox.json") : join(dir, "inbox.json");
     const callbacks: Array<() => void> = [], cleared: unknown[] = [];
-    const session = Lifecycle.createTelegramSessionContextStore<ExtensionContext>();
+    const session = Lifecycle.createBaleSessionContextStore<ExtensionContext>();
     const ctx = { cwd: "/fixture" } as ExtensionContext;
     session.set(ctx);
-    const journalOptions = { path, botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: "fixture" }) };
-    const journal = Journal.createTelegramUpdateJournalStore(journalOptions);
+    const journalOptions = { path, botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: "fixture" }) };
+    const journal = Journal.createBaleUpdateJournalStore(journalOptions);
     const update = (id: number) => ({ update_id: id, message: { message_id: id, text: "fixture" } });
     let projections = 0, publications = 0;
-    const diagnostics = Logging.createTelegramRuntimeDiagnosticsRuntime<ExtensionContext>({
+    const diagnostics = Logging.createBaleRuntimeDiagnosticsRuntime<ExtensionContext>({
       snapshotTimer: {
         setTimer(callback) { callbacks.push(callback); return { unref() {} }; },
         clearTimer(handle) { cleared.push(handle); },
@@ -136,7 +136,7 @@ for (const removedFamily of ["sessions", "snapshot-with-segments"] as const) tes
       else {
         assert.equal(fs.existsSync(path), false, "No old cursor restored from remaining empty segments");
         await rm(path + ".segments", { recursive: true, force: true });
-        const next = Journal.createTelegramUpdateJournalStore(journalOptions);
+        const next = Journal.createBaleUpdateJournalStore(journalOptions);
         next.appendBatch([update(100)], 100);
         assert.equal(next.read().acceptedThroughUpdateId, 100, "Fresh fixture has no predecessor cursor");
       }
@@ -147,7 +147,7 @@ for (const removedFamily of ["sessions", "snapshot-with-segments"] as const) tes
   },
 );
 
-let runtimeTelegramExtension: RuntimeTelegramExtension | undefined;
+let runtimeBaleExtension: RuntimeBaleExtension | undefined;
 let runtimeAgentDir: string | undefined;
 
 const queueOwnerWorkerPath = fileURLToPath(
@@ -404,18 +404,18 @@ function runQueueOwnerReplacementProcess(
 async function ensureRuntimeAgentDir(): Promise<string> {
   if (!runtimeAgentDir) {
     runtimeAgentDir = await mkdtemp(
-      join(tmpdir(), "pi-telegram-runtime-agent-"),
+      join(tmpdir(), "pi-bale-runtime-agent-"),
     );
     process.env.PI_CODING_AGENT_DIR = runtimeAgentDir;
   }
   return runtimeAgentDir;
 }
 
-async function getRuntimeTelegramExtension(): Promise<RuntimeTelegramExtension> {
-  if (runtimeTelegramExtension) return runtimeTelegramExtension;
+async function getRuntimeBaleExtension(): Promise<RuntimeBaleExtension> {
+  if (runtimeBaleExtension) return runtimeBaleExtension;
   await ensureRuntimeAgentDir();
-  runtimeTelegramExtension = (await import("../index.ts")).default;
-  return runtimeTelegramExtension;
+  runtimeBaleExtension = (await import("../index.ts")).default;
+  return runtimeBaleExtension;
 }
 
 for (const role of ["leader", "follower"] as const) {
@@ -427,7 +427,7 @@ for (const role of ["leader", "follower"] as const) {
       const backgroundSettled = Promise.withResolvers<void>();
       let followerProvisioned = false;
       const keepAlive = setInterval(() => {}, 1000);
-      const runWorkspaceOperation: NonNullable<BusLeader.TelegramBusFollowerTargetProvisionerDeps["runWorkspaceOperation"]> = (input, operation) => {
+      const runWorkspaceOperation: NonNullable<BusLeader.BaleBusFollowerTargetProvisionerDeps["runWorkspaceOperation"]> = (input, operation) => {
         const run = Promise.resolve().then(operation);
         if (input.operationKind === "workspace.reconcile-follower-provision") {
           void run.then(() => backgroundSettled.resolve(), (error) => backgroundSettled.reject(error));
@@ -435,11 +435,11 @@ for (const role of ["leader", "follower"] as const) {
         return run;
       };
       try {
-        const store = Threads.createTelegramTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
-        const sourceBinding = { ...Threads.createTelegramWorkspaceBindingIdentity("/repo", 0, "source")!,
+        const store = Threads.createBaleTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
+        const sourceBinding = { ...Threads.createBaleWorkspaceBindingIdentity("/repo", 0, "source")!,
           slot: "A", threadName: "Atlas", target: { chatId: 7, threadId: 41 }, updatedAtMs: 1 };
         store.upsertWorkspaceBinding(sourceBinding);
-        const destinationBinding = { ...Threads.createTelegramWorkspaceBindingIdentity("/repo", 0, "destination")!,
+        const destinationBinding = { ...Threads.createBaleWorkspaceBindingIdentity("/repo", 0, "destination")!,
           slot: "B", threadName: "Birch", target: { chatId: 7, threadId: 42 }, updatedAtMs: 1 };
         if (remembered) store.upsertWorkspaceBinding(destinationBinding);
         store.upsert({ profileKey: role === "leader" ? "cwd:/repo" : "manual:old",
@@ -454,19 +454,19 @@ for (const role of ["leader", "follower"] as const) {
           assert.ok(!["deleteForumTopic", "closeForumTopic"].includes(method));
           return { message_thread_id: 43 } as T;
         };
-        const handoffs: Lifecycle.TelegramConnectionHandoffStore = {};
-        const source = Lifecycle.createTelegramConnectionIntentRuntime({ store: handoffs });
+        const handoffs: Lifecycle.BaleConnectionHandoffStore = {};
+        const source = Lifecycle.createBaleConnectionIntentRuntime({ store: handoffs });
         source.begin("/repo");
         source.suspend(shutdown);
         let starts = 0;
         let finished!: () => void;
         const completed = new Promise<void>((resolve) => { finished = resolve; });
         const failures: unknown[] = [];
-        const intent = Lifecycle.createTelegramConnectionIntentRuntime({ store: handoffs });
+        const intent = Lifecycle.createBaleConnectionIntentRuntime({ store: handoffs });
         const ctx = { cwd: "/repo", sessionManager: {
           getSessionFile: () => resume.sessionFile, getSessionId: () => "destination",
         }, ui: { notify: (text: string) => failures.push(text) } } as unknown as ExtensionContext;
-        const lifecycle = Lifecycle.createTelegramConnectionLifecycle({ intent,
+        const lifecycle = Lifecycle.createBaleConnectionLifecycle({ intent,
           getGeneration: () => 1, isCurrent: () => true,
           getProfileName: () => undefined, isConnected: () => false,
           activateProfile: async () => true,
@@ -480,10 +480,10 @@ for (const role of ["leader", "follower"] as const) {
                   if (error instanceof Error) failures.push(error);
                 }, getNowMs: () => 1000 };
               const result = role === "leader"
-                ? await Sync.ensureTelegramLeaderThreadBinding({ ...ports, instanceId: "77:2",
+                ? await Sync.ensureBaleLeaderThreadBinding({ ...ports, instanceId: "77:2",
                     cwd: current.cwd, sessionId: current.sessionManager.getSessionId(),
                     probeWorkspaceBinding: async () => {} })
-                : await BusLeader.createTelegramBusFollowerTargetProvisioner({ ...ports,
+                : await BusLeader.createBaleBusFollowerTargetProvisioner({ ...ports,
                     getSyncState: () => ({}), setSyncState() {} })({ instanceId: "77:2",
                     profileKey: "manual:new", cwd: current.cwd,
                     sessionId: current.sessionManager.getSessionId(), connectedAtMs: 1000 });
@@ -536,7 +536,7 @@ test("Storage reference preparation rejects historical aliases without redirecti
     import * as Journal from ${JSON.stringify(new URL("../lib/journal.ts", import.meta.url).href)};
     import * as Admission from ${JSON.stringify(new URL("../lib/workspace-admission.ts", import.meta.url).href)};
     const originalCwd = process.cwd();
-    const root = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), "pi-telegram-reference-")));
+    const root = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), "pi-bale-reference-")));
     const snapshot = (directory) => fs.readdirSync(directory, { withFileTypes: true })
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(entry => [entry.name, entry.isDirectory() ? snapshot(join(directory, entry.name))
@@ -544,7 +544,7 @@ test("Storage reference preparation rejects historical aliases without redirecti
     try {
       const agentDir = join(root, "agent");
       process.env.PI_CODING_AGENT_DIR = agentDir;
-      const config = Config.createTelegramConfigStore({ agentDir, initialConfig: { profiles: {
+      const config = Config.createBaleConfigStore({ agentDir, initialConfig: { profiles: {
         default: { botToken: "7:fixture-default", allowedUserId: 7 },
         work: { botToken: "7:fixture-work", allowedUserId: 7 },
       } } });
@@ -553,30 +553,30 @@ test("Storage reference preparation rejects historical aliases without redirecti
       const queueOwner = { ...owner, instanceId: "fixture-instance", sessionGeneration: 1 };
       const leaseInput = { operationId: "retained", operationKind: "fixture", scope: { kind: "profile" } };
       const compose = (checked) => {
-        const admission = Admission.createTelegramWorkspaceAdmissionRuntimeBinding({
+        const admission = Admission.createBaleWorkspaceAdmissionRuntimeBinding({
           getProfileName: config.getActiveProfileName, getBotToken: config.getBotToken,
           owner, getProcessLiveness: () => "alive",
           getPath(profileName) {
             // Reconstruct the historical defective callback shape without changing its fixture bytes.
-            const selected = Paths.resolveTelegramWorkspaceAdmissionPath(profileName);
-            return checked ? Paths.requireTelegramStoragePathReference(selected,
-              Paths.resolveTelegramWorkspaceAdmissionPath(undefined, profileName)) : selected;
+            const selected = Paths.resolveBaleWorkspaceAdmissionPath(profileName);
+            return checked ? Paths.requireBaleStoragePathReference(selected,
+              Paths.resolveBaleWorkspaceAdmissionPath(undefined, profileName)) : selected;
           },
         });
-        const journals = Journal.createTelegramUpdateJournalBindingRuntime({
+        const journals = Journal.createBaleUpdateJournalBindingRuntime({
           base: { getProfileName: config.getActiveProfileName, getBotToken: config.getBotToken,
             getBotId: () => 7, getWorkspaceAdmission: admission.resolve,
             getQueueRuntimeIdentity: () => ({ ...owner, instanceId: queueOwner.instanceId }),
             onRecovery() { assert.fail("Reference preparation must not recover journals"); } },
           getLeaderJournalPath(profileName) {
-            const selected = Paths.resolveTelegramUpdateJournalPath(profileName);
-            return checked ? Paths.requireTelegramStoragePathReference(selected,
-              Paths.resolveTelegramUpdateJournalPath(undefined, profileName)) : selected;
+            const selected = Paths.resolveBaleUpdateJournalPath(profileName);
+            return checked ? Paths.requireBaleStoragePathReference(selected,
+              Paths.resolveBaleUpdateJournalPath(undefined, profileName)) : selected;
           },
           getFollowerJournalPath(bindingKey, profileName) {
-            const selected = Paths.resolveTelegramFollowerJournalPath(bindingKey, undefined, profileName);
-            return checked ? Paths.requireTelegramStoragePathReference(selected,
-              Paths.resolveTelegramFollowerJournalPath(bindingKey, agentDir, profileName)) : selected;
+            const selected = Paths.resolveBaleFollowerJournalPath(bindingKey, undefined, profileName);
+            return checked ? Paths.requireBaleStoragePathReference(selected,
+              Paths.resolveBaleFollowerJournalPath(bindingKey, agentDir, profileName)) : selected;
           },
           getActiveFollowerBindingKey: () => "fixture-recipient", isFollowerRegistered: () => false,
         });
@@ -603,11 +603,11 @@ test("Storage reference preparation rejects historical aliases without redirecti
         assert.equal(binding.journal.read().entries[0].state, "queued");
         assert.equal(ledger.read().leases.length, 1);
         references.push({ runtimeKey: binding.runtimeKey, recoveryKey: binding.recoveryKey });
-        assert.equal(JSON.parse(binding.runtimeKey).path, join("work", "tmp", "pi-telegram", "inbox.json"));
-        assert.ok(fs.existsSync(join(cwd, "work", "tmp", "pi-telegram", "inbox.json")));
-        assert.ok(fs.existsSync(join(cwd, "work", "tmp", "pi-telegram", "workspace-admission.json")));
+        assert.equal(JSON.parse(binding.runtimeKey).path, join("work", "tmp", "pi-bale", "inbox.json"));
+        assert.ok(fs.existsSync(join(cwd, "work", "tmp", "pi-bale", "inbox.json")));
+        assert.ok(fs.existsSync(join(cwd, "work", "tmp", "pi-bale", "workspace-admission.json")));
         const before = snapshot(root);
-        const denied = /Telegram storage reference does not match its approved absolute path/;
+        const denied = /Bale storage reference does not match its approved absolute path/;
         assert.throws(() => checked.admission.resolve().acquireAdmission({ ...leaseInput,
           operationId: "must-not-write" }), denied);
         assert.throws(() => checked.journals.resolveLeader().journal.appendBatch([{ update_id: 99 }]), denied);
@@ -619,13 +619,13 @@ test("Storage reference preparation rejects historical aliases without redirecti
       }
       // Opaque raw-relative keys alone cannot distinguish two physical source locations.
       assert.deepEqual(references[0], references[1]);
-      assert.equal(fs.existsSync(Paths.resolveTelegramUpdateJournalPath(undefined, "work")), false);
-      assert.equal(fs.existsSync(Paths.resolveTelegramWorkspaceAdmissionPath(undefined, "work")), false);
+      assert.equal(fs.existsSync(Paths.resolveBaleUpdateJournalPath(undefined, "work")), false);
+      assert.equal(fs.existsSync(Paths.resolveBaleWorkspaceAdmissionPath(undefined, "work")), false);
       {
         const before = snapshot(root);
-        const census = Journal.inspectTelegramProfileJournalNamespace({
-          directory: Paths.resolveTelegramTempDir(), profile: "work",
-          botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: config.getBotToken(), botId: 7 }),
+        const census = Journal.inspectBaleProfileJournalNamespace({
+          directory: Paths.resolveBaleTempDir(), profile: "work",
+          botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: config.getBotToken(), botId: 7 }),
           limits: { maxDirectoryEntries: 32, maxFiles: 32, maxBytes: 100000, maxEntries: 32, maxWork: 1000 },
         });
         assert.equal(census.sources.length, 1);
@@ -643,7 +643,7 @@ test("Storage reference preparation rejects historical aliases without redirecti
 }, 10_000);
 
 test("Cross-instance agent turns route in both leader and follower directions", async () => {
-  const followerRegistry = Bus.createTelegramBusFollowerRegistry();
+  const followerRegistry = Bus.createBaleBusFollowerRegistry();
   followerRegistry.register({
     instanceId: "follower",
     connectedAtMs: 1,
@@ -652,8 +652,8 @@ test("Cross-instance agent turns route in both leader and follower directions", 
     threadName: "Birch",
   });
   const events: string[] = [];
-  const handleUpdate = async (update: Updates.TelegramUpdateFlow) => {
-    await Updates.executeTelegramUpdate(update, 7, {
+  const handleUpdate = async (update: Updates.BaleUpdateFlow) => {
+    await Updates.executeBaleUpdate(update, 7, {
       ctx: "ctx",
       getCurrentInstanceId: () => "leader",
       getMessageOwnership: () => ({ instanceId: "source-instance" }),
@@ -670,7 +670,7 @@ test("Cross-instance agent turns route in both leader and follower directions", 
       foreignOwnedUpdateForwarder: {
         forwardMessage: async ({ message, ownership }) => {
           events.push(
-            `forward:${ownership.instanceId}:${ownership.ownerGeneration}:${message.message_thread_id}:${message.pi_telegram_agent_source_thread}`,
+            `forward:${ownership.instanceId}:${ownership.ownerGeneration}:${message.message_thread_id}:${message.pi_bale_agent_source_thread}`,
           );
           return {
             status: "accepted",
@@ -683,22 +683,22 @@ test("Cross-instance agent turns route in both leader and follower directions", 
         },
       },
       removePendingMediaGroupMessages: () => {},
-      removeQueuedTelegramTurnsByMessageIds: () => 0,
-      handleAuthorizedTelegramReactionUpdate: async () => {},
-      pairTelegramUserIfNeeded: async () => false,
+      removeQueuedBaleTurnsByMessageIds: () => 0,
+      handleAuthorizedBaleReactionUpdate: async () => {},
+      pairBaleUserIfNeeded: async () => false,
       answerCallbackQuery: async () => {},
       answerGuestQuery: async () => {},
-      handleAuthorizedTelegramCallbackQuery: async () => {},
+      handleAuthorizedBaleCallbackQuery: async () => {},
       sendTextReply: async () => undefined,
-      handleAuthorizedTelegramMessage: async (message) => {
+      handleAuthorizedBaleMessage: async (message) => {
         events.push(
-          `local:${message.message_thread_id}:${message.pi_telegram_agent_source_thread}`,
+          `local:${message.message_thread_id}:${message.pi_bale_agent_source_thread}`,
         );
       },
-      handleAuthorizedTelegramEditedMessage: async () => {},
+      handleAuthorizedBaleEditedMessage: async () => {},
     });
   };
-  const runtime = AgentMessages.createTelegramAgentMessageRuntime({
+  const runtime = AgentMessages.createBaleAgentMessageRuntime({
     instanceId: "leader",
     getAllowedChatId: () => 7,
     getLeaderTarget: () => ({ chatId: 7, threadId: 42 }),
@@ -738,15 +738,15 @@ for (const [scenario, keepRouter, recoverCopy] of [["cold-router", false, false]
   test(`Retired historical UI protects uncertain delivery and preserves protected-attempt recovery (${scenario})`, async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-history-ui-"));
   const socketPath = join(dir, "recipient.sock");
-  const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:historical-ui" });
+  const botIdentity = Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:historical-ui" });
   const sourceOptions = { path: join(dir, "source.json"), botIdentity };
   let interruptCommit = false;
-  const source = Journal.createTelegramUpdateJournalStore({ ...sourceOptions, onPublicationBoundary(boundary, target) {
+  const source = Journal.createBaleUpdateJournalStore({ ...sourceOptions, onPublicationBoundary(boundary, target) {
     if (interruptCommit && boundary === "before-write" && !target.startsWith(`${sourceOptions.path}.retained`)) throw new Error("fixture interrupted source commit");
   } });
-  const recipientJournal = Journal.createTelegramUpdateJournalStore({ path: join(dir, "recipient.json"), botIdentity });
-  const binding = Journal.createTelegramUpdateJournalBindingKey(sourceOptions);
-  const threadStore = Threads.createTelegramTopicTargetStore({ path: join(dir, "threads.json") });
+  const recipientJournal = Journal.createBaleUpdateJournalStore({ path: join(dir, "recipient.json"), botIdentity });
+  const binding = Journal.createBaleUpdateJournalBindingKey(sourceOptions);
+  const threadStore = Threads.createBaleTopicTargetStore({ path: join(dir, "threads.json") });
   await threadStore.load();
   for (const [cwd, threadId, instanceId, slot] of [["/repo", 42, "leader-a", "A"], ["/other", 43, "recipient", "B"]] as const) {
     threadStore.upsert({ profileKey: `cwd:${cwd}`, target: { chatId: 7, threadId }, status: "active",
@@ -760,8 +760,8 @@ for (const [scenario, keepRouter, recoverCopy] of [["cold-router", false, false]
   let admitted!: () => void;
   const admissionGate = new Promise<void>(resolve => { admitted = resolve; });
   let forwards = 0;
-  const admission = BusFollower.createTelegramBusFollowerDurableAdmissionRuntime<string>({ journal: recipientJournal, signalWorker: () => {} });
-  const server = Bus.createTelegramBusLocalServer({ socketPath, async handleEnvelope(envelope) {
+  const admission = BusFollower.createBaleBusFollowerDurableAdmissionRuntime<string>({ journal: recipientJournal, signalWorker: () => {} });
+  const server = Bus.createBaleBusLocalServer({ socketPath, async handleEnvelope(envelope) {
     assert.equal(envelope.kind, "leader.forwardMessage");
     if (envelope.kind !== "leader.forwardMessage") throw new Error("Unexpected fixture envelope");
     forwards++;
@@ -769,7 +769,7 @@ for (const [scenario, keepRouter, recoverCopy] of [["cold-router", false, false]
     admitted(); await ackGate;
     return { kind: "bus.ack", requestId: envelope.requestId, ok: true, result: receipt };
   } });
-  const forwarder = Bus.createTelegramBusForeignOwnedUpdateForwarder({ socketPath, createRequestId: () => "history-ui", timeoutMs: 5_000 });
+  const forwarder = Bus.createBaleBusForeignOwnedUpdateForwarder({ socketPath, createRequestId: () => "history-ui", timeoutMs: 5_000 });
   const surfaces: Array<{ id: number; text: string; markup: unknown }> = [];
   let copies = 0;
   let reviewing = false;
@@ -778,18 +778,18 @@ for (const [scenario, keepRouter, recoverCopy] of [["cold-router", false, false]
     async runWorkspaceOperation(_input, operation) { return operation(); },
     getTargetOwnership: target => target.chatId === 7 && target.threadId === 43 ? {
       instanceId: "recipient", ownerGeneration: "recipient-generation", recipientBindingKey: "manual:recipient",
-      protocolIdentity: Bus.createTelegramBusProtocolIdentity({ runtimeBuild: "fixture",
-        capabilities: [Bus.TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }),
+      protocolIdentity: Bus.createBaleBusProtocolIdentity({ runtimeBuild: "fixture",
+        capabilities: [Bus.BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }),
     } : undefined,
     foreignOwnedUpdateForwarder: forwarder,
     async editInteractiveMessage(_chat, id, text, _mode, markup) { surfaces.push({ id, text, markup }); },
     async callApi() { assert.equal(reviewing, false, "Stopping the source must not probe/create/delete a Thread"); return true as never; },
-    async deleteMessage() { assert.fail("Stopping the source must not delete Telegram messages"); },
+    async deleteMessage() { assert.fail("Stopping the source must not delete Bale messages"); },
   };
   let harness = RoutingFixture.createRouteHarness(routeOptions);
   const completed: number[] = [];
   const executed: number[] = [];
-  const worker = Updates.createTelegramUpdateAdmissionWorkerRuntime<RoutingFixture.TestUpdate & Journal.TelegramJournaledUpdate, RoutingFixture.TestContext>({
+  const worker = Updates.createBaleUpdateAdmissionWorkerRuntime<RoutingFixture.TestUpdate & Journal.BaleJournaledUpdate, RoutingFixture.TestContext>({
     journal: { ...source, abandonPending(input) {
       copies++; return source.abandonPending(input);
     } },
@@ -828,7 +828,7 @@ for (const [scenario, keepRouter, recoverCopy] of [["cold-router", false, false]
       // Supplied precondition: an interrupted retention attempt exists before replacement startup; no retired UI action grants it.
       interruptCommit = true;
       try { assert.throws(() => source.abandonPending({ journalBindingKey: binding, entry,
-        operatorAuthorityId: "telegram-owner:7", isCurrent: () => true }), /journal mutation failed/); }
+        operatorAuthorityId: "bale-owner:7", isCurrent: () => true }), /journal mutation failed/); }
       finally { interruptCommit = false; }
       assert.ok(source.inspectPendingRetention(entry));
     }
@@ -859,12 +859,12 @@ for (const [scenario, keepRouter, recoverCopy] of [["cold-router", false, false]
     assert.deepEqual(recipientJournal.read(), acceptedRecipient, "Retired UI and protected recovery cannot change independently accepted custody");
     assert.equal(completed.includes(100), false, "Source abandonment must never fabricate task completion");
     assert.equal(executed.filter(id => id === 100).length, 1);
-    assert.equal(harness.telegramQueueStore.getQueuedItems().length, 0);
+    assert.equal(harness.baleQueueStore.getQueuedItems().length, 0);
     assert.deepEqual(source.appendBatch([original]).duplicateUpdateIds, [100]);
     if (recoverCopy) assert.ok(surfaces.some(surface => surface.id === 99 && surface.text.includes("Routing cancelled")), "Protected recovery retires the obsolete chooser");
     await click("reroute:1:43", 99, 99); assert.equal(forwards, 1);
     const recipientExecutions: number[] = [];
-    const recipient = Updates.createTelegramUpdateWorkerRuntime<string>({ journal: recipientJournal, hasAuthority: () => true,
+    const recipient = Updates.createBaleUpdateWorkerRuntime<string>({ journal: recipientJournal, hasAuthority: () => true,
       executeUpdate(update) { recipientExecutions.push(update.update_id); return { kind: "complete" }; } });
     try {
       recipient.start("recipient-ctx"); await recipient.waitForDrain();
@@ -878,46 +878,46 @@ for (const [scenario, keepRouter, recoverCopy] of [["cold-router", false, false]
 for (const source of ["fresh", "adopted"] as const) {
   void testRoot(`Generic follower delivery acknowledges repeated pending or completed input without re-execution (${source})`,
     { concurrency: false, timeout: 5_000 }, async () => {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-completed-delivery-"));
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-completed-delivery-"));
     const recipientBindingKey = "manual:recipient", sessionId = "session-b", updateId = 44;
-    const journalSerialization = Journal.createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
-    const bindingRuntime = Journal.createTelegramUpdateJournalBindingRuntime({
+    const journalSerialization = Journal.createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const bindingRuntime = Journal.createBaleUpdateJournalBindingRuntime({
       base: { getProfileName: () => "work", getBotToken: () => "fixture:completed-delivery", getBotId: () => 7,
         withSourceSerialization: journalSerialization },
-      getRuntimeDir: () => Paths.resolveTelegramTempDir(dir),
-      getLeaderJournalPath: () => Paths.resolveTelegramSessionPollingJournalPath(sessionId, dir, "work"),
-      getFollowerJournalPath: (key, profile, id) => Paths.resolveTelegramSessionJournalPath(id!, key, dir, profile),
+      getRuntimeDir: () => Paths.resolveBaleTempDir(dir),
+      getLeaderJournalPath: () => Paths.resolveBaleSessionPollingJournalPath(sessionId, dir, "work"),
+      getFollowerJournalPath: (key, profile, id) => Paths.resolveBaleSessionJournalPath(id!, key, dir, profile),
       getActiveFollowerBindingKey: () => recipientBindingKey, getActiveFollowerSessionId: () => sessionId,
       isFollowerRegistered: () => true,
     });
     // Registration/readiness are supplied preconditions; this witness does not drive the Pi session gateway.
     const binding = bindingRuntime.resolveActive()!;
     const message = { message_id: 12, chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false },
-      text: "completed-delivery fixture", pi_telegram_source_update_id: updateId };
+      text: "completed-delivery fixture", pi_bale_source_update_id: updateId };
     const predecessor = source === "adopted" ? bindingRuntime.createRecipientResolver(recipientBindingKey, "session-a")()! : undefined;
     // Production admission resolves the active recipient journal on each call; the adopted case starts in its predecessor.
     let admissionJournal = predecessor?.journal ?? binding.journal;
     const executed: number[] = [];
-    const worker = Updates.createTelegramUpdateAdmissionWorkerRuntime<Updates.TelegramUpdateFlow & Journal.TelegramJournaledUpdate, string>({
+    const worker = Updates.createBaleUpdateAdmissionWorkerRuntime<Updates.BaleUpdateFlow & Journal.BaleJournaledUpdate, string>({
       journal: binding.journal, getJournalBindingKey: () => binding.recoveryKey, hasAuthority: () => true,
       isContextCurrent: ctx => ctx === "recipient-ctx",
       async defaultHandle(update) { executed.push(update.update_id); },
     });
     const admissions: Array<ReturnType<typeof binding.journal.appendBatch>> = [];
-    const socketPath = Bus.getTelegramBusFollowerSocketPath("recipient", dir);
-    const receiver = BusFollower.createTelegramBusForwardedUpdateReceiverRuntime({
+    const socketPath = Bus.getBaleBusFollowerSocketPath("recipient", dir);
+    const receiver = BusFollower.createBaleBusForwardedUpdateReceiverRuntime({
       socketPath, instanceId: "recipient", getAuthSecret: () => "fixture-secret",
       getRegistrationGeneration: () => "registration-b", getRecipientBindingKey: () => recipientBindingKey,
       getContext: () => "recipient-ctx",
-      durableAdmission: BusFollower.createTelegramBusFollowerDurableAdmissionRuntime({
+      durableAdmission: BusFollower.createBaleBusFollowerDurableAdmissionRuntime({
         journal: { appendBatch(updates) {
           const result = admissionJournal.appendBatch(updates); admissions.push(result); return result;
         } }, signalWorker: () => worker.signal(),
       }),
     });
-    const delivery = Bus.createTelegramBusFollowerDeliveryIdentity({ kind: "leader.forwardMessage", recipientBindingKey, sourceUpdateId: updateId });
+    const delivery = Bus.createBaleBusFollowerDeliveryIdentity({ kind: "leader.forwardMessage", recipientBindingKey, sourceUpdateId: updateId });
     const send = async (requestId: string) => {
-      const ack = await Bus.sendTelegramBusLocalEnvelope({ socketPath, envelope: {
+      const ack = await Bus.sendBaleBusLocalEnvelope({ socketPath, envelope: {
         kind: "leader.forwardMessage", requestId, auth: "fixture-secret", recipientInstanceId: "recipient",
         recipientRegistrationGeneration: "registration-b", delivery, message, sentAtMs: 1,
       } });
@@ -954,12 +954,12 @@ for (const source of ["fresh", "adopted"] as const) {
 }
 
 test("Historical pending source alone cannot prove no follower acceptance", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-historical-pending-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-historical-pending-"));
   const socketPath = join(dir, "recipient.sock");
-  const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:historical-fixture" });
+  const botIdentity = Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:historical-fixture" });
   const sourcePath = join(dir, "source.json");
-  const sourceJournal = Journal.createTelegramUpdateJournalStore({ path: sourcePath, botIdentity });
-  const recipientJournal = Journal.createTelegramUpdateJournalStore({ path: join(dir, "recipient.json"), botIdentity });
+  const sourceJournal = Journal.createBaleUpdateJournalStore({ path: sourcePath, botIdentity });
+  const recipientJournal = Journal.createBaleUpdateJournalStore({ path: join(dir, "recipient.json"), botIdentity });
   const original = { update_id: 100, message: {
     message_id: 9, message_thread_id: 11, chat: { id: 7, type: "private" },
     from: { id: 7, is_bot: false }, text: "historical original",
@@ -971,10 +971,10 @@ test("Historical pending source alone cannot prove no follower acceptance", asyn
   const acknowledgementGate = new Promise<void>((resolve) => { acknowledge = resolve; });
   let admitted!: () => void;
   const admittedGate = new Promise<void>((resolve) => { admitted = resolve; });
-  const durableAdmission = BusFollower.createTelegramBusFollowerDurableAdmissionRuntime<string>({
+  const durableAdmission = BusFollower.createBaleBusFollowerDurableAdmissionRuntime<string>({
     journal: recipientJournal, signalWorker: () => {},
   });
-  const server = Bus.createTelegramBusLocalServer({
+  const server = Bus.createBaleBusLocalServer({
     socketPath,
     async handleEnvelope(envelope) {
       if (envelope.kind !== "leader.forwardMessage") throw new Error("Unexpected fixture envelope");
@@ -984,15 +984,15 @@ test("Historical pending source alone cannot prove no follower acceptance", asyn
       return { kind: "bus.ack", requestId: envelope.requestId, ok: true, result: receipt };
     },
   });
-  const forwarder = Bus.createTelegramBusForeignOwnedUpdateForwarder({
+  const forwarder = Bus.createBaleBusForeignOwnedUpdateForwarder({
     socketPath, createRequestId: () => "historical:1", timeoutMs: 10_000,
   });
-  const worker = Updates.createTelegramUpdateWorkerRuntime<string>({
+  const worker = Updates.createBaleUpdateWorkerRuntime<string>({
     journal: sourceJournal, hasAuthority: () => true,
     async executeUpdate(update) {
       // Legacy selection/forwarding intent is not published in the source entry.
       const settlement = await forwarder.forwardMessage({
-        message: { ...original.message, pi_telegram_source_update_id: update.update_id },
+        message: { ...original.message, pi_bale_source_update_id: update.update_id },
         ownership: { instanceId: "recipient", ownerGeneration: "generation-1", recipientBindingKey: "manual:recipient" },
         ctx: "source-ctx",
       });
@@ -1012,7 +1012,7 @@ test("Historical pending source alone cannot prove no follower acceptance", asyn
     const stopping = worker.stop();
     acknowledge();
     await stopping;
-    const reopened = Journal.createTelegramUpdateJournalStore({ path: sourcePath, botIdentity }).read();
+    const reopened = Journal.createBaleUpdateJournalStore({ path: sourcePath, botIdentity }).read();
     assert.deepEqual(reopened, beforeForward, "Revoked source generation cannot publish late completion");
     const entry = reopened.entries[0]!;
     assert.equal(entry.state, "pending");
@@ -1022,10 +1022,10 @@ test("Historical pending source alone cannot prove no follower acceptance", asyn
     assert.equal(entry.inputProvenance, undefined);
     assert.equal(recipientJournal.read().entries.length, 1, "Recipient authority survives source shutdown");
     const acceptedRecipient = structuredClone(recipientJournal.read());
-    const journalBindingKey = Journal.createTelegramUpdateJournalBindingKey({ path: sourcePath, botIdentity });
+    const journalBindingKey = Journal.createBaleUpdateJournalBindingKey({ path: sourcePath, botIdentity });
     const completed: number[] = [];
     let carrier: unknown;
-    const recovery = Updates.createTelegramUpdateAdmissionWorkerRuntime<Updates.TelegramUpdateFlow & Journal.TelegramJournaledUpdate, string>({
+    const recovery = Updates.createBaleUpdateAdmissionWorkerRuntime<Updates.BaleUpdateFlow & Journal.BaleJournaledUpdate, string>({
       journal: sourceJournal, getJournalBindingKey: () => journalBindingKey, hasAuthority: () => true,
       shouldReviewHistoricalInput: candidate => candidate.updateId === original.update_id,
       onUpdateCompleted: id => { completed.push(id); },
@@ -1039,7 +1039,7 @@ test("Historical pending source alone cannot prove no follower acceptance", asyn
         message: { message_id: 20, chat: { id: 7, type: "private" } } } }]);
       recovery.start("recovery-ctx");
       await recovery.waitForDrain();
-      const page = Updates.inspectTelegramHistoricalInputs(carrier, { journalBindingKey, isCurrent: () => true });
+      const page = Updates.inspectBaleHistoricalInputs(carrier, { journalBindingKey, isCurrent: () => true });
       assert.equal(page?.sources.length, 1);
       const result = page!.sources[0]!.retry({ operatorAuthorityId: "owner:7", isCurrent: () => true });
       assert.ok(result);
@@ -1049,7 +1049,7 @@ test("Historical pending source alone cannot prove no follower acceptance", asyn
       assert.deepEqual(completed, [101], "Stopping the original is not task completion");
       assert.deepEqual(sourceJournal.appendBatch([original]).duplicateUpdateIds, [100]);
       const recipientExecutions: number[] = [];
-      const recipient = Updates.createTelegramUpdateWorkerRuntime<string>({
+      const recipient = Updates.createBaleUpdateWorkerRuntime<string>({
         journal: recipientJournal, hasAuthority: () => true,
         executeUpdate(update) { recipientExecutions.push(update.update_id); return { kind: "complete" }; },
       });
@@ -1075,23 +1075,23 @@ for (const scenario of [
   { carrier: "message_reaction", cached: true, replace: true, threaded: false },
 ] as const) {
   test(`Cached forwarding retries ${scenario.carrier} (${scenario.threaded ? "threaded" : "message-only"}) through durable admission`, async () => {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-cached-forward-"));
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-cached-forward-"));
     const socketPath = join(dir, "receiver.sock");
     const target = { chatId: 7, threadId: 11 };
-    const registry = Bus.createTelegramBusFollowerRegistry();
+    const registry = Bus.createBaleBusFollowerRegistry();
     const registration = {
       instanceId: "follower",
       profileKey: "manual:recipient",
       registrationGeneration: "g1",
       connectedAtMs: 1,
       target,
-      protocol: Bus.createTelegramBusProtocolIdentity({
+      protocol: Bus.createBaleBusProtocolIdentity({
         runtimeBuild: "fixture",
-        capabilities: [Bus.TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
+        capabilities: [Bus.BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION],
       }),
     };
     registry.register(registration);
-    const ownership = Ownership.createTelegramBusMessageOwnershipRuntime({
+    const ownership = Ownership.createBaleBusMessageOwnershipRuntime({
       instanceId: "leader",
       getProfileKey: () => "default",
       listFollowers: registry.list,
@@ -1099,14 +1099,14 @@ for (const scenario of [
     if (scenario.cached) ownership.recordFollower({
       chatId: target.chatId, messageId: 9, target, follower: registration,
     });
-    const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({
+    const botIdentity = Journal.createBaleUpdateJournalBotIdentity({
       botToken: "123:cached-forward-fixture",
     });
     let now = 1_000;
-    const leaderJournal = Journal.createTelegramUpdateJournalStore({
+    const leaderJournal = Journal.createBaleUpdateJournalStore({
       path: join(dir, "leader.json"), botIdentity, getNowMs: () => now,
     });
-    const followerJournal = Journal.createTelegramUpdateJournalStore({
+    const followerJournal = Journal.createBaleUpdateJournalStore({
       path: join(dir, "follower.json"), botIdentity, getNowMs: () => now,
     });
     const message = {
@@ -1115,7 +1115,7 @@ for (const scenario of [
       ...(scenario.threaded ? { message_thread_id: 11 } : {}),
       voice: { file_id: "fixture-voice", file_unique_id: "fixture-voice", duration: 1 },
     };
-    const source: Updates.TelegramUpdateFlow & Journal.TelegramJournaledUpdate = {
+    const source: Updates.BaleUpdateFlow & Journal.BaleJournaledUpdate = {
       update_id: 100,
       ...(scenario.carrier === "callback_query"
         ? { callback_query: { id: "fixture-callback", from: message.from, message } }
@@ -1124,13 +1124,13 @@ for (const scenario of [
               message_id: 9, old_reaction: [], new_reaction: [{ type: "emoji", emoji: "👍" }] } }
           : { [scenario.carrier]: message }),
     };
-    const received: Bus.TelegramBusEnvelope[] = [];
-    const durableAdmission = BusFollower.createTelegramBusFollowerDurableAdmissionRuntime<string>({
+    const received: Bus.BaleBusEnvelope[] = [];
+    const durableAdmission = BusFollower.createBaleBusFollowerDurableAdmissionRuntime<string>({
       journal: followerJournal,
       signalWorker: () => {},
     });
     let admissionFailures = scenario.replace ? 1 : 2;
-    const receiver = BusFollower.createTelegramBusForwardedUpdateReceiverRuntime({
+    const receiver = BusFollower.createBaleBusForwardedUpdateReceiverRuntime({
       socketPath, instanceId: registration.instanceId,
       getAuthSecret: () => "fixture-auth",
       getRegistrationGeneration: () => scenario.replace ? "g2" : "g1",
@@ -1145,11 +1145,11 @@ for (const scenario of [
       },
     });
     let requests = 0;
-    const ownershipChecks: Bus.TelegramBusForwardOwnership[] = [];
+    const ownershipChecks: Bus.BaleBusForwardOwnership[] = [];
     const rejectedDeliveryIds: string[] = [];
-    const validate = Bus.createTelegramBusForwardOwnershipValidator(registry);
-    const forwarder = Bus.createTelegramBusForeignOwnedUpdateForwarder<
-      string, Updates.TelegramMessageReactionUpdated, Updates.TelegramCallbackQuery, Updates.TelegramUpdateMessage
+    const validate = Bus.createBaleBusForwardOwnershipValidator(registry);
+    const forwarder = Bus.createBaleBusForeignOwnedUpdateForwarder<
+      string, Updates.BaleMessageReactionUpdated, Updates.BaleCallbackQuery, Updates.BaleUpdateMessage
     >({
       socketPath, createRequestId: () => `fixture:${++requests}`,
       getAuthSecret: () => "fixture-auth",
@@ -1162,33 +1162,33 @@ for (const scenario of [
       },
     });
     const noLocalExecution = () => assert.fail("Foreign input must not execute on the leader");
-    const runtime = Updates.createTelegramUpdateRuntime<string>({
+    const runtime = Updates.createBaleUpdateRuntime<string>({
       getAllowedUserId: () => 7,
       getCurrentInstanceId: () => "leader",
       getMessageOwnership: ownership.getForwardOwnership,
-      getTargetOwnership: (requested) => Bus.getTelegramFollowerTargetOwnership({
+      getTargetOwnership: (requested) => Bus.getBaleFollowerTargetOwnership({
         target: requested, followers: registry.list(),
       }),
       recordMessageOwnership: ownership.recordRouted,
       foreignOwnedUpdateForwarder: forwarder,
       removePendingMediaGroupMessages: noLocalExecution,
-      removeQueuedTelegramTurnsByMessageIds: noLocalExecution,
-      applyQueuedTelegramTurnReactionByMessageId: noLocalExecution,
-      pairTelegramUserIfNeeded: noLocalExecution,
+      removeQueuedBaleTurnsByMessageIds: noLocalExecution,
+      applyQueuedBaleTurnReactionByMessageId: noLocalExecution,
+      pairBaleUserIfNeeded: noLocalExecution,
       answerCallbackQuery: async () => {},
       answerGuestQuery: noLocalExecution,
-      handleAuthorizedTelegramCallbackQuery: noLocalExecution,
+      handleAuthorizedBaleCallbackQuery: noLocalExecution,
       sendTextReply: noLocalExecution,
-      handleAuthorizedTelegramMessage: noLocalExecution,
-      handleAuthorizedTelegramEditedMessage: noLocalExecution,
-      handleUnboundTelegramTopicMessage: noLocalExecution,
+      handleAuthorizedBaleMessage: noLocalExecution,
+      handleAuthorizedBaleEditedMessage: noLocalExecution,
+      handleUnboundBaleTopicMessage: noLocalExecution,
     });
-    const worker = Updates.createTelegramUpdateWorkerRuntime<string>({
+    const worker = Updates.createBaleUpdateWorkerRuntime<string>({
       journal: leaderJournal, hasAuthority: () => true, getNowMs: () => now,
       scheduleRetry: () => 0, cancelRetry: () => {},
       async executeUpdate(update, ctx) {
-        await runtime.handleUpdate(Updates.bindTelegramUpdateAdmissionSource(
-          update as Updates.TelegramUpdateFlow & Journal.TelegramJournaledUpdate, noLocalExecution,
+        await runtime.handleUpdate(Updates.bindBaleUpdateAdmissionSource(
+          update as Updates.BaleUpdateFlow & Journal.BaleJournaledUpdate, noLocalExecution,
         ), ctx);
         return { kind: "complete" };
       },
@@ -1207,7 +1207,7 @@ for (const scenario of [
         assert.deepEqual(followerJournal.read().entries, []);
         assert.equal(ownership.store.get(7, 9)?.recipientBindingKey, registration.profileKey);
         if (failureCount === 1 && scenario.replace) {
-          assert.match(entry.failure!.summary, /Stale Telegram bus follower registration generation/);
+          assert.match(entry.failure!.summary, /Stale Bale bus follower registration generation/);
           registry.register({ ...registration, registrationGeneration: "g2", connectedAtMs: 2 });
         }
         now = entry.nextRetryAtMs!;
@@ -1226,14 +1226,14 @@ for (const scenario of [
       assert.deepEqual(admitted[0]!.update[scenario.carrier], {
         ...source[scenario.carrier],
         ...(scenario.carrier === "callback_query" ? { message: {
-          ...message, pi_telegram_source_update_id: source.update_id,
+          ...message, pi_bale_source_update_id: source.update_id,
         } } : {}),
-        pi_telegram_source_update_id: source.update_id,
+        pi_bale_source_update_id: source.update_id,
       });
       const kind = scenario.carrier === "message" ? "leader.forwardMessage"
         : scenario.carrier === "edited_message" ? "leader.forwardEditedMessage"
           : scenario.carrier === "callback_query" ? "leader.forwardCallback" : "leader.forwardReaction";
-      const delivery = Bus.createTelegramBusFollowerDeliveryIdentity({
+      const delivery = Bus.createBaleBusFollowerDeliveryIdentity({
         kind, recipientBindingKey: registration.profileKey, sourceUpdateId: source.update_id,
       });
       assert.deepEqual(rejectedDeliveryIds, [delivery.deliveryId, delivery.deliveryId]);
@@ -1309,7 +1309,7 @@ function parseJsonRequestBody(
   return JSON.parse(init.body) as Record<string, unknown>;
 }
 
-function getRuntimeTelegramApiMethod(input: string | URL | Request): string {
+function getRuntimeBaleApiMethod(input: string | URL | Request): string {
   const url = typeof input === "string" ? input : input.toString();
   return url.split("/").at(-1) ?? "";
 }
@@ -1318,7 +1318,7 @@ async function getRuntimeIntegrationDiagnostics(
   methods: Array<{ method: string; body?: Record<string, unknown> }>,
 ): Promise<string> {
   const agentDir = await ensureRuntimeAgentDir();
-  const runtimeDir = join(agentDir, "tmp", "pi-telegram");
+  const runtimeDir = join(agentDir, "tmp", "pi-bale");
   const readOptional = async (path: string) => {
     try {
       return await readFile(path, "utf8");
@@ -1330,7 +1330,7 @@ async function getRuntimeIntegrationDiagnostics(
     readOptional(join(runtimeDir, "state.json")),
     readOptional(join(runtimeDir, "logs.jsonl")),
   ]);
-  const ownersText = await readRuntimeTelegramLocks().then(value => JSON.stringify(value), error => String(error));
+  const ownersText = await readRuntimeBaleLocks().then(value => JSON.stringify(value), error => String(error));
   let owner: Record<string, unknown> | string = ownersText;
   try {
     const parsed = JSON.parse(ownersText) as Record<string, Record<string, unknown>>;
@@ -1350,7 +1350,7 @@ async function getRuntimeIntegrationDiagnostics(
   return JSON.stringify({ methods, owner, state, logs }, null, 2);
 }
 
-function getRuntimeTelegramApiText(
+function getRuntimeBaleApiText(
   body: Record<string, unknown> | undefined,
 ): string {
   const richMessage = body?.rich_message as
@@ -1367,9 +1367,9 @@ function setRuntimeTestFetch(fetchImpl: typeof fetch): () => void {
   };
 }
 
-async function createRuntimeTelegramConfigFixture() {
+async function createRuntimeBaleConfigFixture() {
   const agentDir = await ensureRuntimeAgentDir();
-  const configPath = join(agentDir, "telegram.json");
+  const configPath = join(agentDir, "bale.json");
   const previousConfig = await readFile(configPath, "utf8").catch(
     () => undefined,
   );
@@ -1377,13 +1377,13 @@ async function createRuntimeTelegramConfigFixture() {
   return {
     write: async (config: Record<string, unknown>) => {
       await mkdir(agentDir, { recursive: true });
-      const telegramTempDir = join(agentDir, "tmp", "pi-telegram");
-      const tempEntries = await readdir(telegramTempDir).catch(() => []);
+      const baleTempDir = join(agentDir, "tmp", "pi-bale");
+      const tempEntries = await readdir(baleTempDir).catch(() => []);
       await Promise.all(
         tempEntries
           .filter((entry) => entry.startsWith("inbox") || entry === "sessions")
           .map((entry) =>
-            rm(join(telegramTempDir, entry), {
+            rm(join(baleTempDir, entry), {
               recursive: true,
               force: true,
             }),
@@ -1422,14 +1422,14 @@ async function createRuntimeTelegramConfigFixture() {
 }
 
 /** Fixture-only replacement of every profile's consolidated transport section; sibling sections stay intact. */
-async function writeRuntimeTelegramLocks(
+async function writeRuntimeBaleLocks(
   locks: Record<string, unknown>,
 ): Promise<void> {
   const agentDir = await ensureRuntimeAgentDir();
-  const telegramRuntimeDir = join(agentDir, "tmp", "pi-telegram");
-  await mkdir(telegramRuntimeDir, { recursive: true });
-  const path = join(telegramRuntimeDir, "state.json");
-  const state = Locks.readTelegramRuntimeState(path);
+  const baleRuntimeDir = join(agentDir, "tmp", "pi-bale");
+  await mkdir(baleRuntimeDir, { recursive: true });
+  const path = join(baleRuntimeDir, "state.json");
+  const state = Locks.readBaleRuntimeState(path);
   const profiles: Record<string, Record<string, unknown>> = {};
   for (const [profile, sections] of Object.entries(state.profiles)) {
     const { transport: _transport, ...rest } = sections as Record<string, unknown>;
@@ -1441,14 +1441,14 @@ async function writeRuntimeTelegramLocks(
 }
 
 /** Fixture Workspace writer: a temporary exact transport owner publishes, then releases before the extension starts. */
-async function createRuntimeSeedWorkspaceStore(): Promise<{ threads: Threads.TelegramTopicTargetStore; release: () => Promise<void> }> {
-  const path = join(await ensureRuntimeAgentDir(), "tmp", "pi-telegram", "state.json");
-  const transports = await readRuntimeTelegramLocks();
-  const owner = Locks.createTelegramLockRuntime<{ cwd: string }>({ statePath: path, key: () => "default", pid: process.pid,
+async function createRuntimeSeedWorkspaceStore(): Promise<{ threads: Threads.BaleTopicTargetStore; release: () => Promise<void> }> {
+  const path = join(await ensureRuntimeAgentDir(), "tmp", "pi-bale", "state.json");
+  const transports = await readRuntimeBaleLocks();
+  const owner = Locks.createBaleLockRuntime<{ cwd: string }>({ statePath: path, key: () => "default", pid: process.pid,
     instanceId: "fixture-workspace-seed", runtimeGeneration: 1, isProcessAlive: () => true });
   assert.equal(owner.acquire({ cwd: "/fixture-workspace-seed" }).ok, true);
   let released = false;
-  const threads = Threads.createTelegramTopicTargetStore({ path, canPersist: () => !released && owner.owns(),
+  const threads = Threads.createBaleTopicTargetStore({ path, canPersist: () => !released && owner.owns(),
     consolidated: {
       captureAuthority() {
         const epoch = released ? undefined : owner.getOwnedLeaderEpoch();
@@ -1458,34 +1458,34 @@ async function createRuntimeSeedWorkspaceStore(): Promise<{ threads: Threads.Tel
     } });
   await threads.load();
   // Restore the exact prior transport sections so the seed owner leaves no previous-leader evidence.
-  return { threads, async release() { if (!released) { released = true; owner.release(); await writeRuntimeTelegramLocks(transports); } } };
+  return { threads, async release() { if (!released) { released = true; owner.release(); await writeRuntimeBaleLocks(transports); } } };
 }
 
 /** Read-only consolidated Workspace view for assertions; it can never publish. */
-function createRuntimeWorkspaceReader(path: string): Threads.TelegramTopicTargetStore {
-  return Threads.createTelegramTopicTargetStore({ path,
+function createRuntimeWorkspaceReader(path: string): Threads.BaleTopicTargetStore {
+  return Threads.createBaleTopicTargetStore({ path,
     consolidated: { captureAuthority: () => undefined, publishIfOwned: () => ({ committed: false }) } });
 }
 
-async function readRuntimeTelegramLocks(): Promise<Record<string, Record<string, unknown>>> {
-  const state = Locks.readTelegramRuntimeState(join(await ensureRuntimeAgentDir(), "tmp", "pi-telegram", "state.json"));
+async function readRuntimeBaleLocks(): Promise<Record<string, Record<string, unknown>>> {
+  const state = Locks.readBaleRuntimeState(join(await ensureRuntimeAgentDir(), "tmp", "pi-bale", "state.json"));
   return Object.fromEntries(Object.entries(state.profiles).filter(([, sections]) => sections.transport !== undefined)
     .map(([profile, sections]) => [profile, sections.transport as Record<string, unknown>]));
 }
 
 async function stageRuntimeV02712Artifacts(): Promise<string | undefined> {
   const agentDir = await ensureRuntimeAgentDir();
-  const telegramRuntimeDir = join(agentDir, "tmp", "pi-telegram");
-  await mkdir(telegramRuntimeDir, { recursive: true });
-  // Start from a clean consolidated state, as a fresh root after upgrading from `tmp/telegram`.
-  await rm(join(telegramRuntimeDir, "state.json"), { force: true });
+  const baleRuntimeDir = join(agentDir, "tmp", "pi-bale");
+  await mkdir(baleRuntimeDir, { recursive: true });
+  // Start from a clean consolidated state, as a fresh root after upgrading from `tmp/bale`.
+  await rm(join(baleRuntimeDir, "state.json"), { force: true });
   const seed = await createRuntimeSeedWorkspaceStore();
   seed.threads.setBotState({ threadMode: "enabled" });
   await seed.threads.persist();
   await seed.release();
   if (process.platform === "win32") return undefined;
-  const busPath = Bus.resolveTelegramBusSocketPath(
-    Bus.getTelegramBusSocketPath(agentDir, process.platform, undefined, "consolidated"),
+  const busPath = Bus.resolveBaleBusSocketPath(
+    Bus.getBaleBusSocketPath(agentDir, process.platform, undefined, "consolidated"),
     process.platform,
   );
   await mkdir(dirname(busPath), { recursive: true, mode: 0o700 });
@@ -1502,11 +1502,11 @@ function createRuntimeDeferredResponse() {
   return { promise, resolve };
 }
 
-function createRuntimeTelegramApiResponse(result: unknown): Response {
+function createRuntimeBaleApiResponse(result: unknown): Response {
   return { json: async () => ({ ok: true, result }) } as Response;
 }
 
-function createRuntimeTelegramApiErrorResponse(
+function createRuntimeBaleApiErrorResponse(
   status: number,
   description: string,
 ): Response {
@@ -1674,7 +1674,7 @@ function createRuntimePiHarness(options: RuntimePiHarnessOptions = {}) {
 
 function createIntegrationQueueTurn(
   replyToMessageId: number,
-): Queue.PendingTelegramTurn {
+): Queue.PendingBaleTurn {
   return {
     kind: "prompt",
     chatId: 42,
@@ -1693,12 +1693,12 @@ function createIntegrationQueueTurn(
 
 test("Busy Next continues into the selected prompt when its abort notice fails", async () => {
   const events: string[] = [];
-  const activeTurnStore = Queue.createTelegramActiveTurnStore();
+  const activeTurnStore = Queue.createBaleActiveTurnStore();
   const interrupted = createIntegrationQueueTurn(10);
   const next = createIntegrationQueueTurn(11);
   activeTurnStore.set(interrupted);
-  let queuedItems: Queue.TelegramQueueItem<string>[] = [next];
-  const dispatch = Queue.createTelegramQueueDispatchController<string>({
+  let queuedItems: Queue.BaleQueueItem<string>[] = [next];
+  const dispatch = Queue.createBaleQueueDispatchController<string>({
     getQueuedItems: () => queuedItems,
     setQueuedItems: (items) => {
       queuedItems = items;
@@ -1713,7 +1713,7 @@ test("Busy Next continues into the selected prompt when its abort notice fails",
     sendUserMessage: () => events.push("next-send"),
     onPromptDispatchFailure: () => events.push("next-failure"),
   });
-  await Commands.handleTelegramNextCommand({
+  await Commands.handleBaleNextCommand({
     hasAbortHandler: () => true,
     isIdle: () => false,
     hasQueuedItems: () => queuedItems.length > 0,
@@ -1728,20 +1728,20 @@ test("Busy Next continues into the selected prompt when its abort notice fails",
     sendTextReply: async () => {},
   });
   const settledTurn = activeTurnStore.get();
-  await Queue.handleTelegramAgentEndRuntime({
+  await Queue.handleBaleAgentEndRuntime({
     turn: settledTurn,
     assistant: { stopReason: "aborted" },
     foldQueuedPromptsIntoHistory: false,
     resetRuntimeState: activeTurnStore.clear,
     updateStatus: () => {},
-    dispatchNextQueuedTelegramTurn: () => dispatch.dispatchNext("ctx"),
+    dispatchNextQueuedBaleTurn: () => dispatch.dispatchNext("ctx"),
     clearPreview: async () => {},
     setPreviewPendingText: () => {},
     finalizeMarkdownPreview: async () => false,
     sendMarkdownReply: async () => {},
     sendTextReply: async () => {
       events.push("abort-notice");
-      throw new Error("Telegram unavailable");
+      throw new Error("Bale unavailable");
     },
     sendQueuedAttachments: async () => {},
     recordRuntimeEvent: (_category, _error, details) => {
@@ -1762,13 +1762,13 @@ test("Busy Next continues into the selected prompt when its abort notice fails",
 for (const supersedingCommand of ["abort", "stop"] as const) {
   test(`Busy Next drops transition notices when superseded by /${supersedingCommand}`, async () => {
     const events: string[] = [];
-    const activeTurnStore = Queue.createTelegramActiveTurnStore();
+    const activeTurnStore = Queue.createBaleActiveTurnStore();
     activeTurnStore.set(createIntegrationQueueTurn(20));
-    let queuedItems: Queue.TelegramQueueItem<string>[] = [
+    let queuedItems: Queue.BaleQueueItem<string>[] = [
       createIntegrationQueueTurn(21),
     ];
     let foldQueuedPromptsIntoHistory = false;
-    const dispatch = Queue.createTelegramQueueDispatchController<string>({
+    const dispatch = Queue.createBaleQueueDispatchController<string>({
       getQueuedItems: () => queuedItems,
       setQueuedItems: (items) => {
         queuedItems = items;
@@ -1787,7 +1787,7 @@ for (const supersedingCommand of ["abort", "stop"] as const) {
       activeTurnStore.clearNextAbortAnnouncement();
       dispatch.cancelNextDispatchAnnouncement();
     };
-    await Commands.handleTelegramNextCommand({
+    await Commands.handleBaleNextCommand({
       hasAbortHandler: () => true,
       isIdle: () => false,
       hasQueuedItems: () => queuedItems.length > 0,
@@ -1804,9 +1804,9 @@ for (const supersedingCommand of ["abort", "stop"] as const) {
       sendTextReply: async () => {},
     });
     if (supersedingCommand === "abort") {
-      await Commands.handleTelegramAbortCommand({
+      await Commands.handleBaleAbortCommand({
         hasAbortHandler: () => true,
-        hasActiveTelegramTurn: activeTurnStore.has,
+        hasActiveBaleTurn: activeTurnStore.has,
         clearPendingModelSwitch: () => {},
         cancelNextTransitionAnnouncements,
         abortCurrentTurn: () => events.push("superseding-abort"),
@@ -1819,11 +1819,11 @@ for (const supersedingCommand of ["abort", "stop"] as const) {
         },
       });
     } else {
-      await Commands.handleTelegramStopCommand({
+      await Commands.handleBaleStopCommand({
         hasAbortHandler: () => true,
         clearPendingModelSwitch: () => {},
         cancelNextTransitionAnnouncements,
-        clearQueuedTelegramItems: () => {
+        clearQueuedBaleItems: () => {
           const count = queuedItems.length;
           queuedItems = [];
           return count;
@@ -1839,13 +1839,13 @@ for (const supersedingCommand of ["abort", "stop"] as const) {
       });
     }
     const settledTurn = activeTurnStore.get();
-    await Queue.handleTelegramAgentEndRuntime({
+    await Queue.handleBaleAgentEndRuntime({
       turn: settledTurn,
       assistant: { stopReason: "aborted" },
       foldQueuedPromptsIntoHistory,
       resetRuntimeState: activeTurnStore.clear,
       updateStatus: () => {},
-      dispatchNextQueuedTelegramTurn: () => dispatch.dispatchNext("ctx"),
+      dispatchNextQueuedBaleTurn: () => dispatch.dispatchNext("ctx"),
       clearPreview: async () => {},
       setPreviewPendingText: () => {},
       finalizeMarkdownPreview: async () => false,
@@ -1872,18 +1872,18 @@ for (const supersedingCommand of ["abort", "stop"] as const) {
 }
 
 test("v0.27.12 artifacts and graceful tab cleanup preserve same-directory auto-connect ownership", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const { handlers, commands, pi } = createRuntimePiHarness();
   const methods: Array<{ method: string; body?: Record<string, unknown> }> = [];
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     methods.push({ method, ...(body ? { body } : {}) });
     if (method === "deleteWebhook" || method === "setMyCommands") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getMe") {
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         id: 123,
         username: "test_bot",
         has_topics_enabled: true,
@@ -1897,7 +1897,7 @@ test("v0.27.12 artifacts and graceful tab cleanup preserve same-directory auto-c
       });
     }
     if (method === "createForumTopic") {
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_thread_id: 42,
         name: "Atlas",
       });
@@ -1907,12 +1907,12 @@ test("v0.27.12 artifacts and graceful tab cleanup preserve same-directory auto-c
       method === "closeForumTopic" ||
       method === "deleteForumTopic"
     ) {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       botId: 123,
       botUsername: "test_bot",
@@ -1920,13 +1920,13 @@ test("v0.27.12 artifacts and graceful tab cleanup preserve same-directory auto-c
       lastUpdateId: 0,
       threads: { automaticCleanup: true },
     });
-    await writeRuntimeTelegramLocks({});
+    await writeRuntimeBaleLocks({});
     const legacyBusPath = await stageRuntimeV02712Artifacts();
     const runtimeAgentPath = await ensureRuntimeAgentDir();
-    const journalPath = join(runtimeAgentPath, "tmp", "pi-telegram", "inbox.json");
-    const journal = Journal.createTelegramUpdateJournalStore({
+    const journalPath = join(runtimeAgentPath, "tmp", "pi-bale", "inbox.json");
+    const journal = Journal.createBaleUpdateJournalStore({
       path: journalPath,
-      botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+      botIdentity: Journal.createBaleUpdateJournalBotIdentity({
         botToken: "123:abc",
         botId: 123,
       }),
@@ -1943,10 +1943,10 @@ test("v0.27.12 artifacts and graceful tab cleanup preserve same-directory auto-c
         },
       },
     ]);
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({ cwd: "/repo/graceful-leader" });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForCondition(
       () => methods.some((entry) => entry.method === "createForumTopic"),
       10_000,
@@ -1979,7 +1979,7 @@ test("v0.27.12 artifacts and graceful tab cleanup preserve same-directory auto-c
 
     const agentDir = await ensureRuntimeAgentDir();
     void agentDir;
-    const ownersAfterQuit = await readRuntimeTelegramLocks() as Record<string, { pid?: number; cwd?: string }>;
+    const ownersAfterQuit = await readRuntimeBaleLocks() as Record<string, { pid?: number; cwd?: string }>;
     assert.equal(ownersAfterQuit.default?.pid, process.pid);
     assert.equal(ownersAfterQuit.default?.cwd, "/repo/graceful-leader");
 
@@ -2013,15 +2013,15 @@ test("v0.27.12 artifacts and graceful tab cleanup preserve same-directory auto-c
     }, deleteCall ? undefined : await getRuntimeIntegrationDiagnostics(methods));
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 }, 60_000);
 
 for (const siblingTiming of ["none", "startup", "live", "retry"] as const) test(`Production startup spends previous-process Restore originals without delivery even after their Thread becomes bound (sibling=${siblingTiming})`, async () => {
   const withSibling = siblingTiming !== "none", siblingUpdateId = siblingTiming === "live" ? 103 : 99;
-  const config = await createRuntimeTelegramConfigFixture();
+  const config = await createRuntimeBaleConfigFixture();
   const agentDir = await ensureRuntimeAgentDir();
-  const dir = join(agentDir, "tmp", "pi-telegram");
+  const dir = join(agentDir, "tmp", "pi-bale");
   const dispatched: RuntimeHarnessMessage[] = [];
   const { handlers, commands, pi } = createRuntimePiHarness({ sendUserMessage: content => dispatched.push(content) });
   const ctx = createRuntimeExtensionContext({ cwd: "/repo/restore-held",
@@ -2033,21 +2033,21 @@ for (const siblingTiming of ["none", "startup", "live", "retry"] as const) test(
   let polls = 0, releaseLiveSibling: (() => void) | undefined;
   const liveSiblingGate = new Promise<void>(resolve => { releaseLiveSibling = resolve; });
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     methods.push(method);
-    if (method === "getMe") return createRuntimeTelegramApiResponse({ id: 123, has_topics_enabled: true });
+    if (method === "getMe") return createRuntimeBaleApiResponse({ id: 123, has_topics_enabled: true });
     if (method === "sendMessage") {
       messages.push(JSON.parse(String(init?.body)));
-      return createRuntimeTelegramApiResponse({ message_id: 500 + messages.length });
+      return createRuntimeBaleApiResponse({ message_id: 500 + messages.length });
     }
     if (method === "getUpdates") {
-      if (++polls === 1) return createRuntimeTelegramApiResponse([{ update_id: 102, message: { message_id: 102, date: 1,
+      if (++polls === 1) return createRuntimeBaleApiResponse([{ update_id: 102, message: { message_id: 102, date: 1,
         chat: { id: 77, type: "private" }, from: { id: 77, is_bot: false, first_name: "Owner" },
         message_thread_id: 42, text: "/start" } }]);
       if (polls === 2 && siblingTiming === "live") {
         // Wait for a normal command to finish: this source cannot belong to the worker's startup census.
         await liveSiblingGate;
-        return createRuntimeTelegramApiResponse([{ update_id: siblingUpdateId, message: { message_id: siblingUpdateId, date: 1,
+        return createRuntimeBaleApiResponse([{ update_id: siblingUpdateId, message: { message_id: siblingUpdateId, date: 1,
           chat: { id: 77, type: "private" }, from: { id: 77, is_bot: false, first_name: "Owner" },
           message_thread_id: 42, text: "/start" } },
           { update_id: 104, message: { message_id: 104, date: 1, chat: { id: 77, type: "private" },
@@ -2059,17 +2059,17 @@ for (const siblingTiming of ["none", "startup", "live", "retry"] as const) test(
       });
     }
     if (["deleteWebhook", "setMyCommands", "sendMessage", "editForumTopic", "sendChatAction"].includes(method)) {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
     await config.write({ botToken: "123:abc", botId: 123, allowedUserId: 77, threads: { automaticCleanup: false } });
-    await writeRuntimeTelegramLocks({});
+    await writeRuntimeBaleLocks({});
     await stageRuntimeV02712Artifacts();
     const seed = await createRuntimeSeedWorkspaceStore();
     const threads = seed.threads;
-    const binding = { ...Threads.createTelegramWorkspaceBindingIdentity(ctx.cwd, 0, ctx.sessionManager.getSessionId())!,
+    const binding = { ...Threads.createBaleWorkspaceBindingIdentity(ctx.cwd, 0, ctx.sessionManager.getSessionId())!,
       slot: "A", threadName: "Atlas", target: { chatId: 77, threadId: 10 }, updatedAtMs: 1 };
     const owner = { profileKey: `cwd:${ctx.cwd}`, slot: "A", threadName: "Atlas", instanceId: "former",
       owner: { kind: "leader" as const, cwd: ctx.cwd, instanceId: "former" }, target: binding.target,
@@ -2077,8 +2077,8 @@ for (const siblingTiming of ["none", "startup", "live", "retry"] as const) test(
     threads.upsert(owner);
     threads.upsertWorkspaceBinding(binding);
     await threads.persist();
-    const journalOptions = { path: join(dir, "inbox.json"), botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:abc", botId: 123 }) };
-    const journal = Journal.createTelegramUpdateJournalStore(journalOptions);
+    const journalOptions = { path: join(dir, "inbox.json"), botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:abc", botId: 123 }) };
+    const journal = Journal.createBaleUpdateJournalStore(journalOptions);
     journal.appendBatch([...(siblingTiming === "startup" || siblingTiming === "retry" ? [{ update_id: siblingUpdateId, message: { message_id: siblingUpdateId, date: 1,
       chat: { id: 77, type: "private" }, from: { id: 77, is_bot: false, first_name: "Owner" },
       message_thread_id: 42, text: siblingTiming === "retry" ? "/start" : "held temporary-tab sibling" } }] : []), { update_id: 100, message: { message_id: 100, date: 1,
@@ -2086,13 +2086,13 @@ for (const siblingTiming of ["none", "startup", "live", "retry"] as const) test(
       message_thread_id: 42, text: "held Restore original" } }], 100);
     if (siblingTiming === "retry") journal.markExecutionFailure({ updateId: siblingUpdateId, expectedAttemptCount: 0,
       failedAtMs: 1, nextRetryAtMs: 2, failureClass: "fixture", summary: "interrupted sibling execution", disposition: "retry-wait" });
-    const resolve = Threads.createTelegramWorkspaceRestoreResolver({ agentDir, getProfileName: () => undefined,
+    const resolve = Threads.createBaleWorkspaceRestoreResolver({ agentDir, getProfileName: () => undefined,
       getBotToken: () => "123:abc", threadStore: threads });
     const store = resolve()!;
     await threads.load();
     const request = { operationId: "interrupted-restore", binding: threads.listWorkspaceBindings()[0]!,
       owner: threads.list()[0]!, target: { chatId: 77, threadId: 42 },
-      source: { journalBindingKey: Journal.createTelegramUpdateJournalBindingKey(journalOptions), updateIds: [100] } };
+      source: { journalBindingKey: Journal.createBaleUpdateJournalBindingKey(journalOptions), updateIds: [100] } };
     if (withSibling) {
       const temporaryAuthority = { executor: { instanceId: "former", leaderEpoch: "previous" }, operatorUserId: 77, isCurrent: () => true };
       const entry = store.acknowledgeTemporaryThread(store.reserveTemporaryThread({ journalBindingKey: request.source.journalBindingKey, updateId: 100 }, "a".repeat(32), temporaryAuthority)!.entry,
@@ -2104,9 +2104,9 @@ for (const siblingTiming of ["none", "startup", "live", "retry"] as const) test(
     assert.equal(relocated?.phase, "relocated", JSON.stringify({ request, intents: store.list(),
       bindings: threads.listWorkspaceBindings(), records: threads.list() }));
     await seed.release();
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     try {
       await waitForCondition(() => messages.some(message => JSON.stringify(message).includes("menu:model")), 10_000);
     } catch (error) {
@@ -2146,33 +2146,33 @@ for (const siblingTiming of ["none", "startup", "live", "retry"] as const) test(
 }, 20_000);
 
 test("Graceful preserved leader quit publishes inactivity and restores its intact Workspace", async () => {
-  const config = await createRuntimeTelegramConfigFixture();
+  const config = await createRuntimeBaleConfigFixture();
   const { handlers, commands, pi } = createRuntimePiHarness();
   const methods: string[] = [];
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     methods.push(method);
-    if (method === "getMe") return createRuntimeTelegramApiResponse({ id: 123, has_topics_enabled: true });
-    if (method === "createForumTopic") return createRuntimeTelegramApiResponse({ message_thread_id: 42 });
+    if (method === "getMe") return createRuntimeBaleApiResponse({ id: 123, has_topics_enabled: true });
+    if (method === "createForumTopic") return createRuntimeBaleApiResponse({ message_thread_id: 42 });
     if (method === "getUpdates") return await new Promise<Response>((_resolve, reject) => {
       if (init?.signal?.aborted) reject(new DOMException("stop", "AbortError"));
       else init?.signal?.addEventListener("abort", () => reject(new DOMException("stop", "AbortError")), { once: true });
     });
     if (["deleteWebhook", "setMyCommands", "sendMessage", "editForumTopic"].includes(method)) {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   const ctx = createRuntimeExtensionContext({ cwd: "/repo/preserved-leader" });
   try {
     await config.write({ botToken: "123:abc", botId: 123, allowedUserId: 77,
       threads: { automaticCleanup: false } });
-    await writeRuntimeTelegramLocks({});
+    await writeRuntimeBaleLocks({});
     await stageRuntimeV02712Artifacts();
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
-    const dir = join(await ensureRuntimeAgentDir(), "tmp", "pi-telegram");
+    await commands.get("bale-connect")?.handler("", ctx);
+    const dir = join(await ensureRuntimeAgentDir(), "tmp", "pi-bale");
     await handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "quit" }, ctx);
     const saved = createRuntimeWorkspaceReader(join(dir, "state.json"));
     await saved.load();
@@ -2182,7 +2182,7 @@ test("Graceful preserved leader quit publishes inactivity and restores its intac
     assert.equal(binding.target.threadId, 42);
     assert.equal(typeof binding.inactiveSinceMs, "number");
     assert.equal(saved.listSyncObservations().some((entry) => entry.syncStatus === "deleted"), false);
-    const owners = await readRuntimeTelegramLocks();
+    const owners = await readRuntimeBaleLocks();
     assert.equal(owners.default?.pid, process.pid);
     assert.equal(owners.default?.cwd, ctx.cwd);
     assert.equal(methods.includes("deleteForumTopic"), false);
@@ -2203,27 +2203,27 @@ test("Graceful preserved leader quit publishes inactivity and restores its intac
 }, 20_000);
 
 test("Native connect failure emits one compact notice and retains redacted debug evidence", async () => {
-  const config = await createRuntimeTelegramConfigFixture();
+  const config = await createRuntimeBaleConfigFixture();
   const { handlers, commands, pi } = createRuntimePiHarness();
   const notices: string[] = [];
   const ctx = createRuntimeExtensionContext({ cwd: "/repo/connect-error" });
   ctx.ui.notify = (text?: string) => { notices.push(text ?? ""); };
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
-    if (method === "getMe") return createRuntimeTelegramApiResponse({ id: 123, has_topics_enabled: true });
-    if (method === "createForumTopic") return createRuntimeTelegramApiErrorResponse(401, "Unauthorized token 123:abc");
-    if (method === "deleteWebhook") return createRuntimeTelegramApiResponse(true);
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    const method = getRuntimeBaleApiMethod(input);
+    if (method === "getMe") return createRuntimeBaleApiResponse({ id: 123, has_topics_enabled: true });
+    if (method === "createForumTopic") return createRuntimeBaleApiErrorResponse(401, "Unauthorized token 123:abc");
+    if (method === "deleteWebhook") return createRuntimeBaleApiResponse(true);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
     await config.write({ botToken: "123:abc", botId: 123, allowedUserId: 77 });
-    await writeRuntimeTelegramLocks({});
+    await writeRuntimeBaleLocks({});
     await stageRuntimeV02712Artifacts();
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     await handlers.get("session_start")?.({ type: "session_start", reason: "startup" }, ctx);
-    await commands.get("telegram-connect")!.handler("", ctx);
-    assert.deepEqual(notices, ["Telegram token rejected. Run /telegram-setup."]);
-    await commands.get("telegram-status")!.handler("--debug", ctx);
+    await commands.get("bale-connect")!.handler("", ctx);
+    assert.deepEqual(notices, ["Bale token rejected. Run /bale-setup."]);
+    await commands.get("bale-status")!.handler("--debug", ctx);
     assert.match(notices.at(-1)!, /Unauthorized token/);
     assert.match(notices.at(-1)!, /redacted-token/);
     assert.ok(!notices.at(-1)!.includes("123:abc"));
@@ -2236,7 +2236,7 @@ test("Native connect failure emits one compact notice and retains redacted debug
 
 test("Bare connect followed immediately by resume starts the destination through the native runtime", async () => {
   for (const remembered of [false, true]) {
-    const config = await createRuntimeTelegramConfigFixture();
+    const config = await createRuntimeBaleConfigFixture();
     const source = createRuntimePiHarness();
     const destination = createRuntimePiHarness();
     const methods: string[] = [];
@@ -2255,38 +2255,38 @@ test("Bare connect followed immediately by resume starts the destination through
     ctx.ui.notify = (text?: string) => { notices.push(text ?? ""); };
     next.ui.notify = (text?: string) => { notices.push(text ?? ""); };
     const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-      const method = getRuntimeTelegramApiMethod(input);
+      const method = getRuntimeBaleApiMethod(input);
       methods.push(method);
-      if (method === "getMe") return createRuntimeTelegramApiResponse({ id: 123, has_topics_enabled: true });
-      if (method === "createForumTopic") return createRuntimeTelegramApiResponse({ message_thread_id: 43 });
+      if (method === "getMe") return createRuntimeBaleApiResponse({ id: 123, has_topics_enabled: true });
+      if (method === "createForumTopic") return createRuntimeBaleApiResponse({ message_thread_id: 43 });
       if (method === "getUpdates") return await new Promise<Response>((_resolve, reject) => {
         if (init?.signal?.aborted) reject(new DOMException("stop", "AbortError"));
         else init?.signal?.addEventListener("abort", () => reject(new DOMException("stop", "AbortError")), { once: true });
       });
       if (["deleteWebhook", "setMyCommands", "sendMessage", "editForumTopic"].includes(method)) {
-        return createRuntimeTelegramApiResponse(true);
+        return createRuntimeBaleApiResponse(true);
       }
-      throw new Error(`Unexpected Telegram API method: ${method}`);
+      throw new Error(`Unexpected Bale API method: ${method}`);
     });
     try {
       await config.write({ botToken: "123:abc", botId: 123, allowedUserId: 77,
         threads: { automaticCleanup: false } });
-      await writeRuntimeTelegramLocks({});
+      await writeRuntimeBaleLocks({});
       await stageRuntimeV02712Artifacts();
-      const path = join(await ensureRuntimeAgentDir(), "tmp", "pi-telegram", "state.json");
+      const path = join(await ensureRuntimeAgentDir(), "tmp", "pi-bale", "state.json");
       const seed = await createRuntimeSeedWorkspaceStore();
       const store = seed.threads;
-      store.upsertWorkspaceBinding({ ...Threads.createTelegramWorkspaceBindingIdentity(cwd, 0, sourceManager.getSessionId())!,
+      store.upsertWorkspaceBinding({ ...Threads.createBaleWorkspaceBindingIdentity(cwd, 0, sourceManager.getSessionId())!,
         slot: "A", threadName: "Atlas", target: { chatId: 77, threadId: 41 }, updatedAtMs: 1 });
-      if (remembered) store.upsertWorkspaceBinding({ ...Threads.createTelegramWorkspaceBindingIdentity(cwd, 0, "destination")!,
+      if (remembered) store.upsertWorkspaceBinding({ ...Threads.createBaleWorkspaceBindingIdentity(cwd, 0, "destination")!,
         slot: "B", threadName: "Birch", target: { chatId: 77, threadId: 42 }, updatedAtMs: 1 });
       await store.persist();
       await seed.release();
       void path;
-      const extension = await getRuntimeTelegramExtension();
+      const extension = await getRuntimeBaleExtension();
       extension(source.pi);
       await source.handlers.get("session_start")?.({ type: "session_start", reason: "startup" }, ctx);
-      const connect = source.commands.get("telegram-connect")!.handler("", ctx);
+      const connect = source.commands.get("bale-connect")!.handler("", ctx);
       await source.handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "resume", targetSessionFile: sessionFile }, ctx);
       sourceClosed = true;
       extension(destination.pi);
@@ -2322,17 +2322,17 @@ test("Bare connect followed immediately by resume starts the destination through
 }, 30_000);
 
 test("Graceful follower disconnect persists intent and deletes through its live leader", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-follower-cleanup-integration-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-follower-cleanup-integration-"));
   const socketPath = join(dir, "bus.sock");
-  const store = Threads.createTelegramTopicTargetStore({
+  const store = Threads.createBaleTopicTargetStore({
     path: join(dir, "state.json"),
     getNowMs: () => 2000,
   });
-  const registry = Bus.createTelegramBusFollowerRegistry();
+  const registry = Bus.createBaleBusFollowerRegistry();
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   let syncState = {};
   const disconnectFollower =
-    BusLeader.createTelegramBusFollowerDisconnectHandler({
+    BusLeader.createBaleBusFollowerDisconnectHandler({
       topicTargetStore: store,
       async callApi<TResponse>(method: string, body: Record<string, unknown>) {
         calls.push({ method, body });
@@ -2346,12 +2346,12 @@ test("Graceful follower disconnect persists intent and deletes through its live 
       getNowMs: () => 2000,
       recordRuntimeEvent: () => undefined,
     });
-  const server = Bus.createTelegramBusLocalServer({
+  const server = Bus.createBaleBusLocalServer({
     socketPath,
-    handleEnvelope: BusLeader.createTelegramBusLeaderEnvelopeHandler({
+    handleEnvelope: BusLeader.createBaleBusLeaderEnvelopeHandler({
       followerRegistry: registry,
       authSecret: "leader-secret",
-      protocolIdentity: Bus.createTelegramBusProtocolIdentity({
+      protocolIdentity: Bus.createBaleBusProtocolIdentity({
         runtimeBuild: "test",
       }),
       getNowMs: () => 2000,
@@ -2383,10 +2383,10 @@ test("Graceful follower disconnect persists intent and deletes through its live 
     }),
   });
   let requestSequence = 0;
-  const follower = BusFollower.createTelegramBusFollowerRegistrationRuntime({
+  const follower = BusFollower.createBaleBusFollowerRegistrationRuntime({
     instanceId: "follower-a",
     createRequestId: () => `follower-a:${++requestSequence}`,
-    protocolIdentity: Bus.createTelegramBusProtocolIdentity({
+    protocolIdentity: Bus.createBaleBusProtocolIdentity({
       runtimeBuild: "test",
     }),
     getLeaderAuthSecret: (leader) => leader.busSecret,
@@ -2423,17 +2423,17 @@ test("Graceful follower disconnect persists intent and deletes through its live 
 });
 
 test("Public activity delivery reaches the classic instance without blocking agent start", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const { handlers, commands, pi } = createRuntimePiHarness();
   const activitySend = createRuntimeDeferredResponse();
   const sentBodies: Array<Record<string, unknown>> = [];
   let activityHandledCount = 0;
   let unregisterActivity: (() => void) | undefined;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook" || method === "setMyCommands") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       return await new Promise<Response>((_resolve, reject) => {
@@ -2443,32 +2443,32 @@ test("Public activity delivery reaches the classic instance without blocking age
       });
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "sendMessage") {
       sentBodies.push(body ?? {});
       if (body?.text === "Activity from local") return activitySend.promise;
-      return createRuntimeTelegramApiResponse({ message_id: 90 });
+      return createRuntimeBaleApiResponse({ message_id: 90 });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       botId: 123,
       botUsername: "test_bot",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    await writeRuntimeTelegramLocks({});
+    await writeRuntimeBaleLocks({});
     const classicSeed = await createRuntimeSeedWorkspaceStore();
     classicSeed.threads.setBotState({ threadMode: "disabled", updatedAtMs: Date.now() });
     await classicSeed.threads.persist(); await classicSeed.release();
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext();
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
-    unregisterActivity = registerTelegramActivityHandler({
+    await commands.get("bale-connect")?.handler("", ctx);
+    unregisterActivity = registerBaleActivityHandler({
       id: "integration-classic-activity",
       handle: async (event, activityCtx) => {
         if (event.type !== "agent-start") return;
@@ -2494,7 +2494,7 @@ test("Public activity delivery reaches the classic instance without blocking age
     assert.equal(activityBody?.message_thread_id, undefined);
 
     activitySend.resolve(
-      createRuntimeTelegramApiResponse({ message_id: 91 }),
+      createRuntimeBaleApiResponse({ message_id: 91 }),
     );
     await waitForEventLoopCondition(() => activityHandledCount === 1);
     await handlers.get("agent_settled")?.({}, ctx);
@@ -2509,12 +2509,12 @@ test("Public activity delivery reaches the classic instance without blocking age
   } finally {
     unregisterActivity?.();
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Verbose activity reaches classic transport before the final assistant answer", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const { handlers, commands, pi } = createRuntimePiHarness();
   const calls: Array<{
     method: string;
@@ -2522,10 +2522,10 @@ test("Verbose activity reaches classic transport before the final assistant answ
   }> = [];
   let nextMessageId = 100;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init) ?? {};
     if (method === "deleteWebhook" || method === "setMyCommands") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       return await new Promise<Response>((_resolve, reject) => {
@@ -2535,21 +2535,21 @@ test("Verbose activity reaches classic transport before the final assistant answ
       });
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     calls.push({ method, body });
     if (method === "sendRichMessageDraft" || method === "editMessageText") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_id: nextMessageId++,
       });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
@@ -2558,8 +2558,8 @@ test("Verbose activity reaches classic transport before the final assistant answ
         proactivePush: true,
       },
     });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     const classicSeed = await createRuntimeSeedWorkspaceStore();
     classicSeed.threads.setBotState({ threadMode: "disabled", updatedAtMs: Date.now() });
     await classicSeed.threads.persist(); await classicSeed.release();
@@ -2567,7 +2567,7 @@ test("Verbose activity reaches classic transport before the final assistant answ
       cwd: "/repo/verbose-classic",
     });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await handlers.get("input")?.(
       { source: "interactive", text: "verbose probe" },
       ctx,
@@ -2701,11 +2701,11 @@ test("Verbose activity reaches classic transport before the final assistant answ
     assert.match(editedRich, /result/);
     assert.equal(calls[toolEditIndex]?.body.text, undefined);
     await handlers.get("agent_settled")?.({}, ctx);
-    await commands.get("telegram-disconnect")?.handler("", ctx);
+    await commands.get("bale-disconnect")?.handler("", ctx);
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
@@ -2715,7 +2715,7 @@ test("Verbose activity uses follower transport and loses stale registration auth
     operation: string;
     args: unknown[];
   }> = [];
-  const directRuntime = createTelegramBridgeApiRuntime({
+  const directRuntime = createBaleBridgeApiRuntime({
     client: {
       call: async <TResponse>() => {
         return Promise.reject(
@@ -2729,13 +2729,13 @@ test("Verbose activity uses follower transport and loses stale registration auth
       },
       downloadFile: async () => "/tmp/file",
       answerCallbackQuery: async () => {},
-    } satisfies TelegramApiClient,
+    } satisfies BaleApiClient,
     tempDir: "/tmp",
     maxFileSizeBytes: 1,
     tempFileMaxAgeMs: 1,
     recordRuntimeEvent: () => {},
   });
-  const api = BusApi.createTelegramBusAwareApiRuntime({
+  const api = BusApi.createBaleBusAwareApiRuntime({
     directRuntime,
     ownsDirect: () => false,
     getDefaultTarget: () => ({ chatId: 77, threadId: 43 }),
@@ -2747,7 +2747,7 @@ test("Verbose activity uses follower transport and loses stale registration auth
         : true;
     },
   });
-  const authority = Routing.createTelegramAssistantOutputAuthorityRuntime({
+  const authority = Routing.createBaleAssistantOutputAuthorityRuntime({
     getPreferredTarget: () => ({ chatId: 77, threadId: 43 }),
     getFallbackChatId: () => 77,
     getTransportStamp: () => "profile-1",
@@ -2757,7 +2757,7 @@ test("Verbose activity uses follower transport and loses stale registration auth
     isFollowerRegistered: () => followerGeneration !== "",
     getFollowerGeneration: () => followerGeneration || undefined,
   });
-  const runtime = createTelegramActivityVerbosityRuntime({
+  const runtime = createBaleActivityVerbosityRuntime({
     getActivityMode: () => "verbose",
     resolveTarget: () => ({ chatId: 77, threadId: 43 }),
     captureAuthority: authority.captureAuthority,
@@ -2768,7 +2768,7 @@ test("Verbose activity uses follower transport and loses stale registration auth
   });
   const base = {
     activityId: "follower-activity",
-    source: "telegram",
+    source: "bale",
     target: { chatId: 77, threadId: 43 },
     timestamp: 1,
   } as const;
@@ -2826,23 +2826,23 @@ for (const mode of ["thread", "classic", "thread-unavailable"] as const) {
   test(`Queue dispatch preserves typing destination through native runtime and API fences (${mode})`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
     const Runtime = await import("../lib/runtime.ts");
-    const runtime = Runtime.createTelegramBridgeRuntime(), ctx = { id: "session" };
+    const runtime = Runtime.createBaleBridgeRuntime(), ctx = { id: "session" };
     const threaded = mode !== "classic", target = mode === "thread" ? { chatId: 7, threadId: 42 } : { chatId: 7 };
     let authority: string | undefined = "current", apiCalls = 0, injections = 0;
     const bodies: Array<Record<string, unknown>> = [], failures: unknown[] = [];
-    const restoreFetch = setRuntimeTestFetch(async (_input, init) => { bodies.push(parseJsonRequestBody(init) ?? {}); return createRuntimeTelegramApiResponse(true); });
-    const client = createTelegramApiClient(() => "123:fixture", { isThreadedMode: () => threaded });
-    const prompt = Runtime.createTelegramPromptDispatchRuntime({
+    const restoreFetch = setRuntimeTestFetch(async (_input, init) => { bodies.push(parseJsonRequestBody(init) ?? {}); return createRuntimeBaleApiResponse(true); });
+    const client = createBaleApiClient(() => "123:fixture", { isThreadedMode: () => threaded });
+    const prompt = Runtime.createBalePromptDispatchRuntime({
       failureLog: createPassthroughFailureLog(error => failures.push(error)),
       lifecycle: runtime.lifecycle, typing: runtime.typing,
       getDefaultChatId: () => 7, isThreadedMode: () => threaded, getTransportAuthority: () => authority,
       isContextActive: value => value === ctx, updateStatus() {}, recordRuntimeEvent(_category, error) { failures.push(error); },
       async sendTypingAction(chatId, options) { apiCalls++; return client.call("sendChatAction", { chat_id: chatId, action: "typing",
         ...(options?.message_thread_id !== undefined ? { message_thread_id: options.message_thread_id } : {}) }, { assertAuthority: options?.assertAuthority }); } });
-    const turn: Queue.PendingTelegramTurn = { kind: "prompt", chatId: 7, target, replyToMessageId: 0, sourceMessageIds: [12],
+    const turn: Queue.PendingBaleTurn = { kind: "prompt", chatId: 7, target, replyToMessageId: 0, sourceMessageIds: [12],
       queueOrder: 1, queueLane: "default", laneOrder: 1, queuedAttachments: [], content: [{ type: "text", text: "retained All input" }], historyText: "input", statusSummary: "input" };
-    let items: Queue.TelegramQueueItem<typeof ctx>[] = [turn];
-    const dispatch = Queue.createTelegramQueueDispatchController<typeof ctx>({ getQueuedItems: () => items, setQueuedItems(next) { items = next; },
+    let items: Queue.BaleQueueItem<typeof ctx>[] = [turn];
+    const dispatch = Queue.createBaleQueueDispatchController<typeof ctx>({ getQueuedItems: () => items, setQueuedItems(next) { items = next; },
       canDispatch: () => !runtime.lifecycle.hasDispatchPending(), updateStatus() {}, sendTextReply: async () => undefined,
       onPromptDispatchStart: prompt.onPromptDispatchStart, sendUserMessage() { injections++; }, onPromptDispatchFailure: prompt.onPromptDispatchFailure });
     try {
@@ -2866,7 +2866,7 @@ test("Follower All output is refused by delivery policy and leader authorization
     target: { chatId: 77, threadId: 12 },
   };
   const directBodies: Array<Record<string, unknown>> = [];
-  const leaderProxy = BusLeader.createTelegramBusLeaderApiProxy({
+  const leaderProxy = BusLeader.createBaleBusLeaderApiProxy({
     async call(method, body) {
       assert.equal(method, "sendMessage");
       directBodies.push(body);
@@ -2879,16 +2879,16 @@ test("Follower All output is refused by delivery policy and leader authorization
       throw new Error("Download transport is not expected");
     },
   });
-  const busAwareApi = BusApi.createTelegramBusAwareApiRuntime({
-    directRuntime: {} as TelegramBridgeApiRuntime,
+  const busAwareApi = BusApi.createBaleBusAwareApiRuntime({
+    directRuntime: {} as BaleBridgeApiRuntime,
     ownsDirect: () => false,
     getDefaultTarget: () => follower.target,
     async callFollowerApi(method, args) {
-      if (!Bus.isTelegramFollowerApiCallAllowed({ follower, method, args })) throw new Error("Follower All output is denied");
+      if (!Bus.isBaleFollowerApiCallAllowed({ follower, method, args })) throw new Error("Follower All output is denied");
       return leaderProxy(method, args);
     },
   });
-  const runtime = Delivery.createTelegramBridgeDeliveryRuntime({
+  const runtime = Delivery.createBaleBridgeDeliveryRuntime({
     generation: "follower-generation",
     getTargetPolicyView: () => ({
       canDeliver: true,
@@ -2907,7 +2907,7 @@ test("Follower All output is refused by delivery policy and leader authorization
   );
 
   assert.equal(result.ok, false);
-  await assert.rejects(busAwareApi.call("sendMessage", { chat_id: 77, text: "Legacy All", __piTelegramAggregateDelivery: true }), /All output is denied/);
+  await assert.rejects(busAwareApi.call("sendMessage", { chat_id: 77, text: "Legacy All", __piBaleAggregateDelivery: true }), /All output is denied/);
   assert.deepEqual(directBodies, []);
 });
 
@@ -2917,7 +2917,7 @@ test("Leader transport coalesces matching direct and follower chat actions", asy
   const pendingAction = new Promise<boolean>((resolve) => {
     releaseAction = resolve;
   });
-  const directRuntime = createTelegramBridgeApiRuntime({
+  const directRuntime = createBaleBridgeApiRuntime({
     client: {
       call: async <TResponse>() => {
         calls += 1;
@@ -2926,13 +2926,13 @@ test("Leader transport coalesces matching direct and follower chat actions", asy
       callMultipart: async <TResponse>() => true as TResponse,
       downloadFile: async () => "/tmp/file",
       answerCallbackQuery: async () => {},
-    } satisfies TelegramApiClient,
+    } satisfies BaleApiClient,
     tempDir: "/tmp",
     maxFileSizeBytes: 1,
     tempFileMaxAgeMs: 1,
     recordRuntimeEvent: () => {},
   });
-  const leaderProxy = BusLeader.createTelegramBusLeaderApiProxy({
+  const leaderProxy = BusLeader.createBaleBusLeaderApiProxy({
     call: directRuntime.call,
     callMultipart: directRuntime.callMultipart,
     downloadFile: directRuntime.downloadFile,
@@ -2949,26 +2949,26 @@ test("Leader transport coalesces matching direct and follower chat actions", asy
 
 for (const drift of ["none", "context", "generation", "epoch", "owner", "profile", "path", "canonical"] as const) {
   test(`Native section owners compose Restore, nonleader admission and queued projection (${drift})`, async () => {
-    const dir = await mkdtemp(join(tmpdir(), "pt-section-owners-")), path = Paths.resolveTelegramStatePath(dir);
+    const dir = await mkdtemp(join(tmpdir(), "pt-section-owners-")), path = Paths.resolveBaleStatePath(dir);
     const scope = { path, profile: "default" }, ctx = { cwd: "/section-owner" };
-    const sessions = Lifecycle.createTelegramSessionContextStore<typeof ctx>();
+    const sessions = Lifecycle.createBaleSessionContextStore<typeof ctx>();
     sessions.set(ctx);
-    const lock = Locks.createTelegramLockRuntime<typeof ctx>({ statePath: path, key: () => scope.profile,
+    const lock = Locks.createBaleLockRuntime<typeof ctx>({ statePath: path, key: () => scope.profile,
       pid: 10, instanceId: "section-owner", runtimeGeneration: 1, isProcessAlive: () => true });
-    const captureAuthority = Locks.createTelegramOwnedStateAuthorityCapture(lock, sessions);
-    const open = () => Threads.createTelegramTopicTargetStore({ path: () => scope.path, telegramProfile: () => scope.profile,
+    const captureAuthority = Locks.createBaleOwnedStateAuthorityCapture(lock, sessions);
+    const open = () => Threads.createBaleTopicTargetStore({ path: () => scope.path, baleProfile: () => scope.profile,
       consolidated: { captureAuthority, publishIfOwned: lock.publishStateSectionIfOwned! }, getNowMs: () => 1000 });
-    const namedLock = Locks.createTelegramLockRuntime<typeof ctx>({ statePath: path, key: () => "work",
+    const namedLock = Locks.createBaleLockRuntime<typeof ctx>({ statePath: path, key: () => "work",
       pid: 20, instanceId: "named-owner", runtimeGeneration: 1, isProcessAlive: () => true });
-    const namedSessions = Lifecycle.createTelegramSessionContextStore<typeof ctx>();
+    const namedSessions = Lifecycle.createBaleSessionContextStore<typeof ctx>();
     namedSessions.set(ctx);
-    const named = Threads.createTelegramTopicTargetStore({ path, telegramProfile: "work", getNowMs: () => 1000,
-      consolidated: { captureAuthority: Locks.createTelegramOwnedStateAuthorityCapture(namedLock, namedSessions),
+    const named = Threads.createBaleTopicTargetStore({ path, baleProfile: "work", getNowMs: () => 1000,
+      consolidated: { captureAuthority: Locks.createBaleOwnedStateAuthorityCapture(namedLock, namedSessions),
         publishIfOwned: namedLock.publishStateSectionIfOwned! } });
-    const processBirthId = ProcessIdentity.getTelegramProcessBirthIdentity(process.pid, "section-admission");
+    const processBirthId = ProcessIdentity.getBaleProcessBirthIdentity(process.pid, "section-admission");
     assert.ok(processBirthId);
-    const ledger = (profile: string) => WorkspaceAdmission.createTelegramWorkspaceAdmissionLedger({ path, stateProfile: profile,
-      profileKey: WorkspaceAdmission.createTelegramWorkspaceAdmissionProfileKey({ profileName: profile, botToken: `section-${profile}` }),
+    const ledger = (profile: string) => WorkspaceAdmission.createBaleWorkspaceAdmissionLedger({ path, stateProfile: profile,
+      profileKey: WorkspaceAdmission.createBaleWorkspaceAdmissionProfileKey({ profileName: profile, botToken: `section-${profile}` }),
       owner: { processId: process.pid, processBirthId }, getProcessLiveness: () => "alive", getNowMs: () => 1000 });
     try {
       assert.equal(lock.acquire(ctx).ok, true);
@@ -2985,7 +2985,7 @@ for (const drift of ["none", "context", "generation", "epoch", "owner", "profile
       const target = { chatId: 7, threadId: 10 };
       store.upsert({ profileKey: "cwd:/section-owner", owner: { kind: "leader", cwd: ctx.cwd, instanceId: "old" },
         instanceId: "old", target, status: "active", slot: "A", threadName: "Atlas", createdAtMs: 1, updatedAtMs: 1 });
-      store.upsertWorkspaceBinding({ ...Threads.createTelegramWorkspaceBindingIdentity(ctx.cwd, 0, "session")!,
+      store.upsertWorkspaceBinding({ ...Threads.createBaleWorkspaceBindingIdentity(ctx.cwd, 0, "session")!,
         target, slot: "A", threadName: "Atlas", journalBindingKeys: [], journalBindingsComplete: true, journalSources: [], updatedAtMs: 1 });
       await store.persist();
       await store.load();
@@ -2993,13 +2993,13 @@ for (const drift of ["none", "context", "generation", "epoch", "owner", "profile
         operationKind: "send", scope: { kind: "target", target } });
       assert.equal(lease.kind, "acquired");
       if (lease.kind !== "acquired") return;
-      assert.notEqual(lease.lease.owner.processId, (Locks.readTelegramRuntimeState(path).profiles.default!.transport as { pid: number }).pid);
+      assert.notEqual(lease.lease.owner.processId, (Locks.readBaleRuntimeState(path).profiles.default!.transport as { pid: number }).pid);
       const view = store.workspaceRestore({ profileName: "default", tokenSha256: "a".repeat(64), getNowMs: () => 1000 });
       const auth = { executor: { instanceId: "section-owner", leaderEpoch: String(lock.getOwnedLeaderEpoch()!) },
         operatorUserId: 7, isCurrent: captureAuthority()! };
       const request = { operationId: "section-restore", binding: store.listWorkspaceBindings()[0]!,
         owner: store.list()[0]!, target: { chatId: 7, threadId: 42 }, source: { journalBindingKey: "source", updateIds: [500] } };
-      assert.equal(Threads.isTelegramWorkspaceRestoreRequest(request), true, JSON.stringify(request));
+      assert.equal(Threads.isBaleWorkspaceRestoreRequest(request), true, JSON.stringify(request));
       const relocated = await view.commit(request, auth);
       assert.ok(relocated);
       const recipient = { kind: "leader" as const, instanceId: "old", sessionId: "session", generation: "registration" };
@@ -3009,8 +3009,8 @@ for (const drift of ["none", "context", "generation", "epoch", "owner", "profile
       store.commitWorkspaceRestoreRegistration({ target: { chatId: 7, threadId: 42 },
         bindingKey: relocated.request.binding.bindingKey, slot: "A" }, () => { registrations++; });
       assert.equal(registrations, 1, "Registration observes the existing Workspace frame without nesting a shared transaction");
-      const stable = Locks.readTelegramRuntimeState(path);
-      const canonicalRestore = Threads.parseTelegramWorkspaceStateSection(stable.profiles.default!.workspace, "default")!.workspaceRestore;
+      const stable = Locks.readBaleRuntimeState(path);
+      const canonicalRestore = Threads.parseBaleWorkspaceStateSection(stable.profiles.default!.workspace, "default")!.workspaceRestore;
       const epoch = lock.getOwnedLeaderEpoch();
       store.setBotState({ threadMode: "enabled" });
       store.setStatusSnapshot({ runtime: { pollingActive: true }, diagnostics: { pendingDispatch: false,
@@ -3028,7 +3028,7 @@ for (const drift of ["none", "context", "generation", "epoch", "owner", "profile
       if (drift === "generation") { sessions.clear(ctx); sessions.set(ctx); }
       if (drift === "epoch") { lock.release(); assert.equal(lock.acquire(ctx).ok, true); assert.notEqual(lock.getOwnedLeaderEpoch(), epoch); }
       if (drift === "owner") {
-        const replacement = Locks.createTelegramLockRuntime({ statePath: path, pid: 30, instanceId: "replacement", isProcessAlive: () => true });
+        const replacement = Locks.createBaleLockRuntime({ statePath: path, pid: 30, instanceId: "replacement", isProcessAlive: () => true });
         const predecessor = lock.getState();
         assert.equal(predecessor.kind, "active-here");
         if (predecessor.kind !== "active-here") return;
@@ -3036,15 +3036,15 @@ for (const drift of ["none", "context", "generation", "epoch", "owner", "profile
       }
       if (drift === "profile") scope.profile = "work";
       if (drift === "path") scope.path = join(dir, "wrong-state.json");
-      const beforeFlush = Locks.readTelegramRuntimeState(path);
+      const beforeFlush = Locks.readBaleRuntimeState(path);
       const workspaceError = await workspaceResult;
       await runtimeWrite;
       if (drift === "none") assert.equal(workspaceError, undefined);
       else assert.match(String(workspaceError), drift === "canonical" ? /canonical snapshot changed/ : /captured publication authority/);
-      const after = Locks.readTelegramRuntimeState(path);
+      const after = Locks.readBaleRuntimeState(path);
       assert.deepEqual(after.profiles.work, stable.profiles.work, "Actual named-profile owners remain untouched");
       for (const section of ["transport", "admission"] as const) assert.deepEqual(after.profiles.default?.[section], beforeFlush.profiles.default?.[section]);
-      const workspace = Threads.parseTelegramWorkspaceStateSection(after.profiles.default!.workspace, "default")!;
+      const workspace = Threads.parseBaleWorkspaceStateSection(after.profiles.default!.workspace, "default")!;
       assert.deepEqual(workspace.workspaceRestore, canonicalRestore, "Issued Restore facts are not rolled back by sibling publication");
       assert.equal(workspace.workspaceBindings?.[0]?.target.threadId, 42);
       assert.deepEqual(workspace.workspaceBindings?.[0]?.journalBindingKeys, []);
@@ -3058,9 +3058,9 @@ for (const drift of ["none", "context", "generation", "epoch", "owner", "profile
       } else assert.deepEqual(after.profiles.default, beforeFlush.profiles.default, "Revoked grants publish neither queued section");
       if (drift === "canonical") assert.equal(workspace.bot.lastReconcileAction, "concurrent-section-change");
       assert.equal(fs.existsSync(join(dir, "wrong-state.json")), false);
-      const beforeRelease = Locks.readTelegramRuntimeState(path);
+      const beforeRelease = Locks.readBaleRuntimeState(path);
       assert.equal(admission.releaseAdmission(lease.lease), true, "Nonleader process/birth authority survives transport/session changes");
-      const released = Locks.readTelegramRuntimeState(path);
+      const released = Locks.readBaleRuntimeState(path);
       for (const section of ["transport", "workspace", "runtime"] as const) assert.deepEqual(released.profiles.default?.[section], beforeRelease.profiles.default?.[section]);
       assert.deepEqual(released.profiles.work, stable.profiles.work);
       assert.equal(namedAdmission.read().leases.length, 1);
@@ -3088,11 +3088,11 @@ test("Journaled start after follower Thread re-creation keeps reply, menu and ow
     let sourceJournal;
     const commandsUrl = new URL("lib/commands.js", base), commandsModule = await import(commandsUrl.href);
     mock.module(commandsUrl.href, { namedExports: { ...commandsModule,
-      createTelegramCommandHandlerTargetRuntime(deps) {
+      createBaleCommandHandlerTargetRuntime(deps) {
         const record = deps.recordRuntimeEvent;
-        const actual = commandsModule.createTelegramCommandHandlerTargetRuntime({ ...deps,
+        const actual = commandsModule.createBaleCommandHandlerTargetRuntime({ ...deps,
           recordRuntimeEvent(category, error, detail) {
-            if (category === "telegram-command" && detail?.command === "start" && detail.phase === "menu-render") menuErrors.push(String(error));
+            if (category === "bale-command" && detail?.command === "start" && detail.phase === "menu-render") menuErrors.push(String(error));
             record?.(category, error, detail);
           },
         });
@@ -3106,12 +3106,12 @@ test("Journaled start after follower Thread re-creation keeps reply, menu and ow
       },
     } });
     const menuUrl = new URL("lib/menu.js", base), menuModule = await import(menuUrl.href);
-    mock.module(menuUrl.href, { namedExports: { ...menuModule, createTelegramModelMenuRuntime(...args) {
-      const actual = menuModule.createTelegramModelMenuRuntime(...args); menus.push(actual); return actual;
+    mock.module(menuUrl.href, { namedExports: { ...menuModule, createBaleModelMenuRuntime(...args) {
+      const actual = menuModule.createBaleModelMenuRuntime(...args); menus.push(actual); return actual;
     } } });
     const ownershipUrl = new URL("lib/ownership.js", base), ownershipModule = await import(ownershipUrl.href);
-    mock.module(ownershipUrl.href, { namedExports: { ...ownershipModule, createTelegramBusMessageOwnershipRuntime(...args) {
-      const actual = ownershipModule.createTelegramBusMessageOwnershipRuntime(...args); ownership.push(actual); return actual;
+    mock.module(ownershipUrl.href, { namedExports: { ...ownershipModule, createBaleBusMessageOwnershipRuntime(...args) {
+      const actual = ownershipModule.createBaleBusMessageOwnershipRuntime(...args); ownership.push(actual); return actual;
     } } });
     const Journal = await import(new URL("lib/journal.js", base));
     const Paths = await import(new URL("lib/paths.js", base));
@@ -3120,24 +3120,24 @@ test("Journaled start after follower Thread re-creation keeps reply, menu and ow
     const { default: extension } = await import(new URL("index.js", base));
     const keepAlive = setInterval(() => {}, 60000);
     const follower = createRuntimePiHarness();
-    const followers = Bus.createTelegramBusFollowerRegistry();
-    const leaderOwnership = ownershipModule.createTelegramBusMessageOwnershipRuntime({ instanceId: "fixture-leader",
+    const followers = Bus.createBaleBusFollowerRegistry();
+    const leaderOwnership = ownershipModule.createBaleBusMessageOwnershipRuntime({ instanceId: "fixture-leader",
       getProfileKey: () => "fixture", listFollowers: followers.list });
-    const socketPath = Bus.getTelegramBusSocketPath(dir, process.platform, undefined, "consolidated");
+    const socketPath = Bus.getBaleBusSocketPath(dir, process.platform, undefined, "consolidated");
     let currentThread = 43, leaderChild, leaderExit;
     const replyAttempts = [];
-    const authorize = Bus.createTelegramFollowerApiCallAuthorizer({ isMessageOwned: leaderOwnership.isOwnedByFollower });
-    const server = Bus.createTelegramBusLocalServer({ socketPath, handleEnvelope: BusLeader.createTelegramBusLeaderEnvelopeHandler({
+    const authorize = Bus.createBaleFollowerApiCallAuthorizer({ isMessageOwned: leaderOwnership.isOwnedByFollower });
+    const server = Bus.createBaleBusLocalServer({ socketPath, handleEnvelope: BusLeader.createBaleBusLeaderEnvelopeHandler({
       followerRegistry: followers, authSecret: "fixture-secret",
-      protocolIdentity: Bus.createTelegramBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
-        Bus.TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION, Bus.TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF,
-        Bus.TELEGRAM_BUS_CAPABILITY_CONNECT_RECOVERY] }),
+      protocolIdentity: Bus.createBaleBusProtocolIdentity({ runtimeBuild: "fixture", capabilities: [
+        Bus.BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION, Bus.BALE_BUS_CAPABILITY_QUEUE_HANDOFF,
+        Bus.BALE_BUS_CAPABILITY_CONNECT_RECOVERY] }),
       provisionFollowerTarget: () => ({ chatId: 77, threadId: currentThread, slot: "A" }),
       authorizeFollowerApiCall(input) {
         const body = input.args[1];
         if (handlersEntered && input.method === "call" && input.args[0] === "sendMessage" &&
           body?.reply_markup?.inline_keyboard?.flat().some(button => button.callback_data === "menu:model"))
-          replyAttempts.push([body.message_thread_id, body[Bus.TELEGRAM_BUS_CROSS_TARGET_DELIVERY_FIELD]]);
+          replyAttempts.push([body.message_thread_id, body[Bus.BALE_BUS_CROSS_TARGET_DELIVERY_FIELD]]);
         return authorize(input);
       },
       recordFollowerMessageOwnership: leaderOwnership.recordFollower,
@@ -3175,14 +3175,14 @@ test("Journaled start after follower Thread re-creation keeps reply, menu and ow
       }
     };
     try {
-      await writeFile(join(dir, "telegram.json"), JSON.stringify({ botToken: "123:reply-recipient", botId: 123, allowedUserId: 77,
+      await writeFile(join(dir, "bale.json"), JSON.stringify({ botToken: "123:reply-recipient", botId: 123, allowedUserId: 77,
         threads: { automaticCleanup: false }, assistant: { activity: "quiet", timeInjection: "hidden" } }), { mode: 0o600 });
       const leaderSource = [
         "import * as Locks from " + JSON.stringify(new URL("lib/locks.js", base).href) + ";",
         "import * as Threads from " + JSON.stringify(new URL("lib/threads.js", base).href) + ";",
-        "const owner = Locks.createTelegramLockRuntime({ statePath: " + JSON.stringify(Paths.resolveTelegramStatePath(dir)) + ", instanceId: 'fixture-leader', busSocketPath: " + JSON.stringify(socketPath) + ", busSecret: 'fixture-secret' });",
+        "const owner = Locks.createBaleLockRuntime({ statePath: " + JSON.stringify(Paths.resolveBaleStatePath(dir)) + ", instanceId: 'fixture-leader', busSocketPath: " + JSON.stringify(socketPath) + ", busSecret: 'fixture-secret' });",
         "if (!owner.acquire({ cwd: '/reply-leader' }).ok) throw new Error('Leader fixture acquisition failed');",
-        "const store = Threads.createTelegramTopicTargetStore({ path: " + JSON.stringify(Paths.resolveTelegramStatePath(dir)) + ", consolidated: { captureAuthority: () => owner.owns, publishIfOwned: owner.publishStateSectionIfOwned } });",
+        "const store = Threads.createBaleTopicTargetStore({ path: " + JSON.stringify(Paths.resolveBaleStatePath(dir)) + ", consolidated: { captureAuthority: () => owner.owns, publishIfOwned: owner.publishStateSectionIfOwned } });",
         "await store.load(); store.setBotState({ threadMode: 'enabled' }); await store.persist();",
         "const timer = setInterval(() => owner.refresh(), 1000); process.on('SIGTERM', () => { clearInterval(timer); owner.release(); process.exit(0); }); console.log('READY');",
       ].join("\\n");
@@ -3198,20 +3198,20 @@ test("Journaled start after follower Thread re-creation keeps reply, menu and ow
       await server.start();
       extension(follower.pi); followerStarted = true;
       await follower.handlers.get("session_start")({}, followerCtx);
-      await follower.commands.get("telegram-connect").handler("", followerCtx);
+      await follower.commands.get("bale-connect").handler("", followerCtx);
       assert.equal(followers.list().length, 1, "The production root registered through the real local bus");
       const firstRegistration = followers.list()[0];
       assert.equal(firstRegistration.target.threadId, 43);
       assert.ok(firstRegistration.sessionId && firstRegistration.profileKey);
-      const journalPath = Paths.resolveTelegramSessionJournalPath(firstRegistration.sessionId, firstRegistration.profileKey, dir);
-      sourceJournal = Journal.createTelegramUpdateJournalStore({ path: journalPath, profileName: "default",
-        botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:reply-recipient", botId: 123 }) });
+      const journalPath = Paths.resolveBaleSessionJournalPath(firstRegistration.sessionId, firstRegistration.profileKey, dir);
+      sourceJournal = Journal.createBaleUpdateJournalStore({ path: journalPath, profileName: "default",
+        botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:reply-recipient", botId: 123 }) });
       const original = { update_id: 901, message: { message_id: 501, chat: { id: 77, type: "private" },
         from: { id: 77, is_bot: false }, message_thread_id: 41, text: "/start" } };
       sourceJournal.appendBatch([original]);
       assert.deepEqual(sourceJournal.read().entries.find(entry => entry.updateId === 901)?.update, original);
       currentThread = 44;
-      await follower.commands.get("telegram-connect").handler("", followerCtx);
+      await follower.commands.get("bale-connect").handler("", followerCtx);
       const current = followers.list()[0];
       assert.equal(current.target.threadId, 44, "The replacement Thread is acknowledged by a fresh real registration");
       assert.deepEqual([current.instanceId, current.sessionId, current.profileKey, current.cwd],
@@ -3251,16 +3251,16 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
   const interrupted = boundary !== "review-reopen";
   void testRoot(`Fresh production root uses shared files and ignores released storage (${profile ?? "default"}, ${boundary})`,
     { concurrency: false, timeout: 15_000 }, async () => {
-    const extension = await getRuntimeTelegramExtension(), previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-    const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pt-fresh-"))), directory = Paths.resolveTelegramTempDir(agentDir);
-    const oldDir = join(agentDir, "tmp", "telegram"), oldFiles = {
+    const extension = await getRuntimeBaleExtension(), previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pt-fresh-"))), directory = Paths.resolveBaleTempDir(agentDir);
+    const oldDir = join(agentDir, "tmp", "bale"), oldFiles = {
       "owners.json": "{}\n", "state.json": "{\"version\":999,\"sentinel\":\"released-workspace\"}\n",
       "inbox.json": "{\"version\":999,\"sentinel\":\"never-replay\"}\n", "logs.jsonl": "released log bytes\n",
     };
     await mkdir(oldDir, { recursive: true });
     for (const [name, bytes] of Object.entries(oldFiles)) await writeFile(join(oldDir, name), bytes, { mode: 0o600 });
     const bot = { botToken: "123:fresh-root", botId: 123, allowedUserId: 77, threads: { automaticCleanup: false } };
-    await writeFile(join(agentDir, "telegram.json"), JSON.stringify({ ...bot, profiles: { work: bot }, assistant: { activity: "quiet", timeInjection: "hidden" } }), { mode: 0o600 });
+    await writeFile(join(agentDir, "bale.json"), JSON.stringify({ ...bot, profiles: { work: bot }, assistant: { activity: "quiet", timeInjection: "hidden" } }), { mode: 0o600 });
     const methods: string[] = [], dispatched: unknown[] = [];
     const { handlers, commands, tools, pi } = createRuntimePiHarness({ sendUserMessage: message => { dispatched.push(message); } });
     const modelRegistry = { refresh() {}, getAvailable: () => [], isUsingOAuth: () => false };
@@ -3274,26 +3274,26 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
     let holdCreation = false, releaseCreation: (() => void) | undefined;
     let followerConnect: Promise<void> | undefined, sessionStart: Promise<unknown> | undefined;
     let activeFollowerCtx = followerCtx;
-    let replacementOwner: ReturnType<typeof Locks.createTelegramLockRuntime> | undefined;
+    let replacementOwner: ReturnType<typeof Locks.createBaleLockRuntime> | undefined;
     const resumedCtx = createRuntimeExtensionContext({ cwd: ctx.cwd, modelRegistry, getContextUsage: () => undefined,
       sessionManager: { ...ctx.sessionManager, getSessionFile: () => `/sessions/${ctx.sessionManager.getSessionId()}.jsonl` } });
     const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-      const method = getRuntimeTelegramApiMethod(input); methods.push(method);
-      if (method === "getMe") return createRuntimeTelegramApiResponse({ id: 123, username: "fixture_bot", has_topics_enabled: true });
-      if (method === "getChat") return createRuntimeTelegramApiResponse({ id: -100123, type: "channel", username: "fixture_channel" });
+      const method = getRuntimeBaleApiMethod(input); methods.push(method);
+      if (method === "getMe") return createRuntimeBaleApiResponse({ id: 123, username: "fixture_bot", has_topics_enabled: true });
+      if (method === "getChat") return createRuntimeBaleApiResponse({ id: -100123, type: "channel", username: "fixture_channel" });
       if (method === "sendRichMessage" && parseJsonRequestBody(init)?.chat_id === -100123) {
         channelSends++;
         if ((parseJsonRequestBody(init)?.rich_message as { markdown: string }).markdown === "Unknown outcome") throw new Error("isolated lost channel ACK");
-        return createRuntimeTelegramApiResponse({ message_id: 91, chat: { id: -100123, type: "channel" } });
+        return createRuntimeBaleApiResponse({ message_id: 91, chat: { id: -100123, type: "channel" } });
       }
       if (method === "createForumTopic") {
         const threadId = nextThread++;
         if (holdCreation) await new Promise<void>(resolve => { releaseCreation = resolve; });
-        return createRuntimeTelegramApiResponse({ message_thread_id: threadId, name: "Fresh" });
+        return createRuntimeBaleApiResponse({ message_thread_id: threadId, name: "Fresh" });
       }
-      if (method === "getUpdates" && ++polls === 1) return createRuntimeTelegramApiResponse([]);
+      if (method === "getUpdates" && ++polls === 1) return createRuntimeBaleApiResponse([]);
       if (method === "getUpdates") return await new Promise<Response>((resolve, reject) => {
-        releaseReview = () => resolve(createRuntimeTelegramApiResponse([{ update_id: reviewUpdateId++, callback_query: {
+        releaseReview = () => resolve(createRuntimeBaleApiResponse([{ update_id: reviewUpdateId++, callback_query: {
           id: `cleanup-placement-review-${reviewUpdateId}`, from: { id: 77, is_bot: false }, data: "settings:review:inactive-threads",
           message: { message_id: 300, message_thread_id: 42, chat: { id: 77, type: "private" } },
         } }]));
@@ -3302,24 +3302,24 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
       });
       if (method === "answerCallbackQuery") {
         reviewAnswers.push(String(parseJsonRequestBody(init)?.text ?? ""));
-        return createRuntimeTelegramApiResponse(true);
+        return createRuntimeBaleApiResponse(true);
       }
-      if (["deleteWebhook", "setMyCommands", "sendMessage", "sendRichMessage", "editMessageText", "editForumTopic", "sendChatAction"].includes(method)) return createRuntimeTelegramApiResponse(true);
+      if (["deleteWebhook", "setMyCommands", "sendMessage", "sendRichMessage", "editMessageText", "editForumTopic", "sendChatAction"].includes(method)) return createRuntimeBaleApiResponse(true);
       throw new Error(`Unexpected fresh-root API method: ${method}`);
     });
     try {
       process.env.PI_CODING_AGENT_DIR = agentDir;
       assert.equal(fs.existsSync(directory), false);
-      const seedOwner = Locks.createTelegramLockRuntime<{ cwd: string }>({ statePath: Paths.resolveTelegramStatePath(agentDir),
+      const seedOwner = Locks.createBaleLockRuntime<{ cwd: string }>({ statePath: Paths.resolveBaleStatePath(agentDir),
         key: () => profile ?? "default", pid: process.pid, instanceId: "cleanup-placement-seed", runtimeGeneration: 1 });
       assert.equal(seedOwner.acquire({ cwd: "/cleanup-placement-seed" }).ok, true);
-      const seed = Threads.createTelegramTopicTargetStore({ path: Paths.resolveTelegramStatePath(agentDir), telegramProfile: profile,
+      const seed = Threads.createBaleTopicTargetStore({ path: Paths.resolveBaleStatePath(agentDir), baleProfile: profile,
         consolidated: { captureAuthority() {
           const epoch = seedOwner.getOwnedLeaderEpoch();
           return epoch === undefined ? undefined : () => seedOwner.owns() && seedOwner.getOwnedLeaderEpoch() === epoch;
         }, publishIfOwned: seedOwner.publishStateSectionIfOwned! } });
       await seed.load();
-      const inactiveBinding = { ...Threads.createTelegramWorkspaceBindingIdentity("/inactive-cleanup", 0, "inactive-cleanup")!,
+      const inactiveBinding = { ...Threads.createBaleWorkspaceBindingIdentity("/inactive-cleanup", 0, "inactive-cleanup")!,
         slot: "Z", threadName: "Zenith", target: { chatId: 77, threadId: 90 }, inactiveSinceMs: 1, updatedAtMs: 2,
         journalBindingKeys: [], journalBindingsComplete: true as const, journalSources: [] };
       seed.upsertWorkspaceBinding(inactiveBinding);
@@ -3327,33 +3327,33 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
       seedOwner.release();
       extension(pi);
       await handlers.get("session_start")?.({}, ctx);
-      await commands.get("telegram-connect")!.handler(profile ?? "", ctx);
+      await commands.get("bale-connect")!.handler(profile ?? "", ctx);
       await waitForCondition(() => !!releaseReview);
       const initialPollerCount = methods.filter(method => method === "getUpdates").length;
       const rootFiles = (await readdir(directory, { withFileTypes: true })).filter(entry => !entry.isDirectory()).map(entry => entry.name).sort();
       assert.deepEqual(rootFiles, ["logs.jsonl", "state.json"], "IPC/staging/rotation never create another root file");
-      const state = Locks.readTelegramRuntimeState(Paths.resolveTelegramStatePath(agentDir)), sections = state.profiles[profile ?? "default"]!;
+      const state = Locks.readBaleRuntimeState(Paths.resolveBaleStatePath(agentDir)), sections = state.profiles[profile ?? "default"]!;
       assert.ok(sections.transport && sections.workspace && sections.admission);
-      const workspace = Threads.parseTelegramWorkspaceStateSection(sections.workspace, profile ?? "default")!;
+      const workspace = Threads.parseBaleWorkspaceStateSection(sections.workspace, profile ?? "default")!;
       assert.ok(workspace.threads.some(record => record.target.threadId === 42));
-      const logical = Bus.getTelegramBusSocketPath(agentDir, process.platform, profile, "consolidated"), endpoint = Bus.resolveTelegramBusSocketPath(logical);
+      const logical = Bus.getBaleBusSocketPath(agentDir, process.platform, profile, "consolidated"), endpoint = Bus.resolveBaleBusSocketPath(logical);
       // Over-long Unix endpoints (for example deep macOS temp roots) use the bounded private fallback instead.
-      if (process.platform !== "win32" && Buffer.byteLength(logical) > BusTransport.TELEGRAM_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES) {
-        assert.notEqual(dirname(endpoint), Paths.resolveTelegramRuntimeDir(agentDir));
+      if (process.platform !== "win32" && Buffer.byteLength(logical) > BusTransport.BALE_BUS_MAX_DIRECT_UNIX_ENDPOINT_BYTES) {
+        assert.notEqual(dirname(endpoint), Paths.resolveBaleRuntimeDir(agentDir));
       } else if (process.platform !== "win32") {
-        assert.equal(dirname(endpoint), Paths.resolveTelegramRuntimeDir(agentDir));
+        assert.equal(dirname(endpoint), Paths.resolveBaleRuntimeDir(agentDir));
         const target = await readlink(endpoint);
         assert.equal(dirname(target), ".", "Native publication has a colocated relative private listener");
         assert.equal(fs.lstatSync(join(dirname(endpoint), target)).isSocket(), true);
       }
-      const channelTool = tools.get("telegram_message")!;
+      const channelTool = tools.get("bale_message")!;
       await channelTool.execute("fresh-root-channel", { text: "Retained channel post", chat_id: -100123, channel: true });
-      const service = Paths.resolveTelegramServiceJournalStorage("channel-posts", agentDir, profile ?? "default");
+      const service = Paths.resolveBaleServiceJournalStorage("channel-posts", agentDir, profile ?? "default");
       assert.equal(fs.existsSync(service.path), true);
-      const logPath = Paths.resolveTelegramRuntimeLogPath(agentDir);
+      const logPath = Paths.resolveBaleRuntimeLogPath(agentDir);
       await writeFile(logPath, JSON.stringify({ kind: "event", at: 1, category: "fixture", profile: profile ?? "default", message: "x".repeat(5 * 1024 * 1024) }) + "\n", { mode: 0o600 });
       await assert.rejects(channelTool.execute("fresh-root-unknown", { text: "Unknown outcome", chat_id: -100123, channel: true }), /channel publication failed/u);
-      const previousLog = Paths.resolveTelegramPreviousSharedRuntimeLogPath(agentDir);
+      const previousLog = Paths.resolveBalePreviousSharedRuntimeLogPath(agentDir);
       await waitForAsyncCondition(async () => fs.existsSync(previousLog));
       assert.equal((await readFile(previousLog, "utf8")).includes('"category":"fixture"'), true);
       assert.equal(fs.existsSync(join(directory, "logs._prev.jsonl")), false);
@@ -3362,11 +3362,11 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
       const creationsBefore = methods.filter(method => method === "createForumTopic").length;
       holdCreation = interrupted;
       if (interrupted) {
-        const siblingOwner = Locks.createTelegramLockRuntime({ statePath: Paths.resolveTelegramStatePath(agentDir),
+        const siblingOwner = Locks.createBaleLockRuntime({ statePath: Paths.resolveBaleStatePath(agentDir),
           key: () => profile ? "default" : "work", instanceId: "production-race-sibling" });
         assert.equal(siblingOwner.acquire({ cwd: "/sibling-profile" }).ok, true);
-        const sibling = Threads.createTelegramTopicTargetStore({ path: Paths.resolveTelegramStatePath(agentDir),
-          telegramProfile: profile ? undefined : "work", consolidated: {
+        const sibling = Threads.createBaleTopicTargetStore({ path: Paths.resolveBaleStatePath(agentDir),
+          baleProfile: profile ? undefined : "work", consolidated: {
             captureAuthority: () => siblingOwner.owns,
             publishIfOwned: siblingOwner.publishStateSectionIfOwned!,
           } });
@@ -3377,13 +3377,13 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
       followerStarted = true;
       followerConnect = (async () => {
         await follower.handlers.get("session_start")?.({}, followerCtx);
-        await follower.commands.get("telegram-connect")!.handler(profile ?? "", followerCtx);
+        await follower.commands.get("bale-connect")!.handler(profile ?? "", followerCtx);
       })();
       if (interrupted) {
         // Supersede captured authority while native follower registration holds admission across an API await.
         try { await waitForCondition(() => !!releaseCreation); }
-        catch (error) { throw new Error(`${String(error)}\n${JSON.stringify({ methods })}\n${await readFile(Paths.resolveTelegramRuntimeLogPath(agentDir), "utf8")}`); }
-        const statePath = Paths.resolveTelegramStatePath(agentDir), stateBeforeRevocation = Locks.readTelegramRuntimeState(statePath);
+        catch (error) { throw new Error(`${String(error)}\n${JSON.stringify({ methods })}\n${await readFile(Paths.resolveBaleRuntimeLogPath(agentDir), "utf8")}`); }
+        const statePath = Paths.resolveBaleStatePath(agentDir), stateBeforeRevocation = Locks.readBaleRuntimeState(statePath);
         const held = stateBeforeRevocation.profiles[profile ?? "default"]!;
         assert.ok((held.admission as { leases: unknown[] }).leases.length > 0, "Production admission spans the actual creation await");
         assert.equal(Object.keys(stateBeforeRevocation.profiles).length, 2, "The preservation assertion has a real sibling-profile section");
@@ -3396,8 +3396,8 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
           await sessionStart;
           releaseCreation!();
           await followerConnect;
-          const after = Locks.readTelegramRuntimeState(statePath);
-          const retained = Threads.parseTelegramWorkspaceStateSection(after.profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
+          const after = Locks.readBaleRuntimeState(statePath);
+          const retained = Threads.parseBaleWorkspaceStateSection(after.profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
           const remoteBinding = retained.workspaceBindings?.find(binding => binding.cwd === followerCtx.cwd);
           assert.ok(remoteBinding, "The independently current leader retains acknowledged remote creation; local refusal is not rollback");
           assert.equal(remoteBinding.sessionId, followerCtx.sessionManager.getSessionId());
@@ -3405,13 +3405,13 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
           assert.equal(remoteBinding.slot, "B");
           assert.deepEqual(retained.workspaceBindings?.filter(binding => binding.cwd !== followerCtx.cwd), workspace.workspaceBindings);
           assert.ok(remoteBinding.journalSources?.length);
-          for (const source of remoteBinding.journalSources!) assert.equal(fs.existsSync(Paths.resolveTelegramSessionJournalPath(
+          for (const source of remoteBinding.journalSources!) assert.equal(fs.existsSync(Paths.resolveBaleSessionJournalPath(
             source.sessionId, source.recipientBindingKey, agentDir, profile)), false,
             "Stale creation ACK leaves the recipient family absent");
           const sendsBeforeRefusal = methods.length;
-          await assert.rejects(follower.tools.get("telegram_message")!.execute("stale-registration", { text: "Must not send" }),
-            /requires this Pi instance to own \/telegram-connect or be registered/u);
-          assert.equal(methods.length, sendsBeforeRefusal, "Refused local authority issues no Telegram API call");
+          await assert.rejects(follower.tools.get("bale_message")!.execute("stale-registration", { text: "Must not send" }),
+            /requires this Pi instance to own \/bale-connect or be registered/u);
+          assert.equal(methods.length, sendsBeforeRefusal, "Refused local authority issues no Bale API call");
           assert.deepEqual((after.profiles[profile ?? "default"]!.admission as { leases: unknown[] }).leases, []);
           for (const [key, value] of Object.entries(stateBeforeRevocation.profiles)) {
             if (key !== (profile ?? "default")) assert.deepEqual(after.profiles[key], value);
@@ -3421,12 +3421,12 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
           assert.deepEqual(dispatched, []);
           assert.equal(methods.includes("deleteForumTopic"), false);
           for (const [name, bytes] of Object.entries(oldFiles)) assert.equal(await readFile(join(oldDir, name), "utf8"), bytes);
-          await follower.commands.get("telegram-connect")!.handler(profile ?? "", activeFollowerCtx);
-          await follower.tools.get("telegram_message")!.execute("fresh-registration", { text: "Fresh attempt only" });
+          await follower.commands.get("bale-connect")!.handler(profile ?? "", activeFollowerCtx);
+          await follower.tools.get("bale_message")!.execute("fresh-registration", { text: "Fresh attempt only" });
           assert.equal(methods.filter(method => method === "createForumTopic").length, creationsBefore + 1,
             "Fresh local registration reuses the acknowledged remote binding without repeating creation");
-          const freshState = Locks.readTelegramRuntimeState(statePath);
-          const fresh = Threads.parseTelegramWorkspaceStateSection(freshState.profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
+          const freshState = Locks.readBaleRuntimeState(statePath);
+          const fresh = Threads.parseBaleWorkspaceStateSection(freshState.profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
           assert.deepEqual(fresh.workspaceBindings?.find(binding => binding.cwd === followerCtx.cwd)?.target, remoteBinding.target);
           assert.equal(fresh.workspaceBindings?.find(binding => binding.cwd === followerCtx.cwd)?.slot, remoteBinding.slot);
           for (const [key, value] of Object.entries(stateBeforeRevocation.profiles)) {
@@ -3439,7 +3439,7 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
           followerStarted = false;
           return;
         }
-        replacementOwner = Locks.createTelegramLockRuntime({ statePath, key: () => profile ?? "default",
+        replacementOwner = Locks.createBaleLockRuntime({ statePath, key: () => profile ?? "default",
           instanceId: "production-race-successor" });
         const oldOwner = replacementOwner.getState();
         assert.equal(oldOwner.kind, "active-here", "The native fixture shares this OS process, not the runtime owner identity");
@@ -3449,16 +3449,16 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
         const sentinel = { runtime: { pollingActive: false }, diagnostics: { phase: "successor-only" } };
         assert.equal(replacementOwner.publishStateSectionIfOwned!("runtime", () => ({ value: sentinel, result: true }),
           { isCurrent: replacementOwner.owns }).committed, true);
-        const successorTransport = Locks.readTelegramRuntimeState(statePath).profiles[profile ?? "default"]!.transport;
+        const successorTransport = Locks.readBaleRuntimeState(statePath).profiles[profile ?? "default"]!.transport;
         releaseCreation!();
         await followerConnect;
         await handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "reload" }, ctx);
         await follower.handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "reload" }, followerCtx);
         followerStarted = false;
         // The revoked leader-side provisioning unwinds asynchronously after the follower's connect returns.
-        await waitForCondition(() => (Locks.readTelegramRuntimeState(statePath).profiles[profile ?? "default"]!
+        await waitForCondition(() => (Locks.readBaleRuntimeState(statePath).profiles[profile ?? "default"]!
           .admission as { leases: unknown[] }).leases.length === 0, 8_000);
-        const afterRace = Locks.readTelegramRuntimeState(statePath);
+        const afterRace = Locks.readBaleRuntimeState(statePath);
         assert.deepEqual(afterRace.profiles[profile ?? "default"]!.workspace, held.workspace,
           "Late creation ACK cannot publish an owner/binding under the revoked production leader");
         assert.deepEqual(afterRace.profiles[profile ?? "default"]!.runtime, sentinel,
@@ -3478,33 +3478,33 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
       }
       await followerConnect;
       await waitForAsyncCondition(async () => {
-        const raw = Locks.readTelegramRuntimeState(Paths.resolveTelegramStatePath(agentDir)).profiles[profile ?? "default"]?.workspace;
-        return Threads.parseTelegramWorkspaceStateSection(raw, profile ?? "default")?.threads.some(record => record.owner?.kind === "manual-follower") === true;
+        const raw = Locks.readBaleRuntimeState(Paths.resolveBaleStatePath(agentDir)).profiles[profile ?? "default"]?.workspace;
+        return Threads.parseBaleWorkspaceStateSection(raw, profile ?? "default")?.threads.some(record => record.owner?.kind === "manual-follower") === true;
       });
       assert.equal(methods.filter(method => method === "getUpdates").length, initialPollerCount, "The follower joins the native leader, never starts a second poller");
-      const joinedWorkspace = Threads.parseTelegramWorkspaceStateSection(Locks.readTelegramRuntimeState(Paths.resolveTelegramStatePath(agentDir)).profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
+      const joinedWorkspace = Threads.parseBaleWorkspaceStateSection(Locks.readBaleRuntimeState(Paths.resolveBaleStatePath(agentDir)).profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
       const joinedFollower = joinedWorkspace.threads.find(record => record.owner?.kind === "manual-follower")!;
       assert.ok(joinedFollower.instanceId);
-      const followerEndpoint = Bus.resolveTelegramBusSocketPath(Bus.getTelegramBusFollowerSocketPath(joinedFollower.instanceId, agentDir, process.platform, profile, "consolidated"));
+      const followerEndpoint = Bus.resolveBaleBusSocketPath(Bus.getBaleBusFollowerSocketPath(joinedFollower.instanceId, agentDir, process.platform, profile, "consolidated"));
       if (process.platform !== "win32") {
-        assert.equal(dirname(followerEndpoint), Paths.resolveTelegramRuntimeDir(agentDir));
+        assert.equal(dirname(followerEndpoint), Paths.resolveBaleRuntimeDir(agentDir));
         const target = await readlink(followerEndpoint);
         assert.equal(dirname(target), ".");
         assert.equal(fs.lstatSync(join(dirname(followerEndpoint), target)).isSocket(), true);
       }
       assert.deepEqual((await readdir(directory, { withFileTypes: true })).filter(entry => !entry.isDirectory()).map(entry => entry.name).sort(), ["logs.jsonl", "state.json"]);
-      const cleanupStorage = Paths.resolveTelegramServiceJournalStorage("thread-cleanup", agentDir, profile ?? "default");
+      const cleanupStorage = Paths.resolveBaleServiceJournalStorage("thread-cleanup", agentDir, profile ?? "default");
       assert.equal(fs.existsSync(cleanupStorage.path), false);
       assert.ok(releaseReview);
       releaseReview();
       try {
         await waitForAsyncCondition(async () => fs.existsSync(cleanupStorage.path) && reviewAnswers.includes("Review prepared. No tabs were deleted"));
       } catch (error) {
-        throw new Error(`${String(error)}\n${JSON.stringify({ reviewAnswers, methods })}\n${await readFile(Paths.resolveTelegramRuntimeLogPath(agentDir), "utf8")}`);
+        throw new Error(`${String(error)}\n${JSON.stringify({ reviewAnswers, methods })}\n${await readFile(Paths.resolveBaleRuntimeLogPath(agentDir), "utf8")}`);
       }
       const cleanupOptions = { ...cleanupStorage, profileName: profile ?? "default",
-        tokenSha256: Journal.createTelegramUpdateJournalBotIdentity({ botToken: bot.botToken }).tokenSha256 };
-      const cleanup = ThreadCleanupManager.createTelegramThreadCleanupWorkStore(cleanupOptions);
+        tokenSha256: Journal.createBaleUpdateJournalBotIdentity({ botToken: bot.botToken }).tokenSha256 };
+      const cleanup = ThreadCleanupManager.createBaleThreadCleanupWorkStore(cleanupOptions);
       const work = cleanup.list();
       assert.equal(work.length, 1);
       assert.equal(work[0]?.entries.length, 1);
@@ -3512,39 +3512,39 @@ for (const profile of [undefined, "work"] as const) for (const boundary of ["rev
       assert.equal(work[0]?.entries[0]?.state, "prepared");
       assert.equal(work[0]?.entries[0]?.issuedAtMs, undefined);
       assert.deepEqual(work[0]?.entries[0]?.target, inactiveBinding.target);
-      const pollingPath = (Locks.readTelegramRuntimeState(Paths.resolveTelegramStatePath(agentDir)).profiles[profile ?? "default"]!.transport as { journalPath: string }).journalPath;
-      const pollingJournal = Journal.createTelegramUpdateJournalStore({ path: pollingPath, profileName: profile ?? "default",
-        botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: bot.botToken, botId: bot.botId }) });
+      const pollingPath = (Locks.readBaleRuntimeState(Paths.resolveBaleStatePath(agentDir)).profiles[profile ?? "default"]!.transport as { journalPath: string }).journalPath;
+      const pollingJournal = Journal.createBaleUpdateJournalStore({ path: pollingPath, profileName: profile ?? "default",
+        botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: bot.botToken, botId: bot.botId }) });
       await waitForCondition(() => pollingJournal.read().acceptedThroughUpdateId === 100 && pollingJournal.read().entries.length === 0);
       assert.equal(dirname(service.path), dirname(cleanupStorage.path));
       assert.deepEqual((await readdir(join(directory, "journals"))).sort(), [basename(service.path), basename(cleanupStorage.path)].sort());
-      assert.equal((await readdir(Paths.resolveTelegramRuntimeDir(agentDir))).some(name => name.endsWith(".tmp")), false);
+      assert.equal((await readdir(Paths.resolveBaleRuntimeDir(agentDir))).some(name => name.endsWith(".tmp")), false);
       const cleanupBeforeRestart = await readFile(cleanupStorage.path);
       await follower.handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "quit" }, followerCtx);
       followerStarted = false;
       await handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "quit" }, ctx);
       const serviceBeforeRestart = await readFile(service.path);
-      const workspaceBeforeRestart = Threads.parseTelegramWorkspaceStateSection(Locks.readTelegramRuntimeState(Paths.resolveTelegramStatePath(agentDir)).profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
+      const workspaceBeforeRestart = Threads.parseBaleWorkspaceStateSection(Locks.readBaleRuntimeState(Paths.resolveBaleStatePath(agentDir)).profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
       const pollerCount = methods.filter(method => method === "getUpdates").length;
       resumed = createRuntimePiHarness();
       extension(resumed.pi);
       await resumed.handlers.get("session_start")?.({ type: "session_start", reason: "resume" }, resumedCtx);
-      await resumed.commands.get("telegram-connect")!.handler(profile ?? "", resumedCtx);
+      await resumed.commands.get("bale-connect")!.handler(profile ?? "", resumedCtx);
       await waitForCondition(() => methods.filter(method => method === "getUpdates").length > pollerCount);
-      const resumedTool = resumed.tools.get("telegram_message")!;
+      const resumedTool = resumed.tools.get("bale_message")!;
       await resumedTool.execute("fresh-root-channel", { text: "Retained channel post", chat_id: -100123, channel: true });
       await assert.rejects(resumedTool.execute("fresh-root-unknown", { text: "Unknown outcome", chat_id: -100123, channel: true }), /channel publication failed/u);
       assert.equal(channelSends, 2, "Success and unknown issuance survive a replacement instance without resending either");
       assert.deepEqual(await readFile(service.path), serviceBeforeRestart);
       assert.deepEqual(await readFile(cleanupStorage.path), cleanupBeforeRestart);
-      assert.deepEqual(ThreadCleanupManager.createTelegramThreadCleanupWorkStore(cleanupOptions).list(), work);
+      assert.deepEqual(ThreadCleanupManager.createBaleThreadCleanupWorkStore(cleanupOptions).list(), work);
       assert.ok(releaseReview);
       releaseReview();
       await waitForCondition(() => reviewAnswers.filter(answer => answer === "Review prepared. No tabs were deleted").length === 2 &&
         pollingJournal.read().acceptedThroughUpdateId === 101 && pollingJournal.read().entries.length === 0);
       assert.deepEqual(await readFile(cleanupStorage.path), cleanupBeforeRestart, "Repeated production review reuses the same work set without issuance or rewriting");
-      assert.deepEqual(ThreadCleanupManager.createTelegramThreadCleanupWorkStore(cleanupOptions).list(), work);
-      const workspaceAfterRestart = Threads.parseTelegramWorkspaceStateSection(Locks.readTelegramRuntimeState(Paths.resolveTelegramStatePath(agentDir)).profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
+      assert.deepEqual(ThreadCleanupManager.createBaleThreadCleanupWorkStore(cleanupOptions).list(), work);
+      const workspaceAfterRestart = Threads.parseBaleWorkspaceStateSection(Locks.readBaleRuntimeState(Paths.resolveBaleStatePath(agentDir)).profiles[profile ?? "default"]!.workspace, profile ?? "default")!;
       assert.ok(workspaceBeforeRestart.workspaceBindings?.length);
       const retainedInactive = workspaceAfterRestart.workspaceBindings?.find(value => value.bindingKey === inactiveBinding.bindingKey);
       assert.deepEqual(retainedInactive?.journalBindingKeys, []);
@@ -3585,15 +3585,15 @@ for (const settlement of ["tool-success", "manual-compaction", "auto-threshold",
   let session: import("@earendil-works/pi-coding-agent").AgentSession | undefined;
   const incoming = (update: unknown) => {
     updates.push(update);
-    if (pollReply) { const reply = pollReply; pollReply = undefined; reply(createRuntimeTelegramApiResponse(updates.splice(0))); }
+    if (pollReply) { const reply = pollReply; pollReply = undefined; reply(createRuntimeBaleApiResponse(updates.splice(0))); }
   };
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input), body = init?.body ? JSON.parse(String(init.body)) : {};
+    const method = getRuntimeBaleApiMethod(input), body = init?.body ? JSON.parse(String(init.body)) : {};
     methods.push(String(method));
-    if (method === "getMe") return createRuntimeTelegramApiResponse({ id: 123, is_bot: true, username: "fixture_bot" });
-    if (method === "getChat") return createRuntimeTelegramApiResponse({ id: 99, type: "private" });
+    if (method === "getMe") return createRuntimeBaleApiResponse({ id: 123, is_bot: true, username: "fixture_bot" });
+    if (method === "getChat") return createRuntimeBaleApiResponse({ id: 99, type: "private" });
     if (method === "getUpdates") {
-      if (updates.length) return createRuntimeTelegramApiResponse(updates.splice(0));
+      if (updates.length) return createRuntimeBaleApiResponse(updates.splice(0));
       return new Promise<Response>((resolve, reject) => {
         pollReply = resolve;
         const abort = () => { if (pollReply === resolve) pollReply = undefined; reject(new DOMException("stop", "AbortError")); };
@@ -3605,20 +3605,20 @@ for (const settlement of ["tool-success", "manual-compaction", "auto-threshold",
       const markup = body.reply_markup ?? body.rich_message?.reply_markup;
       const candidate = markup?.inline_keyboard?.flat().find((cell: { text: string }) => cell.text === "▶️ Queued fixture");
       if (candidate) { callback = candidate.callback_data; buttonMessageId = id; }
-      return createRuntimeTelegramApiResponse({ message_id: id, chat: { id: 99, type: "private" } });
+      return createRuntimeBaleApiResponse({ message_id: id, chat: { id: 99, type: "private" } });
     }
-    if (["deleteWebhook", "setMyCommands", "sendChatAction", "answerCallbackQuery", "editMessageText", "editMessageReplyMarkup", "sendMessageDraft"].includes(method ?? "")) return createRuntimeTelegramApiResponse(true);
+    if (["deleteWebhook", "setMyCommands", "sendChatAction", "answerCallbackQuery", "editMessageText", "editMessageReplyMarkup", "sendMessageDraft"].includes(method ?? "")) return createRuntimeBaleApiResponse(true);
     throw new Error(`Unexpected isolated SDK HTTP operation: ${method}`);
   });
   try {
     process.env.PI_CODING_AGENT_DIR = dir;
-    await writeFile(join(dir, "telegram.json"), JSON.stringify({ botToken: "123:fixture-sdk", botId: 123, allowedUserId: 77, lastUpdateId: 0 }), { mode: 0o600 });
+    await writeFile(join(dir, "bale.json"), JSON.stringify({ botToken: "123:fixture-sdk", botId: 123, allowedUserId: 77, lastUpdateId: 0 }), { mode: 0o600 });
     const modelRuntime = await ModelRuntime.create({ authPath: join(dir, "auth.json"), modelsPath: null,
       modelsStorePath: join(dir, "models-cache.json"), allowModelNetwork: false, refreshOnCreate: false });
-    const faux = fauxProvider({ provider: "telegram-fixture", api: "telegram-fixture", tokensPerSecond: Infinity,
+    const faux = fauxProvider({ provider: "bale-fixture", api: "bale-fixture", tokensPerSecond: Infinity,
       ...(settlement === "auto-threshold" ? { models: [{ id: "fixture-small-context", contextWindow: 4096, maxTokens: 512 }] } : {}) });
     modelRuntime.registerNativeProvider(faux.provider);
-    faux.setResponses([() => fauxAssistantMessage(fauxToolCall("telegram_message", { text: 'Fixture button\n<!-- telegram_button {▶️ Queued fixture|button fixture} -->' }), { stopReason: "toolUse" }),
+    faux.setResponses([() => fauxAssistantMessage(fauxToolCall("bale_message", { text: 'Fixture button\n<!-- bale_button {▶️ Queued fixture|button fixture} -->' }), { stopReason: "toolUse" }),
       () => fauxAssistantMessage("Fixture button prepared"), () => fauxAssistantMessage(fauxToolCall("hold_fixture", {}, { id: "held-tool" }), { stopReason: "toolUse" }),
       ...(settlement === "auto-overflow" ? [() => fauxAssistantMessage("", { stopReason: "error", errorMessage: "context_length_exceeded" })] : []),
       ...Array.from({ length: 8 }, () => () => fauxAssistantMessage("Fixture finished"))]);
@@ -3655,17 +3655,17 @@ for (const settlement of ["tool-success", "manual-compaction", "auto-threshold",
     await resources.reload();
     assert.deepEqual(resources.getExtensions().errors, []);
     ({ session } = await createAgentSession({ cwd: dir, agentDir: dir, modelRuntime, model: faux.getModel(), thinkingLevel: "off", resourceLoader: resources,
-      settingsManager: settings, sessionManager: SessionManager.create(dir, join(dir, "sessions")), tools: ["hold_fixture", "telegram_message"] }));
+      settingsManager: settings, sessionManager: SessionManager.create(dir, join(dir, "sessions")), tools: ["hold_fixture", "bale_message"] }));
     await session.bindExtensions({ mode: "rpc", uiContext: { notify(message) { notices.push(message); } } as import("@earendil-works/pi-coding-agent").ExtensionUIContext,
       onError: error => { errors.push(JSON.stringify(error)); } });
-    assert.ok(session.extensionRunner.getCommand("telegram-connect"));
-    await session.prompt("/telegram-connect");
-    await session.prompt("Send the isolated fixture button to the paired Telegram chat");
+    assert.ok(session.extensionRunner.getCommand("bale-connect"));
+    await session.prompt("/bale-connect");
+    await session.prompt("Send the isolated fixture button to the paired Bale chat");
     incoming({ update_id: 1, message: { message_id: 10, chat: { id: 99, type: "private" }, from: { id: 77, is_bot: false }, text: "held fixture" } });
     try { await waitForCondition(() => toolStarted && callback !== undefined); }
     catch (error) {
-      await session.prompt("/telegram-status --debug");
-      const logs = await readFile(Paths.resolveTelegramRuntimeLogPath(dir), "utf8").catch(() => "missing log");
+      await session.prompt("/bale-status --debug");
+      const logs = await readFile(Paths.resolveBaleRuntimeLogPath(dir), "utf8").catch(() => "missing log");
       throw new Error(JSON.stringify({ dispatches, errors, methods, notices, toolStarted, callback, messages: session.messages, logs }), { cause: error });
     }
     for (const [id, text] of [[2, "queued fixture A"], [3, "queued fixture B"]] as const) incoming({ update_id: id, message: { message_id: id + 10,
@@ -3674,9 +3674,9 @@ for (const settlement of ["tool-success", "manual-compaction", "auto-threshold",
       message: { message_id: buttonMessageId, chat: { id: 99, type: "private" } } } });
     await waitForTimeout(2200);
     assert.equal(dispatches.length, 1, "Multiple actual watchdog ticks cannot inject while a tool is active");
-    assert.equal(toolAborts, 0, "Queued Telegram input must not abort the held tool");
-    const logPath = Paths.resolveTelegramRuntimeLogPath(dir), before = await readFile(logPath, "utf8");
-    await session.prompt("/telegram-status --debug");
+    assert.equal(toolAborts, 0, "Queued Bale input must not abort the held tool");
+    const logPath = Paths.resolveBaleRuntimeLogPath(dir), before = await readFile(logPath, "utf8");
+    await session.prompt("/bale-status --debug");
     assert.ok((await readFile(logPath, "utf8")).startsWith(before), "The real SDK diagnostic command cannot truncate existing evidence");
     if (settlement === "manual-compaction") {
       await session.compact();
@@ -3711,24 +3711,24 @@ for (const settlement of ["tool-success", "manual-compaction", "auto-threshold",
 }, 30000);
 
 for (const peer of ["legacy", "capable", "status", "abort", "stop", "next", "continue"] as const) test(`Production follower root advertises unified live-rebind capabilities but preserves recipient gates (${peer})`, async () => {
-  const extension = await getRuntimeTelegramExtension(), previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const extension = await getRuntimeBaleExtension(), previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pt-live-ports-")));
-  const protocol = Bus.createTelegramBusProtocolIdentity({ runtimeBuild: "prepared-peer", capabilities: [
-    Bus.TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION, Bus.TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF,
-    Bus.TELEGRAM_BUS_CAPABILITY_CONNECT_RECOVERY,
-    ...(peer !== "legacy" ? [Bus.TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SAVE, Bus.TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY,
-      Bus.TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE, Bus.TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET,
-      Bus.TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY] : [])] });
-  const leaderSocket = Bus.getTelegramBusFollowerSocketPath("fixture-leader", agentDir);
+  const protocol = Bus.createBaleBusProtocolIdentity({ runtimeBuild: "prepared-peer", capabilities: [
+    Bus.BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION, Bus.BALE_BUS_CAPABILITY_QUEUE_HANDOFF,
+    Bus.BALE_BUS_CAPABILITY_CONNECT_RECOVERY,
+    ...(peer !== "legacy" ? [Bus.BALE_BUS_CAPABILITY_LIVE_REBIND_SAVE, Bus.BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY,
+      Bus.BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE, Bus.BALE_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET,
+      Bus.BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY] : [])] });
+  const leaderSocket = Bus.getBaleBusFollowerSocketPath("fixture-leader", agentDir);
   let leaderChild: ReturnType<typeof spawn> | undefined, leaderExit: Promise<number | null> | undefined;
-  const registry = Bus.createTelegramBusFollowerRegistry(), { handlers, commands, pi } = createRuntimePiHarness({
+  const registry = Bus.createBaleBusFollowerRegistry(), { handlers, commands, pi } = createRuntimePiHarness({
     sendUserMessage() { assert.fail("Held save or unprepared release cannot dispatch"); },
   });
   const ctx = createRuntimeExtensionContext({ cwd: "/prepared-follower" });
   const notices: string[] = []; ctx.ui.notify = (text?: string) => { notices.push(text ?? ""); };
   const target = { chatId: 77, threadId: 43 };
-  const server = Bus.createTelegramBusLocalServer({ socketPath: leaderSocket,
-    handleEnvelope: BusLeader.createTelegramBusLeaderEnvelopeHandler({ followerRegistry: registry, protocolIdentity: protocol,
+  const server = Bus.createBaleBusLocalServer({ socketPath: leaderSocket,
+    handleEnvelope: BusLeader.createBaleBusLeaderEnvelopeHandler({ followerRegistry: registry, protocolIdentity: protocol,
       authSecret: "fixture-secret", provisionFollowerTarget: (_registration, options) => {
         assert.equal(options?.recoverConnection, true, "The public connect command carries explicit recovery intent");
         return { ...target, slot: "A" };
@@ -3736,22 +3736,22 @@ for (const peer of ["legacy", "capable", "status", "abort", "stop", "next", "con
       callApi(method) { return method === "getMe" ? { id: 123, has_topics_enabled: true } : true; },
     }) });
   const restoreFetch = setRuntimeTestFetch(async input => {
-    const method = getRuntimeTelegramApiMethod(input);
-    if (method === "getMe") return createRuntimeTelegramApiResponse({ id: 123, has_topics_enabled: true });
+    const method = getRuntimeBaleApiMethod(input);
+    if (method === "getMe") return createRuntimeBaleApiResponse({ id: 123, has_topics_enabled: true });
     if (method === "getUpdates" || method === "deleteForumTopic") throw new Error(`Follower must not issue ${method}`);
-    return createRuntimeTelegramApiResponse(true);
+    return createRuntimeBaleApiResponse(true);
   });
   try {
     process.env.PI_CODING_AGENT_DIR = agentDir;
-    await writeFile(join(agentDir, "telegram.json"), JSON.stringify({ botToken: "123:prepared-ports", botId: 123, allowedUserId: 77,
+    await writeFile(join(agentDir, "bale.json"), JSON.stringify({ botToken: "123:prepared-ports", botId: 123, allowedUserId: 77,
       threads: { automaticCleanup: false }, assistant: { activity: "quiet" } }), { mode: 0o600 });
     const leaderSource = `
       import * as Locks from ${JSON.stringify(new URL("../lib/locks.ts", import.meta.url).href)};
       import * as Threads from ${JSON.stringify(new URL("../lib/threads.ts", import.meta.url).href)};
-      const owner = Locks.createTelegramLockRuntime({ statePath: ${JSON.stringify(Paths.resolveTelegramStatePath(agentDir))},
+      const owner = Locks.createBaleLockRuntime({ statePath: ${JSON.stringify(Paths.resolveBaleStatePath(agentDir))},
         instanceId: "fixture-leader", busSocketPath: ${JSON.stringify(leaderSocket)}, busSecret: "fixture-secret" });
       if (!owner.acquire({ cwd: "/fixture-leader" }).ok) throw new Error("Leader fixture acquisition failed");
-      const store = Threads.createTelegramTopicTargetStore({ path: ${JSON.stringify(Paths.resolveTelegramStatePath(agentDir))}, consolidated: {
+      const store = Threads.createBaleTopicTargetStore({ path: ${JSON.stringify(Paths.resolveBaleStatePath(agentDir))}, consolidated: {
         captureAuthority: () => owner.owns, publishIfOwned: owner.publishStateSectionIfOwned,
       } });
       await store.load(); store.setBotState({ threadMode: "enabled" }); await store.persist();
@@ -3771,26 +3771,26 @@ for (const peer of ["legacy", "capable", "status", "abort", "stop", "next", "con
     });
     await server.start();
     extension(pi); await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")!.handler("", ctx);
+    await commands.get("bale-connect")!.handler("", ctx);
     const follower = registry.list()[0]; assert.ok(follower?.busSocketPath && follower.profileKey && follower.sessionId && follower.registrationGeneration,
-      notices.join("\n") + "\n" + await readFile(Paths.resolveTelegramRuntimeLogPath(agentDir), "utf8"));
-    for (const cap of [Bus.TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SAVE, Bus.TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY,
-      Bus.TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE, Bus.TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET, Bus.TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY]) {
-      assert.equal(Bus.hasTelegramBusCapability(follower.protocol, cap), true, "The actual production registration advertises the unified channel");
+      notices.join("\n") + "\n" + await readFile(Paths.resolveBaleRuntimeLogPath(agentDir), "utf8"));
+    for (const cap of [Bus.BALE_BUS_CAPABILITY_LIVE_REBIND_SAVE, Bus.BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY,
+      Bus.BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE, Bus.BALE_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET, Bus.BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY]) {
+      assert.equal(Bus.hasBaleBusCapability(follower.protocol, cap), true, "The actual production registration advertises the unified channel");
     }
-    const path = Paths.resolveTelegramSessionJournalPath(follower.sessionId, follower.profileKey, agentDir);
-    const bindingKey = Journal.createTelegramUpdateJournalBindingKey({ path, profileName: "default",
-      botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:prepared-ports", botId: 123 }) });
-    const journal = Journal.createTelegramUpdateJournalStore({ path, profileName: "default",
-      botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:prepared-ports", botId: 123 }) });
+    const path = Paths.resolveBaleSessionJournalPath(follower.sessionId, follower.profileKey, agentDir);
+    const bindingKey = Journal.createBaleUpdateJournalBindingKey({ path, profileName: "default",
+      botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:prepared-ports", botId: 123 }) });
+    const journal = Journal.createBaleUpdateJournalStore({ path, profileName: "default",
+      botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:prepared-ports", botId: 123 }) });
     const before = journal.read();
     const selectedCommand = peer === "legacy" || peer === "capable" ? undefined : { name: peer, target: { chatId: 77, threadId: 42 } };
     const envelope = { requestId: "activated-save", auth: "fixture-secret", recipientInstanceId: follower.instanceId,
       recipientRegistrationGeneration: follower.registrationGeneration, recipientSessionId: follower.sessionId,
       recipientBindingKey: bindingKey, operationId: "unprepared-operation", sentAtMs: 1, ...(selectedCommand ? { selectedCommand } : {}) };
-    let preparedSource: Bus.TelegramBusPreparedCommandSource | undefined;
+    let preparedSource: Bus.BaleBusPreparedCommandSource | undefined;
     for (const kind of ["leader.prepareLiveRebind", "leader.applyLiveRebind", "leader.settleLiveRebind"] as const) {
-      const ack = await Bus.sendTelegramBusLocalEnvelope({ socketPath: follower.busSocketPath, timeoutMs: 1000,
+      const ack = await Bus.sendBaleBusLocalEnvelope({ socketPath: follower.busSocketPath, timeoutMs: 1000,
         envelope: { ...envelope, requestId: kind, ...(preparedSource ? { preparedSource } : {}), ...(kind === "leader.prepareLiveRebind"
           ? { kind, updates: [{ update_id: 100, message: { message_id: 100, chat: { id: 77, type: "private" },
             from: { id: 77, is_bot: false }, text: selectedCommand ? `/${selectedCommand.name}` : "not dispatched" } }] }
@@ -3855,9 +3855,9 @@ for (const boundary of ["current", "busy", "recipient-response"] as const) {
         };
         mock.module(url.href, { namedExports: exports });
       }
-      await captureModule("commands", { createTelegramCommandHandlerTargetRuntime: "command", createTelegramSessionActionAssembly: "sessionActions" });
-      await captureModule("lifecycle", { createTelegramSessionContextStore: "session" });
-      await captureModule("threads", { createTelegramLeaderThreadStateRuntime: "leader" });
+      await captureModule("commands", { createBaleCommandHandlerTargetRuntime: "command", createBaleSessionActionAssembly: "sessionActions" });
+      await captureModule("lifecycle", { createBaleSessionContextStore: "session" });
+      await captureModule("threads", { createBaleLeaderThreadStateRuntime: "leader" });
       const { default: extension } = await import("./dist/index.js");
       const { pi, handlers, commands } = createRuntimePiHarness();
       let compactions = 0, reports = 0, source = true, sends = 0, polls = 0;
@@ -3889,9 +3889,9 @@ for (const boundary of ["current", "busy", "recipient-response"] as const) {
         return response(true);
       };
       try {
-        await writeFile(join(dir, "telegram.json"), JSON.stringify({ botToken: "123:root-compact", botId: 123, allowedUserId: 77,
+        await writeFile(join(dir, "bale.json"), JSON.stringify({ botToken: "123:root-compact", botId: 123, allowedUserId: 77,
           threads: { automaticCleanup: false }, assistant: { activity: "quiet" } }), { mode: 0o600 });
-        extension(pi); await handlers.get("session_start")({}, ctx); await commands.get("telegram-connect").handler("", ctx);
+        extension(pi); await handlers.get("session_start")({}, ctx); await commands.get("bale-connect").handler("", ctx);
         const target = captured.leader.getTarget(); assert.equal(target.threadId, 43);
         if (boundary === "busy") ctx.isIdle = () => false;
         const message = { message_id: 11, message_thread_id: 43, chat: { id: 77, type: "private" }, from: { id: 77, is_bot: false }, text: "/" + commandName };
@@ -3969,12 +3969,12 @@ for (const boundary of ["current", "source-response", "source-publication", "rec
         };
         mock.module(url.href, { namedExports: exports });
       }
-      await captureModule("thread-naming", { createTelegramThreadNameDialogRuntime: "naming" });
-      await captureModule("commands", { createTelegramCommandHandlerTargetRuntime: "command" });
-      await captureModule("routing", { createTelegramInboundRouteRuntime: "routing" });
-      await captureModule("lifecycle", { createTelegramSessionContextStore: "session" });
-      await captureModule("threads", { createTelegramTopicTargetStore: "store", createTelegramLeaderThreadStateRuntime: "leader" });
-      await captureModule("bus-follower", { createTelegramBusFollowerRegistrationState: "follower" });
+      await captureModule("thread-naming", { createBaleThreadNameDialogRuntime: "naming" });
+      await captureModule("commands", { createBaleCommandHandlerTargetRuntime: "command" });
+      await captureModule("routing", { createBaleInboundRouteRuntime: "routing" });
+      await captureModule("lifecycle", { createBaleSessionContextStore: "session" });
+      await captureModule("threads", { createBaleTopicTargetStore: "store", createBaleLeaderThreadStateRuntime: "leader" });
+      await captureModule("bus-follower", { createBaleBusFollowerRegistrationState: "follower" });
       const { default: extension } = await import("./dist/index.js");
       const { pi, handlers, commands } = createRuntimePiHarness();
       const ctx = createRuntimeExtensionContext({ cwd: "/root-dialog", sessionManager: { getSessionId: () => "dialog-session" } });
@@ -4005,11 +4005,11 @@ for (const boundary of ["current", "source-response", "source-publication", "rec
       };
       let execution;
       try {
-        await writeFile(join(dir, "telegram.json"), JSON.stringify({ botToken: "123:root-dialog", botId: 123, allowedUserId: 77,
+        await writeFile(join(dir, "bale.json"), JSON.stringify({ botToken: "123:root-dialog", botId: 123, allowedUserId: 77,
           threads: { automaticCleanup: false }, assistant: { activity: "quiet" } }), { mode: 0o600 });
         Date.now = () => now;
         extension(pi); await handlers.get("session_start")({}, ctx);
-        await commands.get("telegram-connect").handler("", ctx);
+        await commands.get("bale-connect").handler("", ctx);
         target = captured.leader.getTarget(); assert.equal(target.threadId, 43);
         if (boundary === "follower") captured.follower.setRegistered(true, target, { slot: "A", registrationGeneration: "fixture", sessionId: "dialog-session" });
         const message = { message_id: 11, message_thread_id: target.threadId,
@@ -4110,12 +4110,12 @@ for (const boundary of ["current", "context", "canonical", "local", "follower", 
         };
         mock.module(url.href, { namedExports: exports });
       }
-      await captureModule("thread-naming", { createTelegramThreadNameDialogRuntime: "naming" });
-      await captureModule("routing", { createTelegramInboundRouteRuntime: "routing" });
-      await captureModule("lifecycle", { createTelegramSessionContextStore: "session" });
-      await captureModule("threads", { createTelegramTopicTargetStore: "store", createTelegramLeaderThreadStateRuntime: "leader" });
-      await captureModule("bus-follower", { createTelegramBusFollowerRegistrationState: "follower" });
-      await captureModule("locks", { createTelegramLockRuntime: "lock" });
+      await captureModule("thread-naming", { createBaleThreadNameDialogRuntime: "naming" });
+      await captureModule("routing", { createBaleInboundRouteRuntime: "routing" });
+      await captureModule("lifecycle", { createBaleSessionContextStore: "session" });
+      await captureModule("threads", { createBaleTopicTargetStore: "store", createBaleLeaderThreadStateRuntime: "leader" });
+      await captureModule("bus-follower", { createBaleBusFollowerRegistrationState: "follower" });
+      await captureModule("locks", { createBaleLockRuntime: "lock" });
       const Locks = await import("./dist/lib/locks.js"), Paths = await import("./dist/lib/paths.js");
       const { default: extension } = await import("./dist/index.js");
       const { pi, handlers, commands } = createRuntimePiHarness();
@@ -4153,8 +4153,8 @@ for (const boundary of ["current", "context", "canonical", "local", "follower", 
             if (boundary === "context") captured.session.set({ ...ctx });
             if (boundary === "local") captured.store.upsert({ ...captured.store.list()[0], status: "offline" });
             if (boundary === "canonical") {
-              const path = Paths.resolveTelegramStatePath(dir);
-              Locks.withTelegramFileTransaction(join(dirname(path), "runtime", basename(path) + ".transaction"), () => {
+              const path = Paths.resolveBaleStatePath(dir);
+              Locks.withBaleFileTransaction(join(dirname(path), "runtime", basename(path) + ".transaction"), () => {
                 const state = JSON.parse(fs.readFileSync(path, "utf8"));
                 state.profiles.default.workspace.workspaceBindings[0].inactiveSinceMs = 2;
                 fs.writeFileSync(path, JSON.stringify(state), { mode: 0o600 });
@@ -4173,10 +4173,10 @@ for (const boundary of ["current", "context", "canonical", "local", "follower", 
         return response(true);
       };
       try {
-        await writeFile(join(dir, "telegram.json"), JSON.stringify({ botToken: "123:root-dialog", botId: 123, allowedUserId: 77,
+        await writeFile(join(dir, "bale.json"), JSON.stringify({ botToken: "123:root-dialog", botId: 123, allowedUserId: 77,
           threads: { automaticCleanup: false }, assistant: { activity: "quiet" } }), { mode: 0o600 });
         extension(pi); await handlers.get("session_start")({}, ctx);
-        await commands.get("telegram-connect").handler("", ctx);
+        await commands.get("bale-connect").handler("", ctx);
         const target = captured.leader.getTarget(); assert.equal(target.threadId, 43);
         if (boundary === "follower") captured.follower.setRegistered(true, target, { slot: "A", registrationGeneration: "fixture", sessionId: "dialog-session" });
         if (boundary === "follower" || boundary === "classic") {
@@ -4194,9 +4194,9 @@ for (const boundary of ["current", "context", "canonical", "local", "follower", 
               createRuntimeExtensionContext({ cwd: "/root-dialog" }),
             ),
             /context|authority/,
-          );          const statePath = Paths.resolveTelegramStatePath(dir);
-          Locks.mutateTelegramRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "unrelated-profile" }, result: true }), { isCurrent: () => true });
-          const other = Locks.readTelegramRuntimeState(statePath).profiles.other;
+          );          const statePath = Paths.resolveBaleStatePath(dir);
+          Locks.mutateBaleRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "unrelated-profile" }, result: true }), { isCurrent: () => true });
+          const other = Locks.readBaleRuntimeState(statePath).profiles.other;
           const textBoundary = boundary.startsWith("text-"), callbackBoundary = boundary.startsWith("callback-");
           if ((textBoundary || callbackBoundary) && boundary.includes("reset")) assert.equal((await captured.routingDeps.renameCurrentThread(target, "Azure")).ok, true);
           const before = structuredClone(captured.leader.getIdentity());
@@ -4264,7 +4264,7 @@ for (const boundary of ["current", "context", "canonical", "local", "follower", 
             assert.doesNotThrow(captured.guard, "Source and ended input cannot revoke independent recipient authority");
             captured.session.set({ ...ctx }); assert.throws(captured.guard, /context|recipient authority/);
           } else assert.throws(captured.guard, /context|recipient authority/);
-          assert.deepEqual(Locks.readTelegramRuntimeState(statePath).profiles.other, other);
+          assert.deepEqual(Locks.readBaleRuntimeState(statePath).profiles.other, other);
         }
         console.log("root-dialog-pass:" + boundary);
       } finally {
@@ -4314,12 +4314,12 @@ for (const fault of ["current", "source-held", "session-held", "expiry", "succes
         };
         mock.module(url.href, { namedExports: exports });
       }
-      await captureModule("thread-naming", { createTelegramThreadNameDialogRuntime: "naming" });
-      await captureModule("commands", { createTelegramCommandHandlerTargetRuntime: "command" });
-      await captureModule("lifecycle", { createTelegramSessionContextStore: "session" });
-      await captureModule("threads", { createTelegramTopicTargetStore: "store", createTelegramLeaderThreadStateRuntime: "leader" });
-      await captureModule("routing", { createTelegramInboundRouteRuntime: "routing" });
-      await captureModule("locks", { createTelegramLockRuntime: "lock" });
+      await captureModule("thread-naming", { createBaleThreadNameDialogRuntime: "naming" });
+      await captureModule("commands", { createBaleCommandHandlerTargetRuntime: "command" });
+      await captureModule("lifecycle", { createBaleSessionContextStore: "session" });
+      await captureModule("threads", { createBaleTopicTargetStore: "store", createBaleLeaderThreadStateRuntime: "leader" });
+      await captureModule("routing", { createBaleInboundRouteRuntime: "routing" });
+      await captureModule("locks", { createBaleLockRuntime: "lock" });
       const Updates = await import("./dist/lib/updates.js"), Journal = await import("./dist/lib/journal.js");
       const Locks = await import("./dist/lib/locks.js"), Paths = await import("./dist/lib/paths.js");
       const { default: extension } = await import("./dist/index.js");
@@ -4354,18 +4354,18 @@ for (const fault of ["current", "source-held", "session-held", "expiry", "succes
       let worker;
       const flush = async () => { for (let i = 0; i < 24; i++) await new Promise(resolve => setImmediate(resolve)); };
       try {
-        await writeFile(join(dir, "telegram.json"), JSON.stringify({ botToken: "123:root-admitted-dialog", botId: 123, allowedUserId: 77,
+        await writeFile(join(dir, "bale.json"), JSON.stringify({ botToken: "123:root-admitted-dialog", botId: 123, allowedUserId: 77,
           threads: { automaticCleanup: false }, assistant: { activity: "quiet" } }), { mode: 0o600 });
         Date.now = () => now;
-        extension(pi); await handlers.get("session_start")({}, ctx); await commands.get("telegram-connect").handler("", ctx);
+        extension(pi); await handlers.get("session_start")({}, ctx); await commands.get("bale-connect").handler("", ctx);
         assert.equal(captured.leader.getTarget()?.threadId, 43);
-        const statePath = Paths.resolveTelegramStatePath(dir);
-        Locks.mutateTelegramRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "other-profile" }, result: true }), { isCurrent: () => true });
-        const other = Locks.readTelegramRuntimeState(statePath).profiles.other;
+        const statePath = Paths.resolveBaleStatePath(dir);
+        Locks.mutateBaleRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "other-profile" }, result: true }), { isCurrent: () => true });
+        const other = Locks.readBaleRuntimeState(statePath).profiles.other;
         const options = { path: join(dir, "selected-originals.json"), profileName: "default",
-          botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:root-admitted-dialog" }) };
-        const journal = Journal.createTelegramUpdateJournalStore(options); captured.journalKey = Journal.createTelegramUpdateJournalBindingKey(options);
-        worker = Updates.createTelegramUpdateAdmissionWorkerRuntime({ journal: { ...journal, removeCompletedExact(...args) {
+          botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:root-admitted-dialog" }) };
+        const journal = Journal.createBaleUpdateJournalStore(options); captured.journalKey = Journal.createBaleUpdateJournalBindingKey(options);
+        worker = Updates.createBaleUpdateAdmissionWorkerRuntime({ journal: { ...journal, removeCompletedExact(...args) {
           if (args[0].includes(100)) removals++;
           const result = journal.removeCompletedExact(...args);
           if (args[0].includes(100) && fault === "lost-ack") throw new Error("Source ACK lost");
@@ -4396,7 +4396,7 @@ for (const fault of ["current", "source-held", "session-held", "expiry", "succes
         if (fault === "successor") captured.naming.open({ scope: captured.routingDeps.getCurrentInstanceId(), target, dialogMessageId: 101 });
         responseGate.resolve(); await flush();
         const published = ["current", "lost-ack", "consumed"].includes(fault), ack = published && fault !== "lost-ack";
-        assert.equal(removals, published ? 1 : 0); assert.equal(!!Updates.inspectTelegramDeferredSourceCompletion(originals.get(100)), ack);
+        assert.equal(removals, published ? 1 : 0); assert.equal(!!Updates.inspectBaleDeferredSourceCompletion(originals.get(100)), ack);
         assert.equal(journal.read().entries.some(row => row.updateId === 100), !published);
         const candidate = captured.naming.inspect(target);
         if (published) {
@@ -4411,10 +4411,10 @@ for (const fault of ["current", "source-held", "session-held", "expiry", "succes
         } else if (fault === "successor") assert.equal(candidate.dialogMessageId, 101);
         else assert.equal(candidate, undefined);
         assert.equal(requests.length, 1); assert.equal(removals, published ? 1 : 0); assert.equal(executions, 1); assert.equal(admissions, 0);
-        const canonical = Locks.readTelegramRuntimeState(statePath).profiles.default.workspace;
+        const canonical = Locks.readBaleRuntimeState(statePath).profiles.default.workspace;
         assert.equal(canonical.workspaceBindings[0].target.threadId, 42, "Refusal does not roll back binding");
         assert.equal(canonical.workspaceBindings[0].manualThreadName, undefined, "Dialog completion is not title mutation");
-        assert.deepEqual(Locks.readTelegramRuntimeState(statePath).profiles.other, other);
+        assert.deepEqual(Locks.readBaleRuntimeState(statePath).profiles.other, other);
         console.log("root-admitted-dialog-pass:" + fault);
       } finally {
         responseGate.resolve(); await flush(); await worker?.stop(); Date.now = originalNow;
@@ -4474,12 +4474,12 @@ for (const fault of ["current", "session-held", "response-session", "lost-ack", 
         };
         mock.module(url.href, { namedExports: exports });
       }
-      await captureModule("commands", { createTelegramSessionActionAssembly: "sessionActions" });
-      await captureModule("replies", { createTelegramRenderedMessageDeliveryRuntime: "reply" });
-      await captureModule("lifecycle", { createTelegramSessionContextStore: "session" });
-      await captureModule("threads", { createTelegramTopicTargetStore: "store", createTelegramLeaderThreadStateRuntime: "leader" });
-      await captureModule("routing", { createTelegramInboundRouteRuntime: "routing" });
-      await captureModule("locks", { createTelegramLockRuntime: "lock" });
+      await captureModule("commands", { createBaleSessionActionAssembly: "sessionActions" });
+      await captureModule("replies", { createBaleRenderedMessageDeliveryRuntime: "reply" });
+      await captureModule("lifecycle", { createBaleSessionContextStore: "session" });
+      await captureModule("threads", { createBaleTopicTargetStore: "store", createBaleLeaderThreadStateRuntime: "leader" });
+      await captureModule("routing", { createBaleInboundRouteRuntime: "routing" });
+      await captureModule("locks", { createBaleLockRuntime: "lock" });
       const Updates = await import("./dist/lib/updates.js"), Journal = await import("./dist/lib/journal.js");
       const Locks = await import("./dist/lib/locks.js"), Paths = await import("./dist/lib/paths.js");
       const { default: extension } = await import("./dist/index.js");
@@ -4516,17 +4516,17 @@ for (const fault of ["current", "session-held", "response-session", "lost-ack", 
       let worker;
       const flush = async () => { for (let i = 0; i < 24; i++) await new Promise(resolve => setImmediate(resolve)); };
       try {
-        await writeFile(join(dir, "telegram.json"), JSON.stringify({ botToken: "123:root-admitted-compact", botId: 123, allowedUserId: 77,
+        await writeFile(join(dir, "bale.json"), JSON.stringify({ botToken: "123:root-admitted-compact", botId: 123, allowedUserId: 77,
           threads: { automaticCleanup: false }, assistant: { activity: "quiet" } }), { mode: 0o600 });
-        extension(pi); await handlers.get("session_start")({}, ctx); await commands.get("telegram-connect").handler("", ctx);
+        extension(pi); await handlers.get("session_start")({}, ctx); await commands.get("bale-connect").handler("", ctx);
         assert.equal(captured.leader.getTarget()?.threadId, 43);
-        const statePath = Paths.resolveTelegramStatePath(dir);
-        Locks.mutateTelegramRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "other-profile" }, result: true }), { isCurrent: () => true });
-        const other = Locks.readTelegramRuntimeState(statePath).profiles.other;
+        const statePath = Paths.resolveBaleStatePath(dir);
+        Locks.mutateBaleRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "other-profile" }, result: true }), { isCurrent: () => true });
+        const other = Locks.readBaleRuntimeState(statePath).profiles.other;
         const options = { path: join(dir, "selected-originals.json"), profileName: "default",
-          botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:root-admitted-compact" }) };
-        const journal = Journal.createTelegramUpdateJournalStore(options); captured.journalKey = Journal.createTelegramUpdateJournalBindingKey(options);
-        worker = Updates.createTelegramUpdateAdmissionWorkerRuntime({ journal: { ...journal, removeCompletedExact(...args) {
+          botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:root-admitted-compact" }) };
+        const journal = Journal.createBaleUpdateJournalStore(options); captured.journalKey = Journal.createBaleUpdateJournalBindingKey(options);
+        worker = Updates.createBaleUpdateAdmissionWorkerRuntime({ journal: { ...journal, removeCompletedExact(...args) {
           if (args[0].includes(100)) removals++;
           const result = journal.removeCompletedExact(...args);
           if (args[0].includes(100) && fault === "lost-ack") throw new Error("Source ACK lost");
@@ -4559,12 +4559,12 @@ for (const fault of ["current", "session-held", "response-session", "lost-ack", 
         assert.equal(requests.length, reported ? 1 : 0); assert.equal(removals, reported ? 1 : 0);
         const target = captured.leader.getTarget();
         assert.equal(target.threadId, ["missing-capture", "missing-send"].includes(fault) ? 43 : 42);
-        assert.equal(!!Updates.inspectTelegramDeferredSourceCompletion(originals.get(100)), ack);
+        assert.equal(!!Updates.inspectBaleDeferredSourceCompletion(originals.get(100)), ack);
         assert.equal(journal.read().entries.some(row => row.updateId === 100), !reported);
         await click();
         assert.equal(answers.some(text => text?.includes("Command source disposal confirmed")), ack);
         if (ack) {
-          const restore = Locks.readTelegramRuntimeState(statePath).profiles.default.workspace.workspaceRestore.liveRebindings[0];
+          const restore = Locks.readBaleRuntimeState(statePath).profiles.default.workspace.workspaceRestore.liveRebindings[0];
           assert.equal(restore.inputRelease, "accepted", "Native producer admission is distinct from its exact source ACK");
           const cleanupText = restore.cleanup === "confirmed" ? "old-Thread removal confirmed"
             : restore.cleanup === "unknown" ? "old-Thread removal unconfirmed; deletion will not repeat"
@@ -4590,11 +4590,11 @@ for (const fault of ["current", "session-held", "response-session", "lost-ack", 
         assert.equal(executions, 1); assert.equal(admissions, 0);
         assert.equal(captured.sessionActions.action.hasPending(), false, "Confirmation delivery cannot arm replacement");
         assert.ok(requests.every(row => row.chat_id === 77 && row.message_thread_id === 42 && !row.reply_parameters && !("assertAuthority" in row)));
-        const canonical = Locks.readTelegramRuntimeState(statePath).profiles.default.workspace;
+        const canonical = Locks.readBaleRuntimeState(statePath).profiles.default.workspace;
         assert.equal(canonical.workspaceBindings[0].target.threadId, ["missing-capture", "missing-send"].includes(fault) ? 43 : 42,
           "Missing ports refuse before binding; issued source or delivery refusal never rolls back binding");
         assert.equal(canonical.workspaceBindings[0].manualThreadName, undefined, "Confirmation completion is not title mutation or compaction");
-        assert.deepEqual(Locks.readTelegramRuntimeState(statePath).profiles.other, other);
+        assert.deepEqual(Locks.readBaleRuntimeState(statePath).profiles.other, other);
         console.log("root-admitted-confirmation-pass:" + commandName + ":" + fault);
       } finally {
         responseGate.resolve(); await flush(); await worker?.stop();
@@ -4644,11 +4644,11 @@ for (const fault of ["current", "owner-source", "owner-session", "reply-session"
         };
         mock.module(url.href, { namedExports: exports });
       }
-      await captureModule("commands", { createTelegramThreadDisplayNameRenameBinding: "renameBinding", createTelegramThreadDisplayNameResetBinding: "resetBinding" });
-      await captureModule("lifecycle", { createTelegramSessionContextStore: "session" });
-      await captureModule("threads", { createTelegramTopicTargetStore: "store", createTelegramLeaderThreadStateRuntime: "leader" });
-      await captureModule("routing", { createTelegramInboundRouteRuntime: "routing" });
-      await captureModule("locks", { createTelegramLockRuntime: "lock" });
+      await captureModule("commands", { createBaleThreadDisplayNameRenameBinding: "renameBinding", createBaleThreadDisplayNameResetBinding: "resetBinding" });
+      await captureModule("lifecycle", { createBaleSessionContextStore: "session" });
+      await captureModule("threads", { createBaleTopicTargetStore: "store", createBaleLeaderThreadStateRuntime: "leader" });
+      await captureModule("routing", { createBaleInboundRouteRuntime: "routing" });
+      await captureModule("locks", { createBaleLockRuntime: "lock" });
       const Updates = await import("./dist/lib/updates.js"), Journal = await import("./dist/lib/journal.js");
       const Locks = await import("./dist/lib/locks.js"), Paths = await import("./dist/lib/paths.js");
       const { default: extension } = await import("./dist/index.js");
@@ -4680,18 +4680,18 @@ for (const fault of ["current", "owner-source", "owner-session", "reply-session"
       let worker;
       const flush = async () => { for (let i = 0; i < 24; i++) await new Promise(resolve => setImmediate(resolve)); };
       try {
-        await writeFile(join(dir, "telegram.json"), JSON.stringify({ botToken: "123:root-selected-name", botId: 123, allowedUserId: 77,
+        await writeFile(join(dir, "bale.json"), JSON.stringify({ botToken: "123:root-selected-name", botId: 123, allowedUserId: 77,
           threads: { automaticCleanup: false }, assistant: { activity: "quiet" } }), { mode: 0o600 });
-        extension(pi); await handlers.get("session_start")({}, ctx); await commands.get("telegram-connect").handler("", ctx);
+        extension(pi); await handlers.get("session_start")({}, ctx); await commands.get("bale-connect").handler("", ctx);
         assert.equal(captured.leader.getTarget()?.threadId, 43);
         if (operation === "reset") assert.equal((await captured.renameBinding.rename(captured.leader.getTarget(), "Azure")).ok, true);
-        const statePath = Paths.resolveTelegramStatePath(dir);
-        Locks.mutateTelegramRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "other-profile" }, result: true }), { isCurrent: () => true });
-        const other = Locks.readTelegramRuntimeState(statePath).profiles.other;
+        const statePath = Paths.resolveBaleStatePath(dir);
+        Locks.mutateBaleRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "other-profile" }, result: true }), { isCurrent: () => true });
+        const other = Locks.readBaleRuntimeState(statePath).profiles.other;
         const options = { path: join(dir, "selected-originals.json"), profileName: "default",
-          botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:root-selected-name" }) };
-        const journal = Journal.createTelegramUpdateJournalStore(options); captured.journalKey = Journal.createTelegramUpdateJournalBindingKey(options);
-        worker = Updates.createTelegramUpdateAdmissionWorkerRuntime({ journal: { ...journal, removeCompletedExact(...args) {
+          botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:root-selected-name" }) };
+        const journal = Journal.createBaleUpdateJournalStore(options); captured.journalKey = Journal.createBaleUpdateJournalBindingKey(options);
+        worker = Updates.createBaleUpdateAdmissionWorkerRuntime({ journal: { ...journal, removeCompletedExact(...args) {
           if (args[0].includes(100)) removals++; return journal.removeCompletedExact(...args);
         } }, getJournalBindingKey: () => captured.journalKey, hasAuthority: () => true, isContextCurrent: value => value === ctx,
           getQueueOwnerIdentity: () => ({ instanceId: "fixture-worker", processId: process.pid, processBirthId: process.pid + ":name", sessionGeneration: 1 }),
@@ -4717,16 +4717,16 @@ for (const fault of ["current", "owner-source", "owner-session", "reply-session"
         owner.resolve(); await flush();
         const completed = fault === "current" || fault === "reply-session";
         assert.equal(removals, completed ? 1 : 0); assert.equal(requests.length, completed ? 1 : 0);
-        assert.equal(!!Updates.inspectTelegramDeferredSourceCompletion(originals.get(100)), completed);
+        assert.equal(!!Updates.inspectBaleDeferredSourceCompletion(originals.get(100)), completed);
         assert.equal(journal.read().entries.some(row => row.updateId === 100), !completed);
         if (completed) {
-          const canonical = Locks.readTelegramRuntimeState(statePath).profiles.default.workspace;
+          const canonical = Locks.readBaleRuntimeState(statePath).profiles.default.workspace;
           assert.equal(canonical.workspaceBindings[0].target.threadId, 42);
           assert.equal(canonical.workspaceBindings[0].manualThreadName, operation === "rename" ? "Azure" : undefined, JSON.stringify(requests));
           assert.equal(captured.leader.getIdentity().threadName, operation === "rename" ? "Azure" : "A");
           await click(); originals.get(100).text = "changed after completion";
         } else {
-          const canonical = Locks.readTelegramRuntimeState(statePath).profiles.default.workspace;
+          const canonical = Locks.readBaleRuntimeState(statePath).profiles.default.workspace;
           assert.equal(canonical.workspaceBindings[0].target.threadId, 42, "Name refusal cannot roll back rebinding");
           assert.equal(canonical.workspaceBindings[0].manualThreadName, operation === "reset" ? "Azure" : undefined);
         }
@@ -4735,7 +4735,7 @@ for (const fault of ["current", "owner-source", "owner-session", "reply-session"
         assert.equal(ownerCalls, 1); assert.equal(executions, 1); assert.equal(admissions, 0);
         assert.equal(requests.length, completed ? 1 : 0, "Current and refused replies never reissue");
         assert.ok(requests.every(value => value.chat_id === 77 && value.message_thread_id === 42));
-        assert.deepEqual(Locks.readTelegramRuntimeState(statePath).profiles.other, other);
+        assert.deepEqual(Locks.readBaleRuntimeState(statePath).profiles.other, other);
         console.log("root-selected-name-pass:" + operation + ":" + fault);
       } finally {
         owner.resolve(); reply.resolve(); await flush(); await worker?.stop();
@@ -4793,18 +4793,18 @@ for (const boundary of ["current", "ordinary", "entry-session", "caller", "conte
         };
         mock.module(url.href, { namedExports: exports });
       }
-      await captureModule("commands", { createTelegramThreadDisplayNameRenameBinding: "renameBinding", createTelegramThreadDisplayNameResetBinding: "resetBinding" });
-      await captureModule("lifecycle", { createTelegramSessionContextStore: "session" });
-      await captureModule("config", { createTelegramConfigStore: "config" });
-      await captureModule("threads", { createTelegramTopicTargetStore: "store", createTelegramLeaderThreadStateRuntime: "leader" });
-      await captureModule("bus-follower", { createTelegramBusFollowerRegistrationState: "follower" });
-      await captureModule("locks", { createTelegramLockRuntime: "lock" });
+      await captureModule("commands", { createBaleThreadDisplayNameRenameBinding: "renameBinding", createBaleThreadDisplayNameResetBinding: "resetBinding" });
+      await captureModule("lifecycle", { createBaleSessionContextStore: "session" });
+      await captureModule("config", { createBaleConfigStore: "config" });
+      await captureModule("threads", { createBaleTopicTargetStore: "store", createBaleLeaderThreadStateRuntime: "leader" });
+      await captureModule("bus-follower", { createBaleBusFollowerRegistrationState: "follower" });
+      await captureModule("locks", { createBaleLockRuntime: "lock" });
       const Locks = await import("./dist/lib/locks.js"), Paths = await import("./dist/lib/paths.js");
       const BusLeader = await import("./dist/lib/bus-leader.js");
       let late = () => {}, admittedGuards = [];
       mock.module(new URL("./dist/lib/bus-leader.js", import.meta.url).href, { namedExports: {
-        ...BusLeader, createTelegramBusLeaderRuntimeAssembly(...args) {
-          const runtime = BusLeader.createTelegramBusLeaderRuntimeAssembly(...args);
+        ...BusLeader, createBaleBusLeaderRuntimeAssembly(...args) {
+          const runtime = BusLeader.createBaleBusLeaderRuntimeAssembly(...args);
           const port = operation === "rename" ? "renameLeaderThreadAdmitted" : "resetLeaderThreadName";
           const invoke = runtime[port];
           runtime[port] = async (...callArgs) => {
@@ -4835,16 +4835,16 @@ for (const boundary of ["current", "ordinary", "entry-session", "caller", "conte
         return response(true);
       };
       try {
-        await writeFile(join(dir, "telegram.json"), JSON.stringify({ botToken: "123:root-rename", botId: 123, allowedUserId: 77,
+        await writeFile(join(dir, "bale.json"), JSON.stringify({ botToken: "123:root-rename", botId: 123, allowedUserId: 77,
           threads: { automaticCleanup: false }, assistant: { activity: "quiet" } }), { mode: 0o600 });
         extension(pi); await handlers.get("session_start")({}, ctx);
-        await commands.get("telegram-connect").handler("", ctx);
+        await commands.get("bale-connect").handler("", ctx);
         assert.ok(captured.leader.getTarget()?.threadId, "actual root provisioned target");
         if (operation === "reset") assert.equal((await captured.renameBinding.rename(captured.leader.getTarget(), "Azure")).ok, true);
         const before = structuredClone(captured.leader.getIdentity());
-        const statePath = Paths.resolveTelegramStatePath(dir);
-        Locks.mutateTelegramRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "unrelated-profile" }, result: true }), { isCurrent: () => true });
-        const other = Locks.readTelegramRuntimeState(statePath).profiles.other;
+        const statePath = Paths.resolveBaleStatePath(dir);
+        Locks.mutateBaleRuntimeStateSection(statePath, "other", "runtime", () => ({ value: { sentinel: "unrelated-profile" }, result: true }), { isCurrent: () => true });
+        const other = Locks.readBaleRuntimeState(statePath).profiles.other;
         edits = 0;
         const drift = () => {
           if (boundary === "caller") revoke = true;
@@ -4856,7 +4856,7 @@ for (const boundary of ["current", "ordinary", "entry-session", "caller", "conte
           if (boundary === "token") captured.config.setProfile("default", { ...captured.config.get().profiles.default, botToken: "123:changed" });
           if (boundary === "profile") { captured.config.setProfile("other", { botToken: "123:other", allowedUserId: 77 }); captured.config.activateProfile("other"); }
           if (boundary === "epoch") captured.lock.release();
-          if (boundary === "canonical") Locks.withTelegramFileTransaction(join(dirname(statePath), "runtime", basename(statePath) + ".transaction"), () => {
+          if (boundary === "canonical") Locks.withBaleFileTransaction(join(dirname(statePath), "runtime", basename(statePath) + ".transaction"), () => {
             const state = JSON.parse(fs.readFileSync(statePath, "utf8")); state.profiles.default.workspace.workspaceBindings[0].target.threadId++;
             fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
           });
@@ -4866,13 +4866,13 @@ for (const boundary of ["current", "ordinary", "entry-session", "caller", "conte
           if (boundary === "late-local-name") captured.store.renameByTarget(before.target, "Apex");
           if (boundary === "late-local-title") assert.equal(captured.store.setWorkspaceDisplayTitle(captured.store.listWorkspaceBindings()[0], "Apex"), true);
           if (boundary === "late-local-owner-name") captured.store.upsert({ ...captured.store.list()[0], manualThreadName: "Apex" });
-          if (boundary === "late-canonical-title" || boundary === "late-canonical-owner-name") Locks.withTelegramFileTransaction(join(dirname(statePath), "runtime", basename(statePath) + ".transaction"), () => {
+          if (boundary === "late-canonical-title" || boundary === "late-canonical-owner-name") Locks.withBaleFileTransaction(join(dirname(statePath), "runtime", basename(statePath) + ".transaction"), () => {
             const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
             if (boundary === "late-canonical-title") state.profiles.default.workspace.workspaceBindings[0].displayTitle = "Apex";
             else state.profiles.default.workspace.threads[0].manualThreadName = "Apex";
             fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
           });
-          if (boundary === "late-canonical-name") Locks.withTelegramFileTransaction(join(dirname(statePath), "runtime", basename(statePath) + ".transaction"), () => {
+          if (boundary === "late-canonical-name") Locks.withBaleFileTransaction(join(dirname(statePath), "runtime", basename(statePath) + ".transaction"), () => {
             const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
             state.profiles.default.workspace.workspaceBindings[0].manualThreadName = "Apex";
             state.profiles.default.workspace.threads[0].manualThreadName = "Apex";
@@ -4899,23 +4899,23 @@ for (const boundary of ["current", "ordinary", "entry-session", "caller", "conte
         if (success) {
           assert.equal(captured.leader.getIdentity().threadName, operation === "rename" ? "Azure" : before.slot);
           assert.equal(renamed.threadName, operation === "rename" ? "Azure" : before.slot);
-          assert.equal(Locks.readTelegramRuntimeState(statePath).profiles.default.workspace.workspaceBindings[0].manualThreadName, operation === "rename" ? "Azure" : undefined);
+          assert.equal(Locks.readBaleRuntimeState(statePath).profiles.default.workspace.workspaceBindings[0].manualThreadName, operation === "rename" ? "Azure" : undefined);
           if (operation === "reset" && boundary === "current") assert.equal(captured.leader.getIdentity().slot, before.slot, "guarded publication preserves captured slot");
         } else {
           if (boundary !== "leader-target" && boundary !== "state-publication") assert.deepEqual(captured.leader.getIdentity(), before, "late result cannot publish leader identity");
-          const manualName = Locks.readTelegramRuntimeState(statePath).profiles.default.workspace.workspaceBindings[0].manualThreadName;
+          const manualName = Locks.readBaleRuntimeState(statePath).profiles.default.workspace.workspaceBindings[0].manualThreadName;
           if (!boundary.startsWith("late-") && !boundary.startsWith("result-observation-") && boundary !== "state-publication") assert.equal(manualName === "Azure", operation === "reset");
           else if (boundary === "late-canonical-name") assert.equal(manualName, "Apex", "newer canonical name is preserved");
           else assert.equal(manualName, operation === "rename" ? "Azure" : undefined, "issued canonical publication is not rolled back");
           if (boundary === "late-local-title") assert.equal(captured.store.listWorkspaceBindings()[0].displayTitle, "Apex");
           if (boundary === "late-local-owner-name") assert.equal(captured.store.list()[0].manualThreadName, "Apex");
-          if (boundary === "late-canonical-title") assert.equal(Locks.readTelegramRuntimeState(statePath).profiles.default.workspace.workspaceBindings[0].displayTitle, "Apex");
-          if (boundary === "late-canonical-owner-name") assert.equal(Locks.readTelegramRuntimeState(statePath).profiles.default.workspace.threads[0].manualThreadName, "Apex");
+          if (boundary === "late-canonical-title") assert.equal(Locks.readBaleRuntimeState(statePath).profiles.default.workspace.workspaceBindings[0].displayTitle, "Apex");
+          if (boundary === "late-canonical-owner-name") assert.equal(Locks.readBaleRuntimeState(statePath).profiles.default.workspace.threads[0].manualThreadName, "Apex");
           if (boundary === "state-publication") assert.equal(captured.leader.getIdentity().threadName, before.slot, "already current publication is not rolled back");
           if (boundary === "late-local-name") assert.equal(captured.store.listWorkspaceBindings()[0].manualThreadName, "Apex", "newer local name is preserved");
           if (boundary === "follower") assert.match(renamed.message, /Guarded follower/u);
         }
-        assert.deepEqual(Locks.readTelegramRuntimeState(statePath).profiles.other, other);
+        assert.deepEqual(Locks.readBaleRuntimeState(statePath).profiles.other, other);
         if (boundary === "current") assert.deepEqual(admittedGuards, ["function"], "actual root forwards guard into staged leader publication");
         if (boundary === "ordinary") assert.deepEqual(admittedGuards, ["undefined"], "ordinary naming retains unguarded owner path");
         console.log("root-boundary-pass:" + boundary);
@@ -4934,42 +4934,42 @@ for (const boundary of ["current", "ordinary", "entry-session", "caller", "conte
 
 for (const damage of ["malformed-json", "nul-envelope", "invalid-workspace", "invalid-admission"] as const) {
   test(`Production connect resets damaged shared runtime state and becomes leader (${damage})`, async () => {
-    const extension = await getRuntimeTelegramExtension(), previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    const extension = await getRuntimeBaleExtension(), previousAgentDir = process.env.PI_CODING_AGENT_DIR;
     const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pt-reset-")));
-    const statePath = Paths.resolveTelegramStatePath(agentDir);
+    const statePath = Paths.resolveBaleStatePath(agentDir);
     await mkdir(dirname(statePath), { recursive: true });
     await writeFile(statePath, damage === "malformed-json" ? "{ damaged" : damage === "nul-envelope" ? Buffer.alloc(706)
       : JSON.stringify({ version: 2, profiles: { default: damage === "invalid-admission"
         ? { admission: { version: 1, profileKey: "invalid-fixture-key", leases: [] } }
         : { workspace: { version: 99 } } } }), { mode: 0o600 });
-    await writeFile(join(agentDir, "telegram.json"), JSON.stringify({ botToken: "123:reset-root", botId: 123, allowedUserId: 77 }), { mode: 0o600 });
+    await writeFile(join(agentDir, "bale.json"), JSON.stringify({ botToken: "123:reset-root", botId: 123, allowedUserId: 77 }), { mode: 0o600 });
     const { handlers, commands, tools, pi } = createRuntimePiHarness();
     const ctx = createRuntimeExtensionContext({ cwd: "/reset-root" });
     let polls = 0, outbound = 0;
     const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-      const method = getRuntimeTelegramApiMethod(input);
-      if (method === "getMe") return createRuntimeTelegramApiResponse({ id: 123, username: "fixture_bot" });
-      if (method === "sendMessage" || method === "sendRichMessage") { outbound++; return createRuntimeTelegramApiResponse({ message_id: 1 }); }
-      if (method === "getUpdates" && ++polls === 1) return createRuntimeTelegramApiResponse([]);
+      const method = getRuntimeBaleApiMethod(input);
+      if (method === "getMe") return createRuntimeBaleApiResponse({ id: 123, username: "fixture_bot" });
+      if (method === "sendMessage" || method === "sendRichMessage") { outbound++; return createRuntimeBaleApiResponse({ message_id: 1 }); }
+      if (method === "getUpdates" && ++polls === 1) return createRuntimeBaleApiResponse([]);
       if (method === "getUpdates") return await new Promise<Response>((_resolve, reject) => {
         const abort = () => reject(new DOMException("stop", "AbortError"));
         if (init?.signal?.aborted) abort(); else init?.signal?.addEventListener("abort", abort, { once: true });
       });
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     });
     try {
       process.env.PI_CODING_AGENT_DIR = agentDir;
       extension(pi);
       await handlers.get("session_start")?.({}, ctx);
-      await commands.get("telegram-connect")!.handler("", ctx);
+      await commands.get("bale-connect")!.handler("", ctx);
       await waitForCondition(() => polls >= 2);
-      const state = Locks.readTelegramRuntimeState(statePath);
+      const state = Locks.readBaleRuntimeState(statePath);
       assert.ok(state.profiles.default?.transport, "the connecting instance owns the fresh envelope");
       assert.equal(JSON.stringify(state).includes("damaged") || JSON.stringify(state).includes('"version":99'), false);
-      WorkspaceAdmission.assertTelegramConsolidatedAdmissionSection(state.profiles.default?.admission, "default");
-      await tools.get("telegram_message")!.execute("fixture-recovered-send", { text: "Recovered outbound fixture", chat_id: 77 });
+      WorkspaceAdmission.assertBaleConsolidatedAdmissionSection(state.profiles.default?.admission, "default");
+      await tools.get("bale_message")!.execute("fixture-recovered-send", { text: "Recovered outbound fixture", chat_id: 77 });
       assert.equal(outbound, 1, "Actual production outbound delivery succeeds through the recovered admission ledger");
-      const logs = await readFile(Paths.resolveTelegramRuntimeLogPath(agentDir), "utf8");
+      const logs = await readFile(Paths.resolveBaleRuntimeLogPath(agentDir), "utf8");
       assert.match(logs, /state-reset/u, "the reset leaves one diagnostic event");
     } finally {
       await handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "reload" }, ctx);
@@ -4980,8 +4980,8 @@ for (const damage of ["malformed-json", "nul-envelope", "invalid-workspace", "in
   }, 15000);
 }
 
-test("Extension runtime polls, pairs, and dispatches an inbound Telegram turn into pi", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+test("Extension runtime polls, pairs, and dispatches an inbound Bale turn into pi", async () => {
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentMessages: RuntimeHarnessMessage[] = [];
   let resolveDispatch: ((value: RuntimeHarnessMessage) => void) | undefined;
   const dispatched = new Promise<RuntimeHarnessMessage>((resolve) => {
@@ -4997,15 +4997,15 @@ test("Extension runtime polls, pairs, and dispatches an inbound Telegram turn in
   let sendMessageCalls = 0;
   const apiCalls: string[] = [];
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     apiCalls.push(method);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -5013,7 +5013,7 @@ test("Extension runtime polls, pairs, and dispatches an inbound Telegram turn in
               message_id: 42,
               chat: { id: 99, type: "private" },
               from: { id: 77, is_bot: false, first_name: "Test" },
-              text: "hello from telegram",
+              text: "hello from bale",
             },
           },
         ]);
@@ -5023,24 +5023,24 @@ test("Extension runtime polls, pairs, and dispatches an inbound Telegram turn in
     if (method === "sendMessage" || method === "sendRichMessage") {
       sendMessageCalls += 1;
       if (sendMessageCalls === 1) {
-        return createRuntimeTelegramApiErrorResponse(
+        return createRuntimeBaleApiErrorResponse(
           429,
           "temporary rate limit",
         );
       }
-      return createRuntimeTelegramApiResponse({ message_id: 100 });
+      return createRuntimeBaleApiResponse({ message_id: 100 });
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({ botToken: "123:abc", lastUpdateId: 0 });
-    (await getRuntimeTelegramExtension())(pi);
+    await baleConfig.write({ botToken: "123:abc", lastUpdateId: 0 });
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext();
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     const dispatchedContent = await dispatched;
     await flushMicrotasks();
     assert.equal(sentMessages.length, 1);
@@ -5050,11 +5050,11 @@ test("Extension runtime polls, pairs, and dispatches an inbound Telegram turn in
     assert.equal(apiCalls.includes("sendChatAction"), true);
     const promptBlock = getRuntimeHarnessTextBlock(dispatchedContent);
     assert.equal(promptBlock.type, "text");
-    assert.match(promptBlock.text ?? "", /^\[telegram\] hello from telegram$/);
+    assert.match(promptBlock.text ?? "", /^\[bale\] hello from bale$/);
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
@@ -5066,8 +5066,8 @@ const outcomes = delivery === "ordinary"
     "prompt-completion-lost-ack", "prompt-generation-loss"] as const;
 for (const outcome of outcomes) {
 strictFileTest(`Prepared donor receipt projection gates Queue issuance (${delivery}/${outcome})`, async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-donor-projection-")));
-  const configPath = join(dir, "telegram.json");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-donor-projection-")));
+  const configPath = join(dir, "bale.json");
   const botToken = "123:fixture-donor-projection";
   const owner = { instanceId: "donor", processId: process.pid,
     processBirthId: `${process.pid}:fixture-donor`, sessionGeneration: 1 };
@@ -5076,14 +5076,14 @@ strictFileTest(`Prepared donor receipt projection gates Queue issuance (${delive
   let shutdown: (() => Promise<void>) | undefined;
   try {
     await writeFile(configPath, JSON.stringify({ profiles: { work: { botToken, allowedUserId: 7 } } }));
-    const config = Config.createTelegramConfigStore({ agentDir: dir, configPath });
-    const journalSerialization = Journal.createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const config = Config.createBaleConfigStore({ agentDir: dir, configPath });
+    const journalSerialization = Journal.createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     await config.load(); config.activateProfile("work");
-    const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({ botToken });
-    const ledger = WorkspaceAdmission.createTelegramWorkspaceAdmissionLedger({
+    const botIdentity = Journal.createBaleUpdateJournalBotIdentity({ botToken });
+    const ledger = WorkspaceAdmission.createBaleWorkspaceAdmissionLedger({
       path: join(dir, "workspace-admission.json"), profileKey: "fixture:work", owner,
       getProcessLiveness: () => "alive" });
-    const options: Journal.TelegramInputJournalStoreOptions = {
+    const options: Journal.BaleInputJournalStoreOptions = {
       path: join(dir, "inbox.work.json"), profileName: "work", botIdentity,
       queueRuntimeIdentity: owner, workspaceAdmission: ledger,
       sourceAccess: { directory: dir, limits: {
@@ -5092,7 +5092,7 @@ strictFileTest(`Prepared donor receipt projection gates Queue issuance (${delive
       withPairingAdmission: publish => config.withPairingAdmission("work", botIdentity.tokenSha256, publish),
       getInputContext: () => ({ owner, recipientBindingKey: "workspace:donor" }),
     };
-    const source = Journal.createTelegramInputJournalStore(options);
+    const source = Journal.createBaleInputJournalStore(options);
     const isPrompt = delivery !== "ordinary" || outcome.startsWith("prompt-");
     source.appendBatch([{ update_id: 1 }, { update_id: 2 }, { update_id: 3 }], 3);
     const input = source.acquireInput({ updateId: 1, recipientBindingKey: "workspace:donor" });
@@ -5108,7 +5108,7 @@ strictFileTest(`Prepared donor receipt projection gates Queue issuance (${delive
       receipts: [independent.receipt] }).queueReceipt;
     let readUnavailable = false;
     // Inject only unavailable observation / a lost return after the native durable completion.
-    const boundSource: Journal.TelegramInputJournalStore = { ...source,
+    const boundSource: Journal.BaleInputJournalStore = { ...source,
       read() {
         if (readUnavailable) throw new Error("fixture observation unavailable");
         return source.read();
@@ -5120,18 +5120,18 @@ strictFileTest(`Prepared donor receipt projection gates Queue issuance (${delive
         return result;
       },
     };
-    const journalBindingKey = Journal.createTelegramUpdateJournalBindingKey(options);
+    const journalBindingKey = Journal.createBaleUpdateJournalBindingKey(options);
     const handoff = { queueKind: queued.queueKind, receiptId: queued.receiptId,
       sourceUpdateIds: queued.sourceUpdateIds, expectedOwner: queued.queueOwner, recipientOwner: recipient,
-      handoffToken: Journal.createTelegramUpdateQueueHandoffToken() };
-    const resolveBinding = Updates.createTelegramInputCustodyLifecycleBindingResolver({
+      handoffToken: Journal.createBaleUpdateQueueHandoffToken() };
+    const resolveBinding = Updates.createBaleInputCustodyLifecycleBindingResolver({
       isEnabled: () => true,
       resolveInputJournal: () => ({ runtimeKey: "donor-runtime", recoveryKey: journalBindingKey, journal: boundSource }),
       getRecipientBindingKey: () => "workspace:donor",
     });
     let transport = true;
-    const admission = Updates.createTelegramUpdateAdmissionRuntimeBinding<string>({ isFollowerRegistered: () => false });
-    const assembly = Updates.createTelegramUpdateAdmissionLifecycleAssembly({ runtimeBinding: admission,
+    const admission = Updates.createBaleUpdateAdmissionRuntimeBinding<string>({ isFollowerRegistered: () => false });
+    const assembly = Updates.createBaleUpdateAdmissionLifecycleAssembly({ runtimeBinding: admission,
       worker: { getQueueOwnerIdentity: () => owner, isContextCurrent: (ctx: string) => ctx === "ctx",
         async defaultHandle() { assert.fail("Queued input must not replay its raw handler"); } },
       leader: { resolveBinding, hasAuthority: () => transport },
@@ -5139,11 +5139,11 @@ strictFileTest(`Prepared donor receipt projection gates Queue issuance (${delive
         getGeneration: () => undefined, prepareUpdateForExecution: update => update },
     });
     shutdown = admission.onSessionShutdown;
-    const store = Queue.createTelegramQueueStore<string>();
-    const deferredDispatch = Queue.createTelegramDeferredQueueDispatchRuntime<string>();
+    const store = Queue.createBaleQueueStore<string>();
+    const deferredDispatch = Queue.createBaleDeferredQueueDispatchRuntime<string>();
     deferredDispatch.bind("ctx");
     const effects: string[] = [];
-    const binding = Bindings.createTelegramQueueBindingRuntime({ store, admission, deferredDispatch,
+    const binding = Bindings.createBaleQueueBindingRuntime({ store, admission, deferredDispatch,
       queue: { allocateItemOrder: () => 1 }, activeTurn: { has: () => false },
       lifecycle: { isCompactionInProgress: () => false, hasDispatchPending: () => false },
       transportStamp: { isActive: () => true }, isIdle: () => delivery !== "active-steer", hasPendingMessages: () => false,
@@ -5157,7 +5157,7 @@ strictFileTest(`Prepared donor receipt projection gates Queue issuance (${delive
     });
     const base = { chatId: 7, replyToMessageId: 1, queueOrder: 1, laneOrder: 1,
       statusSummary: "retained work", admissionReceipts: [{ ...queued, journalBindingKey }] };
-    const item: Queue.TelegramQueueItem<string> = isPrompt
+    const item: Queue.BaleQueueItem<string> = isPrompt
       ? { ...base, kind: "prompt", queueLane: delivery === "ordinary" ? "default" : "steer", sourceMessageIds: [1, 3], queuedAttachments: [],
         content: [{ type: "text", text: "retained prompt" }], historyText: "" }
       : { ...base, kind: "control", controlType: "status", queueLane: "control",
@@ -5173,12 +5173,12 @@ strictFileTest(`Prepared donor receipt projection gates Queue issuance (${delive
     assert.equal(assembly.leader.getState()?.blockedReason, "authority-lost");
     if (outcome === "discarded") assembly.leader.discardQueueReceipt(handoff);
     else if (outcome === "offered-without-wake") {
-      Journal.createTelegramInputJournalStore(options).offerQueuedHandoff(handoff);
+      Journal.createBaleInputJournalStore(options).offerQueuedHandoff(handoff);
     } else if (outcome === "offered" || outcome === "cancelled" || outcome === "transferred") {
       assembly.leader.offerQueueReceiptHandoff(handoff);
       if (outcome === "cancelled") assembly.leader.cancelQueueReceiptHandoff(handoff);
       if (outcome === "transferred") {
-        const receiver = Journal.createTelegramInputJournalStore({ ...options, queueRuntimeIdentity: recipient,
+        const receiver = Journal.createBaleInputJournalStore({ ...options, queueRuntimeIdentity: recipient,
           getInputContext: () => ({ owner: recipient, recipientBindingKey: "workspace:recipient" }) });
         receiver.acceptQueuedHandoff(handoff);
         // Retain donor memory, as after a lost acceptance acknowledgement.
@@ -5263,24 +5263,24 @@ strictFileTest(`Prepared donor receipt projection gates Queue issuance (${delive
 
 for (const outcome of ["accepted", "rejected", "lost-ack"] as const) {
 strictFileTest(`Control reconciliation uses native serial handoff custody (${outcome})`, async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-control-reconciliation-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-control-reconciliation-")));
   const botToken = "123:fixture-control-reconciliation";
-  const configPath = join(dir, "telegram.json");
+  const configPath = join(dir, "bale.json");
   const donorOwner = { instanceId: "donor", processId: process.pid,
     processBirthId: `${process.pid}:fixture-donor`, sessionGeneration: 1 };
   const recipientOwner = { instanceId: "recipient", processId: process.pid + 1,
     processBirthId: `${process.pid + 1}:fixture-recipient`, sessionGeneration: 1 };
   const target = { chatId: 7, threadId: 42 };
-  const lifecycles: Array<Updates.TelegramUpdateAdmissionLifecycleRuntime<string>> = [];
+  const lifecycles: Array<Updates.BaleUpdateAdmissionLifecycleRuntime<string>> = [];
   try {
     await writeFile(configPath, JSON.stringify({ profiles: { work: { botToken, allowedUserId: 7 } } }));
-    const config = Config.createTelegramConfigStore({ agentDir: dir, configPath });
-    const journalSerialization = Journal.createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const config = Config.createBaleConfigStore({ agentDir: dir, configPath });
+    const journalSerialization = Journal.createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     await config.load(); config.activateProfile("work");
-    const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({ botToken });
-    const ledger = WorkspaceAdmission.createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
+    const botIdentity = Journal.createBaleUpdateJournalBotIdentity({ botToken });
+    const ledger = WorkspaceAdmission.createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
       profileKey: "fixture:work", owner: donorOwner, getProcessLiveness: () => "alive" });
-    const options: Journal.TelegramInputJournalStoreOptions = {
+    const options: Journal.BaleInputJournalStoreOptions = {
       path: join(dir, "inbox.work.json"), profileName: "work", botIdentity, queueRuntimeIdentity: donorOwner,
       workspaceAdmission: ledger, sourceAccess: { directory: dir, limits: {
         maxFiles: 1000, maxBytes: 10_000_000, maxEntries: 100, maxWork: 100_000 } },
@@ -5288,22 +5288,22 @@ strictFileTest(`Control reconciliation uses native serial handoff custody (${out
       withPairingAdmission: publish => config.withPairingAdmission("work", botIdentity.tokenSha256, publish),
       getInputContext: () => ({ owner: donorOwner, recipientBindingKey: "workspace:donor" }),
     };
-    const donor = Journal.createTelegramInputJournalStore(options);
-    const recipient = Journal.createTelegramInputJournalStore({ ...options, queueRuntimeIdentity: recipientOwner,
+    const donor = Journal.createBaleInputJournalStore(options);
+    const recipient = Journal.createBaleInputJournalStore({ ...options, queueRuntimeIdentity: recipientOwner,
       getInputContext: () => ({ owner: recipientOwner, recipientBindingKey: "workspace:recipient" }) });
-    const key = Journal.createTelegramUpdateJournalBindingKey(options);
+    const key = Journal.createBaleUpdateJournalBindingKey(options);
     donor.appendBatch([{ update_id: 1, message: { message_id: 11, chat: { id: 7, type: "private" },
       from: { id: 7, is_bot: false }, text: "/status" } }], 1);
     const input = donor.acquireInput({ updateId: 1, recipientBindingKey: "workspace:donor" });
     donor.startInput(input.receipt);
     const queued = donor.queueInputs({ queueKind: "control", receiptId: "fixture-control", receipts: [input.receipt] }).queueReceipt;
     const original = donor.read().entries;
-    const createLifecycle = (journal: Journal.TelegramInputJournalStore, owner: typeof donorOwner, recipientBindingKey: string) => {
-      const lifecycle = Updates.createTelegramUpdateAdmissionLifecycleRuntime<string>({
-        resolveBinding: Updates.createTelegramInputCustodyLifecycleBindingResolver({ isEnabled: () => true,
+    const createLifecycle = (journal: Journal.BaleInputJournalStore, owner: typeof donorOwner, recipientBindingKey: string) => {
+      const lifecycle = Updates.createBaleUpdateAdmissionLifecycleRuntime<string>({
+        resolveBinding: Updates.createBaleInputCustodyLifecycleBindingResolver({ isEnabled: () => true,
           resolveInputJournal: () => ({ runtimeKey: owner.instanceId, recoveryKey: key, journal }),
           getRecipientBindingKey: () => recipientBindingKey }),
-        createWorker: (port, binding) => Updates.createTelegramUpdateAdmissionWorkerRuntime({
+        createWorker: (port, binding) => Updates.createBaleUpdateAdmissionWorkerRuntime({
           journal: port, inputCustody: binding.journal.inputCustody,
           getJournalBindingKey: () => key, getRecipientBindingKey: () => recipientBindingKey,
           getQueueOwnerIdentity: () => owner, hasAuthority: () => true,
@@ -5315,17 +5315,17 @@ strictFileTest(`Control reconciliation uses native serial handoff custody (${out
     };
     const donorLifecycle = createLifecycle(donor, donorOwner, "workspace:donor");
     const recipientLifecycle = createLifecycle(recipient, recipientOwner, "workspace:recipient");
-    const donorQueue = Queue.createTelegramQueueStore<string>();
-    const recipientQueue = Queue.createTelegramQueueStore<string>();
+    const donorQueue = Queue.createBaleQueueStore<string>();
+    const recipientQueue = Queue.createBaleQueueStore<string>();
     const effects: string[] = [];
-    const item: Queue.PendingTelegramControlItem<string> = { kind: "control", controlType: "status", chatId: 7,
+    const item: Queue.PendingBaleControlItem<string> = { kind: "control", controlType: "status", chatId: 7,
       target, transportStamp: { profile: "work", generation: "fixture" }, replyToMessageId: 11,
       queueOrder: 1, queueLane: "control", laneOrder: 1, statusSummary: "status",
       admissionReceipts: [{ ...queued, journalBindingKey: key }], execute: async () => { effects.push("donor"); } };
     donorQueue.setQueuedItems([item]);
-    const deferredDispatch = Queue.createTelegramDeferredQueueDispatchRuntime<string>();
+    const deferredDispatch = Queue.createBaleDeferredQueueDispatchRuntime<string>();
     deferredDispatch.bind("recipient");
-    const queueBinding = Bindings.createTelegramQueueBindingRuntime({ store: recipientQueue, deferredDispatch,
+    const queueBinding = Bindings.createBaleQueueBindingRuntime({ store: recipientQueue, deferredDispatch,
       admission: { getSettlement: () => recipientLifecycle,
         hasPendingQueueMutationForItem: recipientLifecycle.hasPendingQueueMutationForItem },
       queue: { allocateItemOrder: () => 2 }, activeTurn: { has: () => false },
@@ -5335,9 +5335,9 @@ strictFileTest(`Control reconciliation uses native serial handoff custody (${out
       promptDispatch: { startTypingLoop: () => {}, onPromptDispatchFailure: () => {}, onPromptDispatchStart: () => {} },
       sendUserMessage: () => { assert.fail("Control handoff must not start a model turn"); },
     });
-    const accept = Updates.createTelegramQueueHandoffRecipientRuntime({
-      staging: Queue.createTelegramQueueHandoffStagingRuntime({ liveStore: recipientQueue,
-        createControlExecution: Updates.createTelegramQueueHandoffControlExecutionFactory({
+    const accept = Updates.createBaleQueueHandoffRecipientRuntime({
+      staging: Queue.createBaleQueueHandoffStagingRuntime({ liveStore: recipientQueue,
+        createControlExecution: Updates.createBaleQueueHandoffControlExecutionFactory({
           isContextCurrent: ctx => ctx === "recipient", showStatus: async () => { effects.push("recipient"); },
           openModelMenu: async () => { assert.fail("Wrong control reconstructed"); },
         }) }),
@@ -5345,20 +5345,20 @@ strictFileTest(`Control reconciliation uses native serial handoff custody (${out
       isTransportStampActive: () => true, dispatchNext: queueBinding.dispatchNext,
     });
     let transfers = 0;
-    const reconcile = Updates.createTelegramQueueHandoffReconciler<string>({
+    const reconcile = Updates.createBaleQueueHandoffReconciler<string>({
       ownsDirect: () => true, isFollowerRegistered: () => false, isBusEnabled: () => true,
       listFollowers: () => [{ instanceId: "recipient", pid: recipientOwner.processId,
         processBirthId: recipientOwner.processBirthId, sessionGeneration: 1, registrationGeneration: "g1",
         connectedAtMs: 1, lastHeartbeatMs: 1, profileKey: "recipient", target }],
       createRecipientJournalBindingKey: () => key, getQueuedItems: donorQueue.getQueuedItems,
       getReceiptOwner: donorLifecycle.getQueueReceiptOwner, getLifecycleForReceipt: () => donorLifecycle,
-      donorInstanceId: "donor", createHandoffToken: Journal.createTelegramUpdateQueueHandoffToken,
+      donorInstanceId: "donor", createHandoffToken: Journal.createBaleUpdateQueueHandoffToken,
       createRequestId: () => "fixture-handoff", stageThroughFollower: async () => { throw Error("Wrong route"); },
       async routeThroughLeader(envelope) {
         transfers++;
         assert.equal("execute" in envelope.payload, false);
         const payload = structuredClone(envelope.payload);
-        const decoded = Bus.parseTelegramBusEnvelope(Bus.encodeTelegramBusEnvelope({
+        const decoded = Bus.parseBaleBusEnvelope(Bus.encodeBaleBusEnvelope({
           ...envelope, kind: "leader.offerQueueHandoff", payload,
         }));
         assert.ok(decoded?.kind === "leader.offerQueueHandoff", "The serial payload must survive the real wire codec");
@@ -5367,7 +5367,7 @@ strictFileTest(`Control reconciliation uses native serial handoff custody (${out
         if (outcome === "lost-ack") throw new Error("fixture lost acceptance ACK");
         return { kind: "bus.ack", requestId: envelope.requestId, ok: true, result };
       },
-      removeDonorItem: receipt => Queue.removeTelegramQueueItemByReceipt({ receipt, store: donorQueue }),
+      removeDonorItem: receipt => Queue.removeBaleQueueItemByReceipt({ receipt, store: donorQueue }),
     });
     await donorLifecycle.onSessionStart("donor");
     await recipientLifecycle.onSessionStart("recipient");
@@ -5395,26 +5395,26 @@ strictFileTest(`Control reconciliation uses native serial handoff custody (${out
 
 for (const stopped of [false, true]) {
 strictFileTest(`Deferred media enqueue keeps custody behind its execution fence (${stopped ? "stopped" : "active"})`, async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-deferred-custody-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-deferred-custody-")));
   const botToken = "123:fixture-deferred-custody";
-  const configPath = join(dir, "telegram.json");
+  const configPath = join(dir, "bale.json");
   const owner = { instanceId: "deferred", processId: process.pid,
     processBirthId: `${process.pid}:fixture-deferred`, sessionGeneration: 1 };
   const entered = Promise.withResolvers<void>();
   const downloaded = Promise.withResolvers<void>();
-  const references = Journal.createTelegramUpdateJournalReferenceRegistry({ maxActive: 1 });
+  const references = Journal.createBaleUpdateJournalReferenceRegistry({ maxActive: 1 });
   let shutdown: (() => Promise<void>) | undefined;
   let clearMedia: (() => void) | undefined;
   try {
     await writeFile(configPath, JSON.stringify({ profiles: { work: { botToken, allowedUserId: 7 } } }));
     await writeFile(join(dir, "fixture.txt"), "fixture attachment");
-    const config = Config.createTelegramConfigStore({ agentDir: dir, configPath });
-    const journalSerialization = Journal.createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const config = Config.createBaleConfigStore({ agentDir: dir, configPath });
+    const journalSerialization = Journal.createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     await config.load(); config.activateProfile("work");
-    const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({ botToken });
-    const ledger = WorkspaceAdmission.createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
+    const botIdentity = Journal.createBaleUpdateJournalBotIdentity({ botToken });
+    const ledger = WorkspaceAdmission.createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
       profileKey: "fixture:work", owner, getProcessLiveness: () => "alive" });
-    const options: Journal.TelegramInputJournalStoreOptions = {
+    const options: Journal.BaleInputJournalStoreOptions = {
       path: join(dir, "inbox.work.json"), profileName: "work", botIdentity, queueRuntimeIdentity: owner,
       workspaceAdmission: ledger, sourceAccess: { directory: dir, limits: {
         maxFiles: 1000, maxBytes: 10_000_000, maxEntries: 100, maxWork: 100_000 } },
@@ -5422,12 +5422,12 @@ strictFileTest(`Deferred media enqueue keeps custody behind its execution fence 
       withPairingAdmission: publish => config.withPairingAdmission("work", botIdentity.tokenSha256, publish),
       getInputContext: () => ({ owner, recipientBindingKey: "workspace:deferred" }),
     };
-    const source = Journal.createTelegramInputJournalStore(options);
-    const bindingKey = Journal.createTelegramUpdateJournalBindingKey(options);
+    const source = Journal.createBaleInputJournalStore(options);
+    const bindingKey = Journal.createBaleUpdateJournalBindingKey(options);
     let queuedReports = 0;
     let queueCommits = 0;
     let completionCommits = 0;
-    const boundSource: Journal.TelegramInputJournalStore = { ...source,
+    const boundSource: Journal.BaleInputJournalStore = { ...source,
       queueInputs(input) {
         queueCommits++;
         assert.equal(references.list().length, 1, "Custody transition must have a participating reference");
@@ -5442,40 +5442,40 @@ strictFileTest(`Deferred media enqueue keeps custody behind its execution fence 
     const message = { message_id: 11, chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false },
       media_group_id: "fixture-album", caption: "deferred attachment",
       document: { file_id: "fixture", file_unique_id: "fixture", file_name: "fixture.txt" } };
-    const store = Queue.createTelegramQueueStore<string>();
-    const prepareTurn = Turns.createTelegramPromptTurnRuntimePreparer<typeof message, string>({
+    const store = Queue.createBaleQueueStore<string>();
+    const prepareTurn = Turns.createBalePromptTurnRuntimePreparer<typeof message, string>({
       allocateQueueOrder: () => 1, getAdmissionScope: () => "fixture", getAdmissionJournalBinding: () => bindingKey,
       async downloadFile() { entered.resolve(); await downloaded.promise; return join(dir, "fixture.txt"); },
     });
-    const enqueue = Queue.createTelegramPromptEnqueueController<typeof message, string>({
+    const enqueue = Queue.createBalePromptEnqueueController<typeof message, string>({
       ...store, prepareTurn, hasPendingDispatch: () => false,
       getFoldQueuedPromptsIntoHistory: () => false, setFoldQueuedPromptsIntoHistory: () => {},
-      assertExecutionCurrent: messages => Updates.assertTelegramUpdateExecutionCurrent(messages[0]),
-      updateStatus: () => {}, dispatchNextQueuedTelegramTurn: () => {},
+      assertExecutionCurrent: messages => Updates.assertBaleUpdateExecutionCurrent(messages[0]),
+      updateStatus: () => {}, dispatchNextQueuedBaleTurn: () => {},
     });
-    const groups = Media.createTelegramMediaGroupController<typeof message, string>({
+    const groups = Media.createBaleMediaGroupController<typeof message, string>({
       setTimer: () => ({ unref() {} }) as ReturnType<typeof setTimeout>, clearTimer: () => {},
     });
     clearMedia = groups.clear;
-    const media = Media.createTelegramMediaGroupDispatchRuntime({ mediaGroups: groups,
-      onDeferredMessage: Updates.reportTelegramUpdateDeferred,
+    const media = Media.createBaleMediaGroupDispatchRuntime({ mediaGroups: groups,
+      onDeferredMessage: Updates.reportBaleUpdateDeferred,
       async dispatchMessages(messages: typeof message[], ctx: string) {
         await enqueue.enqueue(messages, ctx, turn => {
           queuedReports++;
-          Updates.reportTelegramQueueAdmission(messages, turn.admissionReceipts ?? []);
+          Updates.reportBaleQueueAdmission(messages, turn.admissionReceipts ?? []);
         });
       },
     });
-    const admission = Updates.createTelegramUpdateAdmissionRuntimeBinding<string>({ isFollowerRegistered: () => false });
-    const assembly = Updates.createTelegramUpdateAdmissionLifecycleAssembly({ runtimeBinding: admission,
+    const admission = Updates.createBaleUpdateAdmissionRuntimeBinding<string>({ isFollowerRegistered: () => false });
+    const assembly = Updates.createBaleUpdateAdmissionLifecycleAssembly({ runtimeBinding: admission,
       acquireSourceReference: (_role, binding) => references.acquire({
         referenceClass: "leader-lifecycle", recoveryKey: binding.recoveryKey }),
       worker: { getQueueOwnerIdentity: () => owner,
-        defaultHandle: async (update: Updates.TelegramUpdateFlow, ctx: string) => {
+        defaultHandle: async (update: Updates.BaleUpdateFlow, ctx: string) => {
           await media.handleMessage(update.message as typeof message, ctx);
         } },
       leader: { hasAuthority: () => true,
-        resolveBinding: Updates.createTelegramInputCustodyLifecycleBindingResolver({ isEnabled: () => true,
+        resolveBinding: Updates.createBaleInputCustodyLifecycleBindingResolver({ isEnabled: () => true,
           resolveInputJournal: () => ({ runtimeKey: "fixture", recoveryKey: bindingKey, journal: boundSource }),
           getRecipientBindingKey: () => "workspace:deferred" }) },
       follower: { resolveBinding: () => undefined, isRegistered: () => false,
@@ -5516,50 +5516,50 @@ strictFileTest(`Deferred media enqueue keeps custody behind its execution fence 
 }
 
 for (const scenario of ["acknowledged", "lost-registration-reply"] as const) {
-strictFileTest(`Telegram new gateway composes follower suspension, session registration and predecessor pending adoption (${scenario})`, async () => {
+strictFileTest(`Bale new gateway composes follower suspension, session registration and predecessor pending adoption (${scenario})`, async () => {
   let replyLost = false;
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-new-session-custody-")));
-  const contexts = Lifecycle.createTelegramSessionContextStore<ExtensionContext>();
-  const references = Journal.createTelegramUpdateJournalReferenceRegistry({ maxActive: 1 });
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-new-session-custody-")));
+  const contexts = Lifecycle.createBaleSessionContextStore<ExtensionContext>();
+  const references = Journal.createBaleUpdateJournalReferenceRegistry({ maxActive: 1 });
   let sessionId = "session-a", sequence = 0, mayExecute = false, replacementStarted = false;
   const ctx = { cwd: "/fixture", sessionManager: { getSessionId: () => sessionId }, ui: { notify() {} } } as unknown as ExtensionContext;
-  const registrationState = BusFollower.createTelegramBusFollowerRegistrationState();
-  const registry = Bus.createTelegramBusFollowerRegistry();
-  const journalSerialization = Journal.createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+  const registrationState = BusFollower.createBaleBusFollowerRegistrationState();
+  const registry = Bus.createBaleBusFollowerRegistry();
+  const journalSerialization = Journal.createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
   const recipientKey = "manual:same-process";
-  const protocol = Bus.createTelegramBusProtocolIdentity({ runtimeBuild: "fixture-new",
-    capabilities: [Bus.TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] });
+  const protocol = Bus.createBaleBusProtocolIdentity({ runtimeBuild: "fixture-new",
+    capabilities: [Bus.BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] });
   const leaderPath = join(dir, "leader.sock"), followerPath = join(dir, "follower.sock");
   const lock = { busSocketPath: leaderPath, busSecret: "fixture" };
   const enteredPreparation = Promise.withResolvers<void>(), finishPreparation = Promise.withResolvers<void>();
   const replacementDone = Promise.withResolvers<void>();
   const failures: unknown[] = [], executions: { id: number; session: string }[] = [];
-  const adoptions: (Journal.TelegramSessionPendingAdoptionResult | undefined)[] = [];
-  const journals = Journal.createTelegramUpdateJournalBindingRuntime({
+  const adoptions: (Journal.BaleSessionPendingAdoptionResult | undefined)[] = [];
+  const journals = Journal.createBaleUpdateJournalBindingRuntime({
     base: { getProfileName: () => "work", getBotToken: () => "123:fixture-new-custody", getBotId: () => 7,
       withSourceSerialization: journalSerialization },
-    getLeaderJournalPath: () => join(dir, "tmp", "pi-telegram", "inbox.work.json"),
-    getFollowerJournalPath: (key, profileName, sid) => Paths.resolveTelegramSessionJournalPath(sid!, key, dir, profileName),
+    getLeaderJournalPath: () => join(dir, "tmp", "pi-bale", "inbox.work.json"),
+    getFollowerJournalPath: (key, profileName, sid) => Paths.resolveBaleSessionJournalPath(sid!, key, dir, profileName),
     getActiveFollowerBindingKey: () => recipientKey,
     getActiveFollowerSessionId: () => registrationState.getSessionId(sessionId), isFollowerRegistered: registrationState.isRegistered,
   });
   const oldSource = journals.createRecipientResolver(recipientKey, "session-a")()!;
   oldSource.journal.appendBatch([{ update_id: 1, message: { text: "old pending custody" } }]);
   let invoke!: Parameters<ExtensionAPI["registerCommand"]>[1]["handler"];
-  const action = Commands.createTelegramSessionActionRuntime({
+  const action = Commands.createBaleSessionActionRuntime({
     async sendUserMessage(text, options) {
       assert.deepEqual(options, { expandPromptTemplates: true });
       replacementStarted = true;
       try {
         assert.equal(typeof text, "string");
         if (typeof text !== "string") throw new Error("Expected the typed internal command");
-        const prefix = `/${Commands.TELEGRAM_CONNECT_COMMAND_NAME} `;
+        const prefix = `/${Commands.BALE_CONNECT_COMMAND_NAME} `;
         assert.ok(text.startsWith(prefix));
         await invoke(text.slice(prefix.length), { ...ctx, async newSession() {
           assert.equal(oldSource.journal.read().entries.some(entry => entry.updateId === 2), false, "Gateway follows exact source completion");
           await hooks.onSessionShutdown({ type: "session_shutdown", reason: "new" }, ctx);
           assert.equal(registrationState.isRegistered(), false);
-          assert.ok(BusFollower.getTelegramFollowerSessionHandoff());
+          assert.ok(BusFollower.getBaleFollowerSessionHandoff());
           assert.equal(workers.getState()?.phase, "stopped");
           assert.deepEqual(references.list(), [], "Old worker reference ends before successor preparation");
           sessionId = "session-b";
@@ -5571,10 +5571,10 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
     },
     notifyResult: async (_target, result) => { failures.push(result); }, recordRuntimeEvent: (_category, error) => { failures.push(error); },
   });
-  Commands.registerTelegramBridgeCommands({
+  Commands.registerBaleBridgeCommands({
     registerCommand(name, options) {
-      if (name === Commands.TELEGRAM_CONNECT_COMMAND_NAME) invoke = options.handler;
-      assert.notEqual(name, "telegram-internal");
+      if (name === Commands.BALE_CONNECT_COMMAND_NAME) invoke = options.handler;
+      assert.notEqual(name, "bale-internal");
     },
   } as ExtensionAPI, {
     handleInternalAction: action.handleInternalAction,
@@ -5585,14 +5585,14 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
     updateStatus: () => assert.fail("No Connect status update"),
     getSessionGeneration: () => assert.fail("No Connect intent/session sampling"),
   });
-  let currentWorker: Updates.TelegramUpdateWorkerRuntime<ExtensionContext> | undefined;
-  const workers = Updates.createTelegramUpdateAdmissionLifecycleRuntime<ExtensionContext>({
+  let currentWorker: Updates.BaleUpdateWorkerRuntime<ExtensionContext> | undefined;
+  const workers = Updates.createBaleUpdateAdmissionLifecycleRuntime<ExtensionContext>({
     resolveBinding: journals.resolveFollower,
     prepareBinding() { adoptions.push(journals.prepareActiveFollowerSuccession(() => registrationState.isRegistered())); },
     acquireSourceReference: binding => references.acquire({ referenceClass: "follower-lifecycle", recoveryKey: binding.recoveryKey }),
     createWorker(journal, binding) {
       const capturedSession = sessionId;
-      currentWorker = Updates.createTelegramUpdateWorkerRuntime({ journal, getJournalBindingKey: () => binding.recoveryKey,
+      currentWorker = Updates.createBaleUpdateWorkerRuntime({ journal, getJournalBindingKey: () => binding.recoveryKey,
         hasAuthority: () => mayExecute && registrationState.isRegistered(),
         shouldHoldPendingInput: entry => capturedSession === "session-a" && entry.updateId === 1,
         shouldReviewHistoricalInput: entry => capturedSession === "session-a" && entry.updateId === 1,
@@ -5606,10 +5606,10 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
       return currentWorker;
     },
   });
-  const baseLeaderHandler = BusLeader.createTelegramBusLeaderEnvelopeHandler({ authSecret: "fixture", protocolIdentity: protocol,
+  const baseLeaderHandler = BusLeader.createBaleBusLeaderEnvelopeHandler({ authSecret: "fixture", protocolIdentity: protocol,
     followerRegistry: registry, provisionFollowerTarget: () => ({ chatId: 7, threadId: 42, slot: "A" }) });
   // The leader commits the successor registration, but the follower never observes its reply.
-  async function leaderHandler(envelope: Bus.TelegramBusEnvelope) {
+  async function leaderHandler(envelope: Bus.BaleBusEnvelope) {
     const response = await baseLeaderHandler(envelope);
     if (scenario === "lost-registration-reply" && !replyLost && envelope.kind === "follower.register" &&
         envelope.registration.sessionId === "session-b") {
@@ -5618,10 +5618,10 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
     }
     return response;
   }
-  const leader = Bus.createTelegramBusLocalServer({ socketPath: leaderPath,
+  const leader = Bus.createBaleBusLocalServer({ socketPath: leaderPath,
     handleEnvelope: leaderHandler });
-  const assembly = BusFollower.createTelegramBusFollowerRuntimeAssembly({ instanceId: "fixture-follower", registrationState,
-    failureLog: createTelegramFailureRunLog({
+  const assembly = BusFollower.createBaleBusFollowerRuntimeAssembly({ instanceId: "fixture-follower", registrationState,
+    failureLog: createBaleFailureRunLog({
       category: "bus",
       failurePhase: "follower-heartbeat",
       outcomePhase: "follower-heartbeat-recovered",
@@ -5630,7 +5630,7 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
     }),
     recordRuntimeEvent: () => {}, receiver: { socketPath: followerPath, getAuthSecret: () => "fixture", getContext: () => contexts.get(),
       getRecipientBindingKey: () => recipientKey,
-      durableAdmission: BusFollower.createTelegramBusFollowerDurableAdmissionRuntime({ journal: workers, signalWorker: workers.signal }) },
+      durableAdmission: BusFollower.createBaleBusFollowerDurableAdmissionRuntime({ journal: workers, signalWorker: workers.signal }) },
     recovery: { getLeaderState: () => ({ kind: "inactive" }), setLifecyclePhase() {}, updateStatus() {}, promoteToLeader: async () => false },
     registration: { protocolIdentity: protocol, getFollowerBusSocketPath: () => followerPath, getProfileKey: () => recipientKey,
       createRequestId: () => `new:${++sequence}`, getSessionId: () => sessionId, getSessionGeneration: contexts.getGeneration,
@@ -5639,7 +5639,7 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
         await workers.onTransportChanged(current);
       } },
   });
-  const hooks = Lifecycle.createTelegramBridgeSessionLifecycleAssembly({ contextStore: contexts,
+  const hooks = Lifecycle.createBaleBridgeSessionLifecycleAssembly({ contextStore: contexts,
     queue: { getCurrentModel: () => undefined, loadConfig: async () => {}, setQueuedItems() {}, setCurrentModel() {}, setPendingModelSwitch() {},
       syncCounters() {}, syncFlags() {}, bindDeferredDispatchContext() {}, prepareTempDir: async () => {}, updateStatus() {},
       unbindDeferredDispatchContext() {}, discardQueuedItems() {}, clearModelMenuState() {}, getActiveTurnChatId: () => undefined,
@@ -5651,13 +5651,13 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
     services: { resumeGroupedInput() {}, suspendGroupedInput() {}, delivery: { onSessionStart: async () => {}, onSessionShutdown: async () => {} },
       polling: { onSessionStart: workers.onSessionStart }, inboundWorker: { onSessionShutdown: workers.onSessionShutdown },
       capabilityMonitor: { start() {}, stop() {} }, queueWatchdog: { start() {}, stop() {} } },
-  } as unknown as Parameters<typeof Lifecycle.createTelegramBridgeSessionLifecycleAssembly>[0]);
-  const send = (id: number, text: string, generation: string) => Bus.sendTelegramBusLocalEnvelope({ socketPath: followerPath, timeoutMs: 1000,
+  } as unknown as Parameters<typeof Lifecycle.createBaleBridgeSessionLifecycleAssembly>[0]);
+  const send = (id: number, text: string, generation: string) => Bus.sendBaleBusLocalEnvelope({ socketPath: followerPath, timeoutMs: 1000,
     envelope: { kind: "leader.forwardMessage", requestId: `delivery:${++sequence}`, auth: "fixture", recipientInstanceId: "fixture-follower",
-      recipientRegistrationGeneration: generation, delivery: Bus.createTelegramBusFollowerDeliveryIdentity({ kind: "leader.forwardMessage", recipientBindingKey: recipientKey, sourceUpdateId: id }),
-      message: { message_id: id, chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false }, text, pi_telegram_source_update_id: id }, sentAtMs: 1 } });
+      recipientRegistrationGeneration: generation, delivery: Bus.createBaleBusFollowerDeliveryIdentity({ kind: "leader.forwardMessage", recipientBindingKey: recipientKey, sourceUpdateId: id }),
+      message: { message_id: id, chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false }, text, pi_bale_source_update_id: id }, sentAtMs: 1 } });
   try {
-    BusFollower.setTelegramFollowerSessionHandoff(undefined);
+    BusFollower.setBaleFollowerSessionHandoff(undefined);
     await leader.start(); await hooks.onSessionStart({ type: "session_start", reason: "startup" }, ctx);
     assert.ok(await assembly.registration.registerWithLeader(ctx, lock));
     const oldGeneration = registrationState.getGeneration()!;
@@ -5675,15 +5675,15 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
       assert.deepEqual(adoptions, [undefined], "No adoption without an observed successor registration");
       assert.deepEqual(oldSource.journal.read().entries.map(entry => entry.updateId), [1]);
       assert.deepEqual(executions, [{ id: 2, session: "session-a" }]);
-      assert.ok(failures.length > 0 && failures.every(failure => /Telegram bus handler failed/.test(String(failure))),
+      assert.ok(failures.length > 0 && failures.every(failure => /Bale bus handler failed/.test(String(failure))),
         `The lost reply is reported as itself, not a protocol mismatch: ${failures.map(String).join("; ")}`);
       failures.length = 0;
       oldPending = oldSource.journal.read();
-      const handoff = BusFollower.getTelegramFollowerSessionHandoff()!;
+      const handoff = BusFollower.getBaleFollowerSessionHandoff()!;
       assert.ok(handoff, "Session handoff stays available for retry");
       assert.ok(await assembly.registration.registerWithLeader(ctx, lock,
         { target: handoff.target, previousInstanceId: handoff.instanceId }));
-      BusFollower.setTelegramFollowerSessionHandoff(undefined);
+      BusFollower.setBaleFollowerSessionHandoff(undefined);
       successorGeneration = registrationState.getGeneration()!;
     } else {
     await Promise.race([enteredPreparation.promise, replacementDone.promise.then(() => { throw new Error(`Replacement ended before preparation: ${failures.map(String).join("; ")}`); })]);
@@ -5699,7 +5699,7 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
     }
     assert.deepEqual(failures, []);
     assert.equal(assembly.getReadySessionId(), "session-b");
-    assert.equal(BusFollower.getTelegramFollowerSessionHandoff(), undefined);
+    assert.equal(BusFollower.getBaleFollowerSessionHandoff(), undefined);
     assert.equal(journals.getActiveRecoveryKey(), workers.getJournalBindingKey());
     assert.notEqual(journals.getActiveRecoveryKey(), oldSource.recoveryKey);
     assert.deepEqual(references.list(), [{ referenceClass: "follower-lifecycle", recoveryKey: journals.getActiveRecoveryKey() }]);
@@ -5710,7 +5710,7 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
     assert.equal(oldPending.entries[0]?.updateId, 1);
     assert.deepEqual(oldSource.journal.read().entries, [], "Predecessor keeps only the committed adoption tombstone");
     assert.equal(journals.inspectSourceAbandonment(oldSource.recoveryKey, 1)?.operatorAuthorityId,
-      `${Journal.TELEGRAM_SESSION_ADOPTION_AUTHORITY_PREFIX}session-b`);
+      `${Journal.BALE_SESSION_ADOPTION_AUTHORITY_PREFIX}session-b`);
     const next = await send(4, "successor after preparation", successorGeneration);
     assert.equal(next?.kind === "bus.ack" && next.ok, true);
     await currentWorker!.waitForDrain();
@@ -5719,18 +5719,18 @@ strictFileTest(`Telegram new gateway composes follower suspension, session regis
   } finally {
     finishPreparation.resolve(); if (replacementStarted) await replacementDone.promise.catch(() => {});
     assembly.registration.stop(); await assembly.receiver.stop(); await workers.onSessionShutdown(); await leader.stop();
-    BusFollower.setTelegramFollowerSessionHandoff(undefined); await rm(dir, { recursive: true, force: true });
+    BusFollower.setBaleFollowerSessionHandoff(undefined); await rm(dir, { recursive: true, force: true });
   }
 });
 }
 
 for (const outcome of ["ready", "context-replaced", "preparation-failed", "context-refresh", "same-context-refresh", "refresh-failed"] as const) {
 strictFileTest(`Follower registration fences native binding readiness (${outcome})`, async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-registration-readiness-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-registration-readiness-"));
   const ctx = { cwd: "/fixture" };
-  const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:fixture-readiness" });
-  const oldJournal = Journal.createTelegramUpdateJournalStore({ path: join(dir, "old.json"), botIdentity });
-  const nextJournal = Journal.createTelegramUpdateJournalStore({ path: join(dir, "next.json"), botIdentity });
+  const botIdentity = Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:fixture-readiness" });
+  const oldJournal = Journal.createBaleUpdateJournalStore({ path: join(dir, "old.json"), botIdentity });
+  const nextJournal = Journal.createBaleUpdateJournalStore({ path: join(dir, "next.json"), botIdentity });
   oldJournal.appendBatch([{ update_id: 1 }]);
   let selected = oldJournal;
   let releaseHandler!: () => void;
@@ -5741,24 +5741,24 @@ strictFileTest(`Follower registration fences native binding readiness (${outcome
   let sessionGeneration = 1;
   // A prior generation's real unsettled handler keeps the replacement stop pending.
   let authority = true;
-  const blockedLifecycle = Updates.createTelegramUpdateAdmissionLifecycleRuntime<typeof ctx>({
+  const blockedLifecycle = Updates.createBaleUpdateAdmissionLifecycleRuntime<typeof ctx>({
     resolveBinding: () => ({ runtimeKey: selected === oldJournal ? "old" : "next",
       recoveryKey: selected === oldJournal ? "old" : "next", journal: selected }),
-    createWorker: journal => Updates.createTelegramUpdateWorkerRuntime({ journal,
+    createWorker: journal => Updates.createBaleUpdateWorkerRuntime({ journal,
       hasAuthority: () => authority,
       executeUpdate: async (_update, current) => {
         executions++; executionContexts.push(current); await heldHandler; return { kind: "complete" };
       },
     }),
   });
-  const registrationState = BusFollower.createTelegramBusFollowerRegistrationState();
-  const protocol = Bus.createTelegramBusProtocolIdentity({ runtimeBuild: "fixture",
-    capabilities: [Bus.TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] });
+  const registrationState = BusFollower.createBaleBusFollowerRegistrationState();
+  const protocol = Bus.createBaleBusProtocolIdentity({ runtimeBuild: "fixture",
+    capabilities: [Bus.BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] });
   const leaderPath = join(dir, "leader.sock");
   const followerPath = join(dir, "follower.sock");
-  const leader = Bus.createTelegramBusLocalServer({ socketPath: leaderPath,
-    handleEnvelope: BusLeader.createTelegramBusLeaderEnvelopeHandler({
-      authSecret: "fixture", protocolIdentity: protocol, followerRegistry: Bus.createTelegramBusFollowerRegistry(),
+  const leader = Bus.createBaleBusLocalServer({ socketPath: leaderPath,
+    handleEnvelope: BusLeader.createBaleBusLeaderEnvelopeHandler({
+      authSecret: "fixture", protocolIdentity: protocol, followerRegistry: Bus.createBaleBusFollowerRegistry(),
       provisionFollowerTarget: () => ({ chatId: 7, threadId: 42, slot: "A" }),
     }),
   });
@@ -5767,8 +5767,8 @@ strictFileTest(`Follower registration fences native binding readiness (${outcome
   let sequence = 0;
   let contextActive = true;
   let failRefresh = false;
-  const assembly = BusFollower.createTelegramBusFollowerRuntimeAssembly({ instanceId: "fixture-follower", registrationState,
-    failureLog: createTelegramFailureRunLog({
+  const assembly = BusFollower.createBaleBusFollowerRuntimeAssembly({ instanceId: "fixture-follower", registrationState,
+    failureLog: createBaleFailureRunLog({
       category: "bus",
       failurePhase: "follower-heartbeat",
       outcomePhase: "follower-heartbeat-recovered",
@@ -5778,7 +5778,7 @@ strictFileTest(`Follower registration fences native binding readiness (${outcome
     recordRuntimeEvent: () => {},
     receiver: { socketPath: followerPath, getAuthSecret: () => "fixture", getContext: () => activeCtx,
       getRecipientBindingKey: () => "fixture:recipient",
-      durableAdmission: BusFollower.createTelegramBusFollowerDurableAdmissionRuntime({
+      durableAdmission: BusFollower.createBaleBusFollowerDurableAdmissionRuntime({
         journal: blockedLifecycle, signalWorker: () => blockedLifecycle.signal(),
       }),
     },
@@ -5812,13 +5812,13 @@ strictFileTest(`Follower registration fences native binding readiness (${outcome
     await registrationEntered;
     const generation = registrationState.getGeneration()!;
     assert.ok(generation);
-    const send = (sourceUpdateId = 2) => Bus.sendTelegramBusLocalEnvelope({ socketPath: followerPath, timeoutMs: 1000,
+    const send = (sourceUpdateId = 2) => Bus.sendBaleBusLocalEnvelope({ socketPath: followerPath, timeoutMs: 1000,
       envelope: { kind: "leader.forwardMessage", requestId: `delivery:${++sequence}`, auth: "fixture",
         recipientInstanceId: "fixture-follower", recipientRegistrationGeneration: generation,
-        delivery: Bus.createTelegramBusFollowerDeliveryIdentity({ kind: "leader.forwardMessage",
+        delivery: Bus.createBaleBusFollowerDeliveryIdentity({ kind: "leader.forwardMessage",
           recipientBindingKey: "fixture:recipient", sourceUpdateId }),
         message: { message_id: sourceUpdateId, chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false },
-          text: "new binding only", pi_telegram_source_update_id: sourceUpdateId }, sentAtMs: 1 },
+          text: "new binding only", pi_bale_source_update_id: sourceUpdateId }, sentAtMs: 1 },
     });
     const before = oldJournal.read();
     const pending = await send();
@@ -5853,7 +5853,7 @@ strictFileTest(`Follower registration fences native binding readiness (${outcome
         "An unchanged registration cannot admit into a stopped previous-session worker");
       assert.deepEqual(nextJournal.read(), retained);
       const refreshErrors: unknown[] = [];
-      const refresh = BusFollower.createTelegramBusFollowerSessionRefreshHook({ registrationState,
+      const refresh = BusFollower.createBaleBusFollowerSessionRefreshHook({ registrationState,
         registrationRuntime: assembly.registration, getLeaderState: () => ({ kind: "inactive" }),
         isSessionActive: current => current === activeCtx, updateStatus: () => {},
         recordRuntimeEvent: (_category, value) => { if (value instanceof Error) refreshErrors.push(value); } });
@@ -5892,8 +5892,8 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
   "reaction-held", "reaction-failed", "reaction-excluded", "reaction-excluded-repaired", "source-reference-released", "handoff-cancel-after-stop", "handoff-cancel-reference-denied",
   "handoff-accepted-lost-ack-after-stop", "denial-completion-active", "denial-completion-stopped"] as const) {
   strictFileTest(`Prepared pending mutations preserve namespace and accepted work (${scenario})`, async () => {
-    const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-pending-mutation-")));
-    const configPath = join(dir, "telegram.json");
+    const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-pending-mutation-")));
+    const configPath = join(dir, "bale.json");
     const botToken = "123:fixture-pending-mutation";
     const owner = { instanceId: "pending", processId: process.pid,
       processBirthId: `${process.pid}:fixture-pending`, sessionGeneration: 1 };
@@ -5901,19 +5901,19 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
     let releaseReaction!: () => void;
     const heldReaction = new Promise<void>(resolve => { releaseReaction = resolve; });
     let businessObserved = 0;
-    const unregister = Updates.registerTelegramUpdateHandler(update => {
+    const unregister = Updates.registerBaleUpdateHandler(update => {
       if (update && typeof update === "object" && "deleted_business_messages" in update) businessObserved++;
     });
     try {
       await writeFile(configPath, JSON.stringify({ profiles: { work: { botToken, allowedUserId: 7 } } }));
-      const config = Config.createTelegramConfigStore({ agentDir: dir, configPath });
-      const journalSerialization = Journal.createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+      const config = Config.createBaleConfigStore({ agentDir: dir, configPath });
+      const journalSerialization = Journal.createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
       await config.load(); config.activateProfile("work");
-      const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({ botToken });
-      const ledger = WorkspaceAdmission.createTelegramWorkspaceAdmissionLedger({
+      const botIdentity = Journal.createBaleUpdateJournalBotIdentity({ botToken });
+      const ledger = WorkspaceAdmission.createBaleWorkspaceAdmissionLedger({
         path: join(dir, "workspace-admission.json"), profileKey: "fixture:work", owner,
         getProcessLiveness: () => "alive" });
-      const options: Journal.TelegramInputJournalStoreOptions = {
+      const options: Journal.BaleInputJournalStoreOptions = {
         path: join(dir, "inbox.work.json"), profileName: "work", botIdentity,
         queueRuntimeIdentity: owner, workspaceAdmission: ledger,
         sourceAccess: { directory: dir, limits: {
@@ -5922,8 +5922,8 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
         withPairingAdmission: publish => config.withPairingAdmission("work", botIdentity.tokenSha256, publish),
         getInputContext: () => ({ owner, recipientBindingKey: "workspace:pending" }),
       };
-      const source = Journal.createTelegramInputJournalStore(options);
-      const journalBindingKey = Journal.createTelegramUpdateJournalBindingKey(options);
+      const source = Journal.createBaleInputJournalStore(options);
+      const journalBindingKey = Journal.createBaleUpdateJournalBindingKey(options);
       source.appendBatch([1, 2].map(update_id => ({ update_id, message: {
         chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false }, message_id: update_id + 10,
         text: update_id === 1 ? "governed" : "independent",
@@ -5933,7 +5933,7 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
         source.startInput(input.receipt);
         const receipt = source.queueInputs({ queueKind: "prompt", receiptId: `pending-${id}`,
           receipts: [input.receipt] }).queueReceipt;
-        const item: Queue.PendingTelegramTurn = {
+        const item: Queue.PendingBaleTurn = {
           kind: "prompt", chatId: 7, replyToMessageId: id + 10, sourceMessageIds: [id + 10],
           queueOrder: id, queueLane: id === 1 ? "default" : "priority", laneOrder: id,
           statusSummary: id === 1 ? "governed" : "independent", queuedAttachments: [], historyText: "",
@@ -5944,13 +5944,13 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
       });
       const queuedEntries = source.read().entries;
       const completionAttempts: number[][] = [];
-      const references = Journal.createTelegramUpdateJournalReferenceRegistry({ maxActive: 1 });
+      const references = Journal.createBaleUpdateJournalReferenceRegistry({ maxActive: 1 });
       let refuseObservation = false;
       let observationReads = 0;
       let cancellationCalls = 0;
       let nativeCancellationCalls = 0;
       const rawCompletionReferences: number[] = [];
-      const boundSource: Journal.TelegramInputJournalStore = { ...source,
+      const boundSource: Journal.BaleInputJournalStore = { ...source,
         read() {
           if (scenario === "source-reference-released") {
             assert.equal(references.list().length, 1, "Every actual source read needs a live participating reference");
@@ -5978,7 +5978,7 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
           return source.completeQueued(receipts);
         },
       };
-      const resolveBinding = Updates.createTelegramInputCustodyLifecycleBindingResolver({
+      const resolveBinding = Updates.createBaleInputCustodyLifecycleBindingResolver({
         isEnabled: () => true,
         resolveInputJournal: () => ({ runtimeKey: "pending-runtime", recoveryKey: journalBindingKey, journal: boundSource }),
         getRecipientBindingKey: () => "workspace:pending",
@@ -5986,14 +5986,14 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
       const removalAttempts: number[][] = [];
       let reactionCalls = 0;
       let denialReplies = 0;
-      let binding!: Bindings.TelegramQueueBindingRuntime<string>;
-      const updates = Updates.createTelegramPairedUpdateRuntime<string>({
+      let binding!: Bindings.BaleQueueBindingRuntime<string>;
+      const updates = Updates.createBalePairedUpdateRuntime<string>({
         getAllowedUserId: config.getAllowedUserId, persistAllowedUserId: config.persistAllowedUserId,
         updateStatus: () => {}, removePendingMediaGroupMessages: ids => { removalAttempts.push(ids); },
-        removeQueuedTelegramTurnsByMessageIds: (ids, ctx, scope) => {
+        removeQueuedBaleTurnsByMessageIds: (ids, ctx, scope) => {
           removalAttempts.push(ids); return binding.mutation.removeByMessageIds(ids, ctx, scope);
         },
-        applyQueuedTelegramTurnReactionByMessageId: (id, disposition, ctx, scope) =>
+        applyQueuedBaleTurnReactionByMessageId: (id, disposition, ctx, scope) =>
           binding.mutation.applyReactionByMessageId(id, disposition, ctx, scope),
         flushPendingMediaGroupMessage: async () => {
           reactionCalls++; await heldReaction;
@@ -6001,14 +6001,14 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
           return false;
         },
         answerCallbackQuery: async () => {}, answerGuestQuery: async () => {},
-        handleAuthorizedTelegramCallbackQuery: async () => {},
+        handleAuthorizedBaleCallbackQuery: async () => {},
         sendTextReply: async () => { denialReplies++; await heldReaction; return undefined; },
-        handleAuthorizedTelegramMessage: async () => { assert.fail("Queued input must not replay"); },
-        handleAuthorizedTelegramEditedMessage: () => {},
+        handleAuthorizedBaleMessage: async () => { assert.fail("Queued input must not replay"); },
+        handleAuthorizedBaleEditedMessage: () => {},
       });
       let transport = true;
-      const admission = Updates.createTelegramUpdateAdmissionRuntimeBinding<string>({ isFollowerRegistered: () => false });
-      const assembly = Updates.createTelegramUpdateAdmissionLifecycleAssembly({ runtimeBinding: admission,
+      const admission = Updates.createBaleUpdateAdmissionRuntimeBinding<string>({ isFollowerRegistered: () => false });
+      const assembly = Updates.createBaleUpdateAdmissionLifecycleAssembly({ runtimeBinding: admission,
         acquireSourceReference(role, binding) {
           return references.acquire({ referenceClass: role === "leader" ? "leader-lifecycle" : "follower-lifecycle",
             recoveryKey: binding.recoveryKey });
@@ -6020,11 +6020,11 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
           getGeneration: () => undefined, prepareUpdateForExecution: update => update },
       });
       shutdown = admission.onSessionShutdown;
-      const store = Queue.createTelegramQueueStore<string>();
-      const deferredDispatch = Queue.createTelegramDeferredQueueDispatchRuntime<string>();
+      const store = Queue.createBaleQueueStore<string>();
+      const deferredDispatch = Queue.createBaleDeferredQueueDispatchRuntime<string>();
       deferredDispatch.bind("ctx");
       const effects: string[] = [];
-      binding = Bindings.createTelegramQueueBindingRuntime({ store, admission, deferredDispatch,
+      binding = Bindings.createBaleQueueBindingRuntime({ store, admission, deferredDispatch,
         queue: { allocateItemOrder: () => 3 }, activeTurn: { has: () => false },
         lifecycle: { isCompactionInProgress: () => false, hasDispatchPending: () => false },
         transportStamp: { isActive: () => true }, isIdle: () => true, hasPendingMessages: () => false,
@@ -6081,18 +6081,18 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
         const recipientOwner = { ...owner, instanceId: "recipient", processId: process.pid + 1,
           processBirthId: `${process.pid + 1}:fixture-recipient` };
         let rejectRemote!: (error: Error) => void;
-        const remote = new Promise<Queue.TelegramQueueHandoffStageResult>((_resolve, reject) => { rejectRemote = reject; });
+        const remote = new Promise<Queue.BaleQueueHandoffStageResult>((_resolve, reject) => { rejectRemote = reject; });
         const receipt = items[0]!.admissionReceipts![0]!;
         const expectedOwner = assembly.leader.getQueueReceiptOwner(receipt)!;
         assert.ok(expectedOwner);
-        const handoff = Updates.coordinateTelegramQueueHandoff({
+        const handoff = Updates.coordinateBaleQueueHandoff({
           item: { ...items[0]!, target: { chatId: 7, threadId: 42 },
             transportStamp: { profile: "work", generation: "fixture" } },
-          expectedOwner, recipientOwner, handoffToken: Journal.createTelegramUpdateQueueHandoffToken(),
+          expectedOwner, recipientOwner, handoffToken: Journal.createBaleUpdateQueueHandoffToken(),
           lifecycle: assembly.leader,
           stageRemote(input) {
             if (scenario === "handoff-accepted-lost-ack-after-stop") {
-              const recipient = Journal.createTelegramInputJournalStore({ ...options,
+              const recipient = Journal.createBaleInputJournalStore({ ...options,
                 queueRuntimeIdentity: recipientOwner,
                 getInputContext: () => ({ owner: recipientOwner, recipientBindingKey: "workspace:recipient" }) });
               recipient.acceptQueuedHandoff({ queueKind: receipt.queueKind, receiptId: receipt.receiptId,
@@ -6184,11 +6184,11 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
           assert.equal(await config.persistAllowedUserId(7), true);
           source.appendBatch([mutation], 3);
         }
-        const reopened = Journal.createTelegramInputJournalStore(options);
+        const reopened = Journal.createBaleInputJournalStore(options);
         assert.deepEqual(reopened.read().entries.find(entry => entry.updateId === 3), veto,
           "Re-pairing, duplicate append and reopening cannot turn an excluded mutation into intent");
         const beforeMixedRemoval = source.read();
-        assert.throws(() => Updates.createTelegramInputCustodyWorkerJournalPort(source).removeCompleted([3, 1]));
+        assert.throws(() => Updates.createBaleInputCustodyWorkerJournalPort(source).removeCompleted([3, 1]));
         assert.deepEqual(source.read(), beforeMixedRemoval, "A mixed request cannot partially remove the exclusion");
         binding.dispatchNext("ctx");
         binding.dispatchNext("ctx");
@@ -6260,23 +6260,23 @@ for (const scenario of ["business-same-chat", "business-other-chat", "business-d
 }
 
 async function assertAsynchronousEnqueueProgress(foldHistory: boolean, deferAgentStart = false): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-enqueue-race-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-enqueue-race-"));
   const owner = {
     instanceId: `enqueue-${process.pid}`, processId: process.pid,
-    processBirthId: ProcessIdentity.getTelegramProcessBirthIdentity(process.pid, "enqueue"),
+    processBirthId: ProcessIdentity.getBaleProcessBirthIdentity(process.pid, "enqueue"),
     sessionGeneration: 1,
   };
-  const journal = Journal.createTelegramUpdateJournalStore({
+  const journal = Journal.createBaleUpdateJournalStore({
     path: join(dir, "inbox.json"),
-    botIdentity: Journal.createTelegramUpdateJournalBotIdentity({ botToken: "123:enqueue-race" }),
+    botIdentity: Journal.createBaleUpdateJournalBotIdentity({ botToken: "123:enqueue-race" }),
     queueRuntimeIdentity: owner,
   });
-  const store = Queue.createTelegramQueueStore<string>();
-  const activeTurn = Queue.createTelegramActiveTurnStore();
+  const store = Queue.createBaleQueueStore<string>();
+  const activeTurn = Queue.createBaleActiveTurnStore();
   const entered = Promise.withResolvers<void>();
   const processing = Promise.withResolvers<void>();
   const callbacks: Array<() => void> = [];
-  const deferred = Queue.createTelegramDeferredQueueDispatchRuntime<string>({
+  const deferred = Queue.createBaleDeferredQueueDispatchRuntime<string>({
     setTimer(callback) {
       callbacks.push(callback);
       return { unref() {} } as ReturnType<typeof setTimeout>;
@@ -6293,12 +6293,12 @@ async function assertAsynchronousEnqueueProgress(foldHistory: boolean, deferAgen
   const sent: number[] = [];
   const errors: string[] = [];
   const message = (id: number) => ({
-    message_id: id, chat: { id: 7 }, pi_telegram_source_update_id: id,
+    message_id: id, chat: { id: 7 }, pi_bale_source_update_id: id,
     ...(id === 4
       ? { voice: { file_id: "voice-4", file_unique_id: "voice-4", duration: 1 } }
       : { text: `prompt-${id}` }),
   });
-  const prepareTurn = Turns.createTelegramPromptTurnRuntimePreparer<ReturnType<typeof message>, string>({
+  const prepareTurn = Turns.createBalePromptTurnRuntimePreparer<ReturnType<typeof message>, string>({
     allocateQueueOrder: () => ++order,
     getAdmissionScope: () => "enqueue-race",
     getAdmissionJournalBinding: () => "enqueue-race",
@@ -6313,15 +6313,15 @@ async function assertAsynchronousEnqueueProgress(foldHistory: boolean, deferAgen
     },
   });
   let folding = false;
-  const enqueue = Queue.createTelegramPromptEnqueueController<ReturnType<typeof message>, string>({
+  const enqueue = Queue.createBalePromptEnqueueController<ReturnType<typeof message>, string>({
     ...store, prepareTurn,
     hasPendingDispatch: () => pending,
     getFoldQueuedPromptsIntoHistory: () => folding,
     setFoldQueuedPromptsIntoHistory: (value) => { folding = value; },
     updateStatus: () => {},
-    dispatchNextQueuedTelegramTurn: (ctx) => binding.dispatchNext(ctx),
+    dispatchNextQueuedBaleTurn: (ctx) => binding.dispatchNext(ctx),
   });
-  const worker = Updates.createTelegramUpdateWorkerRuntime<string>({
+  const worker = Updates.createBaleUpdateWorkerRuntime<string>({
     journal, hasAuthority: () => true,
     getQueueOwnerIdentity: () => owner,
     getJournalBindingKey: () => "enqueue-race",
@@ -6332,8 +6332,8 @@ async function assertAsynchronousEnqueueProgress(foldHistory: boolean, deferAgen
     },
     onQueueReceiptCommitted: () => deferred.request(binding.dispatchNext),
   });
-  const settlement = Updates.createTelegramQueueAdmissionSettlementRuntime(worker);
-  const startAgentTurn = () => Queue.handleTelegramAgentStartRuntime({
+  const settlement = Updates.createBaleQueueAdmissionSettlementRuntime(worker);
+  const startAgentTurn = () => Queue.handleBaleAgentStartRuntime({
     queuedItems: store.getQueuedItems(), hasPendingDispatch: pending, hasActiveTurn: activeTurn.has(),
     setQueuedItems: store.setQueuedItems, setActiveTurn: activeTurn.set,
     clearDispatchPending: () => { pending = false; },
@@ -6341,7 +6341,7 @@ async function assertAsynchronousEnqueueProgress(foldHistory: boolean, deferAgen
     setFoldQueuedPromptsIntoHistory: () => {}, createPreviewState: () => {},
     startTypingLoop: () => {}, updateStatus: () => {},
   });
-  const binding = Bindings.createTelegramQueueBindingRuntime({
+  const binding = Bindings.createBaleQueueBindingRuntime({
     store, activeTurn, deferredDispatch: deferred,
     queue: { allocateItemOrder: () => ++order },
     lifecycle: { isCompactionInProgress: () => compacting, hasDispatchPending: () => pending },
@@ -6392,7 +6392,7 @@ async function assertAsynchronousEnqueueProgress(foldHistory: boolean, deferAgen
     assert.deepEqual(store.getQueuedItems().flatMap((item) =>
       item.admissionReceipts!.flatMap((receipt) => receipt.sourceUpdateIds)), [2, 3, 4]);
     if (foldHistory) {
-      const text = getRuntimeHarnessTextBlock((store.getQueuedItems()[0] as Queue.PendingTelegramTurn).content).text!;
+      const text = getRuntimeHarnessTextBlock((store.getQueuedItems()[0] as Queue.PendingBaleTurn).content).text!;
       assert.match(text, /1\. prompt-2\n\n2\. prompt-3/);
       assert.doesNotMatch(text, /prompt-1/);
     }
@@ -6439,11 +6439,11 @@ test("Asynchronous enqueue keeps the handed-off head until delayed agent_start",
   assertAsynchronousEnqueueProgress(true, true));
 
 test("Durable worker keeps a poison source while draining independent journal tail", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-poison-tail-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-poison-tail-"));
   const path = join(dir, "inbox.json");
-  const journal = Journal.createTelegramUpdateJournalStore({
+  const journal = Journal.createBaleUpdateJournalStore({
     path,
-    botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+    botIdentity: Journal.createBaleUpdateJournalBotIdentity({
       botToken: "123:poison-tail",
     }),
     getNowMs: () => 1_000,
@@ -6454,7 +6454,7 @@ test("Durable worker keeps a poison source while draining independent journal ta
     { update_id: 3, message: { text: "valid-b" } },
   ]);
   const executed: number[] = [];
-  const worker = Updates.createTelegramUpdateWorkerRuntime({
+  const worker = Updates.createBaleUpdateWorkerRuntime({
     journal,
     hasAuthority: () => true,
     getNowMs: () => 2_000,
@@ -6491,9 +6491,9 @@ test("Durable worker keeps a poison source while draining independent journal ta
 });
 
 test("Live replacement process cannot replay or settle another process queue receipt", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-queue-owner-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-queue-owner-"));
   const path = join(dir, "inbox.json");
-  const processBirthId = ProcessIdentity.getTelegramProcessBirthIdentity(
+  const processBirthId = ProcessIdentity.getBaleProcessBirthIdentity(
     process.pid,
     "fixture-owner",
   );
@@ -6503,9 +6503,9 @@ test("Live replacement process cannot replay or settle another process queue rec
     processBirthId,
     sessionGeneration: 1,
   };
-  const journal = Journal.createTelegramUpdateJournalStore({
+  const journal = Journal.createBaleUpdateJournalStore({
     path,
-    botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+    botIdentity: Journal.createBaleUpdateJournalBotIdentity({
       botToken: "123:queue-owner-worker",
     }),
     queueRuntimeIdentity: {
@@ -6522,7 +6522,7 @@ test("Live replacement process cannot replay or settle another process queue rec
   };
   let processAHasTransport = true;
   let processAExecutions = 0;
-  const processA = Updates.createTelegramUpdateWorkerRuntime({
+  const processA = Updates.createBaleUpdateWorkerRuntime({
     journal,
     hasAuthority: () => processAHasTransport,
     getQueueOwnerIdentity: () => queueOwnerIdentity,
@@ -6563,14 +6563,14 @@ test("Live replacement process cannot replay or settle another process queue rec
 });
 
 test("Transport takeover hands one live-owned prompt to one exact recipient journal", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-transport-handoff-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-transport-handoff-"));
   const journalPath = join(dir, "inbox.json");
   const recipientJournalPath = journalPath;
   const ownersPath = join(dir, "owners.json");
   const socketPath = join(dir, "recipient.sock");
   const donorCwd = "/repo/queue-donor";
   const donorInstanceId = `donor-${process.pid}`;
-  const donorProcessBirthId = ProcessIdentity.getTelegramProcessBirthIdentity(
+  const donorProcessBirthId = ProcessIdentity.getBaleProcessBirthIdentity(
     process.pid,
     donorInstanceId,
   );
@@ -6580,14 +6580,14 @@ test("Transport takeover hands one live-owned prompt to one exact recipient jour
     processBirthId: donorProcessBirthId,
     sessionGeneration: 1,
   };
-  const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({
+  const botIdentity = Journal.createBaleUpdateJournalBotIdentity({
     botToken: "123:queue-owner-worker",
   });
-  const donorJournalBindingKey = Journal.createTelegramUpdateJournalBindingKey({
+  const donorJournalBindingKey = Journal.createBaleUpdateJournalBindingKey({
     path: journalPath,
     botIdentity,
   });
-  const journal = Journal.createTelegramUpdateJournalStore({
+  const journal = Journal.createBaleUpdateJournalStore({
     path: journalPath,
     botIdentity,
     queueRuntimeIdentity: donorOwnerIdentity,
@@ -6600,10 +6600,10 @@ test("Transport takeover hands one live-owned prompt to one exact recipient jour
     journalBindingKey: donorJournalBindingKey,
   };
   const target = { chatId: 7, threadId: 42 };
-  const donorQueue = Queue.createTelegramQueueStore<string>();
+  const donorQueue = Queue.createBaleQueueStore<string>();
   let donorExecutions = 0;
   let authenticatedHandoffs = 0;
-  const donorWorker = Updates.createTelegramUpdateWorkerRuntime({
+  const donorWorker = Updates.createBaleUpdateWorkerRuntime({
     journal,
     hasAuthority: () => true,
     getJournalBindingKey: () => donorJournalBindingKey,
@@ -6631,7 +6631,7 @@ test("Transport takeover hands one live-owned prompt to one exact recipient jour
       }]);
     },
   });
-  const donorLifecycle = Updates.createTelegramUpdateAdmissionLifecycleRuntime<string>({
+  const donorLifecycle = Updates.createBaleUpdateAdmissionLifecycleRuntime<string>({
     resolveBinding: () => ({
       runtimeKey: journalPath,
       recoveryKey: donorJournalBindingKey,
@@ -6640,7 +6640,7 @@ test("Transport takeover hands one live-owned prompt to one exact recipient jour
     getQueueOwnerIdentity: () => donorOwnerIdentity,
     createWorker: () => donorWorker,
   });
-  const donorLock = Locks.createTelegramLockRuntime<{ cwd: string }>({
+  const donorLock = Locks.createBaleLockRuntime<{ cwd: string }>({
     locksPath: ownersPath,
     instanceId: donorInstanceId,
   });
@@ -6687,23 +6687,23 @@ test("Transport takeover hands one live-owned prompt to one exact recipient jour
     assert.equal(donorLock.owns({ cwd: donorCwd }), false);
     assert.equal(process.pid > 0, true);
 
-    const registry = Bus.createTelegramBusFollowerRegistry();
+    const registry = Bus.createBaleBusFollowerRegistry();
     registry.register({
       instanceId: "recipient-process-b",
       profileKey: "manual:recipient-process-b",
       target,
       busSocketPath: socketPath,
       registrationGeneration: "recipient-generation-b",
-      protocol: Bus.createTelegramBusProtocolIdentity({
+      protocol: Bus.createBaleBusProtocolIdentity({
         runtimeBuild: "fixture",
-        capabilities: [Bus.TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF],
+        capabilities: [Bus.BALE_BUS_CAPABILITY_QUEUE_HANDOFF],
       }),
       pid: ready.pid,
       processBirthId: ready.processBirthId,
       sessionGeneration: 1,
       connectedAtMs: Date.now(),
     });
-    const reconcile = Updates.createTelegramQueueHandoffReconciler<string>({
+    const reconcile = Updates.createBaleQueueHandoffReconciler<string>({
       ownsDirect: () => false,
       isFollowerRegistered: () => true,
       isBusEnabled: () => true,
@@ -6722,11 +6722,11 @@ test("Transport takeover hands one live-owned prompt to one exact recipient jour
         assert.equal(receipt.journalBindingKey, donorJournalBindingKey);
         return donorLifecycle;
       },
-      createHandoffToken: Journal.createTelegramUpdateQueueHandoffToken,
+      createHandoffToken: Journal.createBaleUpdateQueueHandoffToken,
       createRequestId: () => "transport-handoff:1",
       donorInstanceId,
       async stageThroughFollower(input) {
-        const response = await Bus.sendTelegramBusLocalEnvelope({
+        const response = await Bus.sendBaleBusLocalEnvelope({
           socketPath,
           timeoutMs: 1_000,
           envelope: {
@@ -6760,10 +6760,10 @@ test("Transport takeover hands one live-owned prompt to one exact recipient jour
           );
         }
         authenticatedHandoffs += 1;
-        return response.result as Queue.TelegramQueueHandoffStageResult;
+        return response.result as Queue.BaleQueueHandoffStageResult;
       },
       async routeThroughLeader(input) {
-        const response = await Bus.sendTelegramBusLocalEnvelope({
+        const response = await Bus.sendBaleBusLocalEnvelope({
           socketPath,
           timeoutMs: 1_000,
           envelope: {
@@ -6795,7 +6795,7 @@ test("Transport takeover hands one live-owned prompt to one exact recipient jour
         };
       },
       removeDonorItem(exactReceipt) {
-        return Queue.removeTelegramQueueItemByReceipt({
+        return Queue.removeBaleQueueItemByReceipt({
           receipt: exactReceipt,
           store: donorQueue,
         });
@@ -6844,13 +6844,13 @@ test("Transport takeover hands one live-owned prompt to one exact recipient jour
 }, 10_000);
 
 test("Queued control handoff reconstructs one local execution in the recipient process", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-control-handoff-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-control-handoff-"));
   const journalPath = join(dir, "inbox.json");
   const ownersPath = join(dir, "owners.json");
   const socketPath = join(dir, "recipient.sock");
   const donorCwd = "/repo/control-donor";
   const donorInstanceId = `control-donor-${process.pid}`;
-  const donorProcessBirthId = ProcessIdentity.getTelegramProcessBirthIdentity(
+  const donorProcessBirthId = ProcessIdentity.getBaleProcessBirthIdentity(
     process.pid,
     donorInstanceId,
   );
@@ -6860,14 +6860,14 @@ test("Queued control handoff reconstructs one local execution in the recipient p
     processBirthId: donorProcessBirthId,
     sessionGeneration: 1,
   };
-  const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({
+  const botIdentity = Journal.createBaleUpdateJournalBotIdentity({
     botToken: "123:queue-owner-worker",
   });
-  const donorJournalBindingKey = Journal.createTelegramUpdateJournalBindingKey({
+  const donorJournalBindingKey = Journal.createBaleUpdateJournalBindingKey({
     path: journalPath,
     botIdentity,
   });
-  const journal = Journal.createTelegramUpdateJournalStore({
+  const journal = Journal.createBaleUpdateJournalStore({
     path: journalPath,
     botIdentity,
     queueRuntimeIdentity: donorOwnerIdentity,
@@ -6880,9 +6880,9 @@ test("Queued control handoff reconstructs one local execution in the recipient p
     journalBindingKey: donorJournalBindingKey,
   };
   const target = { chatId: 7, threadId: 44 };
-  const donorQueue = Queue.createTelegramQueueStore<string>();
+  const donorQueue = Queue.createBaleQueueStore<string>();
   let donorControlExecutions = 0;
-  const donorWorker = Updates.createTelegramUpdateWorkerRuntime({
+  const donorWorker = Updates.createBaleUpdateWorkerRuntime({
     journal,
     hasAuthority: () => true,
     getJournalBindingKey: () => donorJournalBindingKey,
@@ -6907,7 +6907,7 @@ test("Queued control handoff reconstructs one local execution in the recipient p
       }]);
     },
   });
-  const donorLifecycle = Updates.createTelegramUpdateAdmissionLifecycleRuntime<string>({
+  const donorLifecycle = Updates.createBaleUpdateAdmissionLifecycleRuntime<string>({
     resolveBinding: () => ({
       runtimeKey: journalPath,
       recoveryKey: donorJournalBindingKey,
@@ -6916,7 +6916,7 @@ test("Queued control handoff reconstructs one local execution in the recipient p
     getQueueOwnerIdentity: () => donorOwnerIdentity,
     createWorker: () => donorWorker,
   });
-  const donorLock = Locks.createTelegramLockRuntime<{ cwd: string }>({
+  const donorLock = Locks.createBaleLockRuntime<{ cwd: string }>({
     locksPath: ownersPath,
     instanceId: donorInstanceId,
   });
@@ -6943,7 +6943,7 @@ test("Queued control handoff reconstructs one local execution in the recipient p
     assert.ok(expectedOwner);
     const item = donorQueue.getQueuedItems()[0];
     assert.ok(item);
-    const result = await Updates.coordinateTelegramQueueHandoff({
+    const result = await Updates.coordinateBaleQueueHandoff({
       item,
       expectedOwner,
       recipientOwner: {
@@ -6952,10 +6952,10 @@ test("Queued control handoff reconstructs one local execution in the recipient p
         processBirthId: ready.processBirthId,
         sessionGeneration: 1,
       },
-      handoffToken: Journal.createTelegramUpdateQueueHandoffToken(),
+      handoffToken: Journal.createBaleUpdateQueueHandoffToken(),
       lifecycle: donorLifecycle,
       async stageRemote(input) {
-        const response = await Bus.sendTelegramBusLocalEnvelope({
+        const response = await Bus.sendBaleBusLocalEnvelope({
           socketPath,
           timeoutMs: 1_000,
           envelope: {
@@ -6989,10 +6989,10 @@ test("Queued control handoff reconstructs one local execution in the recipient p
         ) {
           throw new Error("control handoff was rejected");
         }
-        return response.result as Queue.TelegramQueueHandoffStageResult;
+        return response.result as Queue.BaleQueueHandoffStageResult;
       },
       removeDonorItem: () =>
-        Queue.removeTelegramQueueItemByReceipt({ receipt, store: donorQueue }),
+        Queue.removeBaleQueueItemByReceipt({ receipt, store: donorQueue }),
     });
     assert.equal(result.status, "transferred");
     assert.equal(donorControlExecutions, 0);
@@ -7024,13 +7024,13 @@ test("Queued control handoff reconstructs one local execution in the recipient p
 }, 10_000);
 
 test("Lost handoff ACK cannot cancel accepted cross-process authority", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-handoff-ack-loss-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-handoff-ack-loss-"));
   const journalPath = join(dir, "inbox.json");
   const ownersPath = join(dir, "owners.json");
   const socketPath = join(dir, "recipient.sock");
   const donorCwd = "/repo/ack-loss-donor";
   const donorInstanceId = `ack-loss-donor-${process.pid}`;
-  const donorProcessBirthId = ProcessIdentity.getTelegramProcessBirthIdentity(
+  const donorProcessBirthId = ProcessIdentity.getBaleProcessBirthIdentity(
     process.pid,
     donorInstanceId,
   );
@@ -7040,14 +7040,14 @@ test("Lost handoff ACK cannot cancel accepted cross-process authority", async ()
     processBirthId: donorProcessBirthId,
     sessionGeneration: 1,
   };
-  const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({
+  const botIdentity = Journal.createBaleUpdateJournalBotIdentity({
     botToken: "123:queue-owner-worker",
   });
-  const donorJournalBindingKey = Journal.createTelegramUpdateJournalBindingKey({
+  const donorJournalBindingKey = Journal.createBaleUpdateJournalBindingKey({
     path: journalPath,
     botIdentity,
   });
-  const journal = Journal.createTelegramUpdateJournalStore({
+  const journal = Journal.createBaleUpdateJournalStore({
     path: journalPath,
     botIdentity,
     queueRuntimeIdentity: donorOwnerIdentity,
@@ -7060,8 +7060,8 @@ test("Lost handoff ACK cannot cancel accepted cross-process authority", async ()
     journalBindingKey: donorJournalBindingKey,
   };
   const target = { chatId: 7, threadId: 43 };
-  const donorQueue = Queue.createTelegramQueueStore<string>();
-  const donorWorker = Updates.createTelegramUpdateWorkerRuntime({
+  const donorQueue = Queue.createBaleQueueStore<string>();
+  const donorWorker = Updates.createBaleUpdateWorkerRuntime({
     journal,
     hasAuthority: () => true,
     getJournalBindingKey: () => donorJournalBindingKey,
@@ -7086,7 +7086,7 @@ test("Lost handoff ACK cannot cancel accepted cross-process authority", async ()
       }]);
     },
   });
-  const donorLifecycle = Updates.createTelegramUpdateAdmissionLifecycleRuntime<string>({
+  const donorLifecycle = Updates.createBaleUpdateAdmissionLifecycleRuntime<string>({
     resolveBinding: () => ({
       runtimeKey: journalPath,
       recoveryKey: donorJournalBindingKey,
@@ -7095,7 +7095,7 @@ test("Lost handoff ACK cannot cancel accepted cross-process authority", async ()
     getQueueOwnerIdentity: () => donorOwnerIdentity,
     createWorker: () => donorWorker,
   });
-  const donorLock = Locks.createTelegramLockRuntime<{ cwd: string }>({
+  const donorLock = Locks.createBaleLockRuntime<{ cwd: string }>({
     locksPath: ownersPath,
     instanceId: donorInstanceId,
   });
@@ -7125,7 +7125,7 @@ test("Lost handoff ACK cannot cancel accepted cross-process authority", async ()
     const item = donorQueue.getQueuedItems()[0];
     assert.ok(item);
     let cancellationAttempts = 0;
-    const result = await Updates.coordinateTelegramQueueHandoff({
+    const result = await Updates.coordinateBaleQueueHandoff({
       item,
       expectedOwner,
       recipientOwner: {
@@ -7134,7 +7134,7 @@ test("Lost handoff ACK cannot cancel accepted cross-process authority", async ()
         processBirthId: ready.processBirthId,
         sessionGeneration: 1,
       },
-      handoffToken: Journal.createTelegramUpdateQueueHandoffToken(),
+      handoffToken: Journal.createBaleUpdateQueueHandoffToken(),
       lifecycle: {
         offerQueueReceiptHandoff: lifecycle.offerQueueReceiptHandoff,
         acceptQueueReceiptHandoff: lifecycle.acceptQueueReceiptHandoff,
@@ -7144,7 +7144,7 @@ test("Lost handoff ACK cannot cancel accepted cross-process authority", async ()
         },
       },
       async stageRemote(input) {
-        const response = await Bus.sendTelegramBusLocalEnvelope({
+        const response = await Bus.sendBaleBusLocalEnvelope({
           socketPath,
           timeoutMs: 5_000,
           envelope: {
@@ -7173,7 +7173,7 @@ test("Lost handoff ACK cannot cancel accepted cross-process authority", async ()
         throw new Error(`unexpected handoff response: ${JSON.stringify(response)}`);
       },
       removeDonorItem: () =>
-        Queue.removeTelegramQueueItemByReceipt({ receipt, store: donorQueue }),
+        Queue.removeBaleQueueItemByReceipt({ receipt, store: donorQueue }),
     });
     assert.equal(result.status, "retained");
     if (result.status !== "retained") assert.fail("expected retained result");
@@ -7208,9 +7208,9 @@ test("Lost handoff ACK cannot cancel accepted cross-process authority", async ()
 }, 10_000);
 
 test("Live owner remains fenced when replacement races dead-owner recovery", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-live-owner-race-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-live-owner-race-"));
   const path = join(dir, "inbox.json");
-  const processBirthId = ProcessIdentity.getTelegramProcessBirthIdentity(
+  const processBirthId = ProcessIdentity.getBaleProcessBirthIdentity(
     process.pid,
     "fixture-live-owner",
   );
@@ -7220,9 +7220,9 @@ test("Live owner remains fenced when replacement races dead-owner recovery", asy
     processBirthId,
     sessionGeneration: 1,
   };
-  const ownerJournal = Journal.createTelegramUpdateJournalStore({
+  const ownerJournal = Journal.createBaleUpdateJournalStore({
     path,
-    botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+    botIdentity: Journal.createBaleUpdateJournalBotIdentity({
       botToken: "123:queue-owner-worker",
     }),
     queueRuntimeIdentity: {
@@ -7239,7 +7239,7 @@ test("Live owner remains fenced when replacement races dead-owner recovery", asy
     receiptId: "process-a-receipt",
     sourceUpdateIds: [1],
   };
-  const ownerWorker = Updates.createTelegramUpdateWorkerRuntime({
+  const ownerWorker = Updates.createBaleUpdateWorkerRuntime({
     journal: ownerJournal,
     hasAuthority: () => true,
     getQueueOwnerIdentity: () => ownerIdentity,
@@ -7276,7 +7276,7 @@ test("Live owner remains fenced when replacement races dead-owner recovery", asy
 });
 
 test("Live Windows queue owner remains unrecoverable and unreplayable without a birth proof", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-windows-owner-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-windows-owner-"));
   const path = join(dir, "inbox.json");
   const foreignOwner = {
     instanceId: "windows-owner",
@@ -7291,7 +7291,7 @@ test("Live Windows queue owner remains unrecoverable and unreplayable without a 
     JSON.stringify({
       version: 1,
       profile: "default",
-      botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+      botIdentity: Journal.createBaleUpdateJournalBotIdentity({
         botToken: "123:queue-owner-worker",
       }),
       entries: [
@@ -7314,20 +7314,20 @@ test("Live Windows queue owner remains unrecoverable and unreplayable without a 
     processBirthId: "5252:generation:windows-replacement",
     sessionGeneration: 1,
   };
-  const journal = Journal.createTelegramUpdateJournalStore({
+  const journal = Journal.createBaleUpdateJournalStore({
     path,
-    botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+    botIdentity: Journal.createBaleUpdateJournalBotIdentity({
       botToken: "123:queue-owner-worker",
     }),
     queueRuntimeIdentity: replacementIdentity,
     getQueueProcessLiveness: (owner) =>
-      ProcessIdentity.getTelegramProcessLiveness(owner, {
+      ProcessIdentity.getBaleProcessLiveness(owner, {
         platform: "win32",
         isProcessAlive: () => true,
       }),
   });
   let executionCount = 0;
-  const worker = Updates.createTelegramUpdateWorkerRuntime({
+  const worker = Updates.createBaleUpdateWorkerRuntime({
     journal,
     hasAuthority: () => true,
     getQueueOwnerIdentity: () => replacementIdentity,
@@ -7364,7 +7364,7 @@ test("Live Windows queue owner remains unrecoverable and unreplayable without a 
           },
         ]),
       (error) =>
-        error instanceof Journal.TelegramUpdateJournalError &&
+        error instanceof Journal.BaleUpdateJournalError &&
         error.code === "conflict",
     );
   } finally {
@@ -7374,12 +7374,12 @@ test("Live Windows queue owner remains unrecoverable and unreplayable without a 
 });
 
 test("Replacement registration stays live while its process races dead-owner recovery", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-registration-recovery-race-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-registration-recovery-race-"));
   const journalPath = join(dir, "inbox.json");
   const socketPath = join(dir, "leader.sock");
   const startPath = join(dir, "start");
   const instanceId = "replacement-race";
-  const botIdentity = Journal.createTelegramUpdateJournalBotIdentity({
+  const botIdentity = Journal.createBaleUpdateJournalBotIdentity({
     botToken: "123:queue-owner-worker",
   });
   await writeFile(
@@ -7429,7 +7429,7 @@ test("Replacement registration stays live while its process races dead-owner rec
     });
     assert.equal(result.registeredPid > 0, true);
     assert.notEqual(result.registeredProcessBirthId, "2000000000:start:dead");
-    const journal = Journal.createTelegramUpdateJournalStore({
+    const journal = Journal.createBaleUpdateJournalStore({
       path: journalPath,
       botIdentity,
     });
@@ -7444,7 +7444,7 @@ test("Replacement registration stays live while its process races dead-owner rec
 }, 10_000);
 
 test("Replacement process discards dead session-owned queue authority", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-dead-owner-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-dead-owner-"));
   const path = join(dir, "inbox.json");
   const deadOwner = {
     instanceId: "dead-owner-instance",
@@ -7459,7 +7459,7 @@ test("Replacement process discards dead session-owned queue authority", async ()
     JSON.stringify({
       version: 1,
       profile: "default",
-      botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+      botIdentity: Journal.createBaleUpdateJournalBotIdentity({
         botToken: "123:queue-owner-worker",
       }),
       entries: [
@@ -7489,9 +7489,9 @@ test("Replacement process discards dead session-owned queue authority", async ()
       directCompletionError: "conflict",
       recoveryStatus: "recovered",
     });
-    const journal = Journal.createTelegramUpdateJournalStore({
+    const journal = Journal.createBaleUpdateJournalStore({
       path,
-      botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+      botIdentity: Journal.createBaleUpdateJournalBotIdentity({
         botToken: "123:queue-owner-worker",
       }),
     });
@@ -7502,12 +7502,12 @@ test("Replacement process discards dead session-owned queue authority", async ()
 });
 
 test("Extension startup preserves queued authority owned by another process", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const agentDir = await ensureRuntimeAgentDir();
-  const journalPath = join(agentDir, "tmp", "pi-telegram", "inbox.json");
-  const journal = Journal.createTelegramUpdateJournalStore({
+  const journalPath = join(agentDir, "tmp", "pi-bale", "inbox.json");
+  const journal = Journal.createBaleUpdateJournalStore({
     path: journalPath,
-    botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+    botIdentity: Journal.createBaleUpdateJournalBotIdentity({
       botToken: "123:recovery",
     }),
   });
@@ -7516,27 +7516,27 @@ test("Extension startup preserves queued authority owned by another process", as
     sendUserMessage: (content) => dispatched.push(content),
   });
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook" || method === "setMyCommands") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getMe") {
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         id: 123,
         username: "recovery_bot",
         has_topics_enabled: false,
       });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:recovery",
       allowedUserId: 77,
       lastUpdateId: 502,
@@ -7568,18 +7568,18 @@ test("Extension startup preserves queued authority owned by another process", as
       owner: {
         instanceId: "foreign-instance",
         processId: process.pid,
-        processBirthId: ProcessIdentity.getTelegramProcessBirthIdentity(
+        processBirthId: ProcessIdentity.getBaleProcessBirthIdentity(
           process.pid,
           "foreign-live-owner",
         ),
         sessionGeneration: 4,
       },
     });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({ cwd: "/repo/journal-recovery" });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await flushMicrotasks();
     await waitForTimeout(20);
 
@@ -7611,13 +7611,13 @@ test("Extension startup preserves queued authority owned by another process", as
   } finally {
     restoreFetch();
     await rm(journalPath, { force: true });
-    await writeRuntimeTelegramLocks({});
-    await telegramConfig.restore();
+    await writeRuntimeBaleLocks({});
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime coalesces a cross-batch forward comment into one Pi turn", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentMessages: RuntimeHarnessMessage[] = [];
   let resolveDispatch!: (value: RuntimeHarnessMessage) => void;
   const dispatched = new Promise<RuntimeHarnessMessage>((resolve) => {
@@ -7631,14 +7631,14 @@ test("Extension runtime coalesces a cross-batch forward comment into one Pi turn
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             update_id: 10,
             message: {
@@ -7651,7 +7651,7 @@ test("Extension runtime coalesces a cross-batch forward comment into one Pi turn
         ]);
       }
       if (getUpdatesCalls === 2) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             update_id: 11,
             message: {
@@ -7675,37 +7675,37 @@ test("Extension runtime coalesces a cross-batch forward comment into one Pi turn
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext();
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     const dispatchedContent = await dispatched;
     assert.equal(sentMessages.length, 1);
     const promptBlock = getRuntimeHarnessTextBlock(dispatchedContent);
     assert.equal(
       promptBlock.text,
-      "[telegram] Мой комментарий\n\n[forward|from:source] Пересланный текст",
+      "[bale] Мой комментарий\n\n[forward|from:source] Пересланный текст",
     );
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime fences queued final and preview after polling ownership moves away", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
-  const extension = await getRuntimeTelegramExtension();
+  const baleConfig = await createRuntimeBaleConfigFixture();
+  const extension = await getRuntimeBaleExtension();
   let resolveDispatch: (() => void) | undefined;
   const dispatched = new Promise<void>((resolve) => {
     resolveDispatch = resolve;
@@ -7722,15 +7722,15 @@ test("Extension runtime fences queued final and preview after polling ownership 
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -7745,21 +7745,21 @@ test("Extension runtime fences queued final and preview after polling ownership 
       }
       if (getUpdatesCalls === 2) {
         return new Promise<Response>((resolve) => {
-          releasePolling = () => resolve(createRuntimeTelegramApiResponse([]));
+          releasePolling = () => resolve(createRuntimeBaleApiResponse([]));
         });
       }
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessageDraft") {
       draftTexts.push(String(body?.text ?? ""));
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "sendRichMessageDraft") {
       const richMessage = body?.rich_message as
         | { markdown?: string }
         | undefined;
       draftTexts.push(String(richMessage?.markdown ?? ""));
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "sendRichMessage") {
       const richMessage = body?.rich_message as
@@ -7767,29 +7767,29 @@ test("Extension runtime fences queued final and preview after polling ownership 
         | undefined;
       sentTexts.push(String(richMessage?.markdown ?? ""));
       sentBodies.push(body ?? {});
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_id: 100 + sentTexts.length,
       });
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
       sentTexts.push(String(body?.text ?? ""));
       sentBodies.push(body ?? {});
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_id: 100 + sentTexts.length,
       });
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "editMessageText") {
       editedTexts.push(String(body?.text ?? ""));
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
     mock.timers.enable({ apis: ["setTimeout"] });
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
@@ -7797,10 +7797,10 @@ test("Extension runtime fences queued final and preview after polling ownership 
     extension(pi);
     const ctx = createRuntimeExtensionContext();
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await dispatched;
     await handlers.get("agent_start")?.({}, ctx);
-    await writeRuntimeTelegramLocks({
+    await writeRuntimeBaleLocks({
       default: {
         pid: process.pid + 1_000_000,
         cwd: "/tmp/other-pi-instance",
@@ -7838,7 +7838,7 @@ test("Extension runtime fences queued final and preview after polling ownership 
     assert.deepEqual(sentBodies, []);
     assert.deepEqual(editedTexts, []);
     assert.deepEqual(
-      (await readRuntimeTelegramLocks()).default,
+      (await readRuntimeBaleLocks()).default,
       { pid: process.pid + 1_000_000, cwd: "/tmp/other-pi-instance" },
     );
     releasePolling?.();
@@ -7846,7 +7846,7 @@ test("Extension runtime fences queued final and preview after polling ownership 
   } finally {
     mock.timers.reset();
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
@@ -7854,13 +7854,13 @@ test("Cancelled threaded startup cannot restart health or overwrite a replacemen
   t.mock.timers.enable({ apis: ["setInterval"] });
   for (const outcome of ["resolve", "reject"] as const) {
     for (const reconnect of [false, true]) {
-      const dir = await mkdtemp(join(tmpdir(), "pi-telegram-conflict-startup-"));
+      const dir = await mkdtemp(join(tmpdir(), "pi-bale-conflict-startup-"));
       const ctx = { cwd: "/startup-fixture" };
-      const lock = Locks.createTelegramLockRuntime<typeof ctx>({
+      const lock = Locks.createBaleLockRuntime<typeof ctx>({
         locksPath: join(dir, "owners.json"), instanceId: "fixture",
       });
-      const state = Polling.createTelegramThreadCapabilityStateRuntime();
-      let botState: Polling.TelegramThreadCapabilityState = {};
+      const state = Polling.createBaleThreadCapabilityStateRuntime();
+      let botState: Polling.BaleThreadCapabilityState = {};
       let releaseOld!: () => void;
       let releaseNew!: () => void;
       let enteredOld!: () => void;
@@ -7872,11 +7872,11 @@ test("Cancelled threaded startup cannot restart health or overwrite a replacemen
       let workers = 0;
       let healthStarts = 0;
       let probes = 0;
-      const health = Sync.createTelegramLeaderHealthRuntime({
+      const health = Sync.createBaleLeaderHealthRuntime({
         callGetMe: async () => { probes++; },
         getSyncState: () => ({}), setSyncState: () => {}, recordEvent: () => {},
       });
-      const controller = Polling.createTelegramPollingController<typeof ctx>({
+      const controller = Polling.createBalePollingController<typeof ctx>({
         hasBotToken: () => true, stopTypingLoop: () => {}, updateStatus: () => {},
         runPollLoop: async (_ctx, signal) => {
           await new Promise<void>((resolve) => {
@@ -7885,7 +7885,7 @@ test("Cancelled threaded startup cannot restart health or overwrite a replacemen
           });
         },
       });
-      const admission = Polling.createTelegramPollingAdmissionRuntime({
+      const admission = Polling.createBalePollingAdmissionRuntime({
         polling: controller, canStart: lock.owns,
         worker: { onSessionStart: async () => {
           workers++;
@@ -7899,7 +7899,7 @@ test("Cancelled threaded startup cannot restart health or overwrite a replacemen
           }
         } },
       });
-      const ports = Polling.createTelegramThreadAwarePollingPorts({
+      const ports = Polling.createBaleThreadAwarePollingPorts({
         getAllowedUserId: () => 1,
         callApi: async <TResponse,>() => ({ has_topics_enabled: true }) as TResponse,
         topicTargetStore: {
@@ -7908,8 +7908,8 @@ test("Cancelled threaded startup cannot restart health or overwrite a replacemen
         },
         isBusRuntimeEnabled: state.isBusRuntimeEnabled,
         isTopicModeUnavailableError: () => true,
-        getPollingStartedWithTelegramBus: state.isBusPollingStarted,
-        setPollingStartedWithTelegramBus: state.setBusPollingStarted,
+        getPollingStartedWithBaleBus: state.isBusPollingStarted,
+        setPollingStartedWithBaleBus: state.setBusPollingStarted,
         setForceFreshLeaderThreadOnNextStart: state.setForceFreshLeaderThread,
         setTopicModeUnavailable: state.setTopicModeUnavailable,
         startClassicPolling: () => assert.fail("Obsolete startup must not fall back to classic polling"),
@@ -7918,7 +7918,7 @@ test("Cancelled threaded startup cannot restart health or overwrite a replacemen
         startLeaderHealth: () => { healthStarts++; health.start(); }, stopLeaderHealth: health.stop,
         registerFollowerWithLeader: async () => false, stopFollowerRegistration: () => {}, recordEvent: () => {},
       });
-      const runtime = Locks.createTelegramLockedPollingRuntime({
+      const runtime = Locks.createBaleLockedPollingRuntime({
         lock, hasBotToken: () => true, isContextCurrent: (context) => context === ctx,
         ownershipCheckMs: 1_000_000, ownershipRefreshMs: 1_000_000,
         startPolling: ports.startPolling, stopPolling: ports.stopPolling, updateStatus: () => {},
@@ -7963,7 +7963,7 @@ test("Cancelled threaded startup cannot restart health or overwrite a replacemen
 
 for (const loss of ["ownership", "persistent-conflict"] as const) {
 test(`Extension runtime preserves accepted work and fences delivery after ${loss}`, async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentMessages: RuntimeHarnessMessage[] = [];
   const sentBodies: Array<Record<string, unknown>> = [];
   const { handlers, commands, pi, getActiveTools } = createRuntimePiHarness({
@@ -7976,15 +7976,15 @@ test(`Extension runtime preserves accepted work and fences delivery after ${loss
   const conflictGate = new Promise<void>((resolve) => { releaseConflicts = resolve; });
   const ctx = createRuntimeExtensionContext({ cwd: "/repo/queue-owner-a" });
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -8009,45 +8009,45 @@ test(`Extension runtime preserves accepted work and fences delivery after ${loss
       }
       if (loss === "persistent-conflict") {
         await conflictGate;
-        return createRuntimeTelegramApiErrorResponse(409,
+        return createRuntimeBaleApiErrorResponse(409,
           "Conflict: terminated by other getUpdates request");
       }
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendRichMessage") {
       sentBodies.push(body ?? {});
-      return createRuntimeTelegramApiResponse({ message_id: 100 });
+      return createRuntimeBaleApiResponse({ message_id: 100 });
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
       sentBodies.push(body ?? {});
-      return createRuntimeTelegramApiResponse({ message_id: 100 });
+      return createRuntimeBaleApiResponse({ message_id: 100 });
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForCondition(() => sentMessages.length === 1);
     assert.match(
       getRuntimeHarnessMessageText(sentMessages[0] as RuntimeHarnessMessage),
-      /^\[telegram\] first accepted$/,
+      /^\[bale\] first accepted$/,
     );
     // The transport section names the polling journal hosted by the leading session.
-    const journalPath = Locks.readTelegramLockJournalPath((await readRuntimeTelegramLocks()).default)!;
+    const journalPath = Locks.readBaleLockJournalPath((await readRuntimeBaleLocks()).default)!;
     assert.match(journalPath, /sessions[\\/][^\\/]+[\\/]inbox\.json$/u);
-    const runtimeJournal = Journal.createTelegramUpdateJournalStore({
+    const runtimeJournal = Journal.createBaleUpdateJournalStore({
       path: journalPath,
-      botIdentity: Journal.createTelegramUpdateJournalBotIdentity({
+      botIdentity: Journal.createBaleUpdateJournalBotIdentity({
         botToken: "123:abc",
       }),
     });
@@ -8060,16 +8060,16 @@ test(`Extension runtime preserves accepted work and fences delivery after ${loss
     );
     await handlers.get("agent_start")?.({}, ctx);
     if (loss === "ownership") {
-      await writeRuntimeTelegramLocks({
+      await writeRuntimeBaleLocks({
         default: { pid: process.pid + 1_000_000, cwd: "/repo/queue-owner-b" },
       });
     } else {
-      assert.ok(getActiveTools().includes("telegram_message"));
+      assert.ok(getActiveTools().includes("bale_message"));
       releaseConflicts();
-      await waitForCondition(() => !getActiveTools().includes("telegram_message"), 30_000);
+      await waitForCondition(() => !getActiveTools().includes("bale_message"), 30_000);
       assert.equal(getUpdatesCalls, 11);
-      assert.equal(Locks.parseTelegramLockEntry((await readRuntimeTelegramLocks()).default), undefined, "Released: no owner remains");
-      assert.equal(Locks.readTelegramLockJournalPath((await readRuntimeTelegramLocks()).default), journalPath, "The pointer keeps polling custody");
+      assert.equal(Locks.parseBaleLockEntry((await readRuntimeBaleLocks()).default), undefined, "Released: no owner remains");
+      assert.equal(Locks.readBaleLockJournalPath((await readRuntimeBaleLocks()).default), journalPath, "The pointer keeps polling custody");
       assert.ok(runtimeJournal.read().entries.some((entry) => entry.updateId === 2 && entry.state === "queued"));
     }
     await handlers.get("agent_end")?.(
@@ -8089,63 +8089,63 @@ test(`Extension runtime preserves accepted work and fences delivery after ${loss
     assert.deepEqual(sentBodies, []);
     assert.match(
       getRuntimeHarnessMessageText(sentMessages[1] as RuntimeHarnessMessage),
-      /^\[telegram\] second queued$/,
+      /^\[bale\] second queued$/,
     );
   } finally {
     releaseConflicts();
     await handlers.get("session_shutdown")?.({}, ctx);
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 }, 40_000);
 }
 
-test("Extension runtime ignores the retired proactive opt-out while Telegram is connected", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+test("Extension runtime ignores the retired proactive opt-out while Bale is connected", async () => {
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentBodies: Array<Record<string, unknown>> = [];
   const typingBodies: Array<Record<string, unknown>> = [];
   const { handlers, commands, pi, getActiveTools } = createRuntimePiHarness();
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
       sentBodies.push(parseJsonRequestBody(init) ?? {});
-      return createRuntimeTelegramApiResponse({ message_id: 100 });
+      return createRuntimeBaleApiResponse({ message_id: 100 });
     }
     if (method === "sendChatAction") {
       typingBodies.push(parseJsonRequestBody(init) ?? {});
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
       assistant: { proactivePush: false },
     });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({
       cwd: "/repo/proactive-disabled-owner",
     });
     await handlers.get("session_start")?.({}, ctx);
     assert.deepEqual(getActiveTools(), ["read", "foreign_tool"]);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     assert.deepEqual(getActiveTools(), [
       "read",
       "foreign_tool",
-      "telegram_attach",
-      "telegram_bind",
-      "telegram_channel_post",
-      "telegram_channel_posts",
-      "telegram_message",
+      "bale_attach",
+      "bale_bind",
+      "bale_channel_post",
+      "bale_channel_posts",
+      "bale_message",
     ]);
     await flushMicrotasks(20);
     await handlers.get("input")?.(
@@ -8195,7 +8195,7 @@ test("Extension runtime ignores the retired proactive opt-out while Telegram is 
       { type: "agent_end", messages: [assistantMessage] },
       ctx,
     );
-    await commands.get("telegram-disconnect")?.handler("", ctx);
+    await commands.get("bale-disconnect")?.handler("", ctx);
     assert.deepEqual(getActiveTools(), ["read", "foreign_tool"]);
     assert.deepEqual(
       await handlers.get("before_agent_start")?.(
@@ -8207,19 +8207,19 @@ test("Extension runtime ignores the retired proactive opt-out while Telegram is 
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 strictFileTest("Channel post tool does not resend lost success or outcome across reconnect replacement", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const { handlers, commands, tools, pi } = createRuntimePiHarness();
   let sends = 0;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
-    if (method === "deleteWebhook") return createRuntimeTelegramApiResponse(true);
+    const method = getRuntimeBaleApiMethod(input);
+    if (method === "deleteWebhook") return createRuntimeBaleApiResponse(true);
     if (method === "getUpdates") throw new DOMException("stop", "AbortError");
-    if (method === "getChat") return createRuntimeTelegramApiResponse({
+    if (method === "getChat") return createRuntimeBaleApiResponse({
       id: -100123, type: "channel", username: "public_channel", title: "Public Channel",
     });
     if (method === "sendRichMessage") {
@@ -8228,26 +8228,26 @@ strictFileTest("Channel post tool does not resend lost success or outcome across
       if ((body.rich_message as { markdown?: unknown } | undefined)?.markdown === "Ambiguous") {
         throw new Error("lost Bot API response");
       }
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_id: 91, chat: { id: -100123, type: "channel" },
       });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0 });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await baleConfig.write({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0 });
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({ cwd: "/repo/channel-replacement" });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
-    const tool = tools.get("telegram_message");
+    await commands.get("bale-connect")?.handler("", ctx);
+    const tool = tools.get("bale_message");
     assert.ok(tool);
     await tool.execute("stable-channel-operation", {
       text: "Channel post", chat_id: -100123, channel: true,
     });
-    await commands.get("telegram-disconnect")?.handler("", ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-disconnect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await tool.execute("stable-channel-operation", {
       text: "Channel post", chat_id: -100123, channel: true,
     });
@@ -8255,22 +8255,22 @@ strictFileTest("Channel post tool does not resend lost success or outcome across
     await assert.rejects(tool.execute("ambiguous-channel-operation", {
       text: "Ambiguous", chat_id: -100123, channel: true,
     }), /channel publication failed/u);
-    await commands.get("telegram-disconnect")?.handler("", ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-disconnect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await assert.rejects(tool.execute("ambiguous-channel-operation", {
       text: "Ambiguous", chat_id: -100123, channel: true,
     }), /channel publication failed/u);
     assert.equal(sends, 2);
-    await commands.get("telegram-disconnect")?.handler("", ctx);
+    await commands.get("bale-disconnect")?.handler("", ctx);
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 strictFileTest("Channel media tool publishes one local upload and edits its caption without replay", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const { handlers, commands, tools, pi } = createRuntimePiHarness();
   const agentDir = await ensureRuntimeAgentDir();
   const mediaPath = join(agentDir, "channel-cover.jpg");
@@ -8278,10 +8278,10 @@ strictFileTest("Channel media tool publishes one local upload and edits its capt
   const calls: Array<{ method: string; caption?: unknown; mediaPresent?: boolean }> = [];
   let sends = 0;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
-    if (method === "deleteWebhook") return createRuntimeTelegramApiResponse(true);
+    const method = getRuntimeBaleApiMethod(input);
+    if (method === "deleteWebhook") return createRuntimeBaleApiResponse(true);
     if (method === "getUpdates") throw new DOMException("stop", "AbortError");
-    if (method === "getChat") return createRuntimeTelegramApiResponse({
+    if (method === "getChat") return createRuntimeBaleApiResponse({
       id: -100123, type: "channel", username: "public_channel", title: "Public Channel",
     });
     if (method === "sendPhoto" || method === "sendVideo") {
@@ -8291,28 +8291,28 @@ strictFileTest("Channel media tool publishes one local upload and edits its capt
       calls.push({ method,
         caption: body instanceof FormData ? body.get("caption") : undefined,
         mediaPresent: body instanceof FormData && body.get(fileField) !== null });
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_id: 92, chat: { id: -100123, type: "channel" },
       });
     }
     if (method === "editMessageCaption") {
       calls.push({ method, caption: (parseJsonRequestBody(init) ?? {}).caption });
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_id: 92, chat: { id: -100123, type: "channel" },
       });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0 });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await baleConfig.write({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0 });
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({ cwd: "/repo/channel-media" });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
-    const messageTool = tools.get("telegram_message");
-    const mutationTool = tools.get("telegram_channel_post");
-    const listTool = tools.get("telegram_channel_posts");
+    await commands.get("bale-connect")?.handler("", ctx);
+    const messageTool = tools.get("bale_message");
+    const mutationTool = tools.get("bale_channel_post");
+    const listTool = tools.get("bale_channel_posts");
     assert.ok(messageTool);
     assert.ok(mutationTool);
     assert.ok(listTool);
@@ -8348,24 +8348,24 @@ strictFileTest("Channel media tool publishes one local upload and edits its capt
     assert.equal(calls[1]?.caption, "<tg-spoiler>Hidden</tg-spoiler> update");
     assert.equal(calls[2]?.caption, "Clip");
     assert.equal(calls[2]?.mediaPresent, true);
-    await commands.get("telegram-disconnect")?.handler("", ctx);
+    await commands.get("bale-disconnect")?.handler("", ctx);
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
     await rm(mediaPath, { force: true });
   }
 });
 
 test("Extension runtime resolves stale same-cwd lock before proactive local result", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentBodies: Array<Record<string, unknown>> = [];
   let getUpdatesCalls = 0;
   const { handlers, pi } = createRuntimePiHarness();
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
@@ -8373,29 +8373,29 @@ test("Extension runtime resolves stale same-cwd lock before proactive local resu
     }
     if (method === "sendRichMessage") {
       sentBodies.push(parseJsonRequestBody(init) ?? {});
-      return createRuntimeTelegramApiResponse({ message_id: 100 });
+      return createRuntimeBaleApiResponse({ message_id: 100 });
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
       sentBodies.push(parseJsonRequestBody(init) ?? {});
-      return createRuntimeTelegramApiResponse({ message_id: 100 });
+      return createRuntimeBaleApiResponse({ message_id: 100 });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
     const cwd = "/repo/proactive-stale-owner";
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
       assistant: { proactivePush: true },
     });
-    await writeRuntimeTelegramLocks({
+    await writeRuntimeBaleLocks({
       default: {
         pid: process.pid + 1_000_000,
         cwd,
       },
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({ cwd });
     await handlers.get("session_start")?.({}, ctx);
     await waitForEventLoopCondition(() => getUpdatesCalls >= 1, 5000);
@@ -8455,46 +8455,46 @@ test("Extension runtime resolves stale same-cwd lock before proactive local resu
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime sends proactive checkpoints and final once in source order", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentBodies: Array<Record<string, unknown>> = [];
   const { handlers, commands, pi } = createRuntimePiHarness();
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendRichMessage") {
       sentBodies.push(parseJsonRequestBody(init) ?? {});
-      return createRuntimeTelegramApiResponse({ message_id: 100 });
+      return createRuntimeBaleApiResponse({ message_id: 100 });
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
       sentBodies.push(parseJsonRequestBody(init) ?? {});
-      return createRuntimeTelegramApiResponse({ message_id: 100 });
+      return createRuntimeBaleApiResponse({ message_id: 100 });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
       assistant: { proactivePush: true },
     });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({
       cwd: "/repo/proactive-owner",
     });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await flushMicrotasks(20);
     await handlers.get("input")?.(
       { source: "interactive", text: "local request" },
@@ -8600,16 +8600,16 @@ test("Extension runtime sends proactive checkpoints and final once in source ord
       sentMarkdown.some((text) => text.includes("private reasoning")),
       false,
     );
-    await commands.get("telegram-disconnect")?.handler("", ctx);
+    await commands.get("bale-disconnect")?.handler("", ctx);
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime drops queued proactive blocks after session replacement", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   let sendCalls = 0;
   let getUpdatesCalls = 0;
   let markFirstSendStarted!: () => void;
@@ -8622,9 +8622,9 @@ test("Extension runtime drops queued proactive blocks after session replacement"
   });
   const { handlers, pi } = createRuntimePiHarness();
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
@@ -8636,22 +8636,22 @@ test("Extension runtime drops queued proactive blocks after session replacement"
         markFirstSendStarted();
         await firstSendGate;
       }
-      return createRuntimeTelegramApiResponse({ message_id: 100 + sendCalls });
+      return createRuntimeBaleApiResponse({ message_id: 100 + sendCalls });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
     const cwd = "/repo/proactive-replacement";
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
       assistant: { proactivePush: true },
     });
-    await writeRuntimeTelegramLocks({
+    await writeRuntimeBaleLocks({
       default: { pid: process.pid + 1_000_000, cwd },
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const oldCtx = createRuntimeExtensionContext({ cwd });
     await handlers.get("session_start")?.({}, oldCtx);
     await waitForEventLoopCondition(() => getUpdatesCalls >= 1, 5000);
@@ -8725,36 +8725,36 @@ test("Extension runtime drops queued proactive blocks after session replacement"
   } finally {
     releaseFirstSend();
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
-test("Extension runtime skips proactive local result without Telegram lock ownership", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+test("Extension runtime skips proactive local result without Bale lock ownership", async () => {
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentBodies: Array<Record<string, unknown>> = [];
   const { handlers, pi } = createRuntimePiHarness();
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "sendMessage" || method === "sendRichMessage") {
       sentBodies.push(parseJsonRequestBody(init) ?? {});
-      return createRuntimeTelegramApiResponse({ message_id: 100 });
+      return createRuntimeBaleApiResponse({ message_id: 100 });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
       assistant: { proactivePush: true },
     });
-    await writeRuntimeTelegramLocks({
+    await writeRuntimeBaleLocks({
       default: {
         pid: process.pid + 1_000_000,
         cwd: "/repo/another-instance",
       },
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({
       cwd: "/repo/proactive-non-owner",
     });
@@ -8774,13 +8774,13 @@ test("Extension runtime skips proactive local result without Telegram lock owner
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 for (const [draftPreviews, activity] of [[false, "quiet"], [true, "quiet"], [false, "thinking"], [true, "verbose"]] as const) {
-test(`Extension runtime delivers anchored Telegram commentary once before final with preview ${draftPreviews ? "on" : "off"} (${activity})`, async (t) => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+test(`Extension runtime delivers anchored Bale commentary once before final with preview ${draftPreviews ? "on" : "off"} (${activity})`, async (t) => {
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentMessages: RuntimeHarnessMessage[] = [];
   const deliveredMarkdown: string[] = [];
   const replyAnchors: unknown[] = [];
@@ -8794,15 +8794,15 @@ test(`Extension runtime delivers anchored Telegram commentary once before final 
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init) ?? {};
     if (method === "deleteWebhook" || method === "setMyCommands") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -8822,10 +8822,10 @@ test(`Extension runtime delivers anchored Telegram commentary once before final 
       });
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    if (method === "sendRichMessageDraft" || method === "sendMessageDraft" || method === "editMessageText") return createRuntimeTelegramApiResponse(true);
-    if (method === "sendRichMessage" && !String((body.rich_message as { markdown?: string } | undefined)?.markdown ?? "").includes("Checkpoint") && !String((body.rich_message as { markdown?: string } | undefined)?.markdown ?? "").includes("Final")) return createRuntimeTelegramApiResponse({ message_id: 300 });
+    if (method === "sendRichMessageDraft" || method === "sendMessageDraft" || method === "editMessageText") return createRuntimeBaleApiResponse(true);
+    if (method === "sendRichMessage" && !String((body.rich_message as { markdown?: string } | undefined)?.markdown ?? "").includes("Checkpoint") && !String((body.rich_message as { markdown?: string } | undefined)?.markdown ?? "").includes("Final")) return createRuntimeBaleApiResponse({ message_id: 300 });
     if (method === "sendRichMessage") {
       replyAnchors.push(body.reply_parameters);
       deliveredMarkdown.push(
@@ -8834,24 +8834,24 @@ test(`Extension runtime delivers anchored Telegram commentary once before final 
             "",
         ),
       );
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_id: 100 + deliveredMarkdown.length,
       });
     }
     if (method === "sendMessage") {
-      return createRuntimeTelegramApiResponse({ message_id: 200 });
+      return createRuntimeBaleApiResponse({ message_id: 200 });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
       assistant: { activity, proactivePush: true, draftPreviews, rendering: "rich" },
     });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     const idleCtx = createRuntimeExtensionContext();
     shutdownContext = idleCtx;
     const activeCtx = createRuntimeExtensionContext({
@@ -8859,11 +8859,11 @@ test(`Extension runtime delivers anchored Telegram commentary once before final 
       isIdle: () => false,
     });
     await handlers.get("session_start")?.({}, idleCtx);
-    await commands.get("telegram-connect")?.handler("", idleCtx);
+    await commands.get("bale-connect")?.handler("", idleCtx);
     await waitForRuntimeState(t, "initial prompt dispatch", () => dispatched);
     assert.match(
       getRuntimeHarnessTextBlock(sentMessages[0]).text ?? "",
-      /^\[telegram\] show checkpoints/,
+      /^\[bale\] show checkpoints/,
     );
     await handlers.get("agent_start")?.({}, activeCtx);
     const checkpointMessage = {
@@ -8937,7 +8937,7 @@ test(`Extension runtime delivers anchored Telegram commentary once before final 
     ]);
     await waitForRuntimeState(t, "settled final delivery", () => deliveredMarkdown.length >= 2);
     await new Promise<void>((resolve) => setImmediate(resolve));
-    assert.equal(deliveredMarkdown.length, 2, "One active Telegram turn may publish its final answer only once");
+    assert.equal(deliveredMarkdown.length, 2, "One active Bale turn may publish its final answer only once");
     assert.deepEqual(deliveredMarkdown, [
       "Checkpoint **visible**",
       "Final **answer**",
@@ -8952,7 +8952,7 @@ test(`Extension runtime delivers anchored Telegram commentary once before final 
       if (shutdownContext) await handlers.get("session_shutdown")?.({}, shutdownContext);
     } finally {
       restoreFetch();
-      await telegramConfig.restore();
+      await baleConfig.restore();
     }
   }
 }, 20_000);
@@ -8961,20 +8961,20 @@ test(`Extension runtime delivers anchored Telegram commentary once before final 
 
 for (const [draftPreviews, activity] of [[false, "thinking"], [true, "quiet"]] as const) {
 test(`Extension runtime delivers the final answer before automatic compaction completes (${activity}, preview ${draftPreviews ? "on" : "off"})`, async (t) => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const deliveredMarkdown: string[] = [];
   let dispatched = false;
   let shutdownContext: ReturnType<typeof createRuntimeExtensionContext> | undefined;
   const { handlers, commands, pi } = createRuntimePiHarness({ sendUserMessage: () => { dispatched = true; } });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init) ?? {};
-    if (method === "deleteWebhook" || method === "setMyCommands" || method === "sendChatAction") return createRuntimeTelegramApiResponse(true);
-    if (method === "sendRichMessageDraft" || method === "sendMessageDraft" || method === "editMessageText") return createRuntimeTelegramApiResponse(true);
+    if (method === "deleteWebhook" || method === "setMyCommands" || method === "sendChatAction") return createRuntimeBaleApiResponse(true);
+    if (method === "sendRichMessageDraft" || method === "sendMessageDraft" || method === "editMessageText") return createRuntimeBaleApiResponse(true);
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
-      if (getUpdatesCalls === 1) return createRuntimeTelegramApiResponse([{ _: "other", update_id: 1, message: { message_id: 10,
+      if (getUpdatesCalls === 1) return createRuntimeBaleApiResponse([{ _: "other", update_id: 1, message: { message_id: 10,
         chat: { id: 77, type: "private" }, from: { id: 77, is_bot: false, first_name: "Test" }, text: "finish then compact" } }]);
       return await new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () => reject(new DOMException("stop", "AbortError")));
@@ -8982,20 +8982,20 @@ test(`Extension runtime delivers the final answer before automatic compaction co
     }
     if (method === "sendRichMessage" || method === "sendMessage") {
       deliveredMarkdown.push(String((body.rich_message as { markdown?: string } | undefined)?.markdown ?? body.text ?? ""));
-      return createRuntimeTelegramApiResponse({ message_id: 100 + deliveredMarkdown.length });
+      return createRuntimeBaleApiResponse({ message_id: 100 + deliveredMarkdown.length });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0,
+    await baleConfig.write({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0,
       assistant: { activity, proactivePush: true, draftPreviews, rendering: "rich" } });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     const idleCtx = createRuntimeExtensionContext();
     shutdownContext = idleCtx;
     const activeCtx = createRuntimeExtensionContext({ sessionManager: idleCtx.sessionManager, isIdle: () => false });
     await handlers.get("session_start")?.({}, idleCtx);
-    await commands.get("telegram-connect")?.handler("", idleCtx);
+    await commands.get("bale-connect")?.handler("", idleCtx);
     await waitForRuntimeState(t, "initial prompt dispatch", () => dispatched);
     await handlers.get("agent_start")?.({}, activeCtx);
     const finalMessage = { role: "assistant", content: [{ type: "text", text: "Final **before compaction**" }] };
@@ -9017,14 +9017,14 @@ test(`Extension runtime delivers the final answer before automatic compaction co
       if (shutdownContext) await handlers.get("session_shutdown")?.({}, shutdownContext);
     } finally {
       restoreFetch();
-      await telegramConfig.restore();
+      await baleConfig.restore();
     }
   }
 }, 20_000);
 }
 
 test("Extension runtime preserves both busy Next notices through follower queue admission", async (t) => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentMessages: RuntimeHarnessMessage[] = [];
   const secondUpdates = createRuntimeDeferredResponse();
   const thirdUpdates = createRuntimeDeferredResponse();
@@ -9042,15 +9042,15 @@ test("Extension runtime preserves both busy Next notices through follower queue 
   const sendTexts: string[] = [];
   const sendBodies: Array<Record<string, unknown>> = [];
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -9069,25 +9069,25 @@ test("Extension runtime preserves both busy Next notices through follower queue 
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      if (!body) throw new Error("Telegram send body is unavailable.");
-      sendTexts.push(getRuntimeTelegramApiText(body));
+      if (!body) throw new Error("Bale send body is unavailable.");
+      sendTexts.push(getRuntimeBaleApiText(body));
       sendBodies.push(body);
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_id: 100 + sendTexts.length,
       });
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({
       isIdle: () => idle,
       abort: () => { abortCount += 1; },
@@ -9099,12 +9099,12 @@ test("Extension runtime preserves both busy Next notices through follower queue 
     });
     shutdownContext = ctx;
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForRuntimeState(t, "initial prompt dispatch", () => sentMessages.length === 1);
     idle = false;
     await handlers.get("agent_start")?.({}, ctx);
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -9119,7 +9119,7 @@ test("Extension runtime preserves both busy Next notices through follower queue 
     );
     await waitForRuntimeState(t, "follow-up poll and queue admission", () => getUpdatesCalls >= 3 && /\+1\b/.test(waitingQueue));
     thirdUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 3,
@@ -9155,7 +9155,7 @@ test("Extension runtime preserves both busy Next notices through follower queue 
     ]);
     assert.equal(
       getRuntimeHarnessMessageText(sentMessages[1]!),
-      "[telegram] follow up",
+      "[bale] follow up",
     );
     await handlers.get("agent_start")?.({}, ctx);
     const completedMessage = {
@@ -9168,11 +9168,11 @@ test("Extension runtime preserves both busy Next notices through follower queue 
     await handlers.get("agent_settled")?.({}, ctx);
     await waitForRuntimeState(t, "follow-up answer", () => sendTexts.includes("follow-up answer"));
     const dispatchBody = sendBodies.find((body) =>
-      getRuntimeTelegramApiText(body) ===
+      getRuntimeBaleApiText(body) ===
         "<b>⏩ Dispatching next queued turn.</b>"
     );
     const finalBody = sendBodies.find((body) =>
-      getRuntimeTelegramApiText(body) === "follow-up answer"
+      getRuntimeBaleApiText(body) === "follow-up answer"
     );
     assert.equal(dispatchBody?.parse_mode, "HTML");
     assert.deepEqual(dispatchBody?.reply_parameters, {
@@ -9180,22 +9180,22 @@ test("Extension runtime preserves both busy Next notices through follower queue 
       allow_sending_without_reply: true,
     });
     assert.equal(finalBody?.reply_parameters, undefined);
-    fourthUpdates.resolve(createRuntimeTelegramApiResponse([]));
+    fourthUpdates.resolve(createRuntimeBaleApiResponse([]));
   } finally {
-    secondUpdates.resolve(createRuntimeTelegramApiResponse([]));
-    thirdUpdates.resolve(createRuntimeTelegramApiResponse([]));
-    fourthUpdates.resolve(createRuntimeTelegramApiResponse([]));
+    secondUpdates.resolve(createRuntimeBaleApiResponse([]));
+    thirdUpdates.resolve(createRuntimeBaleApiResponse([]));
+    fourthUpdates.resolve(createRuntimeBaleApiResponse([]));
     try {
       if (shutdownContext) await handlers.get("session_shutdown")?.({}, shutdownContext);
     } finally {
       restoreFetch();
-      await telegramConfig.restore();
+      await baleConfig.restore();
     }
   }
 }, 20_000);
 
 test("Extension runtime keeps rapid ordinary messages as distinct queued turns", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentMessages: RuntimeHarnessMessage[] = [];
   const rapidUpdates = createRuntimeDeferredResponse();
   const finalUpdates = createRuntimeDeferredResponse();
@@ -9207,14 +9207,14 @@ test("Extension runtime keeps rapid ordinary messages as distinct queued turns",
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -9232,25 +9232,25 @@ test("Extension runtime keeps rapid ordinary messages as distinct queued turns",
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({ isIdle: () => idle });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForCondition(() => sentMessages.length === 1);
     idle = false;
     await handlers.get("agent_start")?.({}, ctx);
     rapidUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -9286,7 +9286,7 @@ test("Extension runtime keeps rapid ordinary messages as distinct queued turns",
     await waitForCondition(() => sentMessages.length === 2);
     assert.equal(
       getRuntimeHarnessMessageText(sentMessages[1]!),
-      "[telegram] rapid second",
+      "[bale] rapid second",
     );
     idle = false;
     await handlers.get("agent_start")?.({}, ctx);
@@ -9296,7 +9296,7 @@ test("Extension runtime keeps rapid ordinary messages as distinct queued turns",
     await waitForCondition(() => sentMessages.length === 3);
     assert.equal(
       getRuntimeHarnessMessageText(sentMessages[2]!),
-      "[telegram] rapid third",
+      "[bale] rapid third",
     );
     assert.equal(
       sentMessages.some((message) =>
@@ -9306,16 +9306,16 @@ test("Extension runtime keeps rapid ordinary messages as distinct queued turns",
       ),
       false,
     );
-    finalUpdates.resolve(createRuntimeTelegramApiResponse([]));
+    finalUpdates.resolve(createRuntimeBaleApiResponse([]));
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
-test("Extension runtime clears queued follow-ups after a Telegram stop", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+test("Extension runtime clears queued follow-ups after a Bale stop", async () => {
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const sentMessages: RuntimeHarnessMessage[] = [];
   let firstDispatchResolved = false;
   const secondUpdates = createRuntimeDeferredResponse();
@@ -9330,15 +9330,15 @@ test("Extension runtime clears queued follow-ups after a Telegram stop", async (
   let getUpdatesCalls = 0;
   const sendTexts: string[] = [];
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -9357,23 +9357,23 @@ test("Extension runtime clears queued follow-ups after a Telegram stop", async (
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      sendTexts.push(getRuntimeTelegramApiText(body));
-      return createRuntimeTelegramApiResponse({
+      sendTexts.push(getRuntimeBaleApiText(body));
+      return createRuntimeBaleApiResponse({
         message_id: 100 + sendTexts.length,
       });
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const idleCtx = createRuntimeExtensionContext();
     let aborted = false;
     const activeCtx = createRuntimeExtensionContext({
@@ -9384,11 +9384,11 @@ test("Extension runtime clears queued follow-ups after a Telegram stop", async (
       },
     });
     await handlers.get("session_start")?.({}, idleCtx);
-    await commands.get("telegram-connect")?.handler("", idleCtx);
+    await commands.get("bale-connect")?.handler("", idleCtx);
     await waitForCondition(() => firstDispatchResolved);
     await handlers.get("agent_start")?.({}, activeCtx);
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -9403,7 +9403,7 @@ test("Extension runtime clears queued follow-ups after a Telegram stop", async (
     );
     await waitForCondition(() => getUpdatesCalls >= 3);
     thirdUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 3,
@@ -9431,7 +9431,7 @@ test("Extension runtime clears queued follow-ups after a Telegram stop", async (
     );
     const dispatchCountBeforeNextTurn = sentMessages.length;
     fourthUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 4,
@@ -9449,7 +9449,7 @@ test("Extension runtime clears queued follow-ups after a Telegram stop", async (
     );
     const promptText =
       getRuntimeHarnessTextBlock(sentMessages.at(-1)).text ?? "";
-    assert.equal(promptText, "[telegram] new request");
+    assert.equal(promptText, "[bale] new request");
     assert.equal(promptText.includes("follow up"), false);
     assert.equal(
       sendTexts.some((text) => text.startsWith("<b>⏹️ Aborted current turn.")),
@@ -9458,12 +9458,12 @@ test("Extension runtime clears queued follow-ups after a Telegram stop", async (
     await handlers.get("session_shutdown")?.({}, idleCtx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime handles immediate status before queued prompt after agent end", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   let firstDispatchResolved = false;
   let shutdownCtx: unknown;
@@ -9477,14 +9477,14 @@ test("Extension runtime handles immediate status before queued prompt after agen
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook")
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -9502,22 +9502,22 @@ test("Extension runtime handles immediate status before queued prompt after agen
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      runtimeEvents.push(`send:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse({
+      runtimeEvents.push(`send:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse({
         message_id: 100 + runtimeEvents.length,
       });
     }
     if (method === "sendChatAction")
-      return createRuntimeTelegramApiResponse(true);
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+      return createRuntimeBaleApiResponse(true);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const baseCtx = createRuntimeExtensionContext({
       cwd: process.cwd(),
       sessionManager: {
@@ -9540,11 +9540,11 @@ test("Extension runtime handles immediate status before queued prompt after agen
     };
     shutdownCtx = idleCtx;
     await handlers.get("session_start")?.({}, idleCtx);
-    await commands.get("telegram-connect")?.handler("", idleCtx);
+    await commands.get("bale-connect")?.handler("", idleCtx);
     await waitForCondition(() => firstDispatchResolved);
     await handlers.get("agent_start")?.({}, activeCtx);
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -9559,7 +9559,7 @@ test("Extension runtime handles immediate status before queued prompt after agen
     );
     await waitForCondition(() => getUpdatesCalls >= 3);
     thirdUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 3,
@@ -9585,21 +9585,21 @@ test("Extension runtime handles immediate status before queued prompt after agen
       idleCtx,
     );
     await waitForCondition(() => runtimeEvents.length >= 3);
-    assert.equal(runtimeEvents[0], "dispatch:[telegram] first request");
-    assert.match(runtimeEvents[1] ?? "", /^send:<b>Pi Telegram<\/b>/);
+    assert.equal(runtimeEvents[0], "dispatch:[bale] first request");
+    assert.match(runtimeEvents[1] ?? "", /^send:<b>Pi Bale<\/b>/);
     assert.equal(
       runtimeEvents[2],
-      "dispatch:[telegram] follow up after status",
+      "dispatch:[bale] follow up after status",
     );
   } finally {
     if (shutdownCtx) await handlers.get("session_shutdown")?.({}, shutdownCtx);
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime opens immediate model menu before queued prompt after agent end", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   const modelA = createRuntimeModel("openai", "gpt-a", true);
   const modelB = createRuntimeModel("anthropic", "claude-b", false);
@@ -9614,15 +9614,15 @@ test("Extension runtime opens immediate model menu before queued prompt after ag
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -9640,23 +9640,23 @@ test("Extension runtime opens immediate model menu before queued prompt after ag
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      runtimeEvents.push(`send:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse({
+      runtimeEvents.push(`send:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse({
         message_id: 100 + runtimeEvents.length,
       });
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const baseCtx = createRuntimeExtensionContext({
       cwd: process.cwd(),
       model: modelA,
@@ -9679,11 +9679,11 @@ test("Extension runtime opens immediate model menu before queued prompt after ag
       isIdle: () => false,
     };
     await handlers.get("session_start")?.({}, idleCtx);
-    await commands.get("telegram-connect")?.handler("", idleCtx);
+    await commands.get("bale-connect")?.handler("", idleCtx);
     await waitForCondition(() => firstDispatchResolved);
     await handlers.get("agent_start")?.({}, activeCtx);
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -9698,7 +9698,7 @@ test("Extension runtime opens immediate model menu before queued prompt after ag
     );
     await waitForCondition(() => getUpdatesCalls >= 3);
     thirdUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 3,
@@ -9724,18 +9724,18 @@ test("Extension runtime opens immediate model menu before queued prompt after ag
       idleCtx,
     );
     await waitForCondition(() => runtimeEvents.length >= 3, 5_000);
-    assert.equal(runtimeEvents[0], "dispatch:[telegram] first request");
+    assert.equal(runtimeEvents[0], "dispatch:[bale] first request");
     assert.equal(runtimeEvents[1], "send:<b>🤖 Choose a model:</b>");
-    assert.equal(runtimeEvents[2], "dispatch:[telegram] follow up after model");
+    assert.equal(runtimeEvents[2], "dispatch:[bale] follow up after model");
     await handlers.get("session_shutdown")?.({}, idleCtx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime keeps queued turns blocked until compaction settles", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   const failureParseModes: string[] = [];
   let compactHooks:
@@ -9753,15 +9753,15 @@ test("Extension runtime keeps queued turns blocked until compaction settles", as
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -9783,12 +9783,12 @@ test("Extension runtime keeps queued turns blocked until compaction settles", as
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      const text = getRuntimeTelegramApiText(body);
+      const text = getRuntimeBaleApiText(body);
       runtimeEvents.push(`send:${text}`);
       if (text.includes("Compaction failed!")) {
         failureParseModes.push(String(body?.parse_mode ?? ""));
       }
-      return createRuntimeTelegramApiResponse({
+      return createRuntimeBaleApiResponse({
         message_id: 100 + runtimeEvents.length,
       });
     }
@@ -9796,25 +9796,25 @@ test("Extension runtime keeps queued turns blocked until compaction settles", as
       runtimeEvents.push(
         `typing:${String(body?.chat_id ?? "")}:${String(body?.action ?? "")}`,
       );
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "editMessageText") {
-      runtimeEvents.push(`edit:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse(true);
+      runtimeEvents.push(`edit:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "answerCallbackQuery") {
       runtimeEvents.push(`answer:${String(body?.callback_query_id ?? "")}`);
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext({
       compact: (hooks: {
         onComplete: () => void;
@@ -9825,12 +9825,12 @@ test("Extension runtime keeps queued turns blocked until compaction settles", as
       },
     });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForCondition(() =>
       runtimeEvents.includes("send:<b>Compact session?</b>"),
     );
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -9859,7 +9859,7 @@ test("Extension runtime keeps queued turns blocked until compaction settles", as
     );
 
     thirdUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 3,
@@ -9875,7 +9875,7 @@ test("Extension runtime keeps queued turns blocked until compaction settles", as
     await waitForCondition(() => getUpdatesCalls >= 3);
     assert.equal(
       runtimeEvents.some(
-        (event) => event === "dispatch:[telegram] follow up after compaction",
+        (event) => event === "dispatch:[bale] follow up after compaction",
       ),
       false,
     );
@@ -9885,7 +9885,7 @@ test("Extension runtime keeps queued turns blocked until compaction settles", as
       ),
     );
     await waitForCondition(() =>
-      runtimeEvents.includes("dispatch:[telegram] follow up after compaction"),
+      runtimeEvents.includes("dispatch:[bale] follow up after compaction"),
     );
     await waitForCondition(() =>
       runtimeEvents.includes(
@@ -9896,13 +9896,13 @@ test("Extension runtime keeps queued turns blocked until compaction settles", as
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 for (const outcome of ["completed", "failed", "cancelled", "shutdown"] as const) {
   test(`Extension runtime retains ${outcome} compaction notice authority after observer timeout`, async (t) => {
-    const telegramConfig = await createRuntimeTelegramConfigFixture();
+    const baleConfig = await createRuntimeBaleConfigFixture();
     const notices: string[] = [];
     let expireObserver: (() => void) | undefined;
     const originalSetTimeout = globalThis.setTimeout;
@@ -9913,22 +9913,22 @@ for (const outcome of ["completed", "failed", "cancelled", "shutdown"] as const)
     });
     const { handlers, commands, pi } = createRuntimePiHarness();
     const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-      const method = getRuntimeTelegramApiMethod(input);
-      if (method === "deleteWebhook" || method === "sendChatAction") return createRuntimeTelegramApiResponse(true);
+      const method = getRuntimeBaleApiMethod(input);
+      if (method === "deleteWebhook" || method === "sendChatAction") return createRuntimeBaleApiResponse(true);
       if (method === "getUpdates") throw new DOMException("stop", "AbortError");
       if (method === "sendMessage" || method === "sendRichMessage") {
-        notices.push(getRuntimeTelegramApiText(parseJsonRequestBody(init)));
-        return createRuntimeTelegramApiResponse({ message_id: 100 + notices.length });
+        notices.push(getRuntimeBaleApiText(parseJsonRequestBody(init)));
+        return createRuntimeBaleApiResponse({ message_id: 100 + notices.length });
       }
-      throw new Error(`Unexpected Telegram API method: ${method}`);
+      throw new Error(`Unexpected Bale API method: ${method}`);
     });
     const ctx = createRuntimeExtensionContext({ cwd: "/repo/compaction-timeout" });
     try {
-      await telegramConfig.write({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0 });
-      await writeRuntimeTelegramLocks({});
-      (await getRuntimeTelegramExtension())(pi);
+      await baleConfig.write({ botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0 });
+      await writeRuntimeBaleLocks({});
+      (await getRuntimeBaleExtension())(pi);
       await handlers.get("session_start")?.({}, ctx);
-      await commands.get("telegram-connect")?.handler("", ctx);
+      await commands.get("bale-connect")?.handler("", ctx);
       await handlers.get("session_before_compact")?.({ signal: new AbortController().signal }, ctx);
       await waitForCondition(() => notices.length === 1);
       assert.ok(expireObserver);
@@ -9951,48 +9951,48 @@ for (const outcome of ["completed", "failed", "cancelled", "shutdown"] as const)
       ])]);
     } finally {
       expireObserver?.();
-      await commands.get("telegram-disconnect")?.handler("", ctx);
+      await commands.get("bale-disconnect")?.handler("", ctx);
       await handlers.get("session_shutdown")?.({}, ctx);
       restoreFetch();
-      await telegramConfig.restore();
+      await baleConfig.restore();
     }
   });
 }
 
 test("Extension runtime compaction notices cannot overtake a pending local final delivery", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const committed: string[] = [];
   let finalStarted = false;
   let releaseFinal!: () => void;
   const finalGate = new Promise<void>((resolve) => { releaseFinal = resolve; });
   const { handlers, commands, pi } = createRuntimePiHarness();
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
-    if (method === "deleteWebhook") return createRuntimeTelegramApiResponse(true);
+    const method = getRuntimeBaleApiMethod(input);
+    if (method === "deleteWebhook") return createRuntimeBaleApiResponse(true);
     if (method === "getUpdates") throw new DOMException("stop", "AbortError");
-    if (method === "sendChatAction") return createRuntimeTelegramApiResponse(true);
+    if (method === "sendChatAction") return createRuntimeBaleApiResponse(true);
     if (method === "sendMessage" || method === "sendRichMessage") {
-      const text = getRuntimeTelegramApiText(parseJsonRequestBody(init));
+      const text = getRuntimeBaleApiText(parseJsonRequestBody(init));
       if (text === "Ordered local final") {
         finalStarted = true;
         await finalGate;
       }
       committed.push(text);
-      return createRuntimeTelegramApiResponse({ message_id: 100 + committed.length });
+      return createRuntimeBaleApiResponse({ message_id: 100 + committed.length });
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   let settled: Promise<unknown> | undefined;
   const ctx = createRuntimeExtensionContext({ cwd: "/repo/compaction-order" });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc", allowedUserId: 77, lastUpdateId: 0,
       assistant: { proactivePush: true },
     });
-    await writeRuntimeTelegramLocks({});
-    (await getRuntimeTelegramExtension())(pi);
+    await writeRuntimeBaleLocks({});
+    (await getRuntimeBaleExtension())(pi);
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await flushMicrotasks(20);
     await handlers.get("input")?.({ source: "interactive", text: "local request" }, ctx);
     await handlers.get("agent_start")?.({}, ctx);
@@ -10025,17 +10025,17 @@ test("Extension runtime compaction notices cannot overtake a pending local final
   } finally {
     releaseFinal();
     await settled;
-    await commands.get("telegram-disconnect")?.handler("", ctx);
+    await commands.get("bale-disconnect")?.handler("", ctx);
     await handlers.get("session_shutdown")?.({}, ctx);
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 for (const [compactionBeforeAgentEnd, emptyFinal] of [[false, false], [true, false], [true, true]] as const) {
 test(`Extension runtime delivers the final answer before observed auto-compaction notices${compactionBeforeAgentEnd ? " arriving before agent_end" : ""}${emptyFinal ? " without final publication" : ""}`, async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
-  await writeRuntimeTelegramLocks({});
+  const baleConfig = await createRuntimeBaleConfigFixture();
+  await writeRuntimeBaleLocks({});
   const runtimeEvents: string[] = [];
   let firstDispatchResolve: (() => void) | undefined;
   const firstDispatched = new Promise<void>((resolve) => {
@@ -10050,14 +10050,14 @@ test(`Extension runtime delivers the final answer before observed auto-compactio
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook")
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -10065,7 +10065,7 @@ test(`Extension runtime delivers the final answer before observed auto-compactio
               message_id: 41,
               chat: { id: 77, type: "private" },
               from: { id: 77, is_bot: false, first_name: "Test" },
-              text: "first telegram turn",
+              text: "first bale turn",
             },
           },
         ]);
@@ -10074,34 +10074,34 @@ test(`Extension runtime delivers the final answer before observed auto-compactio
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      runtimeEvents.push(`send:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse({
+      runtimeEvents.push(`send:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse({
         message_id: 100 + runtimeEvents.length,
       });
     }
     if (method === "editMessageText") {
-      runtimeEvents.push(`edit:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse(true);
+      runtimeEvents.push(`edit:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "sendMessageDraft" || method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext();
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await firstDispatched;
     await handlers.get("agent_start")?.({}, ctx);
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -10182,7 +10182,7 @@ test(`Extension runtime delivers the final answer before observed auto-compactio
       assert.equal(runtimeEvents.slice(noticeBaseline).some((event) => event.includes("Compaction")), false);
     }
     assert.equal(
-      runtimeEvents.includes("dispatch:[telegram] queued during active turn"),
+      runtimeEvents.includes("dispatch:[bale] queued during active turn"),
       false,
     );
     await handlers.get("agent_settled")?.({}, ctx);
@@ -10202,18 +10202,18 @@ test(`Extension runtime delivers the final answer before observed auto-compactio
     if (!emptyFinal) assert.equal(finalReplyIndex < compactionStartedIndex, true);
     assert.equal(compactionStartedIndex < compactionCompletedIndex, true);
     await waitForCondition(() =>
-      runtimeEvents.includes("dispatch:[telegram] queued during active turn"),
+      runtimeEvents.includes("dispatch:[bale] queued during active turn"),
     );
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 }
 
 test("Extension runtime coalesces media-group updates into one delayed dispatch", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   const { handlers, commands, pi } = createRuntimePiHarness({
     sendUserMessage: (content) => {
@@ -10222,14 +10222,14 @@ test("Extension runtime coalesces media-group updates into one delayed dispatch"
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -10256,34 +10256,34 @@ test("Extension runtime coalesces media-group updates into one delayed dispatch"
       }
       throw new DOMException("stop", "AbortError");
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext();
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForEventLoopCondition(() => getUpdatesCalls >= 2, 5000);
     assert.equal(runtimeEvents.length, 0);
     await waitForCondition(() => runtimeEvents.length === 1, 3000);
     assert.equal(
       runtimeEvents[0],
-      "dispatch:[telegram] first caption\n\nsecond caption",
+      "dispatch:[bale] first caption\n\nsecond caption",
     );
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime coalesces likely split long text updates into one dispatch", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   const { handlers, commands, pi } = createRuntimePiHarness({
     sendUserMessage: (content) => {
@@ -10292,14 +10292,14 @@ test("Extension runtime coalesces likely split long text updates into one dispat
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -10324,35 +10324,35 @@ test("Extension runtime coalesces likely split long text updates into one dispat
       }
       throw new DOMException("stop", "AbortError");
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext();
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForEventLoopCondition(() => getUpdatesCalls >= 1, 5000);
     await flushMicrotasks();
     assert.equal(runtimeEvents.length, 0);
     await waitForCondition(() => runtimeEvents.length === 1, 3000);
     assert.equal(
       runtimeEvents[0],
-      `dispatch:[telegram] ${"x".repeat(3600)}\n\ntail`,
+      `dispatch:[bale] ${"x".repeat(3600)}\n\ntail`,
     );
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime clears pending split-text dispatch on shutdown", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   const { handlers, commands, pi } = createRuntimePiHarness({
     sendUserMessage: (content) => {
@@ -10361,14 +10361,14 @@ test("Extension runtime clears pending split-text dispatch on shutdown", async (
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -10383,30 +10383,30 @@ test("Extension runtime clears pending split-text dispatch on shutdown", async (
       }
       throw new DOMException("stop", "AbortError");
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext();
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForEventLoopCondition(() => getUpdatesCalls >= 2, 5000);
     await handlers.get("session_shutdown")?.({}, ctx);
     await new Promise((resolve) => setTimeout(resolve, 900));
     assert.deepEqual(runtimeEvents, []);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime clears pending media-group dispatch on shutdown", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   const { handlers, commands, pi } = createRuntimePiHarness({
     sendUserMessage: (content) => {
@@ -10415,14 +10415,14 @@ test("Extension runtime clears pending media-group dispatch on shutdown", async 
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -10438,30 +10438,30 @@ test("Extension runtime clears pending media-group dispatch on shutdown", async 
       }
       throw new DOMException("stop", "AbortError");
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeExtensionContext();
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForEventLoopCondition(() => getUpdatesCalls >= 2, 5000);
     await handlers.get("session_shutdown")?.({}, ctx);
     await new Promise((resolve) => setTimeout(resolve, 1200));
     assert.deepEqual(runtimeEvents, []);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime applies reaction priority and removal before the next dispatch", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   let firstDispatchResolved = false;
   const secondUpdates = createRuntimeDeferredResponse();
@@ -10476,14 +10476,14 @@ test("Extension runtime applies reaction priority and removal before the next di
   });
   let getUpdatesCalls = 0;
   const restoreFetch = setRuntimeTestFetch(async (input) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -10503,28 +10503,28 @@ test("Extension runtime applies reaction priority and removal before the next di
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const idleCtx = createRuntimeExtensionContext();
     const activeCtx = createRuntimeExtensionContext({
       isIdle: () => false,
       sessionManager: idleCtx.sessionManager,
     });
     await handlers.get("session_start")?.({}, idleCtx);
-    await commands.get("telegram-connect")?.handler("", idleCtx);
+    await commands.get("bale-connect")?.handler("", idleCtx);
     await waitForCondition(() => firstDispatchResolved);
     await handlers.get("agent_start")?.({}, activeCtx);
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -10539,7 +10539,7 @@ test("Extension runtime applies reaction priority and removal before the next di
     );
     await waitForCondition(() => getUpdatesCalls >= 3);
     thirdUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 3,
@@ -10554,7 +10554,7 @@ test("Extension runtime applies reaction priority and removal before the next di
     );
     await waitForCondition(() => getUpdatesCalls >= 4);
     fourthUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 4,
@@ -10571,7 +10571,7 @@ test("Extension runtime applies reaction priority and removal before the next di
     );
     await waitForCondition(() => getUpdatesCalls >= 5);
     fifthUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 5,
@@ -10600,8 +10600,8 @@ test("Extension runtime applies reaction priority and removal before the next di
       idleCtx,
     );
     await waitForCondition(() => runtimeEvents.length === 2);
-    assert.equal(runtimeEvents[0], "dispatch:[telegram] first request");
-    assert.equal(runtimeEvents[1], "dispatch:[telegram] newer waiting");
+    assert.equal(runtimeEvents[0], "dispatch:[bale] first request");
+    assert.equal(runtimeEvents[1], "dispatch:[bale] newer waiting");
     await handlers.get("agent_start")?.({}, activeCtx);
     await handlers.get("agent_end")?.(
       {
@@ -10616,18 +10616,18 @@ test("Extension runtime applies reaction priority and removal before the next di
     );
     await flushMicrotasks();
     assert.deepEqual(runtimeEvents, [
-      "dispatch:[telegram] first request",
-      "dispatch:[telegram] newer waiting",
+      "dispatch:[bale] first request",
+      "dispatch:[bale] newer waiting",
     ]);
     await handlers.get("session_shutdown")?.({}, idleCtx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime applies idle model picks immediately and refreshes status", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const previousArgv = [...process.argv];
   const runtimeEvents: string[] = [];
   const statusEvents: string[] = [];
@@ -10651,14 +10651,14 @@ test("Extension runtime applies idle model picks immediately and refreshes statu
   let nextMessageId = 100;
   const callbackAnswers: string[] = [];
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook")
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -10675,20 +10675,20 @@ test("Extension runtime applies idle model picks immediately and refreshes statu
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      runtimeEvents.push(`send:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse({ message_id: nextMessageId++ });
+      runtimeEvents.push(`send:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse({ message_id: nextMessageId++ });
     }
     if (method === "editMessageText") {
-      runtimeEvents.push(`edit:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse(true);
+      runtimeEvents.push(`edit:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "answerCallbackQuery") {
       callbackAnswers.push(String(body?.text ?? ""));
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "sendChatAction")
-      return createRuntimeTelegramApiResponse(true);
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+      return createRuntimeBaleApiResponse(true);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
     process.argv = [
@@ -10696,12 +10696,12 @@ test("Extension runtime applies idle model picks immediately and refreshes statu
       previousArgv[1] ?? "index.ts",
       "--models=anthropic/claude-b:high",
     ];
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeModelContext({
       model: modelA,
       availableModels: [modelA, modelB],
@@ -10711,13 +10711,13 @@ test("Extension runtime applies idle model picks immediately and refreshes statu
     });
     shutdownCtx = ctx;
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForCondition(() =>
       runtimeEvents.some((event) => event === "send:<b>🤖 Choose a model:</b>"),
     );
     const statusCountBeforePick = statusEvents.length;
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -10741,7 +10741,7 @@ test("Extension runtime applies idle model picks immediately and refreshes statu
     assert.equal(
       runtimeEvents.some(
         (event) =>
-          event.startsWith("edit:<b>Pi Telegram</b>") ||
+          event.startsWith("edit:<b>Pi Bale</b>") ||
           event.startsWith("edit:<b>🤖 Choose a model:</b>"),
       ),
       true,
@@ -10750,12 +10750,12 @@ test("Extension runtime applies idle model picks immediately and refreshes statu
     if (shutdownCtx) await handlers.get("session_shutdown")?.({}, shutdownCtx);
     process.argv = previousArgv;
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime switches a local run in flight and continues in the model-menu target", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   const modelA = createRuntimeModel("openai", "gpt-a", true);
   const modelB = createRuntimeModel("anthropic", "claude-b", false);
@@ -10777,15 +10777,15 @@ test("Extension runtime switches a local run in flight and continues in the mode
   let nextMessageId = 100;
   const callbackAnswers: string[] = [];
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -10802,29 +10802,29 @@ test("Extension runtime switches a local run in flight and continues in the mode
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      runtimeEvents.push(`send:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse({ message_id: nextMessageId++ });
+      runtimeEvents.push(`send:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse({ message_id: nextMessageId++ });
     }
     if (method === "editMessageText") {
-      runtimeEvents.push(`edit:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse(true);
+      runtimeEvents.push(`edit:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "answerCallbackQuery") {
       callbackAnswers.push(String(body?.text ?? ""));
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeModelContext({
       model: modelA,
       availableModels: [modelA, modelB],
@@ -10834,14 +10834,14 @@ test("Extension runtime switches a local run in flight and continues in the mode
       },
     });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForCondition(() =>
       runtimeEvents.some((event) => event === "send:<b>🤖 Choose a model:</b>"),
     );
     idle = false;
     await handlers.get("agent_start")?.({}, ctx);
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -10886,7 +10886,7 @@ test("Extension runtime switches a local run in flight and continues in the mode
     assert.equal(
       runtimeEvents.some((event) =>
         event.includes(
-          "dispatch:[telegram] Continue from the last unfinished step. Model: anthropic/claude-b",
+          "dispatch:[bale] Continue from the last unfinished step. Model: anthropic/claude-b",
         ),
       ),
       true,
@@ -10894,12 +10894,12 @@ test("Extension runtime switches a local run in flight and continues in the mode
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime preserves long-session queue through abort, next, and model switch", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   const modelA = createRuntimeModel("openai", "gpt-a", true);
   const modelB = createRuntimeModel("anthropic", "claude-b", false);
@@ -10923,14 +10923,14 @@ test("Extension runtime preserves long-session queue through abort, next, and mo
   let nextMessageId = 100;
   const callbackAnswers: string[] = [];
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook")
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -10948,28 +10948,28 @@ test("Extension runtime preserves long-session queue through abort, next, and mo
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      runtimeEvents.push(`send:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse({ message_id: nextMessageId++ });
+      runtimeEvents.push(`send:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse({ message_id: nextMessageId++ });
     }
     if (method === "editMessageText") {
-      runtimeEvents.push(`edit:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse(true);
+      runtimeEvents.push(`edit:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "answerCallbackQuery") {
       callbackAnswers.push(String(body?.text ?? ""));
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "sendChatAction")
-      return createRuntimeTelegramApiResponse(true);
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+      return createRuntimeBaleApiResponse(true);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeModelContext({
       model: modelA,
       availableModels: [modelA, modelB],
@@ -10979,12 +10979,12 @@ test("Extension runtime preserves long-session queue through abort, next, and mo
       },
     });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForCondition(() =>
       runtimeEvents.includes("send:<b>🤖 Choose a model:</b>"),
     );
     updates[0].resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -10998,12 +10998,12 @@ test("Extension runtime preserves long-session queue through abort, next, and mo
       ]),
     );
     await waitForCondition(() =>
-      runtimeEvents.includes("dispatch:[telegram] first long-session request"),
+      runtimeEvents.includes("dispatch:[bale] first long-session request"),
     );
     idle = false;
     await handlers.get("agent_start")?.({}, ctx);
     updates[1].resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 3,
@@ -11018,11 +11018,11 @@ test("Extension runtime preserves long-session queue through abort, next, and mo
     );
     await waitForCondition(() => getUpdatesCalls >= 4);
     assert.equal(
-      runtimeEvents.includes("dispatch:[telegram] queued after abort"),
+      runtimeEvents.includes("dispatch:[bale] queued after abort"),
       false,
     );
     updates[2].resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 4,
@@ -11050,11 +11050,11 @@ test("Extension runtime preserves long-session queue through abort, next, and mo
       ctx,
     );
     assert.equal(
-      runtimeEvents.includes("dispatch:[telegram] queued after abort"),
+      runtimeEvents.includes("dispatch:[bale] queued after abort"),
       false,
     );
     updates[3].resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 5,
@@ -11068,12 +11068,12 @@ test("Extension runtime preserves long-session queue through abort, next, and mo
       ]),
     );
     await waitForCondition(() =>
-      runtimeEvents.includes("dispatch:[telegram] queued after abort"),
+      runtimeEvents.includes("dispatch:[bale] queued after abort"),
     );
     idle = false;
     await handlers.get("agent_start")?.({}, ctx);
     updates[4].resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 6,
@@ -11109,18 +11109,18 @@ test("Extension runtime preserves long-session queue through abort, next, and mo
       ctx,
     );
     assert.equal(
-      runtimeEvents.includes("dispatch:[telegram] queued after abort"),
+      runtimeEvents.includes("dispatch:[bale] queued after abort"),
       true,
     );
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });
 
 test("Extension runtime delays model-switch abort until the active tool finishes", async () => {
-  const telegramConfig = await createRuntimeTelegramConfigFixture();
+  const baleConfig = await createRuntimeBaleConfigFixture();
   const runtimeEvents: string[] = [];
   const modelA = createRuntimeModel("openai", "gpt-a", true);
   const modelB = createRuntimeModel("anthropic", "claude-b", false);
@@ -11143,15 +11143,15 @@ test("Extension runtime delays model-switch abort until the active tool finishes
   let nextMessageId = 100;
   const callbackAnswers: string[] = [];
   const restoreFetch = setRuntimeTestFetch(async (input, init) => {
-    const method = getRuntimeTelegramApiMethod(input);
+    const method = getRuntimeBaleApiMethod(input);
     const body = parseJsonRequestBody(init);
     if (method === "deleteWebhook") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "getUpdates") {
       getUpdatesCalls += 1;
       if (getUpdatesCalls === 1) {
-        return createRuntimeTelegramApiResponse([
+        return createRuntimeBaleApiResponse([
           {
             _: "other",
             update_id: 1,
@@ -11169,29 +11169,29 @@ test("Extension runtime delays model-switch abort until the active tool finishes
       throw new DOMException("stop", "AbortError");
     }
     if (method === "sendMessage" || method === "sendRichMessage") {
-      runtimeEvents.push(`send:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse({ message_id: nextMessageId++ });
+      runtimeEvents.push(`send:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse({ message_id: nextMessageId++ });
     }
     if (method === "editMessageText") {
-      runtimeEvents.push(`edit:${getRuntimeTelegramApiText(body)}`);
-      return createRuntimeTelegramApiResponse(true);
+      runtimeEvents.push(`edit:${getRuntimeBaleApiText(body)}`);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "answerCallbackQuery") {
       callbackAnswers.push(String(body?.text ?? ""));
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
     if (method === "sendChatAction") {
-      return createRuntimeTelegramApiResponse(true);
+      return createRuntimeBaleApiResponse(true);
     }
-    throw new Error(`Unexpected Telegram API method: ${method}`);
+    throw new Error(`Unexpected Bale API method: ${method}`);
   });
   try {
-    await telegramConfig.write({
+    await baleConfig.write({
       botToken: "123:abc",
       allowedUserId: 77,
       lastUpdateId: 0,
     });
-    (await getRuntimeTelegramExtension())(pi);
+    (await getRuntimeBaleExtension())(pi);
     const ctx = createRuntimeModelContext({
       model: modelA,
       availableModels: [modelA, modelB],
@@ -11201,12 +11201,12 @@ test("Extension runtime delays model-switch abort until the active tool finishes
       },
     });
     await handlers.get("session_start")?.({}, ctx);
-    await commands.get("telegram-connect")?.handler("", ctx);
+    await commands.get("bale-connect")?.handler("", ctx);
     await waitForCondition(() =>
       runtimeEvents.some((event) => event === "send:<b>🤖 Choose a model:</b>"),
     );
     secondUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 2,
@@ -11221,14 +11221,14 @@ test("Extension runtime delays model-switch abort until the active tool finishes
     );
     await waitForCondition(() =>
       runtimeEvents.some(
-        (event) => event === "dispatch:[telegram] first request",
+        (event) => event === "dispatch:[bale] first request",
       ),
     );
     idle = false;
     await handlers.get("agent_start")?.({}, ctx);
     await handlers.get("tool_execution_start")?.({}, ctx);
     thirdUpdates.resolve(
-      createRuntimeTelegramApiResponse([
+      createRuntimeBaleApiResponse([
         {
           _: "other",
           update_id: 3,
@@ -11269,13 +11269,13 @@ test("Extension runtime delays model-switch abort until the active tool finishes
     await waitForCondition(() =>
       runtimeEvents.some((event) =>
         event.includes(
-          "dispatch:[telegram] Continue from the last unfinished step. Model: anthropic/claude-b",
+          "dispatch:[bale] Continue from the last unfinished step. Model: anthropic/claude-b",
         ),
       ),
     );
     await handlers.get("session_shutdown")?.({}, ctx);
   } finally {
     restoreFetch();
-    await telegramConfig.restore();
+    await baleConfig.restore();
   }
 });

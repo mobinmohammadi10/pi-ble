@@ -1,6 +1,6 @@
 /**
- * Public Telegram delivery API
- * Zones: package boundary, telegram delivery, extension interop
+ * Public Bale delivery API
+ * Zones: package boundary, bale delivery, extension interop
  * Exposes target-aware operational view delivery while keeping transport and runtime binding internals package-private
  */
-export { deleteTelegramView, editTelegramView, sendTelegramChatAction, sendTelegramView, } from "../lib/delivery.js";
+export { deleteBaleView, editBaleView, sendBaleChatAction, sendBaleView, } from "../lib/delivery.js";

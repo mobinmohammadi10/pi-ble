@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram media and text extraction helpers
+ * Regression tests for Bale media and text extraction helpers
  * Covers inbound file-info collection, text extraction, media groups, id collection, and history formatting
  */
 
@@ -7,20 +7,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  collectTelegramFileInfos,
-  collectTelegramMessageIds,
-  createTelegramMediaGroupController,
-  createTelegramPendingGroupsState,
-  transitionTelegramPendingGroups,
-  type TelegramPendingGroupsEffect,
-  type TelegramPendingGroupsEvent,
-  createTelegramMediaGroupDispatchRuntime,
-  downloadTelegramMessageFiles,
-  extractFirstTelegramMessageText,
-  extractTelegramMessagesPromptText,
-  extractTelegramMessagesText,
-  formatTelegramHistoryText,
-  getTelegramMediaGroupKey,
+  collectBaleFileInfos,
+  collectBaleMessageIds,
+  createBaleMediaGroupController,
+  createBalePendingGroupsState,
+  transitionBalePendingGroups,
+  type BalePendingGroupsEffect,
+  type BalePendingGroupsEvent,
+  createBaleMediaGroupDispatchRuntime,
+  downloadBaleMessageFiles,
+  extractFirstBaleMessageText,
+  extractBaleMessagesPromptText,
+  extractBaleMessagesText,
+  formatBaleHistoryText,
+  getBaleMediaGroupKey,
   guessMediaType,
 } from "../lib/media.ts";
 
@@ -34,8 +34,8 @@ function getTestTimerId(timer: TestTimer): number {
   return timer as unknown as number;
 }
 
-test("Media helpers collect file infos across Telegram message variants", () => {
-  const files = collectTelegramFileInfos([
+test("Media helpers collect file infos across Bale message variants", () => {
+  const files = collectBaleFileInfos([
     {
       message_id: 1,
       text: "hello",
@@ -82,8 +82,8 @@ for (const [flags, extension, mimeType, isImage] of [
   test(`Sticker format flags preserve non-image attachments: ${JSON.stringify(flags)}`, async () => {
     const messages = [{ message_id: 5, sticker: { file_id: "sticker", ...flags } }];
     const fileName = `sticker-5${extension}`;
-    assert.deepEqual(collectTelegramFileInfos(messages), [{ file_id: "sticker", fileName, mimeType, kind: "sticker", isImage, source: { kind: "sticker", messageId: 5 } }]);
-    const files = await downloadTelegramMessageFiles(messages, { async downloadFile(id, name) {
+    assert.deepEqual(collectBaleFileInfos(messages), [{ file_id: "sticker", fileName, mimeType, kind: "sticker", isImage, source: { kind: "sticker", messageId: 5 } }]);
+    const files = await downloadBaleMessageFiles(messages, { async downloadFile(id, name) {
       assert.equal(id, "sticker"); assert.equal(name, fileName); return `/tmp/${name}`;
     } });
     assert.deepEqual(files, [{ path: `/tmp/${fileName}`, fileName, mimeType, kind: "sticker", isImage }]);
@@ -91,7 +91,7 @@ for (const [flags, extension, mimeType, isImage] of [
 }
 
 test("Media helpers collect embedded Rich Message media", () => {
-  const files = collectTelegramFileInfos([
+  const files = collectBaleFileInfos([
     {
       message_id: 2,
       rich_message: {
@@ -144,7 +144,7 @@ test("Media helpers collect embedded Rich Message media", () => {
 
 test("Media downloads forward the message source, chat and sender file name", async () => {
   const seen: unknown[] = [];
-  await downloadTelegramMessageFiles([
+  await downloadBaleMessageFiles([
     { message_id: 3, chat: { id: -1009, type: "supergroup", username: "team" }, document: { file_id: "d", file_name: "report.pdf", mime_type: "application/pdf" } },
     { message_id: 4, chat: { id: 7, type: "private" }, voice: { file_id: "v", mime_type: "audio/ogg" } },
   ], { async downloadFile(_id, name, source) { seen.push({ name, source }); return `/tmp/${name}`; } });
@@ -155,7 +155,7 @@ test("Media downloads forward the message source, chat and sender file name", as
 });
 
 test("Media helpers download collected file infos", async () => {
-  const downloaded = await downloadTelegramMessageFiles(
+  const downloaded = await downloadBaleMessageFiles(
     [
       {
         message_id: 3,
@@ -188,13 +188,13 @@ test("Media helpers extract text, ids, and history summaries", () => {
     { message_id: 2, text: "duplicate id" },
   ];
   assert.equal(
-    extractTelegramMessagesText(messages),
+    extractBaleMessagesText(messages),
     "first\n\nsecond\n\nduplicate id",
   );
-  assert.equal(extractFirstTelegramMessageText(messages), "first");
-  assert.deepEqual(collectTelegramMessageIds(messages), [1, 2]);
+  assert.equal(extractFirstBaleMessageText(messages), "first");
+  assert.deepEqual(collectBaleMessageIds(messages), [1, 2]);
   assert.equal(
-    formatTelegramHistoryText(
+    formatBaleHistoryText(
       "hello",
       [{ path: "/tmp/demo.txt" }],
       ["transcript"],
@@ -214,14 +214,14 @@ test("Media helpers keep raw text command-safe and add reply context only for pr
     caption: "caption reply",
     reply_to_message: { caption: "quoted caption" },
   };
-  assert.equal(extractFirstTelegramMessageText([repliedCommand]), "/status");
-  assert.equal(extractTelegramMessagesText([repliedCommand]), "/status");
+  assert.equal(extractFirstBaleMessageText([repliedCommand]), "/status");
+  assert.equal(extractBaleMessagesText([repliedCommand]), "/status");
   assert.equal(
-    extractTelegramMessagesPromptText([repliedCommand]),
+    extractBaleMessagesPromptText([repliedCommand]),
     "/status\n\n[reply] quoted context",
   );
   assert.equal(
-    extractTelegramMessagesPromptText([captionReply]),
+    extractBaleMessagesPromptText([captionReply]),
     "caption reply\n\n[reply] quoted caption",
   );
 });
@@ -253,7 +253,7 @@ test("Media helpers prefer rich-message text for reply context", () => {
     },
   };
   assert.equal(
-    extractTelegramMessagesPromptText([message]),
+    extractBaleMessagesPromptText([message]),
     "current\n\n[reply] Rendered heading\n\nPlain reply text\n\n1. First item",
   );
 });
@@ -261,7 +261,7 @@ test("Media helpers prefer rich-message text for reply context", () => {
 test("Media helpers truncate long reply context for prompt text", () => {
   const longQuote = `${"a".repeat(1000)} extra`;
   assert.equal(
-    extractTelegramMessagesPromptText([
+    extractBaleMessagesPromptText([
       {
         message_id: 1,
         text: "current",
@@ -279,7 +279,7 @@ test("Media helpers infer image media types from file paths", () => {
 
 test("Media helpers key messages by chat and media group", () => {
   assert.equal(
-    getTelegramMediaGroupKey({
+    getBaleMediaGroupKey({
       message_id: 1,
       chat: { id: 7 },
       media_group_id: "album",
@@ -287,7 +287,7 @@ test("Media helpers key messages by chat and media group", () => {
     "7:private:album",
   );
   assert.equal(
-    getTelegramMediaGroupKey({
+    getBaleMediaGroupKey({
       message_id: 1,
       chat: { id: 7 },
       message_thread_id: 42,
@@ -296,7 +296,7 @@ test("Media helpers key messages by chat and media group", () => {
     "7:thread:42:album",
   );
   assert.equal(
-    getTelegramMediaGroupKey({ message_id: 1, chat: { id: 7 } }),
+    getBaleMediaGroupKey({ message_id: 1, chat: { id: 7 } }),
     undefined,
   );
 });
@@ -312,7 +312,7 @@ test("Media helpers replace debounce timers and dispatch grouped messages", asyn
   const callbacks: Array<() => void> = [];
   const dispatched: AlbumMessage[][] = [];
   let nextTimer = 1;
-  const controller = createTelegramMediaGroupController<AlbumMessage>({
+  const controller = createBaleMediaGroupController<AlbumMessage>({
     debounceMs: 100,
     setTimer: (callback) => {
       callbacks.push(callback);
@@ -350,7 +350,7 @@ test("Media helpers replace debounce timers and dispatch grouped messages", asyn
 test("Media group keeps messages until asynchronous dispatch succeeds", async () => {
   const callbacks: Array<() => void> = [];
   let attempts = 0;
-  const controller = createTelegramMediaGroupController<{
+  const controller = createBaleMediaGroupController<{
     message_id: number;
     chat: { id: number };
     media_group_id?: string;
@@ -384,7 +384,7 @@ test("Media group keeps messages until asynchronous dispatch succeeds", async ()
 test("Media group recovers from a dispatcher that throws synchronously", async () => {
   const callbacks: Array<() => void> = [];
   let attempts = 0;
-  const controller = createTelegramMediaGroupController<{
+  const controller = createBaleMediaGroupController<{
     message_id: number;
     chat: { id: number };
     media_group_id?: string;
@@ -418,7 +418,7 @@ test("Media group controller owns timers, removal, and cleanup", () => {
   const callbacks: Array<() => void> = [];
   const dispatched: number[][] = [];
   let nextTimer = 1;
-  const controller = createTelegramMediaGroupController<{
+  const controller = createBaleMediaGroupController<{
     message_id: number;
     chat: { id: number };
     media_group_id?: string;
@@ -463,7 +463,7 @@ test("Media group controller flushes a reaction target before debounce", async (
   const cleared: number[] = [];
   const dispatched: number[][] = [];
   let nextTimer = 1;
-  const controller = createTelegramMediaGroupController<{
+  const controller = createBaleMediaGroupController<{
     message_id: number;
     chat: { id: number };
     media_group_id?: string;
@@ -496,7 +496,7 @@ test("Media group suspension preserves admitted messages for replacement context
   const cleared: number[] = [];
   const dispatched: Array<{ ids: number[]; ctx?: string }> = [];
   let nextTimer = 1;
-  const controller = createTelegramMediaGroupController<
+  const controller = createBaleMediaGroupController<
     { message_id: number; chat: { id: number }; media_group_id?: string },
     string
   >({
@@ -529,7 +529,7 @@ test("Media group suspension preserves admitted messages for replacement context
 test("Media group dispatch runtime handles immediate and grouped messages", async () => {
   const callbacks: Array<() => void> = [];
   const dispatched: Array<{ ids: number[]; ctx: string }> = [];
-  const controller = createTelegramMediaGroupController<
+  const controller = createBaleMediaGroupController<
     {
       message_id: number;
       chat: { id: number };
@@ -543,7 +543,7 @@ test("Media group dispatch runtime handles immediate and grouped messages", asyn
     },
     clearTimer: () => {},
   });
-  const runtime = createTelegramMediaGroupDispatchRuntime({
+  const runtime = createBaleMediaGroupDispatchRuntime({
     mediaGroups: controller,
     dispatchMessages: async (messages, ctx: string) => {
       dispatched.push({
@@ -571,7 +571,7 @@ test("Media group dispatch runtime handles immediate and grouped messages", asyn
 test("Media helpers remove pending groups by message id", () => {
   const cleared: number[] = [];
   let nextTimer = 10;
-  const controller = createTelegramMediaGroupController<{
+  const controller = createBaleMediaGroupController<{
     message_id: number;
     chat: { id: number };
     media_group_id?: string;
@@ -587,15 +587,15 @@ test("Media helpers remove pending groups by message id", () => {
 });
 
 type GroupMessage = { message_id: number };
-type GroupEvent = TelegramPendingGroupsEvent<GroupMessage, string, undefined>;
-type GroupEffect = TelegramPendingGroupsEffect<GroupMessage, string>;
+type GroupEvent = BalePendingGroupsEvent<GroupMessage, string, undefined>;
+type GroupEffect = BalePendingGroupsEffect<GroupMessage, string>;
 
 /** Folds events through the pure group transition, keeping every effect in order. */
 function runPendingGroups(events: GroupEvent[], requireContext = true) {
-  let state = createTelegramPendingGroupsState<GroupMessage, string>();
+  let state = createBalePendingGroupsState<GroupMessage, string>();
   const effects: GroupEffect[] = [];
   for (const event of events) {
-    const next = transitionTelegramPendingGroups(state, event, { debounceMs: 10, requireContext });
+    const next = transitionBalePendingGroups(state, event, { debounceMs: 10, requireContext });
     state = next.state;
     effects.push(...next.effects);
   }
@@ -654,7 +654,7 @@ test("Pending groups keep a failed batch, ignore stale timers and settlements, a
   ]);
   assert.deepEqual(batches(stale.effects), [], "A replaced timer cannot dispatch");
   assert.equal(stale.state.groups.size, 0);
-  const removed = transitionTelegramPendingGroups(
+  const removed = transitionBalePendingGroups(
     runPendingGroups([queuedMessage(1)]).state,
     { type: "removed", messageIds: [1] },
     { debounceMs: 10, requireContext: true },

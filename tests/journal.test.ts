@@ -1,6 +1,6 @@
 /**
- * Durable Telegram inbound update journal regressions
- * Zones: telegram inbound, filesystem authority, crash recovery
+ * Durable Bale inbound update journal regressions
+ * Zones: bale inbound, filesystem authority, crash recovery
  * Covers schema, identity, dedupe, capacity, atomic publication, and cross-process serialization
  */
 
@@ -26,84 +26,84 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTelegramBusFollowerDeliveryIdentity, createTelegramBusFollowerRegistry,
-  createTelegramBusForeignOwnedUpdateForwarder, createTelegramBusProtocolIdentity,
-  getTelegramInputCustodyPeerReadiness,
-  sendTelegramBusLocalEnvelope, TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-  TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE } from "../lib/bus.ts";
-import { getTelegramProcessBirthIdentity } from "../lib/process-identity.ts";
-import { createTelegramBusFollowerSourceReferenceAdmissionRuntime,
-  createTelegramBusForwardedUpdateReceiverRuntime } from "../lib/bus-follower.ts";
-import { createTelegramConfigStore } from "../lib/config.ts";
-import { withTelegramFileTransaction } from "../lib/locks.ts";
-import { resolveTelegramSessionJournalPath, resolveTelegramSessionPollingJournalPath } from "../lib/paths.ts";
-import { createTelegramJournalSourceSerialization,
-  TELEGRAM_ROUTING_INPUT_TTL_MS,
-  createTelegramUpdateJournalBindingKey,
-  createTelegramUpdateJournalEntryDigest,
-  createTelegramUpdateJournalBindingRuntime,
-  TELEGRAM_SESSION_ADOPTION_AUTHORITY_PREFIX,
-  createTelegramUpdateJournalLegacyCustodyEvidence,
-  normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority,
-  createTelegramUpdateJournalBotIdentity,
-  createTelegramUpdateQueueHandoffToken,
-  discoverTelegramFollowerJournalPaths,
-  discoverTelegramSessionJournalPaths,
-  discoverTelegramRecipientJournalPaths,
-  inspectTelegramUpdateJournalFamily,
-  inspectTelegramInputCustodySourceStatus,
-  readTelegramUpdateJournalSource,
-  inspectTelegramProfileJournalNamespace,
-  inspectTelegramSessionJournalNamespace,
-  isTelegramThreadCleanupJournalNamespaceClear,
-  inspectTelegramUpdateJournalRetention,
-  createTelegramUpdateJournalReceiptScope,
-  createTelegramUpdateJournalReceiptScopeResolver,
-  createTelegramUpdateJournalRuntimeBindingResolver,
-  createTelegramUpdateJournalReferenceRegistry,
-  getTelegramUpdateJournalBindingPath,
-  publishTelegramUpdateJournalSegment,
-  TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES,
-  TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
-  createTelegramUpdateJournalStore,
-  createTelegramInputJournalStore,
-  type TelegramInputJournalStoreOptions,
-  type TelegramUpdateJournalQueueOwnerIdentity,
-  getTelegramUpdateJournalAdmissionScopes,
-  TelegramUpdateJournalError,
-  type TelegramJournaledUpdate,
-  type TelegramUpdateJournalStoreOptions,
+import { createBaleBusFollowerDeliveryIdentity, createBaleBusFollowerRegistry,
+  createBaleBusForeignOwnedUpdateForwarder, createBaleBusProtocolIdentity,
+  getBaleInputCustodyPeerReadiness,
+  sendBaleBusLocalEnvelope, BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+  BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE } from "../lib/bus.ts";
+import { getBaleProcessBirthIdentity } from "../lib/process-identity.ts";
+import { createBaleBusFollowerSourceReferenceAdmissionRuntime,
+  createBaleBusForwardedUpdateReceiverRuntime } from "../lib/bus-follower.ts";
+import { createBaleConfigStore } from "../lib/config.ts";
+import { withBaleFileTransaction } from "../lib/locks.ts";
+import { resolveBaleSessionJournalPath, resolveBaleSessionPollingJournalPath } from "../lib/paths.ts";
+import { createBaleJournalSourceSerialization,
+  BALE_ROUTING_INPUT_TTL_MS,
+  createBaleUpdateJournalBindingKey,
+  createBaleUpdateJournalEntryDigest,
+  createBaleUpdateJournalBindingRuntime,
+  BALE_SESSION_ADOPTION_AUTHORITY_PREFIX,
+  createBaleUpdateJournalLegacyCustodyEvidence,
+  normalizeBaleUpdateJournalLegacyCustodyDispositionAuthority,
+  createBaleUpdateJournalBotIdentity,
+  createBaleUpdateQueueHandoffToken,
+  discoverBaleFollowerJournalPaths,
+  discoverBaleSessionJournalPaths,
+  discoverBaleRecipientJournalPaths,
+  inspectBaleUpdateJournalFamily,
+  inspectBaleInputCustodySourceStatus,
+  readBaleUpdateJournalSource,
+  inspectBaleProfileJournalNamespace,
+  inspectBaleSessionJournalNamespace,
+  isBaleThreadCleanupJournalNamespaceClear,
+  inspectBaleUpdateJournalRetention,
+  createBaleUpdateJournalReceiptScope,
+  createBaleUpdateJournalReceiptScopeResolver,
+  createBaleUpdateJournalRuntimeBindingResolver,
+  createBaleUpdateJournalReferenceRegistry,
+  getBaleUpdateJournalBindingPath,
+  publishBaleUpdateJournalSegment,
+  BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES,
+  BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
+  createBaleUpdateJournalStore,
+  createBaleInputJournalStore,
+  type BaleInputJournalStoreOptions,
+  type BaleUpdateJournalQueueOwnerIdentity,
+  getBaleUpdateJournalAdmissionScopes,
+  BaleUpdateJournalError,
+  type BaleJournaledUpdate,
+  type BaleUpdateJournalStoreOptions,
 } from "../lib/journal.ts";
 import {
-  createTelegramWorkspaceAdmissionLedger,
-  TelegramWorkspaceAdmissionError,
-  type TelegramWorkspaceAdmissionLedger,
+  createBaleWorkspaceAdmissionLedger,
+  BaleWorkspaceAdmissionError,
+  type BaleWorkspaceAdmissionLedger,
 } from "../lib/workspace-admission.ts";
-import { createTelegramCustodiedExecutionSession,
-  createTelegramCustodiedUpdateAdmissionHandle,
-  createTelegramInputCustodyLifecycleBindingResolver,
-  createTelegramInputCustodyLegacyDispositionRuntime,
-  createTelegramInputCustodyBusBindingRuntime,
-  createTelegramInputCustodyForwardReferenceResolver,
-  createTelegramInputCustodyHandoffAcceptanceRuntime,
-  createTelegramInputCustodyHandoffClient,
-  createTelegramInputCustodySourceReferenceWakeRuntime,
-  createTelegramInputCustodyWorkerJournalPort,
-  evaluateTelegramInputCustodyActivationReadiness,
-  evaluateTelegramInputCustodyWriterExclusionEvidence,
-  executeTelegramInputCustodyWriterCutover,
-  executeTelegramInputCustodyMigrationCompletion,
-  normalizeTelegramInputCustodyStartupExclusionAuthority,
-  normalizeTelegramInputCustodyMigrationCompletionAuthority,
-  createTelegramInputCustodyActivationReadinessResolver,
-  createTelegramInputCustodyProvenReadinessResolver,
-  createTelegramInputCustodyReadinessEvidenceStore,
-  createTelegramUpdateAdmissionLifecycleAssembly,
-  createTelegramUpdateAdmissionLifecycleRuntime,
-  createTelegramUpdateAdmissionRuntimeBinding,
-  createTelegramUpdateAdmissionWorkerRuntime, executeTelegramCustodiedInput,
-  reportTelegramQueueAdmission, reportTelegramUpdateCompleted,
-  reportTelegramUpdateDeferred } from "../lib/updates.ts";
+import { createBaleCustodiedExecutionSession,
+  createBaleCustodiedUpdateAdmissionHandle,
+  createBaleInputCustodyLifecycleBindingResolver,
+  createBaleInputCustodyLegacyDispositionRuntime,
+  createBaleInputCustodyBusBindingRuntime,
+  createBaleInputCustodyForwardReferenceResolver,
+  createBaleInputCustodyHandoffAcceptanceRuntime,
+  createBaleInputCustodyHandoffClient,
+  createBaleInputCustodySourceReferenceWakeRuntime,
+  createBaleInputCustodyWorkerJournalPort,
+  evaluateBaleInputCustodyActivationReadiness,
+  evaluateBaleInputCustodyWriterExclusionEvidence,
+  executeBaleInputCustodyWriterCutover,
+  executeBaleInputCustodyMigrationCompletion,
+  normalizeBaleInputCustodyStartupExclusionAuthority,
+  normalizeBaleInputCustodyMigrationCompletionAuthority,
+  createBaleInputCustodyActivationReadinessResolver,
+  createBaleInputCustodyProvenReadinessResolver,
+  createBaleInputCustodyReadinessEvidenceStore,
+  createBaleUpdateAdmissionLifecycleAssembly,
+  createBaleUpdateAdmissionLifecycleRuntime,
+  createBaleUpdateAdmissionRuntimeBinding,
+  createBaleUpdateAdmissionWorkerRuntime, executeBaleCustodiedInput,
+  reportBaleQueueAdmission, reportBaleUpdateCompleted,
+  reportBaleUpdateDeferred } from "../lib/updates.ts";
 
 const workerPath = fileURLToPath(
   new URL("./fixtures/journal-worker.ts", import.meta.url),
@@ -113,24 +113,24 @@ test("Legacy custody disposition authority binds immutable quarantined failure e
   const entry = { updateId: 7, update: { update_id: 7 }, admittedAtMs: 100,
     state: "retry-wait" as const, failure: { attemptCount: 2, failedAtMs: 200,
       failureClass: "transport", summary: "retry later" }, nextRetryAtMs: 300 };
-  const evidence = createTelegramUpdateJournalLegacyCustodyEvidence(entry);
+  const evidence = createBaleUpdateJournalLegacyCustodyEvidence(entry);
   assert.ok(evidence);
   assert.match(evidence.evidenceSha256, /^[a-f0-9]{64}$/u);
-  assert.notEqual(createTelegramUpdateJournalLegacyCustodyEvidence({ ...entry,
+  assert.notEqual(createBaleUpdateJournalLegacyCustodyEvidence({ ...entry,
     failure: { ...entry.failure, summary: "changed" } })?.evidenceSha256,
   evidence.evidenceSha256);
   const authority = { version: 1 as const, dispositionId: "legacy-disposition:1",
     updateId: 7, evidenceSha256: evidence.evidenceSha256, action: "requeue-v3" as const,
     operatorAuthorityId: "operator:1", authorizedAtMs: 400 };
-  assert.deepEqual(normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority(authority,
+  assert.deepEqual(normalizeBaleUpdateJournalLegacyCustodyDispositionAuthority(authority,
     evidence), authority);
-  assert.equal(normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority({ ...authority,
+  assert.equal(normalizeBaleUpdateJournalLegacyCustodyDispositionAuthority({ ...authority,
     updateId: 8 }, evidence), undefined);
-  assert.equal(normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority({ ...authority,
+  assert.equal(normalizeBaleUpdateJournalLegacyCustodyDispositionAuthority({ ...authority,
     action: "retry" }, evidence), undefined);
-  assert.equal(normalizeTelegramUpdateJournalLegacyCustodyDispositionAuthority({ ...authority,
+  assert.equal(normalizeBaleUpdateJournalLegacyCustodyDispositionAuthority({ ...authority,
     target: { chatId: 1 } }, evidence), undefined);
-  assert.equal(createTelegramUpdateJournalLegacyCustodyEvidence({ ...entry,
+  assert.equal(createBaleUpdateJournalLegacyCustodyEvidence({ ...entry,
     inputClaim: { phase: "running" } } as never), undefined);
 });
 
@@ -150,18 +150,18 @@ test("V3 legacy custody disposition atomically requeues or discards with audit",
       botIdentity: options.botIdentity, entries: [retryEntry, failedEntry] })}\n`);
     let authorized = true;
     const authorizationKeys: string[][] = [];
-    const store = createTelegramInputJournalStore({ ...options, getNowMs: () => 500,
+    const store = createBaleInputJournalStore({ ...options, getNowMs: () => 500,
       authorizeLegacyCustodyDisposition: authority => {
         authorizationKeys.push(Object.keys(authority).sort());
         return authorized;
       } });
-    const inspector = createTelegramInputJournalStore({ ...options,
+    const inspector = createBaleInputJournalStore({ ...options,
       withSourceSerialization() { throw new Error("candidate listing entered mutation serialization"); } });
     const candidates = inspector.listLegacyCustodyCandidates();
     assert.deepEqual(candidates.map(candidate => candidate.updateId), [7, 8]);
     assert.deepEqual(Object.keys(candidates[0]!).sort(),
       ["attemptCount", "evidenceSha256", "failureClass", "state", "updateId"]);
-    const retryEvidence = createTelegramUpdateJournalLegacyCustodyEvidence(retryEntry)!;
+    const retryEvidence = createBaleUpdateJournalLegacyCustodyEvidence(retryEntry)!;
     const retryAuthority = { version: 1 as const, dispositionId: "legacy:retry:7",
       updateId: 7, evidenceSha256: retryEvidence.evidenceSha256, action: "requeue-v3" as const,
       operatorAuthorityId: "operator:1", authorizedAtMs: 400 };
@@ -184,7 +184,7 @@ test("V3 legacy custody disposition atomically requeues or discards with audit",
     assert.equal(authorizationKeys.length, callsBeforeMalformedDuplicate);
     assert.throws(() => store.applyLegacyCustodyDisposition({ ...retryAuthority,
       dispositionId: "legacy:retry:7:again" }), /non-quarantined/);
-    const failedEvidence = createTelegramUpdateJournalLegacyCustodyEvidence(failedEntry)!;
+    const failedEvidence = createBaleUpdateJournalLegacyCustodyEvidence(failedEntry)!;
     const discardAuthority = { version: 1 as const, dispositionId: "legacy:discard:8",
       updateId: 8, evidenceSha256: failedEvidence.evidenceSha256, action: "discard" as const,
       operatorAuthorityId: "operator:1", authorizedAtMs: 410 };
@@ -200,7 +200,7 @@ test("V3 legacy custody disposition atomically requeues or discards with audit",
 });
 
 test("Follower journal discovery is profile-exact, segment-aware, and fail-closed", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-journal-discovery-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-journal-discovery-"));
   try {
     const defaultA = join(dir, "follower-inbox-aaaaaaaaaaaaaaaa.json");
     const defaultB = join(dir, "follower-inbox-bbbbbbbbbbbbbbbb.json");
@@ -211,13 +211,13 @@ test("Follower journal discovery is profile-exact, segment-aware, and fail-close
     await writeFile(namedC, "{}\n");
     await mkdir(join(dir, "follower-inbox-dddddddddddddddd.json"));
     await writeFile(join(dir, "follower-inbox-not-a-hash.json"), "{}\n");
-    assert.deepEqual(discoverTelegramFollowerJournalPaths({ directory: dir }), {
+    assert.deepEqual(discoverBaleFollowerJournalPaths({ directory: dir }), {
       paths: [defaultA, defaultB], complete: false,
     });
-    assert.deepEqual(discoverTelegramFollowerJournalPaths({ directory: dir, profileName: "work" }), {
+    assert.deepEqual(discoverBaleFollowerJournalPaths({ directory: dir, profileName: "work" }), {
       paths: [namedC], complete: true,
     });
-    assert.deepEqual(discoverTelegramFollowerJournalPaths({
+    assert.deepEqual(discoverBaleFollowerJournalPaths({
       directory: join(dir, "missing"), profileName: "work",
     }), { paths: [], complete: true });
   } finally {
@@ -227,31 +227,31 @@ test("Follower journal discovery is profile-exact, segment-aware, and fail-close
 
 async function withInputCustodyFixture(
   run: (fixture: {
-    path: string; dir: string; options: TelegramInputJournalStoreOptions;
-    setOwner: (owner: TelegramUpdateJournalQueueOwnerIdentity | undefined) => void;
+    path: string; dir: string; options: BaleInputJournalStoreOptions;
+    setOwner: (owner: BaleUpdateJournalQueueOwnerIdentity | undefined) => void;
     setBinding: (binding: string) => void;
-    setHook: (hook: TelegramUpdateJournalStoreOptions["onPublicationBoundary"]) => void;
-    ledger: ReturnType<typeof createTelegramWorkspaceAdmissionLedger>;
+    setHook: (hook: BaleUpdateJournalStoreOptions["onPublicationBoundary"]) => void;
+    ledger: ReturnType<typeof createBaleWorkspaceAdmissionLedger>;
   }) => Promise<void>,
 ): Promise<void> {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-input-custody-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-input-custody-")));
   const path = join(dir, "inbox.work.json");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "123:synthetic-input-custody" });
-  const configPath = join(dir, "telegram.json");
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "123:synthetic-input-custody" });
+  const configPath = join(dir, "bale.json");
   try {
     await writeFile(configPath, JSON.stringify({ profiles: { work: { botToken: "123:synthetic-input-custody", allowedUserId: 7 } } }));
-    const config = createTelegramConfigStore({ agentDir: dir, configPath });
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const config = createBaleConfigStore({ agentDir: dir, configPath });
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     await config.load(); config.activateProfile("work");
     const runtime = { instanceId: "owner", processId: process.pid, processBirthId: `${process.pid}:fixture-birth` };
-    let owner: TelegramUpdateJournalQueueOwnerIdentity | undefined = { ...runtime, sessionGeneration: 1 };
+    let owner: BaleUpdateJournalQueueOwnerIdentity | undefined = { ...runtime, sessionGeneration: 1 };
     let recipientBindingKey = "workspace:owner";
     let held = false;
-    let hook: TelegramUpdateJournalStoreOptions["onPublicationBoundary"];
-    const ledger = createTelegramWorkspaceAdmissionLedger({ path: join(dir, "workspace-admission.json"),
+    let hook: BaleUpdateJournalStoreOptions["onPublicationBoundary"];
+    const ledger = createBaleWorkspaceAdmissionLedger({ path: join(dir, "workspace-admission.json"),
       profileKey: "fixture:work", owner: { processId: runtime.processId, processBirthId: runtime.processBirthId },
       getProcessLiveness: () => "alive" });
-    const options: TelegramInputJournalStoreOptions = {
+    const options: BaleInputJournalStoreOptions = {
       path, profileName: "work", botIdentity, queueRuntimeIdentity: runtime, workspaceAdmission: ledger,
       sourceAccess: { directory: dir, limits: { maxFiles: 1000, maxBytes: 10_000_000, maxEntries: 100, maxWork: 100_000 } },
       withSourceSerialization(operation) {
@@ -292,7 +292,7 @@ function inputSource(receipt: {
 
 test("Input custody acquires once, fences start and settlement, and preserves exact old receipts", async () => {
   await withInputCustodyFixture(async ({ options, setOwner, setBinding, ledger }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     assert.equal("removeCompleted" in store, false);
     assert.equal("removeCompletedExact" in store, false);
     assert.equal("inspectSourceCompletion" in store, false);
@@ -300,7 +300,7 @@ test("Input custody acquires once, fences start and settlement, and preserves ex
     assert.equal("inspectPendingRetention" in store, false);
     assert.equal("inspectAbandonedPending" in store, false);
     assert.equal("markQueued" in store, false);
-    assert.equal("acquireInput" in createTelegramUpdateJournalStore(options), false);
+    assert.equal("acquireInput" in createBaleUpdateJournalStore(options), false);
     store.appendBatch([{ update_id: 10 }, { update_id: 20, message: { text: "original" } }], 20);
     const request = { updateId: 20, recipientBindingKey: "workspace:owner",
       executionUpdate: { update_id: 20, message: { text: "routed", message_thread_id: 9 } } };
@@ -308,7 +308,7 @@ test("Input custody acquires once, fences start and settlement, and preserves ex
     assert.equal(first.acquired, true);
     assert.deepEqual(ledger.read().leases, []);
     assert.throws(() => store.completeInput(first.receipt), (error) => isJournalError(error, "conflict"));
-    assert.deepEqual(createTelegramInputJournalStore(options).acquireInput(request), { acquired: false, receipt: first.receipt });
+    assert.deepEqual(createBaleInputJournalStore(options).acquireInput(request), { acquired: false, receipt: first.receipt });
     assert.throws(() => store.acquireInput({ ...request, recipientBindingKey: "another" }), (error) => isJournalError(error, "conflict"));
     assert.throws(() => store.acquireInput({ ...request, executionUpdate: undefined }), (error) => isJournalError(error, "conflict"));
     const second = store.acquireInput({ updateId: 10, recipientBindingKey: "workspace:owner" });
@@ -330,10 +330,10 @@ test("Input custody acquires once, fences start and settlement, and preserves ex
     const started = store.startInput(first.receipt);
     assert.deepEqual(started, { started: true, update: request.executionUpdate });
     if (started.started) (started.update.message as { text: string }).text = "caller mutation";
-    assert.deepEqual(createTelegramInputJournalStore(options).startInput(first.receipt), { started: false });
+    assert.deepEqual(createBaleInputJournalStore(options).startInput(first.receipt), { started: false });
     assert.equal((store.read().entries[1]!.inputClaim!.executionUpdate!.message as { text: string }).text, "routed");
     const foreign = { instanceId: "foreign", processId: process.pid + 1, processBirthId: "foreign-birth" };
-    const other = createTelegramInputJournalStore({ ...options, queueRuntimeIdentity: foreign,
+    const other = createBaleInputJournalStore({ ...options, queueRuntimeIdentity: foreign,
       getInputContext: () => ({ owner: { ...foreign, sessionGeneration: 1 }, recipientBindingKey: "workspace:owner" }) });
     assert.throws(() => other.acquireInput({ updateId: 10, recipientBindingKey: "workspace:owner" }), (error) => isJournalError(error, "conflict"));
     assert.throws(() => other.completeInput(first.receipt), (error) => isJournalError(error, "conflict"));
@@ -354,8 +354,8 @@ test("V3 activation readiness fails closed on mixed startup evidence", () => {
   const ready = { requested: true, sourceStatus: "v3" as const,
     legacyWritersExcluded: true, historicalMigrationComplete: true,
     peerReadiness: ["ready"] as const };
-  assert.deepEqual(evaluateTelegramInputCustodyActivationReadiness(ready), { enabled: true });
-  assert.deepEqual(evaluateTelegramInputCustodyActivationReadiness({ ...ready,
+  assert.deepEqual(evaluateBaleInputCustodyActivationReadiness(ready), { enabled: true });
+  assert.deepEqual(evaluateBaleInputCustodyActivationReadiness({ ...ready,
     sourceStatus: "absent" }), { enabled: true });
   const cases = [
     [{ ...ready, requested: false }, "disabled"],
@@ -368,7 +368,7 @@ test("V3 activation readiness fails closed on mixed startup evidence", () => {
     [{ ...ready, peerReadiness: ["unknown"] as const }, "peer-capability-mismatch"],
   ] as const;
   for (const [input, blocker] of cases) assert.deepEqual(
-    evaluateTelegramInputCustodyActivationReadiness(input), { enabled: false, blocker });
+    evaluateBaleInputCustodyActivationReadiness(input), { enabled: false, blocker });
 });
 
 test("Legacy journal mutations honor the optional outer writer admission fence", async () => {
@@ -377,7 +377,7 @@ test("Legacy journal mutations honor the optional outer writer admission fence",
     let allowed = false;
     let admissions = 0;
     const order: string[] = [];
-    const store = createTelegramUpdateJournalStore({ ...base,
+    const store = createBaleUpdateJournalStore({ ...base,
       withWriterAdmission(operation) {
         admissions += 1;
         order.push("writer-admission");
@@ -404,7 +404,7 @@ test("Legacy journal mutations honor the optional outer writer admission fence",
     allowed = false;
     assert.throws(() => store.removeCompleted([1]), /writer fence closed/);
     assert.throws(() => store.abandonPending({
-      journalBindingKey: createTelegramUpdateJournalBindingKey(options),
+      journalBindingKey: createBaleUpdateJournalBindingKey(options),
       entry: { updateId: 1, update: { update_id: 1 }, admittedAtMs: 1, state: "pending" },
       operatorAuthorityId: "fixture-owner", isCurrent: () => true,
     }), /writer fence closed/);
@@ -420,40 +420,40 @@ test("V3 source readiness adapter observes absent then strict v3 family", async 
   await withInputCustodyFixture(async ({ options, path }) => {
     const inspection = { ...options.sourceAccess, path,
       profile: options.profileName!, botIdentity: options.botIdentity };
-    const registry = createTelegramBusFollowerRegistry();
-    const readyProtocol = createTelegramBusProtocolIdentity({ runtimeBuild: "0.45.0",
-      capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
-        TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
+    const registry = createBaleBusFollowerRegistry();
+    const readyProtocol = createBaleBusProtocolIdentity({ runtimeBuild: "0.45.0",
+      capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION,
+        BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
     registry.register({ instanceId: "peer", registrationGeneration: "g1",
       protocol: readyProtocol, connectedAtMs: 1 });
-    const resolve = createTelegramInputCustodyActivationReadinessResolver({
+    const resolve = createBaleInputCustodyActivationReadinessResolver({
       isRequested: () => true,
-      inspectSource: () => inspectTelegramInputCustodySourceStatus(inspection),
+      inspectSource: () => inspectBaleInputCustodySourceStatus(inspection),
       areLegacyWritersExcluded: () => true,
       isHistoricalMigrationComplete: () => true,
-      listPeerReadiness: () => getTelegramInputCustodyPeerReadiness(registry.list()),
+      listPeerReadiness: () => getBaleInputCustodyPeerReadiness(registry.list()),
     });
-    assert.equal(inspectTelegramInputCustodySourceStatus(inspection), "absent");
+    assert.equal(inspectBaleInputCustodySourceStatus(inspection), "absent");
     assert.deepEqual(resolve(), { enabled: true });
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 1 }], 1);
-    assert.equal(inspectTelegramInputCustodySourceStatus(inspection), "v3");
+    assert.equal(inspectBaleInputCustodySourceStatus(inspection), "v3");
     assert.deepEqual(resolve(), { enabled: true });
     registry.register({ instanceId: "peer", registrationGeneration: "g1",
-      protocol: createTelegramBusProtocolIdentity({ runtimeBuild: "0.44.0",
-        capabilities: [TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }), connectedAtMs: 2 });
+      protocol: createBaleBusProtocolIdentity({ runtimeBuild: "0.44.0",
+        capabilities: [BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION] }), connectedAtMs: 2 });
     assert.deepEqual(resolve(), { enabled: false, blocker: "peer-capability-mismatch" });
     registry.register({ instanceId: "peer", registrationGeneration: "g2",
       protocol: readyProtocol, connectedAtMs: 3 });
     assert.deepEqual(resolve(), { enabled: true });
     await writeFile(path, "{broken");
-    assert.equal(inspectTelegramInputCustodySourceStatus(inspection), "ambiguous");
+    assert.equal(inspectBaleInputCustodySourceStatus(inspection), "ambiguous");
     assert.deepEqual(resolve(), { enabled: false, blocker: "source-unready" });
   });
 });
 
 test("Journal reference registry bounds and exactly releases process-local leases", async () => {
-  const registry = createTelegramUpdateJournalReferenceRegistry({ maxActive: 2 });
+  const registry = createBaleUpdateJournalReferenceRegistry({ maxActive: 2 });
   const releaseLeader = registry.acquire({ referenceClass: "leader-lifecycle",
     recoveryKey: "journal:leader" });
   const releasePolling = registry.acquire({ referenceClass: "polling-cursor",
@@ -495,17 +495,17 @@ test("V3 migration completion authority binds cutover and historical inventory",
     closureOperationId: "closure:1", ...expected,
     migrationInventorySha256: "b".repeat(64), resultingSourceFamily: "v3" as const,
     authorizedAtMs: 1_000 };
-  assert.deepEqual(normalizeTelegramInputCustodyMigrationCompletionAuthority(authority, expected),
+  assert.deepEqual(normalizeBaleInputCustodyMigrationCompletionAuthority(authority, expected),
     authority);
-  assert.equal(normalizeTelegramInputCustodyMigrationCompletionAuthority({ ...authority,
+  assert.equal(normalizeBaleInputCustodyMigrationCompletionAuthority({ ...authority,
     recoveryKey: "journal:other" }, expected), undefined);
-  assert.equal(normalizeTelegramInputCustodyMigrationCompletionAuthority({ ...authority,
+  assert.equal(normalizeBaleInputCustodyMigrationCompletionAuthority({ ...authority,
     resultingSourceFamily: "legacy" }, expected), undefined);
-  assert.equal(normalizeTelegramInputCustodyMigrationCompletionAuthority({ ...authority,
+  assert.equal(normalizeBaleInputCustodyMigrationCompletionAuthority({ ...authority,
     migrationInventorySha256: "raw inventory" }, expected), undefined);
-  assert.equal(normalizeTelegramInputCustodyMigrationCompletionAuthority({ ...authority,
+  assert.equal(normalizeBaleInputCustodyMigrationCompletionAuthority({ ...authority,
     retryDisposition: "discard" }, expected), undefined);
-  assert.equal(normalizeTelegramInputCustodyMigrationCompletionAuthority({ ...authority,
+  assert.equal(normalizeBaleInputCustodyMigrationCompletionAuthority({ ...authority,
     status: "revoked" }, expected)?.status, "revoked");
 });
 
@@ -517,13 +517,13 @@ test("V3 migration completion publication is exact and idempotent", () => {
     closureOperationId: "closure:1", ...expected, migrationInventorySha256: digest,
     resultingSourceFamily: "v3" as const, authorizedAtMs: 1_000 };
   let retained: string | undefined;
-  const store = createTelegramInputCustodyReadinessEvidenceStore({
+  const store = createBaleInputCustodyReadinessEvidenceStore({
     readRetained: () => retained, publishRetained(value) { retained = value; },
     withSerialization: operation => operation(), authorizePublication: () => true });
   store.publish({ expectedRevision: 0, kind: "migration-completion", evidence: authority });
   let source: "absent" | "v3" = "v3";
   const run = (migrationInventorySha256 = digest) =>
-    executeTelegramInputCustodyMigrationCompletion({ expected, authority,
+    executeBaleInputCustodyMigrationCompletion({ expected, authority,
       migrationInventorySha256, inspectSource: () => source, evidenceStore: store });
   assert.deepEqual(run("c".repeat(64)), { kind: "blocked", blocker: "inventory-drift" });
   source = "absent";
@@ -548,16 +548,16 @@ test("V3 startup exclusion authority binds closure, inventory, identity, and pro
     authorityId: "operator-cutover:1", closureOperationId: "closure:1", ...expected,
     writerInventorySha256: "a".repeat(64), allowedWriterProtocol: "custody-v3" as const,
     authorizedAtMs: 1_000 };
-  assert.deepEqual(normalizeTelegramInputCustodyStartupExclusionAuthority(authority, expected), authority);
-  assert.equal(normalizeTelegramInputCustodyStartupExclusionAuthority({ ...authority,
+  assert.deepEqual(normalizeBaleInputCustodyStartupExclusionAuthority(authority, expected), authority);
+  assert.equal(normalizeBaleInputCustodyStartupExclusionAuthority({ ...authority,
     recoveryKey: "journal:other" }, expected), undefined);
-  assert.equal(normalizeTelegramInputCustodyStartupExclusionAuthority({ ...authority,
+  assert.equal(normalizeBaleInputCustodyStartupExclusionAuthority({ ...authority,
     writerInventorySha256: "raw inventory" }, expected), undefined);
-  assert.equal(normalizeTelegramInputCustodyStartupExclusionAuthority({ ...authority,
+  assert.equal(normalizeBaleInputCustodyStartupExclusionAuthority({ ...authority,
     allowedWriterProtocol: "legacy" }, expected), undefined);
-  assert.equal(normalizeTelegramInputCustodyStartupExclusionAuthority({ ...authority,
+  assert.equal(normalizeBaleInputCustodyStartupExclusionAuthority({ ...authority,
     target: { chatId: 1 } }, expected), undefined);
-  assert.equal(normalizeTelegramInputCustodyStartupExclusionAuthority({ ...authority,
+  assert.equal(normalizeBaleInputCustodyStartupExclusionAuthority({ ...authority,
     status: "revoked" }, expected)?.status, "revoked");
 });
 
@@ -572,8 +572,8 @@ test("V3 writer exclusion requires complete inventory and proven process death",
     authorizedAtMs: 1_000 };
   const evaluate = (complete: boolean, states: Record<number, "alive" | "dead" | "unverifiable">,
     identity = expected,
-    authority: Parameters<typeof evaluateTelegramInputCustodyWriterExclusionEvidence>[0]["startupAuthority"] = startupAuthority) =>
-    evaluateTelegramInputCustodyWriterExclusionEvidence({ expected,
+    authority: Parameters<typeof evaluateBaleInputCustodyWriterExclusionEvidence>[0]["startupAuthority"] = startupAuthority) =>
+    evaluateBaleInputCustodyWriterExclusionEvidence({ expected,
       inventory: { ...identity, complete, writers, writerInventorySha256: digest },
       startupAuthority: authority,
       getProcessLiveness: writer => states[writer.processId] ?? "unverifiable" });
@@ -593,7 +593,7 @@ test("V3 readiness evidence store serializes authorized exact-revision proofs", 
   let retained: string | undefined;
   let authorized = true;
   const authorizedEvidenceKeys: string[][] = [];
-  const store = createTelegramInputCustodyReadinessEvidenceStore({
+  const store = createBaleInputCustodyReadinessEvidenceStore({
     readRetained: () => retained,
     publishRetained(value) { retained = value; },
     withSerialization: operation => operation(),
@@ -664,12 +664,12 @@ test("V3 readiness evidence store serializes authorized exact-revision proofs", 
 });
 
 test("V3 writer cutover installs mode before linked exclusion publication", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-writer-cutover-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-writer-cutover-"));
   try {
     const expected = { profileKey: "profile:work", recoveryKey: "journal:work" };
     const digest = "a".repeat(64);
     const owner = { processId: 101, processBirthId: "101:start:cutover" };
-    const ledger = createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
+    const ledger = createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"),
       profileKey: expected.profileKey, owner, getNowMs: () => 1_000,
       getProcessLiveness: () => "alive" });
     const closure = ledger.acquireJournalWriterClosure({ operationId: "closure:cutover",
@@ -677,7 +677,7 @@ test("V3 writer cutover installs mode before linked exclusion publication", asyn
     assert.equal(closure.kind, "acquired");
     if (closure.kind !== "acquired") return;
     let retained: string | undefined;
-    const store = createTelegramInputCustodyReadinessEvidenceStore({
+    const store = createBaleInputCustodyReadinessEvidenceStore({
       readRetained: () => retained, publishRetained(value) { retained = value; },
       withSerialization: operation => operation(), authorizePublication: () => true });
     const authority = { version: 1 as const, status: "enforced" as const,
@@ -685,7 +685,7 @@ test("V3 writer cutover installs mode before linked exclusion publication", asyn
       ...expected, writerInventorySha256: digest, allowedWriterProtocol: "custody-v3" as const,
       authorizedAtMs: 950 };
     store.publish({ expectedRevision: 0, kind: "startup-exclusion", evidence: authority });
-    const run = () => executeTelegramInputCustodyWriterCutover({ expected,
+    const run = () => executeBaleInputCustodyWriterCutover({ expected,
       closure: closure.fence, startupAuthority: authority,
       inventory: { ...expected, complete: true, writerInventorySha256: digest, writers: [] },
       getProcessLiveness: () => "dead",
@@ -713,7 +713,7 @@ test("V3 writer cutover keeps mode non-ready when authority changes after instal
     authorizedAtMs: 1_000 };
   let reads = 0;
   let publications = 0;
-  const result = executeTelegramInputCustodyWriterCutover({ expected,
+  const result = executeBaleInputCustodyWriterCutover({ expected,
     closure: { operationId: "closure:1", ...expected }, startupAuthority: authority,
     inventory: { ...expected, complete: true, writerInventorySha256: digest, writers: [] },
     getProcessLiveness: () => "dead",
@@ -754,7 +754,7 @@ test("V3 proven readiness requires linked startup authority and installed protoc
   let writerProtocolMode: { protocol: "custody-v3"; profileKey: string; recoveryKey: string;
     startupAuthorityId: string; closureOperationId: string; writerInventorySha256: string } | undefined;
   let sourceStatus: "absent" | "v3" = "v3";
-  const resolve = createTelegramInputCustodyProvenReadinessResolver({
+  const resolve = createBaleInputCustodyProvenReadinessResolver({
     isRequested: () => true, expectedIdentity: () => expected,
     inspectSource: () => sourceStatus, listPeerReadiness: () => ["ready"],
     readWriterExclusionEvidence: () => writerEvidence,
@@ -804,7 +804,7 @@ test("V3 activation readiness resolver is lazy and fails closed on inspection lo
   let migrationComplete = true;
   let sourceThrows = false;
   let peersThrow = false;
-  const resolve = createTelegramInputCustodyActivationReadinessResolver({
+  const resolve = createBaleInputCustodyActivationReadinessResolver({
     isRequested: () => requested,
     inspectSource() { sourceReads += 1; if (sourceThrows) throw new Error("lost source proof"); return "v3"; },
     areLegacyWritersExcluded: () => writersExcluded,
@@ -837,7 +837,7 @@ test("Legacy custody operator runtime resolves exact live binding without cachin
   let bindingKey = "journal:g1";
   const candidate = { updateId: 7, state: "retry-wait" as const, attemptCount: 2,
     failureClass: "transport", evidenceSha256: "a".repeat(64) };
-  const runtime = createTelegramInputCustodyLegacyDispositionRuntime({
+  const runtime = createBaleInputCustodyLegacyDispositionRuntime({
     withBindingReference(recoveryKey, operation) {
       if (recoveryKey !== bindingKey) throw new Error("binding is unavailable");
       calls.push(`enter:${bindingKey}`);
@@ -870,9 +870,9 @@ test("Legacy custody operator runtime resolves exact live binding without cachin
 
 test("V3 worker journal port exposes custody but cannot complete non-excluded input without receipts", async () => {
   await withInputCustodyFixture(async ({ options, path }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 1 }], 1);
-    const port = createTelegramInputCustodyWorkerJournalPort(store);
+    const port = createBaleInputCustodyWorkerJournalPort(store);
     assert.deepEqual(Object.keys(port.inputCustody).sort(),
       ["acquireInput", "completeInput", "queueInputs", "startInput"]);
     assert.equal("applyLegacyCustodyDisposition" in port.inputCustody, false);
@@ -895,10 +895,10 @@ test("V3 worker journal port exposes custody but cannot complete non-excluded in
     let enabled = false;
     let sourceReads = 0;
     let recipientReads = 0;
-    const resolve = createTelegramInputCustodyLifecycleBindingResolver({
+    const resolve = createBaleInputCustodyLifecycleBindingResolver({
       isEnabled: () => enabled,
       resolveInputJournal() { sourceReads += 1; return { runtimeKey: "runtime-v3",
-        recoveryKey: createTelegramUpdateJournalBindingKey(options), journal: store }; },
+        recoveryKey: createBaleUpdateJournalBindingKey(options), journal: store }; },
       getRecipientBindingKey() { recipientReads += 1; return "workspace:owner"; },
     });
     assert.equal(resolve(), undefined);
@@ -921,7 +921,7 @@ test("V3 worker journal port exposes custody but cannot complete non-excluded in
       processBirthId: `${process.pid + 1}:recipient`, sessionGeneration: 1 };
     const handoff = { queueKind: queued.queueKind, receiptId: queued.receiptId,
       sourceUpdateIds: queued.sourceUpdateIds, expectedOwner: queued.queueOwner, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() };
+      handoffToken: createBaleUpdateQueueHandoffToken() };
     assert.deepEqual(binding?.journal.offerQueuedHandoff?.(handoff).offeredUpdateIds, [1]);
     assertRawRemovalRefused();
     assert.deepEqual(binding?.journal.cancelQueuedHandoff?.(handoff).cancelledUpdateIds, [1]);
@@ -930,21 +930,21 @@ test("V3 worker journal port exposes custody but cannot complete non-excluded in
 
 test("Custodied execution adapter starts once and settles complete or single-input queue outcomes", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 1 }, { update_id: 2 }, { update_id: 3 }], 3);
-    assert.deepEqual(await executeTelegramCustodiedInput({ journal: store,
+    assert.deepEqual(await executeBaleCustodiedInput({ journal: store,
       update: { update_id: 1 }, recipientBindingKey: "workspace:owner",
       async execute() { return { kind: "complete" }; } }), { status: "completed" });
     let ambiguousExecutions = 0;
-    await assert.rejects(executeTelegramCustodiedInput({ journal: store,
+    await assert.rejects(executeBaleCustodiedInput({ journal: store,
       update: { update_id: 2 }, recipientBindingKey: "workspace:owner",
       async execute() { ambiguousExecutions += 1; throw new Error("execution outcome unknown"); } }));
-    assert.equal((await executeTelegramCustodiedInput({ journal: store,
+    assert.equal((await executeBaleCustodiedInput({ journal: store,
       update: { update_id: 2 }, recipientBindingKey: "workspace:owner",
       async execute() { ambiguousExecutions += 1; return { kind: "complete" }; } })).status,
     "outcome-unknown");
     assert.equal(ambiguousExecutions, 1);
-    const queued = await executeTelegramCustodiedInput({ journal: store,
+    const queued = await executeBaleCustodiedInput({ journal: store,
       update: { update_id: 3 }, recipientBindingKey: "workspace:owner",
       async execute() { return { kind: "queued", queueKind: "prompt",
         receiptId: "queue-three", sourceUpdateIds: [3] }; } });
@@ -957,10 +957,10 @@ test("Custodied execution adapter starts once and settles complete or single-inp
 
 test("Custodied execution session groups deferred and current receipts atomically", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 10 }, { update_id: 11 }, { update_id: 12 },
       { update_id: 13 }], 13);
-    const session = createTelegramCustodiedExecutionSession({ journal: store,
+    const session = createBaleCustodiedExecutionSession({ journal: store,
       recipientBindingKey: "workspace:owner" });
     const deferred = await session.execute({ update_id: 10 },
       async () => ({ kind: "deferred" }));
@@ -986,7 +986,7 @@ test("Custodied execution session groups deferred and current receipts atomicall
       throw new Error("ambiguous running execution");
     }));
     await assert.rejects(session.settle(13, { kind: "complete" }), /no exact running receipt/);
-    const replacement = createTelegramCustodiedExecutionSession({ journal: store,
+    const replacement = createBaleCustodiedExecutionSession({ journal: store,
       recipientBindingKey: "workspace:owner" });
     assert.equal((await replacement.execute({ update_id: 13 },
       async () => ({ kind: "complete" }))).status, "outcome-unknown");
@@ -999,16 +999,16 @@ test("Custodied execution session groups deferred and current receipts atomicall
 
 test("Custodied admission handle settles a late report through its retained receipt", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 20, message: { chat: { type: "private" } } }], 20);
     let deferredMessage: { chat: { type: string } } | undefined;
     const lateErrors: unknown[] = [];
     const lateSettlements: string[] = [];
-    const handle = createTelegramCustodiedUpdateAdmissionHandle({ journal: store,
+    const handle = createBaleCustodiedUpdateAdmissionHandle({ journal: store,
       recipientBindingKey: "workspace:owner",
       async defaultHandle(update) {
         deferredMessage = update.message;
-        assert.equal(reportTelegramUpdateDeferred(update.message), true);
+        assert.equal(reportBaleUpdateDeferred(update.message), true);
       },
       onLateOutcomeError(error) { lateErrors.push(error); },
       onCustodiedLateSettlement(result) { lateSettlements.push(result.status); },
@@ -1017,7 +1017,7 @@ test("Custodied admission handle settles a late report through its retained rece
       new AbortController().signal);
     assert.equal(result.status, "deferred");
     assert.ok(deferredMessage);
-    assert.equal(reportTelegramUpdateCompleted(deferredMessage), true);
+    assert.equal(reportBaleUpdateCompleted(deferredMessage), true);
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(lateErrors, []);
     assert.deepEqual(lateSettlements, ["completed"]);
@@ -1027,27 +1027,27 @@ test("Custodied admission handle settles a late report through its retained rece
 
 test("Assembled custodied worker publishes one late grouped queue receipt", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 30, message: { chat: { type: "private" } } },
       { update_id: 31, message: { chat: { type: "private" } } }], 31);
-    const port = createTelegramInputCustodyWorkerJournalPort(store);
+    const port = createBaleInputCustodyWorkerJournalPort(store);
     const owner = { ...options.queueRuntimeIdentity, sessionGeneration: 1 };
     const sources: unknown[] = [];
     const published: string[] = [];
-    const worker = createTelegramUpdateAdmissionWorkerRuntime({ journal: port,
+    const worker = createBaleUpdateAdmissionWorkerRuntime({ journal: port,
       inputCustody: port.inputCustody,
-      getJournalBindingKey: () => createTelegramUpdateJournalBindingKey(options),
+      getJournalBindingKey: () => createBaleUpdateJournalBindingKey(options),
       getRecipientBindingKey: () => "workspace:owner",
       getQueueOwnerIdentity: () => owner, hasAuthority: () => true,
       async defaultHandle(update) {
         sources.push(update.message);
         if (sources.length === 1) {
-          assert.equal(reportTelegramUpdateDeferred(update.message), true);
+          assert.equal(reportBaleUpdateDeferred(update.message), true);
           return;
         }
-        assert.equal(reportTelegramQueueAdmission(sources, [{ queueKind: "prompt",
+        assert.equal(reportBaleQueueAdmission(sources, [{ queueKind: "prompt",
           receiptId: "late-group", sourceUpdateIds: [30, 31],
-          journalBindingKey: createTelegramUpdateJournalBindingKey(options) }]), true);
+          journalBindingKey: createBaleUpdateJournalBindingKey(options) }]), true);
       },
       onQueueReceiptCommitted(receipt) { published.push(receipt.receiptId); },
     });
@@ -1070,16 +1070,16 @@ for (const mode of ["leader-restart", "follower-mutable-active"] as const) test(
     let lifetime = 1;
     const createSource = () => {
       const capturedLifetime = lifetime;
-      return createTelegramInputJournalStore({ ...options, getInputContext() {
+      return createBaleInputJournalStore({ ...options, getInputContext() {
         const current = options.getInputContext();
         return capturedLifetime === lifetime ? current : undefined;
       } });
     };
     let source = createSource();
-    const resolve = createTelegramInputCustodyLifecycleBindingResolver({
+    const resolve = createBaleInputCustodyLifecycleBindingResolver({
       isEnabled: () => true,
       resolveInputJournal: () => ({ runtimeKey: "same-source-runtime",
-        recoveryKey: createTelegramUpdateJournalBindingKey(options), journal: source }),
+        recoveryKey: createBaleUpdateJournalBindingKey(options), journal: source }),
       getRecipientBindingKey: () => "workspace:owner",
     });
     let descriptor: ReturnType<typeof resolve>;
@@ -1091,8 +1091,8 @@ for (const mode of ["leader-restart", "follower-mutable-active"] as const) test(
     };
     const originalKeys = { runtime: resolveBinding().runtimeKey, recovery: resolveBinding().recoveryKey };
     const handled: number[] = [];
-    const assembly = createTelegramUpdateAdmissionLifecycleAssembly({
-      runtimeBinding: createTelegramUpdateAdmissionRuntimeBinding({ isFollowerRegistered: () => follower }),
+    const assembly = createBaleUpdateAdmissionLifecycleAssembly({
+      runtimeBinding: createBaleUpdateAdmissionRuntimeBinding({ isFollowerRegistered: () => follower }),
       worker: {
         getQueueOwnerIdentity: () => ({ ...options.queueRuntimeIdentity, sessionGeneration: lifetime }),
         async defaultHandle(update) { handled.push(update.update_id); },
@@ -1132,24 +1132,24 @@ test("V3 source refresh cannot replay an unsettled handler while independent inp
     let lifetime = 1;
     const createSource = () => {
       const capturedLifetime = lifetime;
-      return createTelegramInputJournalStore({ ...options, getInputContext() {
+      return createBaleInputJournalStore({ ...options, getInputContext() {
         const current = options.getInputContext();
         return capturedLifetime === lifetime ? current : undefined;
       } });
     };
     let source = createSource();
-    const resolveBinding = createTelegramInputCustodyLifecycleBindingResolver({
+    const resolveBinding = createBaleInputCustodyLifecycleBindingResolver({
       isEnabled: () => true,
       resolveInputJournal: () => ({ runtimeKey: "held-source-runtime",
-        recoveryKey: createTelegramUpdateJournalBindingKey(options), journal: source }),
+        recoveryKey: createBaleUpdateJournalBindingKey(options), journal: source }),
       getRecipientBindingKey: () => "workspace:owner",
     });
     const release = Promise.withResolvers<void>();
     const attempted: number[] = [];
     const effects: number[] = [];
     let oldFinished = false;
-    const assembly = createTelegramUpdateAdmissionLifecycleAssembly({
-      runtimeBinding: createTelegramUpdateAdmissionRuntimeBinding({ isFollowerRegistered: () => false }),
+    const assembly = createBaleUpdateAdmissionLifecycleAssembly({
+      runtimeBinding: createBaleUpdateAdmissionRuntimeBinding({ isFollowerRegistered: () => false }),
       worker: {
         getQueueOwnerIdentity: () => ({ ...options.queueRuntimeIdentity, sessionGeneration: lifetime }),
         async defaultHandle(update, _ctx, execution) {
@@ -1198,24 +1198,24 @@ test("V3 source refresh cannot replay an unsettled handler while independent inp
 
 test("V3 lifecycle replacement never replays retained running input", async () => {
   await withInputCustodyFixture(async ({ options, setBinding }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 40 }], 40);
     const acquired = store.acquireInput({ updateId: 40,
       recipientBindingKey: "workspace:owner", executionUpdate: { update_id: 40 } });
     assert.equal(store.startInput(acquired.receipt).started, true);
     let recipientBindingKey = "workspace:owner";
-    const resolve = createTelegramInputCustodyLifecycleBindingResolver({
+    const resolve = createBaleInputCustodyLifecycleBindingResolver({
       isEnabled: () => true,
       resolveInputJournal: () => ({ runtimeKey: "runtime-v3",
-        recoveryKey: createTelegramUpdateJournalBindingKey(options), journal: store }),
+        recoveryKey: createBaleUpdateJournalBindingKey(options), journal: store }),
       getRecipientBindingKey: () => recipientBindingKey,
     });
     const owner = { ...options.queueRuntimeIdentity, sessionGeneration: 1 };
     let handlerCalls = 0;
-    const lifecycle = createTelegramUpdateAdmissionLifecycleRuntime({ resolveBinding: resolve,
+    const lifecycle = createBaleUpdateAdmissionLifecycleRuntime({ resolveBinding: resolve,
       getQueueOwnerIdentity: () => owner,
       createWorker(journal, binding) {
-        return createTelegramUpdateAdmissionWorkerRuntime({ journal,
+        return createBaleUpdateAdmissionWorkerRuntime({ journal,
           inputCustody: binding.journal.inputCustody,
           getJournalBindingKey: () => binding.recoveryKey,
           getRecipientBindingKey: () => binding.recipientBindingKey,
@@ -1239,15 +1239,15 @@ test("V3 lifecycle replacement never replays retained running input", async () =
 
 test("Leader-follower custody assembly never replays running input across generation and role", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 50 }], 50);
     const acquired = store.acquireInput({ updateId: 50,
       recipientBindingKey: "workspace:owner", executionUpdate: { update_id: 50 } });
     assert.equal(store.startInput(acquired.receipt).started, true);
-    const resolve = createTelegramInputCustodyLifecycleBindingResolver({
+    const resolve = createBaleInputCustodyLifecycleBindingResolver({
       isEnabled: () => true,
       resolveInputJournal: () => ({ runtimeKey: "role-v3",
-        recoveryKey: createTelegramUpdateJournalBindingKey(options), journal: store }),
+        recoveryKey: createBaleUpdateJournalBindingKey(options), journal: store }),
       getRecipientBindingKey: () => "workspace:owner",
     });
     const owner = { ...options.queueRuntimeIdentity, sessionGeneration: 1 };
@@ -1255,8 +1255,8 @@ test("Leader-follower custody assembly never replays running input across genera
     let generation = "g1";
     let leader = false;
     let handlerCalls = 0;
-    const assembly = createTelegramUpdateAdmissionLifecycleAssembly({
-      runtimeBinding: createTelegramUpdateAdmissionRuntimeBinding({
+    const assembly = createBaleUpdateAdmissionLifecycleAssembly({
+      runtimeBinding: createBaleUpdateAdmissionRuntimeBinding({
         isFollowerRegistered: () => registered }),
       worker: { getQueueOwnerIdentity: () => owner,
         async defaultHandle() { handlerCalls += 1; } },
@@ -1286,19 +1286,19 @@ test("Leader-follower custody assembly never replays running input across genera
 
 test("V3 worker drains independent tail behind retained running input", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 60 }, { update_id: 61 }, { update_id: 62 },
       { update_id: 63 }, { update_id: 64 }, { update_id: 65 }], 65);
     const running = store.acquireInput({ updateId: 60,
       recipientBindingKey: "workspace:owner", executionUpdate: { update_id: 60 } });
     assert.equal(store.startInput(running.receipt).started, true);
-    const port = createTelegramInputCustodyWorkerJournalPort(store);
+    const port = createBaleInputCustodyWorkerJournalPort(store);
     const owner = { ...options.queueRuntimeIdentity, sessionGeneration: 1 };
     const executed: number[] = [];
     let yields = 0;
-    const worker = createTelegramUpdateAdmissionWorkerRuntime({ journal: port,
+    const worker = createBaleUpdateAdmissionWorkerRuntime({ journal: port,
       inputCustody: port.inputCustody,
-      getJournalBindingKey: () => createTelegramUpdateJournalBindingKey(options),
+      getJournalBindingKey: () => createBaleUpdateJournalBindingKey(options),
       getRecipientBindingKey: () => "workspace:owner",
       getQueueOwnerIdentity: () => owner, hasAuthority: () => true, batchSize: 2,
       async yieldToEventLoop() { yields += 1; },
@@ -1322,19 +1322,19 @@ test("V3 worker drains independent tail behind retained running input", async ()
 
 test("V3 worker drains tail behind frozen ready handoff custody", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 70 }, { update_id: 71 }], 71);
     const ready = store.acquireInput({ updateId: 70, recipientBindingKey: "workspace:owner" });
     const recipientOwner = { instanceId: "recipient", processId: process.pid + 1,
       processBirthId: `${process.pid + 1}:recipient`, sessionGeneration: 1 };
     const offered = store.offerInputHandoff({ receipt: ready.receipt, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() });
-    const port = createTelegramInputCustodyWorkerJournalPort(store);
+      handoffToken: createBaleUpdateQueueHandoffToken() });
+    const port = createBaleInputCustodyWorkerJournalPort(store);
     const owner = { ...options.queueRuntimeIdentity, sessionGeneration: 1 };
     const executed: number[] = [];
-    const worker = createTelegramUpdateAdmissionWorkerRuntime({ journal: port,
+    const worker = createBaleUpdateAdmissionWorkerRuntime({ journal: port,
       inputCustody: port.inputCustody,
-      getJournalBindingKey: () => createTelegramUpdateJournalBindingKey(options),
+      getJournalBindingKey: () => createBaleUpdateJournalBindingKey(options),
       getRecipientBindingKey: () => "workspace:owner", getQueueOwnerIdentity: () => owner,
       hasAuthority: () => true, async defaultHandle(update) { executed.push(update.update_id); } });
     try {
@@ -1360,20 +1360,20 @@ test("V3 worker drains tail behind frozen ready handoff custody", async () => {
 
 test("V3 worker drains tail behind foreign ready custody", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const donor = createTelegramInputJournalStore(options);
+    const donor = createBaleInputJournalStore(options);
     donor.appendBatch([{ update_id: 80 }, { update_id: 81 }], 81);
     donor.acquireInput({ updateId: 80, recipientBindingKey: "workspace:owner" });
     const runtime = { instanceId: "replacement", processId: process.pid + 2,
       processBirthId: `${process.pid + 2}:replacement` };
     const owner = { ...runtime, sessionGeneration: 1 };
-    const recipient = createTelegramInputJournalStore({ ...options,
+    const recipient = createBaleInputJournalStore({ ...options,
       queueRuntimeIdentity: runtime,
       getInputContext: () => ({ owner, recipientBindingKey: "workspace:owner" }) });
-    const port = createTelegramInputCustodyWorkerJournalPort(recipient);
+    const port = createBaleInputCustodyWorkerJournalPort(recipient);
     const executed: number[] = [];
-    const worker = createTelegramUpdateAdmissionWorkerRuntime({ journal: port,
+    const worker = createBaleUpdateAdmissionWorkerRuntime({ journal: port,
       inputCustody: port.inputCustody,
-      getJournalBindingKey: () => createTelegramUpdateJournalBindingKey(options),
+      getJournalBindingKey: () => createBaleUpdateJournalBindingKey(options),
       getRecipientBindingKey: () => "workspace:owner", getQueueOwnerIdentity: () => owner,
       hasAuthority: () => true, async defaultHandle(update) { executed.push(update.update_id); } });
     try {
@@ -1391,7 +1391,7 @@ test("V3 worker drains tail behind foreign ready custody", async () => {
 
 test("V3 blocked diagnostics prioritize running outcome unknown over foreign ready", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const donor = createTelegramInputJournalStore(options);
+    const donor = createBaleInputJournalStore(options);
     donor.appendBatch([{ update_id: 90 }, { update_id: 91 }], 91);
     donor.acquireInput({ updateId: 90, recipientBindingKey: "workspace:owner" });
     const running = donor.acquireInput({ updateId: 91,
@@ -1400,13 +1400,13 @@ test("V3 blocked diagnostics prioritize running outcome unknown over foreign rea
     const runtime = { instanceId: "observer", processId: process.pid + 3,
       processBirthId: `${process.pid + 3}:observer` };
     const owner = { ...runtime, sessionGeneration: 1 };
-    const observer = createTelegramInputJournalStore({ ...options,
+    const observer = createBaleInputJournalStore({ ...options,
       queueRuntimeIdentity: runtime,
       getInputContext: () => ({ owner, recipientBindingKey: "workspace:owner" }) });
-    const port = createTelegramInputCustodyWorkerJournalPort(observer);
-    const worker = createTelegramUpdateAdmissionWorkerRuntime({ journal: port,
+    const port = createBaleInputCustodyWorkerJournalPort(observer);
+    const worker = createBaleUpdateAdmissionWorkerRuntime({ journal: port,
       inputCustody: port.inputCustody,
-      getJournalBindingKey: () => createTelegramUpdateJournalBindingKey(options),
+      getJournalBindingKey: () => createBaleUpdateJournalBindingKey(options),
       getRecipientBindingKey: () => "workspace:owner", getQueueOwnerIdentity: () => owner,
       hasAuthority: () => true, async defaultHandle() { assert.fail("blocked input executed"); } });
     try {
@@ -1421,9 +1421,9 @@ test("V3 blocked diagnostics prioritize running outcome unknown over foreign rea
 
 test("V3 worker quarantines legacy retry state while draining pending tail", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 100 }, { update_id: 101 }], 101);
-    const strict = createTelegramInputCustodyWorkerJournalPort(store);
+    const strict = createBaleInputCustodyWorkerJournalPort(store);
     const journal = { ...strict, read() {
       const snapshot = strict.read();
       return { ...snapshot, entries: snapshot.entries.map(entry => entry.updateId === 100
@@ -1431,9 +1431,9 @@ test("V3 worker quarantines legacy retry state while draining pending tail", asy
     } };
     const owner = { ...options.queueRuntimeIdentity, sessionGeneration: 1 };
     const executed: number[] = [];
-    const worker = createTelegramUpdateAdmissionWorkerRuntime({ journal,
+    const worker = createBaleUpdateAdmissionWorkerRuntime({ journal,
       inputCustody: strict.inputCustody,
-      getJournalBindingKey: () => createTelegramUpdateJournalBindingKey(options),
+      getJournalBindingKey: () => createBaleUpdateJournalBindingKey(options),
       getRecipientBindingKey: () => "workspace:owner", getQueueOwnerIdentity: () => owner,
       hasAuthority: () => true, async defaultHandle(update) { executed.push(update.update_id); } });
     try {
@@ -1450,24 +1450,24 @@ test("V3 worker quarantines legacy retry state while draining pending tail", asy
 
 test("V3 source-reference wake requires one exact accepted ready handoff", async () => {
   await withInputCustodyFixture(async ({ options, dir }) => {
-    const donor = createTelegramInputJournalStore(options);
+    const donor = createBaleInputJournalStore(options);
     donor.appendBatch([{ update_id: 109 }], 109);
     const claimed = donor.acquireInput({ updateId: 109, recipientBindingKey: "workspace:owner" });
     const recipientRuntime = { instanceId: "recipient", processId: process.pid + 4,
       processBirthId: `${process.pid + 4}:recipient` };
     const recipientOwner = { ...recipientRuntime, sessionGeneration: 1 };
     const offered = donor.offerInputHandoff({ receipt: claimed.receipt, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() });
-    const recipient = createTelegramInputJournalStore({ ...options,
+      handoffToken: createBaleUpdateQueueHandoffToken() });
+    const recipient = createBaleInputJournalStore({ ...options,
       queueRuntimeIdentity: recipientRuntime,
       getInputContext: () => ({ owner: recipientOwner, recipientBindingKey: "workspace:owner" }) });
-    const recoveryKey = createTelegramUpdateJournalBindingKey(options);
-    const frozenResolver = createTelegramInputCustodyForwardReferenceResolver({
+    const recoveryKey = createBaleUpdateJournalBindingKey(options);
+    const frozenResolver = createBaleInputCustodyForwardReferenceResolver({
       recoveryKey, recipientBindingKey: "workspace:owner", recipientOwner, journal: recipient });
     assert.equal(frozenResolver({ sourceUpdateId: 109,
       recipientBindingKey: "workspace:owner" }), undefined);
     let wakes = 0;
-    const acceptance = createTelegramInputCustodyHandoffAcceptanceRuntime({
+    const acceptance = createBaleInputCustodyHandoffAcceptanceRuntime({
       resolveBinding: key => key === recoveryKey ? { recoveryKey,
         recipientBindingKey: "workspace:owner", recipientOwner, journal: recipient,
         signalWorker() { wakes += 1; } } : undefined,
@@ -1478,7 +1478,7 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
     assert.equal(accepted.duplicate, false);
     assert.equal(wakes, 1);
     const handoffSocketPath = join(dir, "input-handoff.sock");
-    const handoffReceiver = createTelegramBusForwardedUpdateReceiverRuntime({
+    const handoffReceiver = createBaleBusForwardedUpdateReceiverRuntime({
       socketPath: handoffSocketPath, instanceId: "recipient",
       getAuthSecret: () => "shared-secret", getRegistrationGeneration: () => "g2",
       getRecipientBindingKey: () => "workspace:owner",
@@ -1492,7 +1492,7 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
     });
     try {
       await handoffReceiver.start();
-      const handoffAck = await sendTelegramBusLocalEnvelope({ socketPath: handoffSocketPath,
+      const handoffAck = await sendBaleBusLocalEnvelope({ socketPath: handoffSocketPath,
         envelope: { kind: "leader.offerInputCustodyHandoff", requestId: "leader:handoff",
           recipientInstanceId: "recipient", recipientRegistrationGeneration: "g2",
           recipientBindingKey: "workspace:owner", sourceRecoveryKey: recoveryKey,
@@ -1506,18 +1506,18 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
       const networkClaim = donor.acquireInput({ updateId: 110,
         recipientBindingKey: "workspace:owner" });
       let networkSends = 0;
-      const networkClient = createTelegramInputCustodyHandoffClient({ journal: donor,
-        resolveAcceptedReference: createTelegramInputCustodyForwardReferenceResolver({
+      const networkClient = createBaleInputCustodyHandoffClient({ journal: donor,
+        resolveAcceptedReference: createBaleInputCustodyForwardReferenceResolver({
           recoveryKey, recipientBindingKey: "workspace:owner", recipientOwner, journal: recipient }),
         async sendEnvelope(envelope) {
           networkSends += 1;
-          return sendTelegramBusLocalEnvelope({ socketPath: handoffSocketPath, envelope });
+          return sendBaleBusLocalEnvelope({ socketPath: handoffSocketPath, envelope });
         },
       });
       const networkInput = { requestId: "leader:handoff-110", receipt: networkClaim.receipt,
         recipientInstanceId: "recipient", recipientRegistrationGeneration: "g2",
         recipientBindingKey: "workspace:owner", recipientOwner,
-        handoffToken: createTelegramUpdateQueueHandoffToken(), sentAtMs: 2_000,
+        handoffToken: createBaleUpdateQueueHandoffToken(), sentAtMs: 2_000,
         auth: "shared-secret" };
       const networkAccepted = await networkClient.transfer(networkInput);
       assert.equal(networkAccepted.duplicate, false);
@@ -1528,7 +1528,7 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
       assert.equal(networkSends, 1);
       assert.equal(wakes, 3);
     } finally { await handoffReceiver.stop(); }
-    const resolveReference = createTelegramInputCustodyForwardReferenceResolver({
+    const resolveReference = createBaleInputCustodyForwardReferenceResolver({
       recoveryKey, recipientBindingKey: "workspace:owner", recipientOwner, journal: recipient });
     assert.deepEqual(resolveReference({ sourceUpdateId: 109,
       recipientBindingKey: "workspace:owner" }), { sourceRecoveryKey: recoveryKey,
@@ -1537,7 +1537,7 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
     assert.equal(resolveReference({ sourceUpdateId: 109,
       recipientBindingKey: "workspace:other" }), undefined);
     let busBindingActive = true;
-    const busBinding = createTelegramInputCustodyBusBindingRuntime({
+    const busBinding = createBaleInputCustodyBusBindingRuntime({
       getForwardRecoveryKey: () => busBindingActive ? recoveryKey : undefined,
       resolveBinding: key => busBindingActive && key === recoveryKey ? { recoveryKey,
         recipientBindingKey: "workspace:owner", recipientOwner, journal: recipient,
@@ -1565,7 +1565,7 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
     const secondClaim = donor.acquireInput({ updateId: 111,
       recipientBindingKey: "workspace:owner" });
     let handoffSends = 0;
-    const client = createTelegramInputCustodyHandoffClient({ journal: donor,
+    const client = createBaleInputCustodyHandoffClient({ journal: donor,
       resolveAcceptedReference: resolveReference,
       async sendEnvelope(envelope) {
         handoffSends += 1;
@@ -1578,14 +1578,14 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
     const transferInput = { requestId: "leader:handoff-111", receipt: secondClaim.receipt,
       recipientInstanceId: "recipient", recipientRegistrationGeneration: "g2",
       recipientBindingKey: "workspace:owner", recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken(), sentAtMs: 1_998 };
+      handoffToken: createBaleUpdateQueueHandoffToken(), sentAtMs: 1_998 };
     await assert.rejects(client.transfer(transferInput), /handoff acknowledgement lost/);
     assert.equal(handoffSends, 1);
     const reconciled = await client.transfer(transferInput);
     assert.equal(reconciled.duplicate, true);
     assert.equal(reconciled.source.updateId, 111);
     assert.equal(handoffSends, 1);
-    const runtime = createTelegramInputCustodySourceReferenceWakeRuntime({
+    const runtime = createBaleInputCustodySourceReferenceWakeRuntime({
       resolveBinding: key => key === recoveryKey ? { recoveryKey,
         recipientBindingKey: "workspace:owner", recipientOwner, journal: recipient,
         signalWorker() { wakes += 1; } } : undefined,
@@ -1602,13 +1602,13 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
     assert.throws(() => runtime.wakeSource({ ...input,
       recipientBindingKey: "workspace:other" }, {}), /binding is unavailable or changed/);
     assert.equal(wakes, 6);
-    const delivery = createTelegramBusFollowerDeliveryIdentity({ kind: "leader.wakeInputCustody",
+    const delivery = createBaleBusFollowerDeliveryIdentity({ kind: "leader.wakeInputCustody",
       recipientBindingKey: input.recipientBindingKey, sourceUpdateId: input.sourceUpdateId,
       sourceRecoveryKey: input.sourceRecoveryKey, sourceClaim: input.sourceClaim });
-    const admission = createTelegramBusFollowerSourceReferenceAdmissionRuntime({
+    const admission = createBaleBusFollowerSourceReferenceAdmissionRuntime({
       wakeSource: runtime.wakeSource });
     const socketPath = join(dir, "source-reference.sock");
-    const receiver = createTelegramBusForwardedUpdateReceiverRuntime({ socketPath,
+    const receiver = createBaleBusForwardedUpdateReceiverRuntime({ socketPath,
       instanceId: "recipient", getAuthSecret: () => "shared-secret",
       getRegistrationGeneration: () => "g2", getRecipientBindingKey: () => "workspace:owner",
       durableAdmission: { async admit() { assert.fail("legacy copy admission invoked"); } },
@@ -1616,24 +1616,24 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
       hasAuthenticatedSourceReferenceTransport: () => true, getContext: () => ({}),
     });
     const send = (requestId: string, sourceDelivery = delivery, generation = "g2") =>
-      sendTelegramBusLocalEnvelope({ socketPath, envelope: { kind: "leader.wakeInputCustody",
+      sendBaleBusLocalEnvelope({ socketPath, envelope: { kind: "leader.wakeInputCustody",
         requestId, recipientInstanceId: "recipient", recipientRegistrationGeneration: generation,
         delivery: sourceDelivery, sentAtMs: 2_000, auth: "shared-secret" } });
     try {
       await receiver.start();
-      const capable = createTelegramBusProtocolIdentity({ runtimeBuild: "0.45.0",
-        capabilities: [TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
-      const forwarder = createTelegramBusForeignOwnedUpdateForwarder({ socketPath,
+      const capable = createBaleBusProtocolIdentity({ runtimeBuild: "0.45.0",
+        capabilities: [BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE] });
+      const forwarder = createBaleBusForeignOwnedUpdateForwarder({ socketPath,
         createRequestId: () => "leader:resolved", getNowMs: () => 2_000,
         getAuthSecret: () => "shared-secret",
         localProtocolIdentity: capable, resolveInputCustodyReference: resolveReference });
       const forwarded = await forwarder.forwardMessage({ message: {
-        message_id: 109, text: "must-not-cross", pi_telegram_source_update_id: 109 }, ownership: {
+        message_id: 109, text: "must-not-cross", pi_bale_source_update_id: 109 }, ownership: {
         instanceId: "recipient", ownerGeneration: "g2", recipientBindingKey: "workspace:owner",
         protocolIdentity: capable }, ctx: {} });
       assert.equal(forwarded.status, "accepted");
       const replayed = await forwarder.forwardMessage({ message: {
-        message_id: 109, text: "must-not-cross", pi_telegram_source_update_id: 109 }, ownership: {
+        message_id: 109, text: "must-not-cross", pi_bale_source_update_id: 109 }, ownership: {
         instanceId: "recipient", ownerGeneration: "g2", recipientBindingKey: "workspace:owner",
         protocolIdentity: capable }, ctx: {} });
       assert.deepEqual(replayed, forwarded);
@@ -1656,7 +1656,7 @@ test("V3 source-reference wake requires one exact accepted ready handoff", async
 
 test("V3 lifecycle lookup accepts one exact queued handoff for recipient owner", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const donor = createTelegramInputJournalStore(options);
+    const donor = createBaleInputJournalStore(options);
     donor.appendBatch([{ update_id: 110 }], 110);
     const raw = donor.acquireInput({ updateId: 110, recipientBindingKey: "workspace:owner" });
     assert.equal(donor.startInput(raw.receipt).started, true);
@@ -1667,21 +1667,21 @@ test("V3 lifecycle lookup accepts one exact queued handoff for recipient owner",
     const recipientOwner = { ...recipientRuntime, sessionGeneration: 1 };
     const handoff = { queueKind: queued.queueKind, receiptId: queued.receiptId,
       sourceUpdateIds: queued.sourceUpdateIds, expectedOwner: queued.queueOwner, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() };
+      handoffToken: createBaleUpdateQueueHandoffToken() };
     donor.offerQueuedHandoff(handoff);
-    const recipient = createTelegramInputJournalStore({ ...options,
+    const recipient = createBaleInputJournalStore({ ...options,
       queueRuntimeIdentity: recipientRuntime,
       getInputContext: () => ({ owner: recipientOwner, recipientBindingKey: "workspace:owner" }) });
-    const resolve = createTelegramInputCustodyLifecycleBindingResolver({ isEnabled: () => true,
+    const resolve = createBaleInputCustodyLifecycleBindingResolver({ isEnabled: () => true,
       resolveInputJournal: () => ({ runtimeKey: "recipient-v3",
-        recoveryKey: createTelegramUpdateJournalBindingKey(options), journal: recipient }),
+        recoveryKey: createBaleUpdateJournalBindingKey(options), journal: recipient }),
       getRecipientBindingKey: () => "workspace:owner" });
-    const runtimeBinding = createTelegramUpdateAdmissionRuntimeBinding({
+    const runtimeBinding = createBaleUpdateAdmissionRuntimeBinding({
       isFollowerRegistered: () => true });
-    const lifecycleBus = createTelegramInputCustodyBusBindingRuntime({
+    const lifecycleBus = createBaleInputCustodyBusBindingRuntime({
       getForwardRecoveryKey: () => undefined, resolveBinding: () => undefined });
     const referenceEvents: string[] = [];
-    const assembly = createTelegramUpdateAdmissionLifecycleAssembly({ runtimeBinding,
+    const assembly = createBaleUpdateAdmissionLifecycleAssembly({ runtimeBinding,
       inputCustodyBus: lifecycleBus,
       acquireSourceReference(role, binding) {
         referenceEvents.push(`acquire:${role}:${binding.recoveryKey}`);
@@ -1698,7 +1698,7 @@ test("V3 lifecycle lookup accepts one exact queued handoff for recipient owner",
       assert.equal(runtimeBinding.getInputCustodyBus(), lifecycleBus);
       await assembly.follower.onSessionStart({});
       const lifecycle = runtimeBinding.getLifecycleForJournalBinding(
-        createTelegramUpdateJournalBindingKey(options));
+        createBaleUpdateJournalBindingKey(options));
       assert.ok(lifecycle);
       const accepted = lifecycle.acceptQueueReceiptHandoff(handoff);
       assert.deepEqual(accepted.acceptedUpdateIds, [110]);
@@ -1712,7 +1712,7 @@ test("V3 lifecycle lookup accepts one exact queued handoff for recipient owner",
         ["acquire", "release", "acquire"]);
       const receipt = { queueKind: queued.queueKind, receiptId: queued.receiptId,
         sourceUpdateIds: queued.sourceUpdateIds,
-        journalBindingKey: createTelegramUpdateJournalBindingKey(options) };
+        journalBindingKey: createBaleUpdateJournalBindingKey(options) };
       assert.deepEqual(runtimeBinding.getLifecycleForJournalBinding(receipt.journalBindingKey)
         ?.getQueueReceiptOwner(receipt), accepted.queueOwner);
 
@@ -1728,12 +1728,12 @@ test("V3 lifecycle lookup accepts one exact queued handoff for recipient owner",
 
 test("Input custody refuses vetoes and revoked publication without losing a retryable acquisition", async () => {
   await withInputCustodyFixture(async ({ options, path, setOwner, setBinding, setHook }) => {
-    const excluded = createTelegramInputJournalStore({ ...options,
-      withPairingAdmission: publish => withTelegramFileTransaction(join(dirname(path), "telegram.json.transaction"), () => publish(true)) });
+    const excluded = createBaleInputJournalStore({ ...options,
+      withPairingAdmission: publish => withBaleFileTransaction(join(dirname(path), "bale.json.transaction"), () => publish(true)) });
     excluded.appendBatch([{ update_id: 1 }], 1);
     assert.throws(() => excluded.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner" }),
       (error) => isJournalError(error, "conflict"));
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 2 }], 2);
     const identity = { ...options.queueRuntimeIdentity, sessionGeneration: 1 };
     const before = store.read();
@@ -1760,7 +1760,7 @@ test("Input custody refuses vetoes and revoked publication without losing a retr
 
 test("Input custody never regrants a start whose compaction failed after durable publication", async () => {
   await withInputCustodyFixture(async ({ options, path, setHook }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 1 }], 1);
     const { receipt } = store.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner" });
     for (let cursor = 2; cursor <= 255; cursor++) store.appendBatch([], cursor);
@@ -1777,7 +1777,7 @@ test("Input custody never regrants a start whose compaction failed after durable
 
 test("Input custody serializes competing process acquisitions without dead-owner takeover", async () => {
   await withInputCustodyFixture(async ({ options, path }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 42 }], 42);
     await Promise.all([runJournalWorker(path, 1, 42, "input-custody"), runJournalWorker(path, 2, 42, "input-custody")]);
     const results = await Promise.all([1, 2].map(async index => JSON.parse(await readFile(`${path}.claim-${index}.json`, "utf8"))));
@@ -1796,28 +1796,28 @@ test("Input custody serializes competing process acquisitions without dead-owner
 test("Input custody captures configuration, refuses capacity, and retains stored receipt scope", async () => {
   await withInputCustodyFixture(async ({ options, path }) => {
     for (const field of ["sourceAccess", "queueRuntimeIdentity", "withSourceSerialization", "withPairingAdmission", "getInputContext"]) {
-      assert.throws(() => createTelegramInputJournalStore({ ...options, [field]: undefined } as unknown as TelegramInputJournalStoreOptions),
+      assert.throws(() => createBaleInputJournalStore({ ...options, [field]: undefined } as unknown as BaleInputJournalStoreOptions),
         /requires strict serialized polling admission/);
     }
     const captured = { ...options, queueRuntimeIdentity: { ...options.queueRuntimeIdentity } };
     let getterReads = 0;
     Object.defineProperty(captured, "getInputContext", { enumerable: true, get() { getterReads++; return options.getInputContext; } });
-    const store = createTelegramInputJournalStore(captured);
+    const store = createBaleInputJournalStore(captured);
     assert.equal(getterReads, 1);
     captured.queueRuntimeIdentity.instanceId = "caller mutation";
     store.appendBatch([{ update_id: 1 }], 1);
     const bytes = await readFile(path, "utf8");
-    const tight = createTelegramInputJournalStore({ ...options, maxBytes: store.read().serializedBytes });
+    const tight = createBaleInputJournalStore({ ...options, maxBytes: store.read().serializedBytes });
     const request = { updateId: 1, recipientBindingKey: "workspace:owner" };
     assert.throws(() => tight.acquireInput(request), (error) => isJournalError(error, "capacity"));
     assert.equal(await readFile(path, "utf8"), bytes);
     assert.equal(existsSync(`${path}.segments`), false);
     assert.equal(existsSync(`${path}.transaction`), false);
     const acquired = store.acquireInput(request);
-    const enriched = createTelegramInputJournalStore({ ...options, botIdentity: { ...options.botIdentity, botId: 77 } });
+    const enriched = createBaleInputJournalStore({ ...options, botIdentity: { ...options.botIdentity, botId: 77 } });
     assert.throws(() => enriched.acquireInput(request), (error) => isJournalError(error, "identity-mismatch"));
     assert.equal(store.read().botIdentity.botId, undefined);
-    assert.equal(acquired.receipt.journalBindingKey, createTelegramUpdateJournalBindingKey(options));
+    assert.equal(acquired.receipt.journalBindingKey, createBaleUpdateJournalBindingKey(options));
     assert.throws(() => store.startInput({ ...acquired.receipt, tokenSha256: "f".repeat(64) }),
       (error) => isJournalError(error, "conflict"));
     assert.equal(store.startInput(acquired.receipt).started, true);
@@ -1829,11 +1829,11 @@ test("Input custody captures configuration, refuses capacity, and retains stored
 
 test("Input custody removes only immutable exclusions atomically and preserves the replay barrier", async () => {
   await withInputCustodyFixture(async ({ options, path, dir, setOwner, ledger }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     assert.throws(() => store.removeExcluded([1]), (error) => isJournalError(error, "conflict"));
     assert.equal(existsSync(path), false);
-    const excluded = createTelegramInputJournalStore({ ...options,
-      withPairingAdmission: publish => withTelegramFileTransaction(join(dirname(path), "telegram.json.transaction"), () => publish(true)) });
+    const excluded = createBaleInputJournalStore({ ...options,
+      withPairingAdmission: publish => withBaleFileTransaction(join(dirname(path), "bale.json.transaction"), () => publish(true)) });
     excluded.appendBatch([{ update_id: 1 }, { update_id: 2 }, { update_id: 3 }], 3);
     store.appendBatch([{ update_id: 10 }, { update_id: 11 }, { update_id: 12 }], 12);
     const ready = store.acquireInput({ updateId: 11, recipientBindingKey: "workspace:owner" });
@@ -1842,16 +1842,16 @@ test("Input custody removes only immutable exclusions atomically and preserves t
     const before = store.read();
     const names = await readdir(dir);
     for (const ids of [[1, 10], [1, 11], [1, 12], [1, 13], [1, -1], [1, Number.NaN]]) {
-      assert.throws(() => store.removeExcluded(ids), TelegramUpdateJournalError);
+      assert.throws(() => store.removeExcluded(ids), BaleUpdateJournalError);
       assert.deepEqual(store.read(), before);
       assert.deepEqual(await readdir(dir), names);
       assert.deepEqual(ledger.read().leases, []);
     }
     // The immutable veto, not a live execution context or configured sender, permits removal.
     setOwner(undefined);
-    await writeFile(join(dir, "telegram.json"), JSON.stringify({ profiles: { work: { botToken: "123:synthetic-input-custody" } } }));
+    await writeFile(join(dir, "bale.json"), JSON.stringify({ profiles: { work: { botToken: "123:synthetic-input-custody" } } }));
     const ids = [2, 1, 2, 4];
-    const captured = createTelegramInputJournalStore({ ...options,
+    const captured = createBaleInputJournalStore({ ...options,
       withSourceSerialization(operation) {
         assert.ok(ledger.read().leases.some(lease => lease.scope.kind === "profile"));
         ids.push(10);
@@ -1861,7 +1861,7 @@ test("Input custody removes only immutable exclusions atomically and preserves t
     assert.deepEqual(store.removeExcluded([1, 2, 4]).removedUpdateIds, []);
     assert.deepEqual(store.removeExcluded([]).removedUpdateIds, []);
     assert.deepEqual(store.appendBatch([{ update_id: 1 }, { update_id: 2 }, { update_id: 4 }], 12).addedUpdateIds, []);
-    assert.deepEqual(createTelegramInputJournalStore(options).removeExcluded([3]).removedUpdateIds, [3]);
+    assert.deepEqual(createBaleInputJournalStore(options).removeExcluded([3]).removedUpdateIds, [3]);
     assert.deepEqual(store.read().entries, before.entries.filter(entry => entry.updateId >= 10));
     assert.deepEqual(store.read().entries[1]!.inputClaim!.owner, ready.receipt.owner);
     assert.equal(store.read().entries[2]!.inputClaim!.phase, "running");
@@ -1885,7 +1885,7 @@ test("Input custody exclusion removal preserves failure diagnostics outside the 
       queueOwner: { ...options.queueRuntimeIdentity, sessionGeneration: 1, acquisitionId: "fixture-queue", acquiredAtMs: 101 } };
     await writeFile(path, JSON.stringify({ version: 3, profile: "work", botIdentity: options.botIdentity,
       entries: [...entries, queued], acceptedThroughUpdateId: 14 }));
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     setOwner(undefined);
     const before = store.read();
     for (const id of [11, 12, 13, 14]) {
@@ -1901,7 +1901,7 @@ test("Input custody exclusion removal preserves failure diagnostics outside the 
     assert.equal(await readFile(path, "utf8"), malformedBytes);
     assert.equal(existsSync(`${path}.transaction`), false);
     await writeFile(path, bytes);
-    const tight = createTelegramInputJournalStore({ ...options,
+    const tight = createBaleInputJournalStore({ ...options,
       sourceAccess: { ...options.sourceAccess, limits: { ...options.sourceAccess.limits, maxFiles: 1 } } });
     assert.throws(() => tight.removeExcluded([1, 2, 3]), (error) => isJournalError(error, "capacity"));
     assert.equal(await readFile(path, "utf8"), bytes);
@@ -1918,7 +1918,7 @@ test("Input custody exclusion removal preserves failure diagnostics outside the 
     assert.deepEqual(store.read().entries, before.entries.filter(entry => !entry.preApprovalExcluded));
     const after = store.read();
     setHook(() => assert.fail("A repeated exclusion removal must not publish"));
-    assert.deepEqual(createTelegramInputJournalStore(options).removeExcluded([1, 2, 3]).removedUpdateIds, []);
+    assert.deepEqual(createBaleInputJournalStore(options).removeExcluded([1, 2, 3]).removedUpdateIds, []);
     assert.deepEqual(store.read(), after);
   });
 });
@@ -1926,7 +1926,7 @@ test("Input custody exclusion removal preserves failure diagnostics outside the 
 test("Input custody reserves one ready release and complete transition chain before durable admission", async () => {
   await withInputCustodyFixture(async ({ options, dir, ledger }) => {
     const calibrationPath = join(dir, "calibration.json");
-    const calibration = createTelegramInputJournalStore({ ...options, path: calibrationPath });
+    const calibration = createBaleInputJournalStore({ ...options, path: calibrationPath });
     const rawBytes = calibration.appendBatch([{ update_id: 1 }], 1).serializedBytes;
     for (const [name, override] of [
       ["logical", { maxBytes: rawBytes }],
@@ -1938,7 +1938,7 @@ test("Input custody reserves one ready release and complete transition chain bef
         limits: { ...options.sourceAccess.limits, maxWork: 1 } } }],
     ] as const) {
       const path = join(dir, `bounded-${name}.json`);
-      const bounded = createTelegramInputJournalStore({ ...options, path, ...override });
+      const bounded = createBaleInputJournalStore({ ...options, path, ...override });
       assert.throws(() => bounded.appendBatch([{ update_id: 1 }], 1), (error) => isJournalError(error, "capacity"), name);
       assert.equal(existsSync(path), false, name);
       assert.equal(existsSync(`${path}.segments`), false, name);
@@ -1946,7 +1946,7 @@ test("Input custody reserves one ready release and complete transition chain bef
       assert.deepEqual(ledger.read().leases, [], name);
     }
     const path = join(dir, "six-files.json");
-    const store = createTelegramInputJournalStore({ ...options, path,
+    const store = createBaleInputJournalStore({ ...options, path,
       sourceAccess: { ...options.sourceAccess, limits: { ...options.sourceAccess.limits, maxFiles: 6 } } });
     store.appendBatch([{ update_id: 2 }], 2);
     const originalUnlink = fs.unlinkSync;
@@ -1971,7 +1971,7 @@ test("Input custody reserves one ready release and complete transition chain bef
 test("Input custody reserves progress when append snapshot publication is commit-unknown", async () => {
   await withInputCustodyFixture(async ({ options, dir, setHook }) => {
     const path = join(dir, "commit-unknown-append.json");
-    const store = createTelegramInputJournalStore({ ...options, path,
+    const store = createBaleInputJournalStore({ ...options, path,
       sourceAccess: { ...options.sourceAccess, limits: { ...options.sourceAccess.limits, maxFiles: 7 } } });
     store.appendBatch([{ update_id: 1 }], 1);
     setHook((boundary, target) => {
@@ -1989,7 +1989,7 @@ test("Input custody reserves progress when append snapshot publication is commit
     assert.deepEqual(store.completeInput(next.receipt).removedUpdateIds, [2]);
     assert.deepEqual(store.read().entries, []);
     const insufficientPath = join(dir, "commit-unknown-insufficient.json");
-    const insufficient = createTelegramInputJournalStore({ ...options, path: insufficientPath,
+    const insufficient = createBaleInputJournalStore({ ...options, path: insufficientPath,
       sourceAccess: { ...options.sourceAccess, limits: { ...options.sourceAccess.limits, maxFiles: 6 } } });
     insufficient.appendBatch([{ update_id: 1 }], 1);
     setHook(() => assert.fail("Insufficient commit-unknown headroom must refuse before publication"));
@@ -2002,7 +2002,7 @@ test("Input custody reserves progress when append snapshot publication is commit
 
 test("Input custody bounds execution projection growth inside its admission reserve", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 1, message: { text: "original" } }], 1);
     const before = store.read();
     assert.throws(() => store.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner",
@@ -2015,7 +2015,7 @@ test("Input custody bounds execution projection growth inside its admission rese
     const acquired = store.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner",
       executionUpdate: { update_id: 1, message: { text: "routed", message_thread_id: 9 } } });
     assert.equal(acquired.acquired, true);
-    const bounded = createTelegramInputJournalStore({ ...options, path: join(dirname(options.path), "bounded-projection.json"),
+    const bounded = createBaleInputJournalStore({ ...options, path: join(dirname(options.path), "bounded-projection.json"),
       maxBytes: 20_000 });
     bounded.appendBatch([{ update_id: 10 }], 10);
     const running = bounded.acquireInput({ updateId: 10, recipientBindingKey: "workspace:owner" });
@@ -2031,7 +2031,7 @@ test("Input custody bounds execution projection growth inside its admission rese
 test("Input custody releases only an exact ready claim and retries commit-unknown publication", async () => {
   await withInputCustodyFixture(async ({ options, path, setOwner, setHook }) => {
     const identity = { ...options.queueRuntimeIdentity, sessionGeneration: 1 };
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 1, message: { text: "retained" } }], 1);
     const first = store.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner" });
     const ready = store.read();
@@ -2077,7 +2077,7 @@ test("Input custody releases only an exact ready claim and retries commit-unknow
 
 test("Input custody recovers ready ownership only after exact process-death proof", async () => {
   await withInputCustodyFixture(async ({ options, path, ledger }) => {
-    const ownerStore = createTelegramInputJournalStore(options);
+    const ownerStore = createBaleInputJournalStore(options);
     ownerStore.appendBatch([{ update_id: 1 }], 1);
     const first = ownerStore.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner" });
     const recoveryRuntime = { instanceId: "recovery", processId: process.pid + 1000,
@@ -2086,7 +2086,7 @@ test("Input custody recovers ready ownership only after exact process-death proo
     let liveness: "alive" | "dead" | "unverifiable" = "alive";
     let livenessCalls = 0;
     let throwLiveness = false;
-    const recovery = createTelegramInputJournalStore({ ...options, queueRuntimeIdentity: recoveryRuntime,
+    const recovery = createBaleInputJournalStore({ ...options, queueRuntimeIdentity: recoveryRuntime,
       getInputContext: () => ({ owner: recoveryOwner, recipientBindingKey: "workspace:owner" }),
       getQueueProcessLiveness(observed) {
         livenessCalls += 1;
@@ -2129,7 +2129,7 @@ test("Input custody recovers ready ownership only after exact process-death proo
 
 test("Input custody offer freezes the donor and acceptance transfers one exact acquisition", async () => {
   await withInputCustodyFixture(async ({ options, ledger }) => {
-    const donor = createTelegramInputJournalStore(options);
+    const donor = createBaleInputJournalStore(options);
     donor.appendBatch([{ update_id: 1, message: { text: "original" } }], 1);
     const donorClaim = donor.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner",
       executionUpdate: { update_id: 1, message: { text: "routed", message_thread_id: 9 } } });
@@ -2137,7 +2137,7 @@ test("Input custody offer freezes the donor and acceptance transfers one exact a
       processBirthId: `${process.pid + 2000}:recipient` };
     const recipientOwner = { ...recipientRuntime, sessionGeneration: 2 };
     const handoff = { receipt: donorClaim.receipt, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() };
+      handoffToken: createBaleUpdateQueueHandoffToken() };
     const readyBytes = await readFile(options.path, "utf8");
     assert.throws(() => donor.offerInputHandoff({ ...handoff, handoffToken: "short" }),
       (error) => isJournalError(error, "invalid"));
@@ -2157,7 +2157,7 @@ test("Input custody offer freezes the donor and acceptance transfers one exact a
       { update_id: 1, message: { text: "routed", message_thread_id: 9 } });
     assert.equal(donor.offerInputHandoff(handoff).duplicate, true);
     const reconstructedOffer = donor.offerInputHandoff({ ...handoff,
-      handoffToken: createTelegramUpdateQueueHandoffToken() });
+      handoffToken: createBaleUpdateQueueHandoffToken() });
     assert.equal(reconstructedOffer.duplicate, true);
     assert.deepEqual(reconstructedOffer.handoff, offered.handoff);
     assert.throws(() => donor.offerInputHandoff({ ...handoff,
@@ -2170,11 +2170,11 @@ test("Input custody offer freezes the donor and acceptance transfers one exact a
     assert.throws(() => donor.startInput(donorClaim.receipt), (error) => isJournalError(error, "conflict"));
     assert.throws(() => donor.releaseInput(donorClaim.receipt), (error) => isJournalError(error, "conflict"));
     assert.deepEqual(donor.read(), frozen);
-    const wrongBinding = createTelegramInputJournalStore({ ...options, queueRuntimeIdentity: recipientRuntime,
+    const wrongBinding = createBaleInputJournalStore({ ...options, queueRuntimeIdentity: recipientRuntime,
       getInputContext: () => ({ owner: recipientOwner, recipientBindingKey: "workspace:other" }) });
     assert.throws(() => wrongBinding.acceptInputHandoff(acceptance), (error) => isJournalError(error, "conflict"));
     assert.deepEqual(donor.read(), frozen);
-    const recipient = createTelegramInputJournalStore({ ...options, queueRuntimeIdentity: recipientRuntime,
+    const recipient = createBaleInputJournalStore({ ...options, queueRuntimeIdentity: recipientRuntime,
       getInputContext: () => ({ owner: recipientOwner, recipientBindingKey: "workspace:owner" }) });
     assert.throws(() => recipient.acceptInputHandoff({ ...acceptance,
       handoffId: `input-handoff-${"0".repeat(32)}` }), (error) => isJournalError(error, "conflict"));
@@ -2209,20 +2209,20 @@ test("Input custody offer freezes the donor and acceptance transfers one exact a
 
 test("Input custody handoff cancellation, recovery, and commit-unknown acceptance never restore donor authority", async () => {
   await withInputCustodyFixture(async ({ options, path, setHook, ledger }) => {
-    const donor = createTelegramInputJournalStore(options);
+    const donor = createBaleInputJournalStore(options);
     donor.appendBatch([{ update_id: 1 }, { update_id: 2 }, { update_id: 3 }], 3);
     const recipientRuntime = { instanceId: "recipient", processId: process.pid + 3000,
       processBirthId: `${process.pid + 3000}:recipient` };
     const recipientOwner = { ...recipientRuntime, sessionGeneration: 2 };
     let liveness: "alive" | "unverifiable" | "dead" = "dead";
     let livenessCalls = 0;
-    const recovery = createTelegramInputJournalStore({ ...options, queueRuntimeIdentity: recipientRuntime,
+    const recovery = createBaleInputJournalStore({ ...options, queueRuntimeIdentity: recipientRuntime,
       getInputContext: () => ({ owner: recipientOwner, recipientBindingKey: "workspace:owner" }),
       getQueueProcessLiveness: () => { livenessCalls += 1; return liveness; } });
 
     const first = donor.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner" });
     const firstOffer = donor.offerInputHandoff({ receipt: first.receipt, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() });
+      handoffToken: createBaleUpdateQueueHandoffToken() });
     const firstAcceptance = { source: firstOffer.source, recipientOwner,
       handoffId: firstOffer.handoff.handoffId };
     let boundaries = 0;
@@ -2244,7 +2244,7 @@ test("Input custody handoff cancellation, recovery, and commit-unknown acceptanc
 
     const second = donor.acquireInput({ updateId: 2, recipientBindingKey: "workspace:owner" });
     const secondHandoff = { receipt: second.receipt, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() };
+      handoffToken: createBaleUpdateQueueHandoffToken() };
     boundaries = 0;
     setHook(boundary => {
       boundaries += 1;
@@ -2253,7 +2253,7 @@ test("Input custody handoff cancellation, recovery, and commit-unknown acceptanc
     assert.throws(() => donor.offerInputHandoff(secondHandoff), (error) => isJournalError(error, "io"));
     setHook(undefined);
     const offered = donor.offerInputHandoff({ ...secondHandoff,
-      handoffToken: createTelegramUpdateQueueHandoffToken() });
+      handoffToken: createBaleUpdateQueueHandoffToken() });
     assert.equal(offered.duplicate, true);
     const cancellation = { receipt: second.receipt, recipientOwner, handoffId: offered.handoff.handoffId };
     const offeredBytes = await readFile(path, "utf8");
@@ -2274,7 +2274,7 @@ test("Input custody handoff cancellation, recovery, and commit-unknown acceptanc
 
     const third = donor.acquireInput({ updateId: 3, recipientBindingKey: "workspace:owner" });
     const thirdOffer = donor.offerInputHandoff({ receipt: third.receipt, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() });
+      handoffToken: createBaleUpdateQueueHandoffToken() });
     const recoveryRequest = { receipt: third.receipt, recoveryOwner: recipientOwner };
     liveness = "alive";
     assert.equal(recovery.recoverReadyInput(recoveryRequest).status, "owner-alive");
@@ -2295,14 +2295,14 @@ test("Input custody handoff cancellation, recovery, and commit-unknown acceptanc
 
 test("Input custody serializes duplicate accept and accept/dead-recovery across processes", async () => {
   await withInputCustodyFixture(async ({ options, dir, path, ledger }) => {
-    const donor = createTelegramInputJournalStore(options);
+    const donor = createBaleInputJournalStore(options);
     donor.appendBatch([{ update_id: 1 }, { update_id: 2 }], 2);
     const recipientRuntime = { instanceId: "recipient-race", processId: process.pid + 5000,
       processBirthId: `${process.pid + 5000}:recipient-race` };
     const recipientOwner = { ...recipientRuntime, sessionGeneration: 2 };
     const recoveryOwner = { instanceId: "recovery-race", processId: process.pid + 5001,
       processBirthId: `${process.pid + 5001}:recovery-race`, sessionGeneration: 1 };
-    const recipient = createTelegramInputJournalStore({ ...options, queueRuntimeIdentity: recipientRuntime,
+    const recipient = createBaleInputJournalStore({ ...options, queueRuntimeIdentity: recipientRuntime,
       getInputContext: () => ({ owner: recipientOwner, recipientBindingKey: "workspace:owner" }) });
     const requestPath = join(dir, "handoff-worker-request.json");
     const output = async (worker: number) => JSON.parse(
@@ -2312,7 +2312,7 @@ test("Input custody serializes duplicate accept and accept/dead-recovery across 
 
     const first = donor.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner" });
     const firstOffer = donor.offerInputHandoff({ receipt: first.receipt, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() });
+      handoffToken: createBaleUpdateQueueHandoffToken() });
     const firstRequest = { acceptance: { source: firstOffer.source, recipientOwner,
       handoffId: firstOffer.handoff.handoffId },
     recovery: { receipt: first.receipt, recoveryOwner }, recipientBindingKey: "workspace:owner",
@@ -2330,7 +2330,7 @@ test("Input custody serializes duplicate accept and accept/dead-recovery across 
 
     const second = donor.acquireInput({ updateId: 2, recipientBindingKey: "workspace:owner" });
     const secondOffer = donor.offerInputHandoff({ receipt: second.receipt, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() });
+      handoffToken: createBaleUpdateQueueHandoffToken() });
     const secondRequest = { acceptance: { source: secondOffer.source, recipientOwner,
       handoffId: secondOffer.handoff.handoffId },
     recovery: { receipt: second.receipt, recoveryOwner }, recipientBindingKey: "workspace:owner",
@@ -2359,23 +2359,23 @@ test("Input custody serializes duplicate accept and accept/dead-recovery across 
 test("Input custody offer reserves dead-donor recovery through complete cleanup refusal", async () => {
   await withInputCustodyFixture(async ({ options, dir, ledger }) => {
     const path = join(dir, "handoff-headroom.json");
-    const initial = createTelegramInputJournalStore({ ...options, path });
+    const initial = createBaleInputJournalStore({ ...options, path });
     initial.appendBatch([{ update_id: 1 }], 1);
     const donorClaim = initial.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner" });
     const recipientRuntime = { instanceId: "recipient", processId: process.pid + 4000,
       processBirthId: `${process.pid + 4000}:recipient` };
     const recipientOwner = { ...recipientRuntime, sessionGeneration: 2 };
     const handoff = { receipt: donorClaim.receipt, recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() };
+      handoffToken: createBaleUpdateQueueHandoffToken() };
     const before = await readFile(path, "utf8");
-    const insufficient = createTelegramInputJournalStore({ ...options, path,
+    const insufficient = createBaleInputJournalStore({ ...options, path,
       sourceAccess: { ...options.sourceAccess, limits: { ...options.sourceAccess.limits, maxFiles: 5 } } });
     assert.throws(() => insufficient.offerInputHandoff(handoff), (error) => isJournalError(error, "capacity"));
     assert.equal(await readFile(path, "utf8"), before);
     assert.equal(existsSync(`${path}.segments`), false);
-    const donor = createTelegramInputJournalStore({ ...options, path,
+    const donor = createBaleInputJournalStore({ ...options, path,
       sourceAccess: { ...options.sourceAccess, limits: { ...options.sourceAccess.limits, maxFiles: 6 } } });
-    const recipient = createTelegramInputJournalStore({ ...options, path, queueRuntimeIdentity: recipientRuntime,
+    const recipient = createBaleInputJournalStore({ ...options, path, queueRuntimeIdentity: recipientRuntime,
       sourceAccess: { ...options.sourceAccess, limits: { ...options.sourceAccess.limits, maxFiles: 6 } },
       getInputContext: () => ({ owner: recipientOwner, recipientBindingKey: "workspace:owner" }),
       getQueueProcessLiveness: () => "dead" });
@@ -2401,7 +2401,7 @@ test("Input custody offer reserves dead-donor recovery through complete cleanup 
 
 test("Input custody atomically replaces exact running claims with one grouped Pi queue receipt", async () => {
   await withInputCustodyFixture(async ({ options, setOwner, ledger }) => {
-    const store = createTelegramInputJournalStore(options);
+    const store = createBaleInputJournalStore(options);
     store.appendBatch([{ update_id: 1, message: { text: "one" } },
       { update_id: 2, message: { text: "two" } }], 2);
     const first = store.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner",
@@ -2455,7 +2455,7 @@ test("Input custody atomically replaces exact running claims with one grouped Pi
 test("Input custody grouped queue transition reserves commit-unknown completion with cleanup residue", async () => {
   await withInputCustodyFixture(async ({ options, dir, setHook, ledger }) => {
     const path = join(dir, "queue-headroom.json");
-    const initial = createTelegramInputJournalStore({ ...options, path });
+    const initial = createBaleInputJournalStore({ ...options, path });
     initial.appendBatch([{ update_id: 1 }, { update_id: 2 }], 2);
     const first = initial.acquireInput({ updateId: 1, recipientBindingKey: "workspace:owner" });
     const second = initial.acquireInput({ updateId: 2, recipientBindingKey: "workspace:owner" });
@@ -2464,12 +2464,12 @@ test("Input custody grouped queue transition reserves commit-unknown completion 
     const request = { queueKind: "prompt" as const, receiptId: "bounded-group",
       receipts: [first.receipt, second.receipt] };
     const before = await readFile(path, "utf8");
-    const insufficient = createTelegramInputJournalStore({ ...options, path,
+    const insufficient = createBaleInputJournalStore({ ...options, path,
       sourceAccess: { ...options.sourceAccess, limits: { ...options.sourceAccess.limits, maxFiles: 2 } } });
     assert.throws(() => insufficient.queueInputs(request), (error) => isJournalError(error, "capacity"));
     assert.equal(await readFile(path, "utf8"), before);
     assert.equal(existsSync(`${path}.segments`), false);
-    const bounded = createTelegramInputJournalStore({ ...options, path,
+    const bounded = createBaleInputJournalStore({ ...options, path,
       sourceAccess: { ...options.sourceAccess, limits: { ...options.sourceAccess.limits, maxFiles: 3 } } });
     let boundaries = 0;
     setHook(boundary => {
@@ -2496,9 +2496,9 @@ test("Input custody grouped queue transition reserves commit-unknown completion 
 });
 
 test("Custody v3 decodes input claims without granting legacy consumers access", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-custody-codec-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-custody-codec-")));
   const path = join(dir, "inbox.work.json");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-custody-codec" });
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-custody-codec" });
   const owner = { instanceId: "receiver", processId: 42, processBirthId: "birth-42",
     sessionGeneration: 1, acquisitionId: "claim-42", acquiredAtMs: 100 };
   const entry = { updateId: 42, update: { update_id: 42, message: { text: "original" } },
@@ -2516,19 +2516,19 @@ test("Custody v3 decodes input claims without granting legacy consumers access",
       file.entries[0]!.inputClaim.phase = phase;
       await writeFile(path, JSON.stringify(file));
       const before = await readFile(path);
-      const result = readTelegramUpdateJournalSource(input);
+      const result = readBaleUpdateJournalSource(input);
       assert.equal(result.kind, "present");
       if (result.kind !== "present") assert.fail("Expected owned input evidence");
       assert.deepEqual(result.file, file);
-      assert.deepEqual(inspectTelegramUpdateJournalFamily(input), result);
-      assert.throws(() => readTelegramUpdateJournalSource({ ...input,
+      assert.deepEqual(inspectBaleUpdateJournalFamily(input), result);
+      assert.throws(() => readBaleUpdateJournalSource({ ...input,
         limits: { ...input.limits, maxBytes: before.length - 1 } }), (error) => isJournalError(error, "capacity"));
-      assert.throws(() => readTelegramUpdateJournalSource({ ...input, version: 2 }),
+      assert.throws(() => readBaleUpdateJournalSource({ ...input, version: 2 }),
         (error) => isJournalError(error, "unsupported-version"));
-      assert.equal(createTelegramUpdateJournalReceiptScope({ profileName: result.file.profile,
-        botIdentity: result.file.botIdentity }), createTelegramUpdateJournalReceiptScope({ profileName: "work", botIdentity }));
+      assert.equal(createBaleUpdateJournalReceiptScope({ profileName: result.file.profile,
+        botIdentity: result.file.botIdentity }), createBaleUpdateJournalReceiptScope({ profileName: "work", botIdentity }));
       for (const paired of [false, true]) {
-        const store = createTelegramUpdateJournalStore({ path, profileName: "work", botIdentity,
+        const store = createBaleUpdateJournalStore({ path, profileName: "work", botIdentity,
           ...(paired ? { withPairingAdmission: <T>(publish: (excluded: boolean) => T) => publish(false) } : {}) });
         assert.throws(() => store.read(), (error) => isJournalError(error, "unsupported-version"));
         assert.throws(() => store.removeCompleted([42]), (error) => isJournalError(error, "unsupported-version"));
@@ -2540,7 +2540,7 @@ test("Custody v3 decodes input claims without granting legacy consumers access",
     offeredFile.entries[0]!.inputClaim.phase = "ready";
     Reflect.set(offeredFile.entries[0]!.inputClaim, "handoff", validHandoff);
     await writeFile(path, JSON.stringify(offeredFile));
-    const offeredEvidence = readTelegramUpdateJournalSource(input);
+    const offeredEvidence = readBaleUpdateJournalSource(input);
     assert.equal(offeredEvidence.kind, "present");
     if (offeredEvidence.kind === "present") {
       assert.deepEqual(offeredEvidence.file.entries[0]!.inputClaim?.handoff, validHandoff);
@@ -2554,7 +2554,7 @@ test("Custody v3 decodes input claims without granting legacy consumers access",
       queueOwner: { ...owner, acquisitionId: "queue-42", acquiredAtMs: 101 },
       inputProvenance: validProvenance });
     await writeFile(path, JSON.stringify(queuedFile));
-    const queuedEvidence = readTelegramUpdateJournalSource(input);
+    const queuedEvidence = readBaleUpdateJournalSource(input);
     assert.equal(queuedEvidence.kind, "present");
     if (queuedEvidence.kind === "present") {
       assert.deepEqual(queuedEvidence.file.entries[0]!.inputProvenance, validProvenance);
@@ -2628,16 +2628,16 @@ test("Custody v3 decodes input claims without granting legacy consumers access",
       mutate(value);
       await writeFile(path, JSON.stringify(value));
       const before = await readFile(path);
-      assert.throws(() => inspectTelegramUpdateJournalFamily(input), TelegramUpdateJournalError, label);
+      assert.throws(() => inspectBaleUpdateJournalFamily(input), BaleUpdateJournalError, label);
       assert.deepEqual(await readFile(path), before, label);
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Custody v3 retained segments validate claims and preserve exclusion/cursor replay barriers", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-custody-segments-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-custody-segments-")));
   const path = join(dir, "inbox.work.json");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-custody-segments" });
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-custody-segments" });
   const entry = { updateId: 42, update: { update_id: 42 }, preApprovalExcluded: false,
     admittedAtMs: 90, state: "pending", inputClaim: { phase: "ready", recipientBindingKey: "workspace:receiver",
       owner: { instanceId: "receiver", processId: 42, processBirthId: "birth-42", sessionGeneration: 1,
@@ -2651,7 +2651,7 @@ test("Custody v3 retained segments validate claims and preserve exclusion/cursor
     await mkdir(`${path}.segments`);
     const segmentPath = join(`${path}.segments`, "0000000000000001.json");
     await writeFile(segmentPath, JSON.stringify(segment));
-    const read = () => readTelegramUpdateJournalSource(input);
+    const read = () => readBaleUpdateJournalSource(input);
     assert.equal(read().kind, "present");
     const running = structuredClone(segment);
     running.upsertedEntries[0]!.inputClaim.phase = "running";
@@ -2667,7 +2667,7 @@ test("Custody v3 retained segments validate claims and preserve exclusion/cursor
       if (change === "resurrect") await writeFile(path, JSON.stringify({ ...base, entries: [] }));
       await writeFile(segmentPath, JSON.stringify(bad));
       const before = await readFile(segmentPath);
-      assert.throws(read, TelegramUpdateJournalError, change);
+      assert.throws(read, BaleUpdateJournalError, change);
       assert.deepEqual(await readFile(segmentPath), before);
     }
     // Redundant history is still decoded, not trusted merely because a snapshot covers it.
@@ -2675,15 +2675,15 @@ test("Custody v3 retained segments validate claims and preserve exclusion/cursor
     const malformed = structuredClone(segment);
     malformed.upsertedEntries[0]!.inputClaim.phase = "unknown";
     await writeFile(segmentPath, JSON.stringify(malformed));
-    assert.throws(read, TelegramUpdateJournalError);
+    assert.throws(read, BaleUpdateJournalError);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Strict family inspection preserves evidence and rejects uncertain families without writes", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-strict-journal-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-strict-journal-")));
   const path = join(dir, "journal.json");
   const segmentDir = `${path}.segments`;
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-strict" });
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-strict" });
   const limits = { maxFiles: 20, maxBytes: 100_000, maxEntries: 10, maxWork: 100 };
   const input = { directory: dir, path, profile: "default", botIdentity, limits };
   const snapshot = { version: 1, revision: 1, profile: "default", botIdentity, acceptedThroughUpdateId: 1, entries: [] };
@@ -2701,16 +2701,16 @@ test("Strict family inspection preserves evidence and rejects uncertain families
   };
   const reject = async (override = {}) => {
     const before = await tree();
-    assert.throws(() => inspectTelegramUpdateJournalFamily({ ...input, ...override }), TelegramUpdateJournalError);
+    assert.throws(() => inspectBaleUpdateJournalFamily({ ...input, ...override }), BaleUpdateJournalError);
     assert.deepEqual(await tree(), before);
   };
   try {
-    assert.deepEqual(inspectTelegramUpdateJournalFamily(input), { kind: "absent" });
+    assert.deepEqual(inspectBaleUpdateJournalFamily(input), { kind: "absent" });
     await writeFile(path, JSON.stringify(snapshot));
     await mkdir(segmentDir);
     await writeFile(segmentPath, JSON.stringify(segment));
     const before = await tree();
-    const result = inspectTelegramUpdateJournalFamily(input);
+    const result = inspectBaleUpdateJournalFamily(input);
     assert.equal(result.kind, "present");
     if (result.kind === "present") {
       assert.deepEqual(result.file, { ...snapshot, revision: 2, acceptedThroughUpdateId: 2 });
@@ -2750,7 +2750,7 @@ test("Strict family inspection preserves evidence and rejects uncertain families
     await rm(path);
     await reject();
     await mkdir(path);
-    assert.throws(() => inspectTelegramUpdateJournalFamily(input));
+    assert.throws(() => inspectBaleUpdateJournalFamily(input));
     await rm(path, { recursive: true });
     await symlink(segmentPath, path);
     await reject();
@@ -2778,7 +2778,7 @@ test("Strict family inspection preserves evidence and rejects uncertain families
       return count;
     }) as typeof readSync;
     syncBuiltinESMExports();
-    try { assert.throws(() => inspectTelegramUpdateJournalFamily(input), TelegramUpdateJournalError); }
+    try { assert.throws(() => inspectBaleUpdateJournalFamily(input), BaleUpdateJournalError); }
     finally { fs.readSync = original; syncBuiltinESMExports(); }
     assert.equal(changed, true);
   } finally { await rm(dir, { recursive: true, force: true }); }
@@ -2800,41 +2800,41 @@ test("Strict readers work without no-follow, non-blocking or POSIX-uid support, 
       return { ...loaded, source: String(loaded.source).replace(/constants\\.O_(?:NOFOLLOW|NONBLOCK) \\?\\? 0/g, '0') };
     } });
     process.getuid = undefined;
-    const { TELEGRAM_STRICT_READ_FLAGS, readTelegramPrivateFile } = await import(${JSON.stringify(locks)});
-    assert.equal(TELEGRAM_STRICT_READ_FLAGS, constants.O_RDONLY, 'the emulation removed both open flags');
-    const { createTelegramUpdateJournalBotIdentity, readTelegramUpdateJournalSource } =
+    const { BALE_STRICT_READ_FLAGS, readBalePrivateFile } = await import(${JSON.stringify(locks)});
+    assert.equal(BALE_STRICT_READ_FLAGS, constants.O_RDONLY, 'the emulation removed both open flags');
+    const { createBaleUpdateJournalBotIdentity, readBaleUpdateJournalSource } =
       await import(${JSON.stringify(new URL("../lib/journal.ts", import.meta.url).href)});
-    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'pi-telegram-windows-emulation-')));
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'pi-bale-windows-emulation-')));
     try {
-      const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: 'synthetic-windows' });
+      const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: 'synthetic-windows' });
       const path = join(dir, 'journal.json'), other = join(dir, 'other.json');
       const raw = JSON.stringify({ version: 1, profile: 'default', botIdentity, acceptedThroughUpdateId: 1,
         entries: [{ updateId: 1, update: { update_id: 1 }, admittedAtMs: 1, state: 'pending' }] });
       writeFileSync(path, raw, { mode: 0o644 });
       const input = { directory: dir, path, profile: 'default', botIdentity, version: 1,
         limits: { maxFiles: 10, maxBytes: 100000, maxEntries: 10, maxWork: 100 } };
-      assert.equal(readTelegramUpdateJournalSource(input).kind, 'present');
-      assert.equal(readTelegramPrivateFile(path, 100000), raw, 'without a uid, mode bits do not decide privacy');
+      assert.equal(readBaleUpdateJournalSource(input).kind, 'present');
+      assert.equal(readBalePrivateFile(path, 100000), raw, 'without a uid, mode bits do not decide privacy');
       writeFileSync(other, raw);
       rmSync(path);
       symlinkSync(other, path);
-      assert.throws(() => readTelegramUpdateJournalSource(input), /linked or unexpected file type/);
-      assert.throws(() => readTelegramPrivateFile(path, 100000), { name: 'TelegramPrivateFileError' });
+      assert.throws(() => readBaleUpdateJournalSource(input), /linked or unexpected file type/);
+      assert.throws(() => readBalePrivateFile(path, 100000), { name: 'BalePrivateFileError' });
     } finally { rmSync(dir, { recursive: true, force: true }); }
   `], { encoding: "utf8", timeout: 20_000 });
   assert.equal(result.status, 0, result.stderr);
 });
 
 test("Live source reader preserves selected schema, exact identity, scope and rejection bytes", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-live-source-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-live-source-")));
   const path = join(dir, "journal.json");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-live" });
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-live" });
   const input = { directory: dir, path, profile: "default", botIdentity,
     limits: { maxFiles: 10, maxBytes: 100_000, maxEntries: 10, maxWork: 100 }, version: 1 as 1 | 2 };
-  const inspect = () => readTelegramUpdateJournalSource(input);
+  const inspect = () => readBaleUpdateJournalSource(input);
   const reject = (override = {}) => {
     const before = fs.readFileSync(path);
-    assert.throws(() => readTelegramUpdateJournalSource({ ...input, ...override }), TelegramUpdateJournalError);
+    assert.throws(() => readBaleUpdateJournalSource({ ...input, ...override }), BaleUpdateJournalError);
     assert.deepEqual(fs.readFileSync(path), before);
   };
   try {
@@ -2845,7 +2845,7 @@ test("Live source reader preserves selected schema, exact identity, scope and re
         entries: [{ updateId: 1, update: { update_id: 1 }, admittedAtMs: 1, state: "pending",
           ...(version === 2 ? { preApprovalExcluded: false } : {}) }] };
       await writeFile(path, JSON.stringify(raw));
-      assert.deepEqual(inspect(), inspectTelegramUpdateJournalFamily(input));
+      assert.deepEqual(inspect(), inspectBaleUpdateJournalFamily(input));
       reject({ version: version === 1 ? 2 : 1 });
       reject({ version: undefined });
       reject({ botIdentity: { ...botIdentity, botId: 7 } });
@@ -2854,7 +2854,7 @@ test("Live source reader preserves selected schema, exact identity, scope and re
       await writeFile(path, JSON.stringify({ ...raw, botIdentity: { ...botIdentity, botId: 7 } }));
       reject();
       const known = { ...botIdentity, botId: 7 };
-      assert.equal(readTelegramUpdateJournalSource({ ...input, botIdentity: known }).kind, "present");
+      assert.equal(readBaleUpdateJournalSource({ ...input, botIdentity: known }).kind, "present");
       reject({ botIdentity: { ...known, tokenSha256: "a".repeat(64) } });
       reject({ botIdentity: { ...known, botId: 8 } });
       for (const malformed of ["{", Buffer.from([0xff]), JSON.stringify({ ...raw, entries: [null] })]) {
@@ -2864,19 +2864,19 @@ test("Live source reader preserves selected schema, exact identity, scope and re
     }
     await rm(path);
     await mkdir(`${path}.segments`);
-    assert.throws(inspect, TelegramUpdateJournalError);
-    assert.throws(() => readTelegramUpdateJournalSource({ ...input, directory: join(dir, "missing"),
-      path: join(dir, "missing", "journal.json") }), TelegramUpdateJournalError);
-    assert.throws(() => readTelegramUpdateJournalSource({ ...input, path: join(dir, "missing", "journal.json") }), TelegramUpdateJournalError);
+    assert.throws(inspect, BaleUpdateJournalError);
+    assert.throws(() => readBaleUpdateJournalSource({ ...input, directory: join(dir, "missing"),
+      path: join(dir, "missing", "journal.json") }), BaleUpdateJournalError);
+    assert.throws(() => readBaleUpdateJournalSource({ ...input, path: join(dir, "missing", "journal.json") }), BaleUpdateJournalError);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Live ancestor endpoints tolerate sibling churn while full inspection and source mutations refuse", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-live-endpoints-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-live-endpoints-")));
   const root = join(dir, "root");
   const parent = join(root, "nested");
   const path = join(parent, "journal.json");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-endpoints" });
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-endpoints" });
   const input = { directory: root, path, profile: "default", botIdentity, version: 1 as 1 | 2,
     limits: { maxFiles: 10, maxBytes: 100_000, maxEntries: 10, maxWork: 100 } };
   const snapshot = JSON.stringify({ version: 1, revision: 1, profile: "default", botIdentity, entries: [] });
@@ -2884,7 +2884,7 @@ test("Live ancestor endpoints tolerate sibling churn while full inspection and s
   const segmentPath = join(segmentDir, "0000000000000002.json");
   const segment = JSON.stringify({ version: 1, revision: 2, previousRevision: 1, profile: "default", botIdentity,
     upsertedEntries: [], removedUpdateIds: [] });
-  const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+  const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
   const probe = (mutate: () => void, live: boolean | "store", accepted: boolean, readNumber = 1) => {
     const original = fs.readSync;
     let changed = false;
@@ -2898,8 +2898,8 @@ test("Live ancestor endpoints tolerate sibling churn while full inspection and s
     syncBuiltinESMExports();
     try {
       const read = () => {
-        if (live !== "store") return live ? readTelegramUpdateJournalSource(input) : inspectTelegramUpdateJournalFamily(input);
-        const result = createTelegramUpdateJournalStore({ path, botIdentity,
+        if (live !== "store") return live ? readBaleUpdateJournalSource(input) : inspectBaleUpdateJournalFamily(input);
+        const result = createBaleUpdateJournalStore({ path, botIdentity,
           sourceAccess: { directory: root, limits: input.limits },
           withSourceSerialization(operation) { serializedReads += 1; return journalSerialization(operation); } }).read();
         return { kind: result.exists ? "present" : "absent" };
@@ -2908,16 +2908,16 @@ test("Live ancestor endpoints tolerate sibling churn while full inspection and s
         // The unserialized store read refuses the unstable family, then retries once under
         // serialization, which must agree with a fresh strict inspection of the settled family.
         let outcome: string;
-        try { outcome = read().kind; } catch (error) { assert.ok(error instanceof TelegramUpdateJournalError); outcome = "refused"; }
+        try { outcome = read().kind; } catch (error) { assert.ok(error instanceof BaleUpdateJournalError); outcome = "refused"; }
         assert.equal(changed, true);
         let fresh: string;
-        try { fresh = readTelegramUpdateJournalSource(input).kind; } catch { fresh = "refused"; }
+        try { fresh = readBaleUpdateJournalSource(input).kind; } catch { fresh = "refused"; }
         assert.equal(outcome, fresh);
         assert.equal(serializedReads, 1);
         return;
       }
       if (accepted) assert.equal(read().kind, "present");
-      else assert.throws(read, TelegramUpdateJournalError);
+      else assert.throws(read, BaleUpdateJournalError);
       assert.equal(changed, true);
       if (live === "store") assert.equal(serializedReads, 0, "A stable family read takes no transaction");
     } finally { fs.readSync = original; syncBuiltinESMExports(); }
@@ -2975,9 +2975,9 @@ test("Live ancestor endpoints tolerate sibling churn while full inspection and s
 });
 
 test("Strict inspection bounds raw, reconstructed and repeated work and preserves v1/v2 codecs", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-strict-budget-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-strict-budget-")));
   const path = join(dir, "journal.json");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-budget" });
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-budget" });
   const limits = { maxFiles: 10, maxBytes: 100_000, maxEntries: 10, maxWork: 100 };
   const input = { directory: dir, path, profile: "default", botIdentity, limits };
   const entry = { updateId: 1, update: { update_id: 1 }, admittedAtMs: 1, state: "pending" };
@@ -2991,39 +2991,39 @@ test("Strict inspection bounds raw, reconstructed and repeated work and preserve
       await writeFile(path, JSON.stringify(snapshot));
       const target = join(`${path}.segments`, "0000000000000002.json");
       await writeFile(target, JSON.stringify(segment));
-      const result = inspectTelegramUpdateJournalFamily(input);
+      const result = inspectBaleUpdateJournalFamily(input);
       assert.equal(result.kind, "present");
-      assert.deepEqual(readTelegramUpdateJournalSource({ ...input, version }), result);
+      assert.deepEqual(readBaleUpdateJournalSource({ ...input, version }), result);
       if (result.kind === "present") {
         assert.deepEqual(result.file.entries, [...entries, ...segment.upsertedEntries]);
         assert.deepEqual(result.file.botIdentity, botIdentity);
         assert.equal(result.accounting.work, 4);
       }
       for (const bounded of [{ ...limits, maxEntries: 1 }, { ...limits, maxWork: 3 }]) {
-        assert.throws(() => inspectTelegramUpdateJournalFamily({ ...input, limits: bounded }), e => isJournalError(e, "capacity"));
-        assert.throws(() => readTelegramUpdateJournalSource({ ...input, version, limits: bounded }), e => isJournalError(e, "capacity"));
+        assert.throws(() => inspectBaleUpdateJournalFamily({ ...input, limits: bounded }), e => isJournalError(e, "capacity"));
+        assert.throws(() => readBaleUpdateJournalSource({ ...input, version, limits: bounded }), e => isJournalError(e, "capacity"));
       }
       for (const key of ["upsertedEntries", "removedUpdateIds", "operatorDispositions"]) {
         await writeFile(target, JSON.stringify({ ...segment, [key]: Array(11).fill(null) }));
-        assert.throws(() => inspectTelegramUpdateJournalFamily(input), e => isJournalError(e, "capacity"));
+        assert.throws(() => inspectBaleUpdateJournalFamily(input), e => isJournalError(e, "capacity"));
       }
       await writeFile(target, JSON.stringify({ ...segment, upsertedEntries: [], removedUpdateIds: [] }));
       await writeFile(path, JSON.stringify({ ...snapshot, entries: Array(11).fill(entries[0]) }));
-      assert.throws(() => inspectTelegramUpdateJournalFamily(input), e => isJournalError(e, "capacity"));
+      assert.throws(() => inspectBaleUpdateJournalFamily(input), e => isJournalError(e, "capacity"));
       await writeFile(path, JSON.stringify(snapshot));
       if (version === 2) {
         await writeFile(target, JSON.stringify({ ...segment, upsertedEntries: [{ ...entries[0], preApprovalExcluded: true }] }));
-        assert.throws(() => inspectTelegramUpdateJournalFamily(input), e => isJournalError(e, "pairing-evidence"));
+        assert.throws(() => inspectBaleUpdateJournalFamily(input), e => isJournalError(e, "pairing-evidence"));
         await writeFile(path, JSON.stringify({ ...snapshot, entries: [] }));
         await writeFile(target, JSON.stringify({ ...segment, upsertedEntries: entries }));
-        assert.throws(() => inspectTelegramUpdateJournalFamily(input), e => isJournalError(e, "pairing-evidence"));
+        assert.throws(() => inspectBaleUpdateJournalFamily(input), e => isJournalError(e, "pairing-evidence"));
       }
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Recipient discovery covers flat and session journals together and retains incomplete-census refusal", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-recipient-discovery-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-recipient-discovery-"));
   try {
     const legacy = join(dir, "follower-inbox-aaaaaaaaaaaaaaaa.json");
     const folder = join(dir, "sessions", "session");
@@ -3031,23 +3031,23 @@ test("Recipient discovery covers flat and session journals together and retains 
     await writeFile(legacy, "unchanged legacy");
     await mkdir(folder, { recursive: true });
     await mkdir(`${sessionPath}.segments`);
-    assert.deepEqual(discoverTelegramRecipientJournalPaths({ directory: dir }), {
+    assert.deepEqual(discoverBaleRecipientJournalPaths({ directory: dir }), {
       paths: [legacy, sessionPath].sort(), complete: true,
     });
-    assert.deepEqual(discoverTelegramRecipientJournalPaths({ directory: dir, profileName: "work" }), {
+    assert.deepEqual(discoverBaleRecipientJournalPaths({ directory: dir, profileName: "work" }), {
       paths: [], complete: true,
     });
     await writeFile(join(folder, "journal.malformed.json"), "unclassified authority");
-    assert.equal(discoverTelegramRecipientJournalPaths({ directory: dir }).complete, false,
+    assert.equal(discoverBaleRecipientJournalPaths({ directory: dir }).complete, false,
       "Successful legacy discovery cannot mask incomplete session evidence");
     assert.equal(await readFile(legacy, "utf8"), "unchanged legacy");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Session journal discovery includes snapshot, segment-only and retained-only families without merging sessions", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-session-discovery-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-session-discovery-"));
   try {
-    assert.deepEqual(discoverTelegramSessionJournalPaths({ directory: dir }), { paths: [], complete: true });
+    assert.deepEqual(discoverBaleSessionJournalPaths({ directory: dir }), { paths: [], complete: true });
     const first = join(dir, "sessions", "first");
     const second = join(dir, "sessions", "%41");
     await mkdir(first, { recursive: true });
@@ -3060,22 +3060,22 @@ test("Session journal discovery includes snapshot, segment-only and retained-onl
     await mkdir(join(first, `${segmentOnly}.segments`));
     await writeFile(join(second, shared), "also untouched");
     await mkdir(join(second, `${retainedOnly}.retained`));
-    assert.deepEqual(discoverTelegramSessionJournalPaths({ directory: dir }), {
+    assert.deepEqual(discoverBaleSessionJournalPaths({ directory: dir }), {
       paths: [join(first, shared), join(first, segmentOnly), join(second, shared)].sort(), complete: true,
     });
-    assert.deepEqual(discoverTelegramSessionJournalPaths({ directory: dir, profileName: "work" }), {
+    assert.deepEqual(discoverBaleSessionJournalPaths({ directory: dir, profileName: "work" }), {
       paths: [join(second, retainedOnly)], complete: true,
     });
-    assert.equal(discoverTelegramSessionJournalPaths({ directory: dir, maxDirectoryEntries: 7 }).complete, true);
-    assert.equal(discoverTelegramSessionJournalPaths({ directory: dir, maxDirectoryEntries: 6 }).complete, false);
-    assert.equal(discoverTelegramSessionJournalPaths({ directory: dir, maxDirectoryEntries: 0 }).complete, false);
+    assert.equal(discoverBaleSessionJournalPaths({ directory: dir, maxDirectoryEntries: 7 }).complete, true);
+    assert.equal(discoverBaleSessionJournalPaths({ directory: dir, maxDirectoryEntries: 6 }).complete, false);
+    assert.equal(discoverBaleSessionJournalPaths({ directory: dir, maxDirectoryEntries: 0 }).complete, false);
     assert.equal(await readFile(join(first, shared), "utf8"), "untouched, not decoded");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 for (const scenario of ["root-file", "session-alias", "session-file", "unknown-family", "snapshot-directory", "segments-file", "root-link", "session-link", "snapshot-link"] as const) {
   test(`Session journal discovery refuses ${scenario} without altering evidence`, { skip: scenario.endsWith("link") && process.platform === "win32" }, async () => {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-session-discovery-refusal-"));
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-session-discovery-refusal-"));
     try {
       const root = join(dir, "sessions");
       const session = join(root, "safe");
@@ -3098,7 +3098,7 @@ for (const scenario of ["root-file", "session-alias", "session-file", "unknown-f
           else await symlink(join(outside, "original"), family);
         }
       }
-      assert.equal(discoverTelegramSessionJournalPaths({ directory: dir }).complete, false);
+      assert.equal(discoverBaleSessionJournalPaths({ directory: dir }).complete, false);
       assert.equal(await readFile(join(outside, "original"), "utf8"), "unchanged");
       assert.equal(await stat(outside).then(value => value.isDirectory()), true);
     } finally { await rm(dir, { recursive: true, force: true }); }
@@ -3106,9 +3106,9 @@ for (const scenario of ["root-file", "session-alias", "session-file", "unknown-f
 }
 
 test("Strict family inspection preserves legacy failures, queue owners and handoffs", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-strict-metadata-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-strict-metadata-")));
   const path = join(dir, "journal.json");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-metadata" });
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-metadata" });
   const owner = { instanceId: "owner", processId: 123, processBirthId: "synthetic-birth", sessionGeneration: 7 };
   const queued = { updateId: 1, update: { update_id: 1 }, admittedAtMs: 1, state: "queued",
     queueKind: "prompt", queueReceiptId: "receipt", queueOwner: { ...owner, acquisitionId: "acquisition", acquiredAtMs: 2 },
@@ -3124,9 +3124,9 @@ test("Strict family inspection preserves legacy failures, queue owners and hando
       await writeFile(path, text);
       const input = { directory: dir, path, profile: "default", botIdentity,
         limits: { maxFiles: 1, maxBytes: 100_000, maxEntries: 10, maxWork: 100 } };
-      const first = inspectTelegramUpdateJournalFamily(input);
-      const second = inspectTelegramUpdateJournalFamily(input);
-      assert.deepEqual(readTelegramUpdateJournalSource({ ...input, version }), first);
+      const first = inspectBaleUpdateJournalFamily(input);
+      const second = inspectBaleUpdateJournalFamily(input);
+      assert.deepEqual(readBaleUpdateJournalSource({ ...input, version }), first);
       assert.deepEqual(second, first);
       assert.equal(first.kind, "present");
       if (first.kind === "present") {
@@ -3144,16 +3144,16 @@ test("Strict family inspection preserves legacy failures, queue owners and hando
 });
 
 test("Session namespace shares budgets, covers segment tails and leaves foreign contents unread", async () => {
-  const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-session-census-")));
-  const directory = join(agentDir, "tmp", "pi-telegram");
-  const oldPath = resolveTelegramSessionJournalPath("session-old", "manual:recipient", agentDir, "work");
-  const newPath = resolveTelegramSessionJournalPath("A", "manual:recipient", agentDir, "work");
+  const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-session-census-")));
+  const directory = join(agentDir, "tmp", "pi-bale");
+  const oldPath = resolveBaleSessionJournalPath("session-old", "manual:recipient", agentDir, "work");
+  const newPath = resolveBaleSessionJournalPath("A", "manual:recipient", agentDir, "work");
   const legacy = join(directory, "follower-inbox-aaaaaaaaaaaaaaaa.work.json");
-  const foreign = resolveTelegramSessionJournalPath("A", "manual:foreign", agentDir, "foreign");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "fixture-session-census" });
+  const foreign = resolveBaleSessionJournalPath("A", "manual:foreign", agentDir, "foreign");
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "fixture-session-census" });
   const limits = { maxDirectoryEntries: 32, maxFiles: 16, maxBytes: 100_000, maxEntries: 10, maxWork: 1000 };
   const input = { directory, profile: "work", botIdentity, limits };
-  const inspect = () => inspectTelegramSessionJournalNamespace(input);
+  const inspect = () => inspectBaleSessionJournalNamespace(input);
   const entry = (updateId: number) => ({ updateId, update: { update_id: updateId }, admittedAtMs: 1, state: "pending" });
   const file = (entries: unknown[]) => JSON.stringify({ version: 1, revision: 1, profile: "work", botIdentity, entries });
   try {
@@ -3190,9 +3190,9 @@ test("Session namespace shares budgets, covers segment tails and leaves foreign 
     assert.equal(result.accounting.files, 4);
     const exact = { ...limits, maxDirectoryEntries: result.accounting.directoryEntries, maxFiles: result.accounting.files,
       maxBytes: result.accounting.bytes, maxWork: result.accounting.work, maxEntries: 2 };
-    assert.deepEqual(inspectTelegramSessionJournalNamespace({ ...input, limits: exact }), result);
+    assert.deepEqual(inspectBaleSessionJournalNamespace({ ...input, limits: exact }), result);
     for (const key of ["maxDirectoryEntries", "maxFiles", "maxBytes", "maxWork", "maxEntries"] as const) {
-      assert.throws(() => inspectTelegramSessionJournalNamespace({ ...input, limits: { ...exact, [key]: exact[key] - 1 } }),
+      assert.throws(() => inspectBaleSessionJournalNamespace({ ...input, limits: { ...exact, [key]: exact[key] - 1 } }),
         error => isJournalError(error, "capacity"), `Shared ${key} exhaustion`);
     }
     assert.deepEqual(await Promise.all(paths.map(path => readFile(path, "utf8"))), before);
@@ -3200,17 +3200,17 @@ test("Session namespace shares budgets, covers segment tails and leaves foreign 
 });
 
 test("Temporary cleanup namespace requires present exact references and complete-empty shared evidence", async () => {
-  const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-temporary-census-")));
-  const directory = join(agentDir, "tmp", "pi-telegram"), profile = "work";
-  const pollingPath = resolveTelegramSessionPollingJournalPath("leader", agentDir, profile);
-  const historical = resolveTelegramSessionJournalPath("predecessor", "manual:recipient", agentDir, profile);
-  const current = resolveTelegramSessionJournalPath("current", "manual:recipient", agentDir, profile);
+  const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-temporary-census-")));
+  const directory = join(agentDir, "tmp", "pi-bale"), profile = "work";
+  const pollingPath = resolveBaleSessionPollingJournalPath("leader", agentDir, profile);
+  const historical = resolveBaleSessionJournalPath("predecessor", "manual:recipient", agentDir, profile);
+  const current = resolveBaleSessionJournalPath("current", "manual:recipient", agentDir, profile);
   const legacy = join(directory, "follower-inbox-aaaaaaaaaaaaaaaa.work.json");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "fixture-temporary-census", botId: 7 });
-  const key = (path: string) => createTelegramUpdateJournalBindingKey({ path, profileName: profile, botIdentity });
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "fixture-temporary-census", botId: 7 });
+  const key = (path: string) => createBaleUpdateJournalBindingKey({ path, profileName: profile, botIdentity });
   const paths = [pollingPath, historical, current, legacy];
-  const references = createTelegramUpdateJournalReferenceRegistry();
-  const journalSerialization = createTelegramJournalSourceSerialization(() => join(agentDir, "journals.transaction"));
+  const references = createBaleUpdateJournalReferenceRegistry();
+  const journalSerialization = createBaleJournalSourceSerialization(() => join(agentDir, "journals.transaction"));
   const input = { directory, profile, pollingPath, botIdentity,
     requiredJournalBindingKeys: paths.map(key),
     limits: { maxDirectoryEntries: 100, maxFiles: 100, maxBytes: 1_000_000, maxEntries: 100, maxWork: 10_000 },
@@ -3218,7 +3218,7 @@ test("Temporary cleanup namespace requires present exact references and complete
       return references.withReference({ referenceClass: "operator-disposition", recoveryKey: key(path) }, operation);
     } };
   const inspect = (overrides: Partial<typeof input> = {}) => journalSerialization(() =>
-    isTelegramThreadCleanupJournalNamespaceClear({ ...input, ...overrides }));
+    isBaleThreadCleanupJournalNamespaceClear({ ...input, ...overrides }));
   const empty = JSON.stringify({ version: 1, revision: 1, profile, botIdentity, entries: [] });
   try {
     for (const path of paths) { await mkdir(dirname(path), { recursive: true }); await writeFile(path, empty); }
@@ -3251,7 +3251,7 @@ test("Temporary cleanup namespace requires present exact references and complete
       assert.equal(inspect(), false, "Unknown and different-target shared sources gain no cleanup exemption");
     }
     await writeFile(legacy, empty);
-    assert.throws(() => inspect({ requiredJournalBindingKeys: [createTelegramUpdateJournalBindingKey({
+    assert.throws(() => inspect({ requiredJournalBindingKeys: [createBaleUpdateJournalBindingKey({
       path: current, profileName: "foreign", botIdentity,
     })] }));
     assert.throws(() => inspect({ requiredJournalBindingKeys: [] }));
@@ -3271,12 +3271,12 @@ test("Temporary cleanup namespace requires present exact references and complete
 });
 
 test("Session namespace reads the owners-named polling journal from a session folder", async () => {
-  const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-session-polling-")));
-  const directory = join(agentDir, "tmp", "pi-telegram");
-  const pollingPath = resolveTelegramSessionPollingJournalPath("leader-session", agentDir, "work");
+  const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-session-polling-")));
+  const directory = join(agentDir, "tmp", "pi-bale");
+  const pollingPath = resolveBaleSessionPollingJournalPath("leader-session", agentDir, "work");
   const staleRoot = join(directory, "inbox.work.json");
-  const otherPolling = resolveTelegramSessionPollingJournalPath("former", agentDir, "work");
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "fixture-session-polling" });
+  const otherPolling = resolveBaleSessionPollingJournalPath("former", agentDir, "work");
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "fixture-session-polling" });
   const input = { directory, profile: "work", botIdentity, pollingPath,
     limits: { maxDirectoryEntries: 32, maxFiles: 16, maxBytes: 100_000, maxEntries: 10, maxWork: 1000 } };
   const entry = (updateId: number) => ({ updateId, update: { update_id: updateId }, admittedAtMs: 1, state: "pending" });
@@ -3287,25 +3287,25 @@ test("Session namespace reads the owners-named polling journal from a session fo
     await writeFile(pollingPath, file([entry(1)]));
     await writeFile(staleRoot, file([entry(2)]));
     await writeFile(otherPolling, file([entry(3)]));
-    const result = inspectTelegramSessionJournalNamespace(input);
+    const result = inspectBaleSessionJournalNamespace(input);
     assert.deepEqual(result.sources.map(source => [source.role, source.path]),
       [["polling", pollingPath], ["session", staleRoot], ["session", otherPolling]],
       "Unnamed polling journals stay protected custody");
-    assert.throws(() => inspectTelegramSessionJournalNamespace({ ...input, pollingPath: join(directory, "elsewhere", "inbox.work.json") }),
+    assert.throws(() => inspectBaleSessionJournalNamespace({ ...input, pollingPath: join(directory, "elsewhere", "inbox.work.json") }),
       error => isJournalError(error, "invalid"));
   } finally { await rm(agentDir, { recursive: true, force: true }); }
 });
 
 for (const kind of ["alias", "unknown", "retained", "linked-session", "linked-snapshot", "linked-segment", "orphan-segments", "identity-conflict"] as const) {
   test(`Session namespace rejects unclassified or foreign authority (${kind})`, { skip: kind.startsWith("linked") && process.platform === "win32" }, async () => {
-    const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-session-census-refusal-")));
-    const directory = join(agentDir, "tmp", "pi-telegram");
+    const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-session-census-refusal-")));
+    const directory = join(agentDir, "tmp", "pi-bale");
     const folder = join(directory, "sessions", kind === "alias" ? "%61" : "session");
     const path = join(folder, "journal.aaaaaaaaaaaaaaaa.json");
-    const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "fixture-session-census-refusal" });
+    const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "fixture-session-census-refusal" });
     const input = { directory, profile: "default", botIdentity,
       limits: { maxDirectoryEntries: 32, maxFiles: 32, maxBytes: 100_000, maxEntries: 10, maxWork: 1000 } };
-    const inspect = () => inspectTelegramSessionJournalNamespace(input);
+    const inspect = () => inspectBaleSessionJournalNamespace(input);
     try {
       await mkdir(join(directory, "sessions"), { recursive: true });
       const outside = join(agentDir, "outside");
@@ -3339,14 +3339,14 @@ for (const kind of ["alias", "unknown", "retained", "linked-session", "linked-sn
 
 for (const change of ["segment-body", "legacy-segment-body", "new-session", "foreign-body"] as const) {
   test(`Session namespace recensus refuses changes after the last family read (${change})`, async () => {
-    const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-session-recensus-")));
-    const directory = join(agentDir, "tmp", "pi-telegram");
-    const path = resolveTelegramSessionJournalPath("session", "manual:recipient", agentDir);
-    const foreign = resolveTelegramSessionJournalPath("session", "manual:foreign", agentDir, "foreign");
-    const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "fixture-session-recensus" });
+    const agentDir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-session-recensus-")));
+    const directory = join(agentDir, "tmp", "pi-bale");
+    const path = resolveBaleSessionJournalPath("session", "manual:recipient", agentDir);
+    const foreign = resolveBaleSessionJournalPath("session", "manual:foreign", agentDir, "foreign");
+    const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "fixture-session-recensus" });
     const input = { directory, profile: "default", botIdentity,
       limits: { maxDirectoryEntries: 32, maxFiles: 32, maxBytes: 100_000, maxEntries: 10, maxWork: 1000 } };
-    const inspect = () => inspectTelegramSessionJournalNamespace(input);
+    const inspect = () => inspectBaleSessionJournalNamespace(input);
     const segmentPath = join(`${path}.segments`, "0000000000000002.json");
     try {
       await mkdir(dirname(path), { recursive: true });
@@ -3391,18 +3391,18 @@ test("Session namespace accounts preserved originals across polling, flat and se
       const store = createStore(journalPath);
       store.appendBatch([{ update_id: 1 }]);
       store.abandonPending({ entry: store.read().entries[0]!, operatorAuthorityId: "owner:7", isCurrent: () => true,
-        journalBindingKey: createTelegramUpdateJournalBindingKey({ path: journalPath, profileName: "work", botIdentity: identity }) });
+        journalBindingKey: createBaleUpdateJournalBindingKey({ path: journalPath, profileName: "work", botIdentity: identity }) });
     }
     const before = await readJournalFixtureTree(dir);
-    const result = inspectTelegramSessionJournalNamespace(input);
+    const result = inspectBaleSessionJournalNamespace(input);
     assert.deepEqual(result.sources.map(source => source.role), ["polling", "follower", "session"]);
     assert.deepEqual(result.retainedInputs?.map(original => [original.journalPath, original.updateId, original.state]),
       paths.map(journalPath => [journalPath, 1, "committed"]));
     const exact = { ...input.limits, maxDirectoryEntries: result.accounting.directoryEntries,
       maxFiles: result.accounting.files, maxBytes: result.accounting.bytes, maxWork: result.accounting.work };
-    assert.deepEqual(inspectTelegramSessionJournalNamespace({ ...input, limits: exact }), result);
+    assert.deepEqual(inspectBaleSessionJournalNamespace({ ...input, limits: exact }), result);
     for (const key of ["maxDirectoryEntries", "maxFiles", "maxBytes", "maxWork"] as const)
-      assert.throws(() => inspectTelegramSessionJournalNamespace({ ...input, limits: { ...exact, [key]: exact[key] - 1 } }), error => isJournalError(error, "capacity"));
+      assert.throws(() => inspectBaleSessionJournalNamespace({ ...input, limits: { ...exact, [key]: exact[key] - 1 } }), error => isJournalError(error, "capacity"));
     assert.deepEqual(await readJournalFixtureTree(dir), before);
   });
 });
@@ -3418,14 +3418,14 @@ for (const state of ["committed", "uncommitted", "tampered", "foreign-key", "tom
     await withJournalTempDir(async ({ dir, path }) => {
       const input = { directory: dir, path, profile: "work", botIdentity: identity,
         limits: { maxFiles: 100, maxBytes: 1_000_000, maxEntries: 100, maxWork: 10_000 } };
-      const inspect = () => inspectTelegramUpdateJournalRetention(input);
+      const inspect = () => inspectBaleUpdateJournalRetention(input);
       const store = createStore(path);
       store.appendBatch([{ update_id: 1, message: { text: "Original private input" } }]);
       const entry = store.read().entries[0]!;
       const beforeCancel = await readFile(path);
       const segmentsBefore = new Set(existsSync(`${path}.segments`) ? await readdir(`${path}.segments`) : []);
       const cancellation = store.abandonPending({ entry, operatorAuthorityId: "owner:7", isCurrent: () => true,
-        journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }) });
+        journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }) });
       if (state === "uncommitted") {
         await writeFile(path, beforeCancel);
         for (const name of existsSync(`${path}.segments`) ? await readdir(`${path}.segments`) : [])
@@ -3453,7 +3453,7 @@ for (const state of ["committed", "uncommitted", "tampered", "foreign-key", "tom
       if (state === "committed" || state === "uncommitted") {
         const result = inspect();
         assert.deepEqual(result.retainedInputs, [{ path: cancellation.retainedPath,
-          journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
+          journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
           failureId: cancellation.disposition.failureId, updateId: 1, state }]);
         if (state === "committed") {
           const restarted = createStore(path);
@@ -3465,9 +3465,9 @@ for (const state of ["committed", "uncommitted", "tampered", "foreign-key", "tom
           assert.equal(result.evidence.file.entries.length, state === "committed" ? 0 : 1);
           const exact = { maxFiles: result.evidence.accounting.files, maxBytes: result.evidence.accounting.bytes,
             maxEntries: 100, maxWork: result.evidence.accounting.work };
-          assert.deepEqual(inspectTelegramUpdateJournalRetention({ ...input, limits: exact }), result);
+          assert.deepEqual(inspectBaleUpdateJournalRetention({ ...input, limits: exact }), result);
           for (const key of ["maxFiles", "maxBytes", "maxWork"] as const)
-            assert.throws(() => inspectTelegramUpdateJournalRetention({ ...input, limits: { ...exact, [key]: exact[key] - 1 } }), error => isJournalError(error, "capacity"));
+            assert.throws(() => inspectBaleUpdateJournalRetention({ ...input, limits: { ...exact, [key]: exact[key] - 1 } }), error => isJournalError(error, "capacity"));
         }
       } else assert.throws(inspect, error => isJournalError(error, "invalid"));
       assert.deepEqual(await readJournalFixtureTree(dir), before, "No retention, source or disposition is rewritten");
@@ -3476,11 +3476,11 @@ for (const state of ["committed", "uncommitted", "tampered", "foreign-key", "tom
 }
 
 test("Canonical namespace inventory shares budgets, orders families and preserves foreign evidence", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-inventory-")));
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-inventory" });
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-inventory-")));
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-inventory" });
   const limits = { maxDirectoryEntries: 20, maxFiles: 20, maxBytes: 100_000, maxEntries: 10, maxWork: 20 };
   const input = { directory: dir, profile: "default", botIdentity, limits };
-  const inspect = () => inspectTelegramProfileJournalNamespace(input);
+  const inspect = () => inspectBaleProfileJournalNamespace(input);
   try {
     assert.deepEqual(inspect().accounting, { directoryEntries: 0, files: 0, bytes: 0, work: 1 });
     for (const profile of ["default", "work"]) {
@@ -3507,36 +3507,36 @@ test("Canonical namespace inventory shares budgets, orders families and preserve
       assert.equal(result.sources[0]!.evidence.kind, "absent");
       assert.deepEqual(result.accounting, { directoryEntries: 6, files: 2, bytes: 2 * Buffer.byteLength(snapshot), work: 3 });
       const exact = { ...limits, maxDirectoryEntries: 6, maxFiles: 2, maxBytes: result.accounting.bytes, maxWork: 3 };
-      assert.deepEqual(inspectTelegramProfileJournalNamespace({ ...input, limits: exact }), result);
+      assert.deepEqual(inspectBaleProfileJournalNamespace({ ...input, limits: exact }), result);
       for (const key of ["maxDirectoryEntries", "maxFiles", "maxBytes", "maxWork"] as const) {
-        assert.throws(() => inspectTelegramProfileJournalNamespace({ ...input, limits: { ...exact, [key]: exact[key] - 1 } }), e => isJournalError(e, "capacity"));
+        assert.throws(() => inspectBaleProfileJournalNamespace({ ...input, limits: { ...exact, [key]: exact[key] - 1 } }), e => isJournalError(e, "capacity"));
       }
       assert.deepEqual(names.map(name => fs.readFileSync(join(dir, name), "utf8")), before);
       assert.equal(await readFile(join(dir, "inbox.foreign.json"), "utf8"), "invalid JSON, never decoded");
       const entries = [1, 2].map(updateId => ({ updateId, update: { update_id: updateId }, admittedAtMs: 1, state: "pending" }));
       for (const name of names) await writeFile(join(dir, name), JSON.stringify({ version: 1, profile, botIdentity, entries }));
-      const decoded = inspectTelegramProfileJournalNamespace({ ...input, limits: { ...limits, maxWork: 5 } });
+      const decoded = inspectBaleProfileJournalNamespace({ ...input, limits: { ...limits, maxWork: 5 } });
       assert.equal(decoded.accounting.work, 5);
-      assert.throws(() => inspectTelegramProfileJournalNamespace({ ...input, limits: { ...limits, maxWork: 4 } }), e => isJournalError(e, "capacity"));
-      assert.throws(() => inspectTelegramProfileJournalNamespace({ ...input, limits: { ...limits, maxEntries: 1 } }), e => isJournalError(e, "capacity"));
+      assert.throws(() => inspectBaleProfileJournalNamespace({ ...input, limits: { ...limits, maxWork: 4 } }), e => isJournalError(e, "capacity"));
+      assert.throws(() => inspectBaleProfileJournalNamespace({ ...input, limits: { ...limits, maxEntries: 1 } }), e => isJournalError(e, "capacity"));
       for (const name of await readdir(dir)) await rm(join(dir, name), { recursive: true });
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Canonical namespace rejects aliases, residue and foreign links/types without traversal, ignoring legacy recovery", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-inventory-reject-")));
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-inventory" });
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-inventory-reject-")));
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-inventory" });
   const input = { directory: dir, profile: "default", botIdentity,
     limits: { maxDirectoryEntries: 20, maxFiles: 20, maxBytes: 100_000, maxEntries: 10, maxWork: 20 } };
-  const inspect = () => inspectTelegramProfileJournalNamespace(input);
+  const inspect = () => inspectBaleProfileJournalNamespace(input);
   try {
     for (const profile of ["Default", "work-x", "a".repeat(33), "", "work.x"]) {
-      assert.throws(() => inspectTelegramProfileJournalNamespace({ ...input, profile }), TelegramUpdateJournalError);
+      assert.throws(() => inspectBaleProfileJournalNamespace({ ...input, profile }), BaleUpdateJournalError);
     }
     for (const name of ["Inbox.json", "inbox.default.json", "inbox.Work.json", "inbox.a-b.json", "inbox.json.tmp", "follower-inbox-bad.json", "follower-inbox-AAAAAAAAAAAAAAAA.json", "sessions", "Sessions"]) {
       await writeFile(join(dir, name), "unchanged");
-      assert.throws(inspect, TelegramUpdateJournalError, name);
+      assert.throws(inspect, BaleUpdateJournalError, name);
       assert.equal(await readFile(join(dir, name), "utf8"), "unchanged");
       await rm(join(dir, name));
     }
@@ -3548,26 +3548,26 @@ test("Canonical namespace rejects aliases, residue and foreign links/types witho
     }
     for (const name of ["inbox.foreign.json", "follower-inbox-aaaaaaaaaaaaaaaa.json"]) {
       await symlink(join(dir, "does-not-exist"), join(dir, name));
-      assert.throws(inspect, TelegramUpdateJournalError);
+      assert.throws(inspect, BaleUpdateJournalError);
       assert.equal(await readlink(join(dir, name)), join(dir, "does-not-exist"));
       await rm(join(dir, name));
     }
     for (const name of ["inbox.foreign.json", "follower-inbox-aaaaaaaaaaaaaaaa.json.segments", "sessions"]) {
       await mkdir(join(dir, name));
-      assert.throws(inspect, TelegramUpdateJournalError);
+      assert.throws(inspect, BaleUpdateJournalError);
       await rm(join(dir, name), { recursive: true });
     }
     await writeFile(join(dir, "inbox.foreign.json.segments"), "wrong type");
-    assert.throws(inspect, TelegramUpdateJournalError);
+    assert.throws(inspect, BaleUpdateJournalError);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Canonical namespace carries segment-only bot constraints and detects root changes and vanished families", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-inventory-identity-")));
-  const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "synthetic-inventory" });
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-inventory-identity-")));
+  const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "synthetic-inventory" });
   const input = { directory: dir, profile: "default", botIdentity,
     limits: { maxDirectoryEntries: 20, maxFiles: 20, maxBytes: 100_000, maxEntries: 10, maxWork: 20 } };
-  const inspect = () => inspectTelegramProfileJournalNamespace(input);
+  const inspect = () => inspectBaleProfileJournalNamespace(input);
   const paths = [join(dir, "inbox.json"), join(dir, "follower-inbox-aaaaaaaaaaaaaaaa.json")];
   try {
     for (const [index, path] of paths.entries()) {
@@ -3594,7 +3594,7 @@ test("Canonical namespace carries segment-only bot constraints and detects root 
         return count;
       }) as typeof readSync;
       syncBuiltinESMExports();
-      try { assert.throws(inspect, TelegramUpdateJournalError); }
+      try { assert.throws(inspect, BaleUpdateJournalError); }
       finally { fs.readSync = original; syncBuiltinESMExports(); }
       assert.equal(changed, true);
     }
@@ -3618,9 +3618,9 @@ test("Canonical namespace carries segment-only bot constraints and detects root 
 
 function isJournalError(
   error: unknown,
-  code: TelegramUpdateJournalError["code"],
+  code: BaleUpdateJournalError["code"],
 ): boolean {
-  return error instanceof TelegramUpdateJournalError && error.code === code;
+  return error instanceof BaleUpdateJournalError && error.code === code;
 }
 
 function runJournalWorker(
@@ -3658,7 +3658,7 @@ function runJournalWorker(
 async function withJournalTempDir(
   run: (input: { dir: string; path: string }) => Promise<void>,
 ): Promise<void> {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-journal-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-journal-")));
   try {
     await run({ dir, path: join(dir, "inbox.work.json") });
   } finally {
@@ -3666,7 +3666,7 @@ async function withJournalTempDir(
   }
 }
 
-const identity = createTelegramUpdateJournalBotIdentity({
+const identity = createBaleUpdateJournalBotIdentity({
   botToken: "123:journal-secret",
   botId: 42,
 });
@@ -3683,15 +3683,15 @@ function createStore(
     maxEntries?: number;
     maxBytes?: number;
     nowMs?: number;
-    sourceAccess?: TelegramUpdateJournalStoreOptions["sourceAccess"];
-    withSourceSerialization?: TelegramUpdateJournalStoreOptions["withSourceSerialization"];
-    withPairingAdmission?: TelegramUpdateJournalStoreOptions["withPairingAdmission"];
-    withPairedAdmission?: TelegramUpdateJournalStoreOptions["withPairedAdmission"];
+    sourceAccess?: BaleUpdateJournalStoreOptions["sourceAccess"];
+    withSourceSerialization?: BaleUpdateJournalStoreOptions["withSourceSerialization"];
+    withPairingAdmission?: BaleUpdateJournalStoreOptions["withPairingAdmission"];
+    withPairedAdmission?: BaleUpdateJournalStoreOptions["withPairedAdmission"];
     getQueueProcessLiveness?: (
       owner: { processId: number; processBirthId: string },
     ) => "alive" | "dead" | "unverifiable";
     workspaceAdmission?: Pick<
-      TelegramWorkspaceAdmissionLedger,
+      BaleWorkspaceAdmissionLedger,
       "acquireAdmission" | "releaseAdmission"
     >;
     onPublicationBoundary?: (
@@ -3707,7 +3707,7 @@ function createStore(
     }) => void;
   } = {},
 ) {
-  return createTelegramUpdateJournalStore({
+  return createBaleUpdateJournalStore({
     path,
     profileName: "work",
     botIdentity: identity,
@@ -3736,14 +3736,14 @@ for (const liveSource of [false, true]) test(`Pending abandonment retains the or
   await withJournalTempDir(async ({ dir, path }) => {
     const options = liveSource ? {
       sourceAccess: { directory: dir, limits: sourceLimits },
-      withSourceSerialization: createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction")),
+      withSourceSerialization: createBaleJournalSourceSerialization(() => join(dir, "journals.transaction")),
     } : {};
     const store = createStore(path, options);
     const original = { update_id: 1, message: { message_id: 11, message_thread_id: 99,
       chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false }, text: "private original" } };
     store.appendBatch([original, { update_id: 2 }], 2);
     const entry = store.read().entries[0]!;
-    const request = { journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
+    const request = { journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
       entry, operatorAuthorityId: "owner:7", isCurrent: () => true };
     const before = store.read();
     assert.equal(store.inspectPendingRetention(entry), undefined);
@@ -3787,11 +3787,11 @@ for (const scenario of ["committed", "none", "pending", "other-disposition", "mi
       const original = { update_id: 1, message: { message_id: 11, message_thread_id: 99,
         chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false }, text: "restore original" } };
       store.appendBatch([original, { update_id: 2 }], 2);
-      const journalBindingKey = createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity });
+      const journalBindingKey = createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity });
       const entry = store.read().entries[0]!;
       let retainedPath: string | undefined;
       if (scenario !== "none" && scenario !== "pending" && scenario !== "other-disposition") {
-        retainedPath = store.abandonPending({ journalBindingKey, entry, operatorAuthorityId: "telegram-owner:7", isCurrent: () => true }).retainedPath;
+        retainedPath = store.abandonPending({ journalBindingKey, entry, operatorAuthorityId: "bale-owner:7", isCurrent: () => true }).retainedPath;
       }
       if (scenario === "pending") {
         // The pending copy is not abandonment evidence; only the committed tombstone is.
@@ -3814,7 +3814,7 @@ for (const scenario of ["committed", "none", "pending", "other-disposition", "mi
       const snapshot = store.read();
       const bytes = retainedPath && scenario !== "missing-retention" ? await readFile(retainedPath, "utf8") : undefined;
       if (scenario === "committed") {
-        assert.deepEqual(store.inspectAbandonedPending(1), { journalBindingKey, updateId: 1, retainedPath, operatorAuthorityId: "telegram-owner:7" });
+        assert.deepEqual(store.inspectAbandonedPending(1), { journalBindingKey, updateId: 1, retainedPath, operatorAuthorityId: "bale-owner:7" });
         assert.equal(store.inspectAbandonedPending(2), undefined, "another source has no abandonment");
       } else if (scenario === "invalid-id") {
         assert.throws(() => store.inspectAbandonedPending(-1), /invalid abandonment update id/);
@@ -3841,10 +3841,10 @@ for (const scenario of ["foreign-source", "foreign-profile", "foreign-bot", "cha
       });
       if (scenario === "absent") store.removeCompleted([1]);
       const before = store.read();
-      const request = { journalBindingKey: createTelegramUpdateJournalBindingKey({
+      const request = { journalBindingKey: createBaleUpdateJournalBindingKey({
         path: scenario === "foreign-source" ? `${path}.foreign` : path,
         profileName: scenario === "foreign-profile" ? "other" : "work",
-        botIdentity: scenario === "foreign-bot" ? createTelegramUpdateJournalBotIdentity({ botToken: "other:bot", botId: 43 }) : identity,
+        botIdentity: scenario === "foreign-bot" ? createBaleUpdateJournalBotIdentity({ botToken: "other:bot", botId: 43 }) : identity,
       }), entry: scenario === "changed-entry" ? { ...entry, admittedAtMs: entry.admittedAtMs + 1 } : entry,
       operatorAuthorityId: "owner:7", isCurrent: () => scenario !== "lost-authority" };
       assert.throws(() => store.abandonPending(request), (error) =>
@@ -3870,7 +3870,7 @@ for (const phase of ["retention", "journal"] as const) {
         } });
         store.appendBatch([{ update_id: 1 }]);
         const entry = store.read().entries[0]!;
-        const request = { journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
+        const request = { journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
           entry, operatorAuthorityId: "owner:7", isCurrent: () => true };
         interrupt = true;
         assert.throws(() => store.abandonPending(request), /mutation failed/);
@@ -3899,7 +3899,7 @@ for (const phase of ["retention", "journal"] as const) test(`Pending abandonment
     const entry = store.read().entries[0]!;
     interrupt = true;
     assert.throws(() => store.abandonPending({ entry, operatorAuthorityId: "owner:7",
-      journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
+      journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
       isCurrent: () => current }), error => isJournalError(error, "conflict"));
     assert.deepEqual(store.read().entries, [entry]);
     assert.equal(store.read().operatorDispositions, undefined);
@@ -3914,11 +3914,11 @@ test("Pending abandonment resolves a committed segment after snapshot failure wi
     } });
     store.appendBatch([{ update_id: 1 }]);
     const entry = store.read().entries[0]!;
-    for (let revision = 1; revision < TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT; revision++) {
-      publishTelegramUpdateJournalSegment(path, { version: 1, revision, previousRevision: revision - 1,
+    for (let revision = 1; revision < BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT; revision++) {
+      publishBaleUpdateJournalSegment(path, { version: 1, revision, previousRevision: revision - 1,
         profile: "work", botIdentity: identity, upsertedEntries: [], removedUpdateIds: [] });
     }
-    const request = { journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
+    const request = { journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
       entry, operatorAuthorityId: "owner:7", isCurrent: () => true };
     interrupt = true;
     const result = store.abandonPending(request);
@@ -3942,7 +3942,7 @@ test("Pending abandonment preserves corrupted source and retention evidence inst
     }, onRecovery() { assert.fail("Cancellation must not repair source evidence"); } });
     store.appendBatch([{ update_id: 1 }]);
     const entry = store.read().entries[0]!;
-    const request = { journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
+    const request = { journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
       entry, operatorAuthorityId: "owner:7", isCurrent: () => true };
     interrupt = true;
     assert.throws(() => store.abandonPending(request));
@@ -3969,7 +3969,7 @@ for (const scenario of ["tampered", "oversized", "symlink"] as const) test(`Pend
     store.appendBatch([{ update_id: 1 }]);
     const entry = store.read().entries[0]!;
     const result = store.abandonPending({ entry, operatorAuthorityId: "owner:7", isCurrent: () => true,
-      journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }) });
+      journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }) });
     const committed = store.read();
     const original = await readFile(result.retainedPath, "utf8");
     if (scenario === "tampered") {
@@ -3984,7 +3984,7 @@ for (const scenario of ["tampered", "oversized", "symlink"] as const) test(`Pend
       await symlink(`${result.retainedPath}.backup`, result.retainedPath);
     }
     const evidence = await readFile(result.retainedPath, "utf8");
-    assert.throws(() => store.inspectPendingRetention(entry), error => error instanceof TelegramUpdateJournalError);
+    assert.throws(() => store.inspectPendingRetention(entry), error => error instanceof BaleUpdateJournalError);
     assert.equal(await readFile(result.retainedPath, "utf8"), evidence);
     assert.deepEqual(store.read(), committed);
   });
@@ -4002,7 +4002,7 @@ for (const scenario of ["empty-foreign", "missing-snapshot"] as const) test(`Pen
       await rm(path);
     }
     assert.throws(() => store.abandonPending({ entry, operatorAuthorityId: "owner:7",
-      journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
+      journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
       isCurrent: () => true }), error => isJournalError(error, scenario === "empty-foreign" ? "identity-mismatch" : "invalid"));
     if (scenario === "empty-foreign") assert.equal(await readFile(path, "utf8"), foreign);
     else {
@@ -4020,7 +4020,7 @@ test("Pending abandonment remains unavailable to exclusion-schema inputs", async
     const before = store.read();
     assert.throws(() => store.inspectPendingRetention(before.entries[0]!), error => isJournalError(error, "unsupported-version"));
     assert.throws(() => store.abandonPending({ entry: before.entries[0]!, operatorAuthorityId: "owner:7",
-      journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
+      journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
       isCurrent: () => true }), error => isJournalError(error, "unsupported-version"));
     assert.deepEqual(store.read(), before);
     assert.equal(existsSync(`${path}.retained`), false);
@@ -4029,12 +4029,12 @@ test("Pending abandonment remains unavailable to exclusion-schema inputs", async
 
 for (const liveSource of [false, true]) test(`Source serialization gates every store mutation once, never reads, while retaining receipt authority (live=${liveSource})`, async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const configPath = join(dir, "telegram.json");
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const configPath = join(dir, "bale.json");
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     let acquisitions = 0;
     let held = false;
     let failPublication = false;
-    const options: TelegramUpdateJournalStoreOptions = {
+    const options: BaleUpdateJournalStoreOptions = {
       path, profileName: "work", botIdentity: identity, getNowMs: () => 1000,
       ...(liveSource ? { sourceAccess: { directory: dir, limits: sourceLimits } } : {}),
       getQueueProcessLiveness: () => "dead",
@@ -4054,9 +4054,9 @@ for (const liveSource of [false, true]) test(`Source serialization gates every s
         if (failPublication) throw new Error("synthetic publication failure");
       },
     };
-    const store = createTelegramUpdateJournalStore({ ...options, queueRuntimeIdentity: queueOwnerIdentity });
+    const store = createBaleUpdateJournalStore({ ...options, queueRuntimeIdentity: queueOwnerIdentity });
     const recipientOwner = { ...queueOwnerIdentity, instanceId: "recipient", processId: process.pid + 1, processBirthId: "synthetic-recipient" };
-    const recipient = createTelegramUpdateJournalStore({ ...options, queueRuntimeIdentity: recipientOwner });
+    const recipient = createBaleUpdateJournalStore({ ...options, queueRuntimeIdentity: recipientOwner });
     const once = <T>(operation: () => T): T => {
       const before = acquisitions;
       try { return operation(); } finally {
@@ -4081,7 +4081,7 @@ for (const liveSource of [false, true]) test(`Source serialization gates every s
     const owner = once(() => store.markQueued({ ...receipt, owner: queueOwnerIdentity })).queueOwner!;
     const handoff = { ...receipt, expectedOwner: owner,
       recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken() };
+      handoffToken: createBaleUpdateQueueHandoffToken() };
     once(() => store.offerQueuedHandoff(handoff));
     once(() => store.cancelQueuedHandoff(handoff));
     once(() => store.offerQueuedHandoff(handoff));
@@ -4110,7 +4110,7 @@ for (const liveSource of [false, true]) test(`Source serialization gates every s
 
 test("Live v1 publication refuses an omitted cursor that would trail new entries", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     let publications = 0;
     const store = createStore(path, { sourceAccess: { directory: dir, limits: sourceLimits },
       withSourceSerialization: journalSerialization,
@@ -4119,7 +4119,7 @@ test("Live v1 publication refuses an omitted cursor that would trail new entries
     const before = store.read();
     const bytes = await readFile(path);
     publications = 0;
-    assert.throws(() => store.appendBatch([{ update_id: 2 }]), TelegramUpdateJournalError);
+    assert.throws(() => store.appendBatch([{ update_id: 2 }]), BaleUpdateJournalError);
     assert.equal(publications, 0);
     assert.deepEqual(await readFile(path), bytes);
     assert.equal(existsSync(`${path}.segments`), false);
@@ -4139,7 +4139,7 @@ test("Live v1 publication refuses an omitted cursor that would trail new entries
 
 for (const version of [1, 2] as const) test(`Live v${version} publication refuses generated attempt overflow before writing`, async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     let publications = 0;
     const store = createStore(path, { sourceAccess: { directory: dir, limits: sourceLimits },
       withSourceSerialization: journalSerialization,
@@ -4163,7 +4163,7 @@ for (const version of [1, 2] as const) test(`Live v${version} publication refuse
     const segmentBytes = await readFile(segmentPath);
     publications = 0;
     assert.throws(() => store.markExecutionFailure({ ...failure, expectedAttemptCount: Number.MAX_SAFE_INTEGER }),
-      TelegramUpdateJournalError);
+      BaleUpdateJournalError);
     assert.equal(publications, 0);
     assert.deepEqual(await readFile(path), snapshotBytes);
     assert.deepEqual(await readFile(segmentPath), segmentBytes);
@@ -4178,7 +4178,7 @@ for (const version of [1, 2] as const) test(`Live v${version} publication refuse
 
 test("Live source refuses references and retained authority before journal staging", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     assert.throws(() => createStore(path, { sourceAccess: { directory: dir, limits: sourceLimits } }), /requires source serialization/);
     const options = { sourceAccess: { directory: dir, limits: sourceLimits }, withSourceSerialization: journalSerialization,
       onRecovery() { assert.fail("Strict access must not recover"); }, onPublicationBoundary() { assert.fail("Invalid source must not publish"); } };
@@ -4193,12 +4193,12 @@ test("Live source refuses references and retained authority before journal stagi
         for (const method of Object.keys(store) as (keyof typeof store)[]) {
           if (method === "routingInputs") continue;
           assert.throws(() => method === "appendBatch" ? store.appendBatch([{ update_id: 1 }])
-            : (store[method] as (input: never) => unknown)({} as never), (error) => error instanceof TelegramUpdateJournalError);
+            : (store[method] as (input: never) => unknown)({} as never), (error) => error instanceof BaleUpdateJournalError);
         }
-        for (const method of ["arm", "select"] as const) assert.throws(() => store.routingInputs![method]({} as never), error => error instanceof TelegramUpdateJournalError);
+        for (const method of ["arm", "select"] as const) assert.throws(() => store.routingInputs![method]({} as never), error => error instanceof BaleUpdateJournalError);
         assert.throws(() => store.routingInputs!.expire({ journalBindingKey: "fixture", operatorUserId: 7, isCurrent: () => true,
           entry: { updateId: 1, update: { update_id: 1 }, admittedAtMs: 0, state: "pending",
-            routingInput: { operatorUserId: 7, publishedAtMs: 0, expiresAtMs: TELEGRAM_ROUTING_INPUT_TTL_MS, phase: "waiting" } } }), error => error instanceof TelegramUpdateJournalError);
+            routingInput: { operatorUserId: 7, publishedAtMs: 0, expiresAtMs: BALE_ROUTING_INPUT_TTL_MS, phase: "waiting" } } }), error => error instanceof BaleUpdateJournalError);
       } finally { fs.mkdtempSync = original; syncBuiltinESMExports(); }
     };
     for (const [directory, reference] of [[dir, "relative/inbox.json"], [join(dir, "approved"), path],
@@ -4220,7 +4220,7 @@ test("Live source refuses references and retained authority before journal stagi
 
 test("Live source logical revision bytes and physical publication limits are independent and captured", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     const access = { directory: dir, limits: { ...sourceLimits } };
     const options = { sourceAccess: access, withSourceSerialization: journalSerialization };
     const store = createStore(path, options);
@@ -4229,7 +4229,7 @@ test("Live source logical revision bytes and physical publication limits are ind
     store.appendBatch([{ update_id: 1 }]);
     const published = store.appendBatch([{ update_id: 2 }]);
     const input = { directory: dir, path, profile: "work", botIdentity: identity, limits: sourceLimits, version: 1 as const };
-    const evidence = readTelegramUpdateJournalSource(input);
+    const evidence = readBaleUpdateJournalSource(input);
     assert.equal(evidence.kind, "present");
     if (evidence.kind !== "present") return;
     const logical = Buffer.byteLength(`${JSON.stringify(evidence.file, null, 2)}\n`);
@@ -4263,23 +4263,23 @@ for (const version of [1, 2] as const) for (const interruption of ["none", "snap
   test(`Live compaction preserves receipt scope and redundant identity witness (v${version}, ${interruption})`, async () => {
     await withJournalTempDir(async ({ dir, path }) => {
       const tokenOnly = { tokenSha256: identity.tokenSha256 };
-      const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+      const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
       let interrupt = false;
-      const options: TelegramUpdateJournalStoreOptions = { path, profileName: "work", botIdentity: tokenOnly,
+      const options: BaleUpdateJournalStoreOptions = { path, profileName: "work", botIdentity: tokenOnly,
         getNowMs: () => 1000, sourceAccess: { directory: dir, limits: sourceLimits },
         withSourceSerialization: journalSerialization,
-        ...(version === 2 ? { withPairingAdmission: <T>(publish: (excluded: boolean) => T) => withTelegramFileTransaction(join(dir, "telegram.json.transaction"), () => publish(false)) } : {}),
+        ...(version === 2 ? { withPairingAdmission: <T>(publish: (excluded: boolean) => T) => withBaleFileTransaction(join(dir, "bale.json.transaction"), () => publish(false)) } : {}),
         onPublicationBoundary(boundary, publicationPath) {
           if (interrupt && interruption === "snapshot" && publicationPath === path && boundary === "after-write-before-rename") {
             throw new Error("Synthetic snapshot interruption");
           }
         } };
-      const store = createTelegramUpdateJournalStore(options);
+      const store = createBaleUpdateJournalStore(options);
       store.appendBatch([{ update_id: 1 }], 1);
       const receipt = { queueKind: "prompt" as const, receiptId: "retained", sourceUpdateIds: [1] };
       const owner = store.markQueued({ ...receipt, owner: queueOwnerIdentity }).queueOwner!;
       const input = { directory: dir, path, profile: "work", botIdentity: tokenOnly, version, limits: sourceLimits };
-      const scope = createTelegramUpdateJournalReceiptScope({ profileName: "work", botIdentity: tokenOnly });
+      const scope = createBaleUpdateJournalReceiptScope({ profileName: "work", botIdentity: tokenOnly });
       const snapshot = store.read();
       const file = { version, revision: 1, profile: "work", botIdentity: tokenOnly,
         acceptedThroughUpdateId: 1, entries: snapshot.entries };
@@ -4294,7 +4294,7 @@ for (const version of [1, 2] as const) for (const interruption of ["none", "snap
           acceptedThroughUpdateId: revision, upsertedEntries: [], removedUpdateIds: [],
         }));
       }
-      const acquired = readTelegramUpdateJournalSource(input);
+      const acquired = readBaleUpdateJournalSource(input);
       assert.equal(acquired.kind, "present");
       if (acquired.kind !== "present") return;
       assert.equal(acquired.knownBotId, 42);
@@ -4303,12 +4303,12 @@ for (const version of [1, 2] as const) for (const interruption of ["none", "snap
         const nextSegment = { version, revision: 257, previousRevision: 256, profile: "work", botIdentity: tokenOnly,
           upsertedEntries: [], removedUpdateIds: [], acceptedThroughUpdateId: 257 };
         const segmentBytes = Buffer.byteLength(`${JSON.stringify(nextSegment, null, 2)}\n`);
-        const bounded = createTelegramUpdateJournalStore({ ...options,
+        const bounded = createBaleUpdateJournalStore({ ...options,
           sourceAccess: { directory: dir, limits: { ...sourceLimits, maxBytes: acquired.accounting.bytes + segmentBytes } },
           onPublicationBoundary() { assert.fail("Snapshot cleanup residue capacity must be checked before segment publication"); } });
         assert.throws(() => bounded.appendBatch([], 257), (error) => isJournalError(error, "capacity"));
         assert.equal(existsSync(join(`${path}.segments`, "0000000000000257.json")), false);
-        assert.deepEqual(readTelegramUpdateJournalSource(input), acquired);
+        assert.deepEqual(readBaleUpdateJournalSource(input), acquired);
       }
       const originalUnlink = fs.unlinkSync;
       if (interruption === "cleanup") {
@@ -4323,23 +4323,23 @@ for (const version of [1, 2] as const) for (const interruption of ["none", "snap
         if (interruption === "snapshot") assert.throws(() => store.appendBatch([], 257), (error) => isJournalError(error, "io"));
         else {
           const result = store.appendBatch([], 257);
-          const after = readTelegramUpdateJournalSource(input);
+          const after = readBaleUpdateJournalSource(input);
           assert.equal(after.kind, "present");
           if (after.kind === "present") assert.equal(result.serializedBytes, Buffer.byteLength(`${JSON.stringify(after.file, null, 2)}\n`));
         }
       } finally { fs.unlinkSync = originalUnlink; syncBuiltinESMExports(); interrupt = false; }
-      const after = readTelegramUpdateJournalSource(input);
+      const after = readBaleUpdateJournalSource(input);
       assert.equal(after.kind, "present");
       if (after.kind !== "present") return;
       assert.equal(after.file.revision, 257);
       assert.equal(after.knownBotId, 42);
       assert.deepEqual(after.file.botIdentity, tokenOnly);
-      assert.equal(createTelegramUpdateJournalReceiptScope({ profileName: "work", botIdentity: after.file.botIdentity }), scope);
+      assert.equal(createBaleUpdateJournalReceiptScope({ profileName: "work", botIdentity: after.file.botIdentity }), scope);
       assert.deepEqual(after.file.entries[0]?.queueOwner, owner);
       if (version === 2) assert.equal(after.file.entries[0]?.preApprovalExcluded, false);
       assert.equal(existsSync(witnessPath), true);
       assert.equal((await readdir(`${path}.segments`)).length, interruption === "none" ? 1 : 257);
-      assert.throws(() => readTelegramUpdateJournalSource({ ...input, botIdentity: { ...tokenOnly, botId: 99 } }),
+      assert.throws(() => readBaleUpdateJournalSource({ ...input, botIdentity: { ...tokenOnly, botId: 99 } }),
         (error) => isJournalError(error, "identity-mismatch"));
       if (interruption === "snapshot") store.appendBatch([], 258);
       assert.throws(() => store.completeQueued([{ ...receipt, queueOwner: { ...owner, acquisitionId: "wrong" } }]),
@@ -4353,10 +4353,10 @@ for (const version of [1, 2] as const) for (const interruption of ["none", "snap
 
 test("Live exact accepted receipts survive current config credential changes without adopting them", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const configPath = join(dir, "telegram.json");
+    const configPath = join(dir, "bale.json");
     await writeFile(configPath, JSON.stringify({ profiles: { work: { botToken: "123:journal-secret", allowedUserId: 7 } } }));
-    const config = createTelegramConfigStore({ agentDir: dir, configPath });
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const config = createBaleConfigStore({ agentDir: dir, configPath });
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     await config.load();
     config.activateProfile("work");
     const options = { sourceAccess: { directory: dir, limits: sourceLimits }, withSourceSerialization: journalSerialization,
@@ -4374,7 +4374,7 @@ test("Live exact accepted receipts survive current config credential changes wit
     assert.deepEqual(store.completeQueued([{ ...receipt, queueOwner: owner }]).removedUpdateIds, [1]);
     assert.deepEqual(store.read().botIdentity, identity);
     assert.equal(await readFile(configPath, "utf8"), changedConfig);
-    const rotated = createTelegramUpdateJournalStore({ path, profileName: "work", botIdentity: { ...identity, tokenSha256: "c".repeat(64) },
+    const rotated = createBaleUpdateJournalStore({ path, profileName: "work", botIdentity: { ...identity, tokenSha256: "c".repeat(64) },
       sourceAccess: options.sourceAccess, withSourceSerialization: journalSerialization });
     assert.throws(() => rotated.read(), (error) => isJournalError(error, "identity-mismatch"));
   });
@@ -4382,7 +4382,7 @@ test("Live exact accepted receipts survive current config credential changes wit
 
 test("Live consumption and publication do not return to ordinary journal scans", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     const store = createStore(path, { sourceAccess: { directory: dir, limits: sourceLimits }, withSourceSerialization: journalSerialization });
     const originalRead = fs.readFileSync;
     const originalCensus = fs.readdirSync;
@@ -4410,9 +4410,9 @@ for (const initial of [true, false]) test(`Live publication process interruption
   await withJournalTempDir(async ({ dir, path }) => {
     if (!initial) createStore(path).appendBatch([{ update_id: 1 }]);
     const script = `
-      import { createTelegramJournalSourceSerialization, createTelegramUpdateJournalStore } from ${JSON.stringify(new URL("../lib/journal.ts", import.meta.url).href)};
-      const journalSerialization = createTelegramJournalSourceSerialization(() => ${JSON.stringify(join(dir, "journals.transaction"))});
-      const store = createTelegramUpdateJournalStore({ path: ${JSON.stringify(path)}, profileName: 'work', botIdentity: ${JSON.stringify(identity)},
+      import { createBaleJournalSourceSerialization, createBaleUpdateJournalStore } from ${JSON.stringify(new URL("../lib/journal.ts", import.meta.url).href)};
+      const journalSerialization = createBaleJournalSourceSerialization(() => ${JSON.stringify(join(dir, "journals.transaction"))});
+      const store = createBaleUpdateJournalStore({ path: ${JSON.stringify(path)}, profileName: 'work', botIdentity: ${JSON.stringify(identity)},
         sourceAccess: { directory: ${JSON.stringify(dir)}, limits: ${JSON.stringify(sourceLimits)} },
         withSourceSerialization: journalSerialization,
         onPublicationBoundary(boundary) { if (boundary === 'after-write-before-rename') process.exit(73); } });
@@ -4426,7 +4426,7 @@ for (const initial of [true, false]) test(`Live publication process interruption
     assert.ok((await readdir(dir)).some((name) => name.endsWith(".tmp")), "Actual process interruption retains staging");
     if (!initial) assert.deepEqual(await readdir(`${path}.segments`), [], "Segment staging must not pollute the strict namespace");
     // The owned child is terminal: no surviving writer can publish its staged transition.
-    const evidence = readTelegramUpdateJournalSource({ directory: dir, path, profile: "work", botIdentity: identity,
+    const evidence = readBaleUpdateJournalSource({ directory: dir, path, profile: "work", botIdentity: identity,
       version: 1, limits: sourceLimits });
     assert.equal(evidence.kind, initial ? "absent" : "present");
     if (evidence.kind === "present") assert.deepEqual(evidence.file.entries.map((entry) => entry.updateId), [1]);
@@ -4494,8 +4494,8 @@ test("Source guard rejection precedes every journal transaction and preserves co
 
 for (const liveSource of [false, true]) test(`Bare v1 source serialization follows Workspace admission and shares canonical input once (live=${liveSource})`, async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
-    const ledger = createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"), profileKey: "synthetic",
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const ledger = createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"), profileKey: "synthetic",
       owner: { processId: process.pid, processBirthId: `${process.pid}:synthetic` }, getProcessLiveness: () => "alive" });
     let held = false;
     let gates = 0;
@@ -4544,15 +4544,15 @@ for (const liveSource of [false, true]) test(`Bare v1 source serialization follo
 
 for (const liveSource of [false, true]) test(`Real journal namespace contention excludes every store operation; legacy read is a negative control (live=${liveSource})`, async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     const evidence = JSON.stringify({ version: 1, profile: "foreign", botIdentity: identity, entries: [] });
     await writeFile(path, evidence);
     const journalUrl = new URL("../lib/journal.ts", import.meta.url).href;
     const script = `
       import fs from 'node:fs';
       import { syncBuiltinESMExports } from 'node:module';
-      import { createTelegramJournalSourceSerialization } from ${JSON.stringify(journalUrl)};
-      import { createTelegramUpdateJournalStore } from ${JSON.stringify(journalUrl)};
+      import { createBaleJournalSourceSerialization } from ${JSON.stringify(journalUrl)};
+      import { createBaleUpdateJournalStore } from ${JSON.stringify(journalUrl)};
       Atomics.wait = () => 'timed-out';
       const transactionPath = ${JSON.stringify(join(dir, "journals.transaction"))};
       const original = fs.existsSync;
@@ -4563,8 +4563,8 @@ for (const liveSource of [false, true]) test(`Real journal namespace contention 
         return exists;
       };
       syncBuiltinESMExports();
-      const journalSerialization = createTelegramJournalSourceSerialization(() => transactionPath);
-      const store = createTelegramUpdateJournalStore({ path: ${JSON.stringify(path)}, profileName: 'work',
+      const journalSerialization = createBaleJournalSourceSerialization(() => transactionPath);
+      const store = createBaleUpdateJournalStore({ path: ${JSON.stringify(path)}, profileName: 'work',
         botIdentity: ${JSON.stringify(identity)}, withSourceSerialization: journalSerialization,
         ${liveSource ? `sourceAccess: ${JSON.stringify({ directory: dir, limits: sourceLimits })},` : ""} });
       const methods = Object.keys(store).flatMap(method => method === 'routingInputs'
@@ -4580,7 +4580,7 @@ for (const liveSource of [false, true]) test(`Real journal namespace contention 
           else store[method]({});
           throw new Error('Operation bypassed source serialization: ' + method);
         } catch (error) {
-          if (!error.message.includes('Timed out acquiring Telegram lock transaction: ' + transactionPath)) throw error;
+          if (!error.message.includes('Timed out acquiring Bale lock transaction: ' + transactionPath)) throw error;
           if (contentions <= before) throw new Error('No actual acquisition contention: ' + method);
         }
       }
@@ -4609,13 +4609,13 @@ for (const liveSource of [false, true]) test(`Real journal namespace contention 
 
 for (const liveSource of [false, true]) test(`Paired v1 journal holds Workspace/config/journal order and preserves unordered canonical deliveries (live=${liveSource})`, async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const configPath = join(dir, "telegram.json");
+    const configPath = join(dir, "bale.json");
     await writeFile(configPath, JSON.stringify({ profiles: { work: { botToken: "123:journal-secret" } } }));
-    const config = createTelegramConfigStore({ agentDir: dir, configPath });
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const config = createBaleConfigStore({ agentDir: dir, configPath });
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     await config.load();
     config.activateProfile("work");
-    const ledger = createTelegramWorkspaceAdmissionLedger({
+    const ledger = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "admission.json"), profileKey: "fixture:work",
       owner: { processId: process.pid, processBirthId: `${process.pid}:paired-v1` }, getProcessLiveness: () => "alive",
     });
@@ -4668,7 +4668,7 @@ for (const liveSource of [false, true]) test(`Paired v1 journal holds Workspace/
     assert.equal(existsSync(path), false);
     assert.equal(config.getAllowedUserId(), undefined);
     assert.equal(held, false);
-    const peer = createTelegramConfigStore({ agentDir: dir, configPath });
+    const peer = createBaleConfigStore({ agentDir: dir, configPath });
     await peer.load();
     peer.activateProfile("work");
     await peer.persistAllowedUserId(7);
@@ -4740,13 +4740,13 @@ test("Journal refuses mixed paired-only and exclusion admission modes", async ()
 
 for (const liveSource of [false, true]) test(`Exclusion journal serializes Workspace/config/journal admission and preserves the veto after grant (live=${liveSource})`, async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const configPath = join(dir, "telegram.json");
+    const configPath = join(dir, "bale.json");
     await writeFile(configPath, JSON.stringify({ profiles: { work: { botToken: "123:journal-secret" } } }));
-    const config = createTelegramConfigStore({ agentDir: dir, configPath });
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const config = createBaleConfigStore({ agentDir: dir, configPath });
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     await config.load();
     assert.equal(config.activateProfile("work"), true);
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "admission.json"), profileKey: "fixture:work",
       owner: { processId: process.pid, processBirthId: `${process.pid}:fixture-process` }, getProcessLiveness: () => "alive",
     });
@@ -4831,12 +4831,12 @@ test("Exclusion journal keeps evidence through segment compaction and fresh read
     const store = createStore(path, options);
     store.appendBatch([{ update_id: 1 }], 1);
     excluded = false;
-    for (let cursor = 2; cursor <= TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 1; cursor++) {
+    for (let cursor = 2; cursor <= BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 1; cursor++) {
       store.appendBatch([], cursor);
     }
     const persisted = JSON.parse(await readFile(path, "utf8"));
     assert.equal(persisted.version, 2);
-    assert.equal(persisted.revision, TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT);
+    assert.equal(persisted.revision, BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT);
     assert.equal(persisted.entries[0].preApprovalExcluded, true);
     assert.equal(createStore(path, options).read().entries[0]!.preApprovalExcluded, true);
   });
@@ -4893,10 +4893,10 @@ test("Exclusion journal rejects malformed, changed, resurrected, and legacy evid
 });
 
 test("Workspace protection reads journal evidence without recovery, repair, or publication", async () => {
-  const directory = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-protection-read-")));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-protection-read-")));
   const path = join(directory, "inbox.json");
   let recoveries = 0;
-  const resolveBinding = createTelegramUpdateJournalRuntimeBindingResolver({
+  const resolveBinding = createBaleUpdateJournalRuntimeBindingResolver({
     getProfileName: () => undefined, getBotToken: () => "token-a", getBotId: () => 7,
     getJournalPath: () => path, onRecovery() { recoveries++; },
   });
@@ -4921,11 +4921,11 @@ test("Workspace protection reads journal evidence without recovery, repair, or p
 });
 
 test("Update journal runtime binding separates worker and process recovery identity", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pi-telegram-journal-binding-"));
+  const directory = await mkdtemp(join(tmpdir(), "pi-bale-journal-binding-"));
   let profileName: string | undefined;
   let botToken: string | undefined;
   let botId: number | undefined;
-  const resolveBinding = createTelegramUpdateJournalRuntimeBindingResolver({
+  const resolveBinding = createBaleUpdateJournalRuntimeBindingResolver({
     getProfileName: () => profileName,
     getBotToken: () => botToken,
     getBotId: () => botId,
@@ -4944,20 +4944,20 @@ test("Update journal runtime binding separates worker and process recovery ident
     const first = resolveBinding()!;
     assert.equal(
       first.recoveryKey,
-      createTelegramUpdateJournalBindingKey({
+      createBaleUpdateJournalBindingKey({
         path: join(directory, "inbox.json"),
         profileName: "default",
-        botIdentity: createTelegramUpdateJournalBotIdentity({
+        botIdentity: createBaleUpdateJournalBotIdentity({
           botToken: "token-a",
           botId: 7,
         }),
       }),
     );
     assert.equal(
-      getTelegramUpdateJournalBindingPath(first.recoveryKey),
+      getBaleUpdateJournalBindingPath(first.recoveryKey),
       join(directory, "inbox.json"),
     );
-    assert.equal(getTelegramUpdateJournalBindingPath("profile-a"), undefined);
+    assert.equal(getBaleUpdateJournalBindingPath("profile-a"), undefined);
     assert.equal(first.journal.read().profile, "default");
     first.journal.appendBatch([{ update_id: 1 }]);
     assert.throws(
@@ -4985,10 +4985,10 @@ test("Update journal runtime binding separates worker and process recovery ident
     assert.notEqual(named.runtimeKey, rotated.runtimeKey);
     assert.equal(
       named.recoveryKey,
-      createTelegramUpdateJournalBindingKey({
+      createBaleUpdateJournalBindingKey({
         path: join(directory, "inbox.work.json"),
         profileName: "work",
-        botIdentity: createTelegramUpdateJournalBotIdentity({
+        botIdentity: createBaleUpdateJournalBotIdentity({
           botToken: "token-b",
           botId: 7,
         }),
@@ -5003,14 +5003,14 @@ test("Update journal runtime binding separates worker and process recovery ident
 for (const queueKind of ["prompt", "control"] as const) {
   test(`Historical receipt/completion proofs stay scoped across session replacement (${queueKind})`, async () => {
     await withJournalTempDir(async ({ dir }) => {
-      const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+      const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
       let sessionId: string | undefined = "session-a";
       const runtimeIdentity = { instanceId: "old-runtime", processId: process.pid, processBirthId: "fixture-birth" };
-      const runtime = createTelegramUpdateJournalBindingRuntime({
+      const runtime = createBaleUpdateJournalBindingRuntime({
         base: { getProfileName: () => "work", getBotToken: () => "historical-receipt-token", getBotId: () => 7,
           getQueueRuntimeIdentity: () => runtimeIdentity, withSourceSerialization: journalSerialization },
-        getLeaderJournalPath: () => join(dir, "tmp", "pi-telegram", "inbox.work.json"),
-        getFollowerJournalPath: (key, profileName, sid) => resolveTelegramSessionJournalPath(sid!, key, dir, profileName),
+        getLeaderJournalPath: () => join(dir, "tmp", "pi-bale", "inbox.work.json"),
+        getFollowerJournalPath: (key, profileName, sid) => resolveBaleSessionJournalPath(sid!, key, dir, profileName),
         getActiveFollowerBindingKey: () => "manual:same-process", getActiveFollowerSessionId: () => sessionId,
         isFollowerRegistered: () => true,
       });
@@ -5019,7 +5019,7 @@ for (const queueKind of ["prompt", "control"] as const) {
       const group = { queueKind, receiptId: "same-receipt", sourceUpdateIds: [1, 2] };
       const acquired = original.journal.markQueued({ ...group, owner: { ...runtimeIdentity, sessionGeneration: 1 } });
       const receipt = { ...group, queueOwner: acquired.queueOwner! };
-      const markers = original.journal.read().entries.map(entry => ({ ...createTelegramUpdateJournalEntryDigest(entry), completionSha256: (entry.updateId === 1 ? "a" : "b").repeat(64) }));
+      const markers = original.journal.read().entries.map(entry => ({ ...createBaleUpdateJournalEntryDigest(entry), completionSha256: (entry.updateId === 1 ? "a" : "b").repeat(64) }));
       const expected = original.journal.inspectQueuedReceipt(receipt)!;
       sessionId = "session-b";
       const successor = runtime.resolveActive()!;
@@ -5038,7 +5038,7 @@ for (const queueKind of ["prompt", "control"] as const) {
       assert.throws(() => runtime.inspectQueuedReceipt(original.recoveryKey, { ...receipt, sourceUpdateIds: [2, 1] }), error => isJournalError(error, "invalid"));
       assert.deepEqual(await readJournalFixtureTree(dir), before);
       const recipientOwner = { ...runtimeIdentity, instanceId: "recipient", processId: process.pid + 1, processBirthId: "recipient-birth", sessionGeneration: 1 };
-      const handoffToken = createTelegramUpdateQueueHandoffToken();
+      const handoffToken = createBaleUpdateQueueHandoffToken();
       original.journal.offerQueuedHandoff({ ...group, expectedOwner: receipt.queueOwner, recipientOwner, handoffToken });
       before = await readJournalFixtureTree(dir);
       assert.equal(runtime.inspectQueuedReceipt(original.recoveryKey, receipt), undefined, "Offered custody is never ordinary readiness evidence");
@@ -5060,13 +5060,13 @@ for (const queueKind of ["prompt", "control"] as const) {
 
 test("Session succession adopts only unclaimed predecessor pending input, committing it away before successor admission", async () => {
   await withJournalTempDir(async ({ dir }) => {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     const runtimeIdentity = { instanceId: "same-process", processId: process.pid, processBirthId: "fixture-birth" };
-    const runtime = createTelegramUpdateJournalBindingRuntime({
+    const runtime = createBaleUpdateJournalBindingRuntime({
       base: { getProfileName: () => "work", getBotToken: () => "session-adoption-token", getBotId: () => 7,
         getQueueRuntimeIdentity: () => runtimeIdentity, withSourceSerialization: journalSerialization },
-      getLeaderJournalPath: () => join(dir, "tmp", "pi-telegram", "inbox.work.json"),
-      getFollowerJournalPath: (key, profileName, sid) => resolveTelegramSessionJournalPath(sid!, key, dir, profileName),
+      getLeaderJournalPath: () => join(dir, "tmp", "pi-bale", "inbox.work.json"),
+      getFollowerJournalPath: (key, profileName, sid) => resolveBaleSessionJournalPath(sid!, key, dir, profileName),
       getActiveFollowerBindingKey: () => "manual:same-process", getActiveFollowerSessionId: () => "session-b",
       isFollowerRegistered: () => true,
     });
@@ -5082,7 +5082,7 @@ test("Session succession adopts only unclaimed predecessor pending input, commit
     const before = await readJournalFixtureTree(dir);
     for (const invalid of [{ predecessorSessionId: "session-b" }, { predecessorSessionId: "" }, { isCurrent: () => false }]) {
       assert.throws(() => runtime.adoptPredecessorPending({ recipientBindingKey: key, predecessorSessionId: "session-a",
-        successorSessionId: "session-b", isCurrent: () => current, ...invalid }), /Telegram session adoption/);
+        successorSessionId: "session-b", isCurrent: () => current, ...invalid }), /Bale session adoption/);
     }
     assert.deepEqual(await readJournalFixtureTree(dir), before, "Refused adoption writes nothing");
     // Authority loss while writing the private copy leaves the executable source in place, uncommitted.
@@ -5094,10 +5094,10 @@ test("Session succession adopts only unclaimed predecessor pending input, commit
     // Crash after the predecessor commit but before successor admission: preserved privately, never duplicated.
     const entry4 = predecessor.journal.read().entries.find(entry => entry.updateId === 4)!;
     predecessor.journal.abandonPending({ journalBindingKey: predecessor.recoveryKey, entry: entry4,
-      operatorAuthorityId: `${TELEGRAM_SESSION_ADOPTION_AUTHORITY_PREFIX}session-b`, isCurrent: () => true });
+      operatorAuthorityId: `${BALE_SESSION_ADOPTION_AUTHORITY_PREFIX}session-b`, isCurrent: () => true });
     const crashed = runtime.inspectSourceAbandonment(predecessor.recoveryKey, 4)!;
-    assert.equal(crashed.operatorAuthorityId, `${TELEGRAM_SESSION_ADOPTION_AUTHORITY_PREFIX}session-b`);
-    assert.equal(crashed.operatorAuthorityId.startsWith("telegram-owner:"), false, "Owner-cancellation consumers cannot match adoption");
+    assert.equal(crashed.operatorAuthorityId, `${BALE_SESSION_ADOPTION_AUTHORITY_PREFIX}session-b`);
+    assert.equal(crashed.operatorAuthorityId.startsWith("bale-owner:"), false, "Owner-cancellation consumers cannot match adoption");
     const adopted = runtime.adoptPredecessorPending({ recipientBindingKey: key, predecessorSessionId: "session-a",
       successorSessionId: "session-b", isCurrent: () => current });
     assert.deepEqual(adopted, { adoptedUpdateIds: [1, 2], retainedUpdateIds: [] }, "Retry reuses the uncommitted private copy");
@@ -5118,13 +5118,13 @@ test("Session succession adopts only unclaimed predecessor pending input, commit
 
 test("Active follower succession records the first session and advances only after adoption succeeds", async () => {
   await withJournalTempDir(async ({ dir }) => {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     let sessionId: string | undefined, key = "manual:a";
-    const runtime = createTelegramUpdateJournalBindingRuntime({
+    const runtime = createBaleUpdateJournalBindingRuntime({
       base: { getProfileName: () => "work", getBotToken: () => "session-succession-token", getBotId: () => 7,
         withSourceSerialization: journalSerialization },
-      getLeaderJournalPath: () => join(dir, "tmp", "pi-telegram", "inbox.work.json"),
-      getFollowerJournalPath: (bindingKey, profileName, sid) => resolveTelegramSessionJournalPath(sid!, bindingKey, dir, profileName),
+      getLeaderJournalPath: () => join(dir, "tmp", "pi-bale", "inbox.work.json"),
+      getFollowerJournalPath: (bindingKey, profileName, sid) => resolveBaleSessionJournalPath(sid!, bindingKey, dir, profileName),
       getActiveFollowerBindingKey: () => key, getActiveFollowerSessionId: () => sessionId, isFollowerRegistered: () => true,
     });
     assert.equal(runtime.prepareActiveFollowerSuccession(() => true), undefined, "No session identity, no succession");
@@ -5150,7 +5150,7 @@ for (const state of ["committed", "bot-id-discovery", "uncommitted", "damaged", 
       let botId: number | undefined = state === "bot-id-discovery" ? undefined : 7;
       let drift: "before" | "after" | undefined;
       let serializations = 0, recoveries = 0;
-      const runtime = createTelegramUpdateJournalBindingRuntime({
+      const runtime = createBaleUpdateJournalBindingRuntime({
         base: { getProfileName: () => profile, getBotToken: () => "historical-proof-token", getBotId: () => botId,
           withSourceSerialization(operation) {
             serializations++;
@@ -5160,13 +5160,13 @@ for (const state of ["committed", "bot-id-discovery", "uncommitted", "damaged", 
             return result;
           },
           onRecovery() { recoveries++; } },
-        getLeaderJournalPath: profileName => join(dir, "tmp", "pi-telegram", `inbox${profileName === "work" ? ".work" : ".other"}.json`),
-        getFollowerJournalPath: (key, profileName, sid) => resolveTelegramSessionJournalPath(sid!, key, dir, profileName),
+        getLeaderJournalPath: profileName => join(dir, "tmp", "pi-bale", `inbox${profileName === "work" ? ".work" : ".other"}.json`),
+        getFollowerJournalPath: (key, profileName, sid) => resolveBaleSessionJournalPath(sid!, key, dir, profileName),
         getActiveFollowerBindingKey: () => "manual:same-process", getActiveFollowerSessionId: () => sessionId,
         isFollowerRegistered: () => true,
       });
-      const original = runtime.resolveActive()!, path = getTelegramUpdateJournalBindingPath(original.recoveryKey)!;
-      const botIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "historical-proof-token", botId: 7 });
+      const original = runtime.resolveActive()!, path = getBaleUpdateJournalBindingPath(original.recoveryKey)!;
+      const botIdentity = createBaleUpdateJournalBotIdentity({ botToken: "historical-proof-token", botId: 7 });
       original.journal.appendBatch([{ update_id: 1, message: { text: "old-session" } }]);
       const { exists: _exists, serializedBytes: _bytes, ...beforeCancel } = original.journal.read();
       const cancellation = original.journal.abandonPending({ journalBindingKey: original.recoveryKey, entry: beforeCancel.entries[0]!,
@@ -5186,7 +5186,7 @@ for (const state of ["committed", "bot-id-discovery", "uncommitted", "damaged", 
       if (state === "linked-ancestor") {
         const linkedDir = join(dirname(dirname(path)), "linked");
         await symlink(dirname(path), linkedDir, "dir");
-        lookupKey = createTelegramUpdateJournalBindingKey({ path: join(linkedDir, basename(path)), profileName: "work", botIdentity });
+        lookupKey = createBaleUpdateJournalBindingKey({ path: join(linkedDir, basename(path)), profileName: "work", botIdentity });
       }
       const before = await readJournalFixtureTree(dir);
       serializations = 0;
@@ -5205,10 +5205,10 @@ for (const state of ["committed", "bot-id-discovery", "uncommitted", "damaged", 
       profile = "work"; drift = undefined;
       const calls = serializations;
       for (const candidate of [JSON.stringify({ ...JSON.parse(original.recoveryKey), unknown: true }),
-        createTelegramUpdateJournalBindingKey({ path, profileName: "other", botIdentity }),
-        createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: { ...botIdentity, botId: 8 } }),
-        createTelegramUpdateJournalBindingKey({ path: join(dir, "tmp", "pi-telegram", "sessions", "%73ession-a", basename(path)), profileName: "work", botIdentity }),
-        createTelegramUpdateJournalBindingKey({ path: join(dir, "tmp", "pi-telegram", "recovery", basename(path)), profileName: "work", botIdentity })])
+        createBaleUpdateJournalBindingKey({ path, profileName: "other", botIdentity }),
+        createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: { ...botIdentity, botId: 8 } }),
+        createBaleUpdateJournalBindingKey({ path: join(dir, "tmp", "pi-bale", "sessions", "%73ession-a", basename(path)), profileName: "work", botIdentity }),
+        createBaleUpdateJournalBindingKey({ path: join(dir, "tmp", "pi-bale", "recovery", basename(path)), profileName: "work", botIdentity })])
         assert.equal(runtime.inspectSourceAbandonment(candidate, 1), undefined);
       assert.equal(serializations, calls, "Malformed/foreign/out-of-namespace addresses refuse before acquiring or reading");
       assert.deepEqual(await readJournalFixtureTree(dir), before);
@@ -5220,16 +5220,16 @@ test("Historical chooser expiry proof is body-free, exact-scope and read-only", 
   await withJournalTempDir(async ({ dir }) => {
     let session = "before", now = Date.now();
     const token = "fixture:expiry-proof", profile = "work";
-    const identity = createTelegramUpdateJournalBotIdentity({ botToken: token });
-    const runtime = createTelegramUpdateJournalBindingRuntime({
+    const identity = createBaleUpdateJournalBotIdentity({ botToken: token });
+    const runtime = createBaleUpdateJournalBindingRuntime({
       base: { getProfileName: () => profile, getBotToken: () => token, getBotId: () => undefined },
-      getLeaderJournalPath: () => join(dir, "tmp", "pi-telegram", "inbox.work.json"),
-      getFollowerJournalPath: (key, p, sid) => resolveTelegramSessionJournalPath(sid!, key, dir, p),
+      getLeaderJournalPath: () => join(dir, "tmp", "pi-bale", "inbox.work.json"),
+      getFollowerJournalPath: (key, p, sid) => resolveBaleSessionJournalPath(sid!, key, dir, p),
       getActiveFollowerBindingKey: () => "manual:fixture", getActiveFollowerSessionId: () => session,
       isFollowerRegistered: () => true,
     });
-    const binding = runtime.resolveActive()!, path = getTelegramUpdateJournalBindingPath(binding.recoveryKey)!;
-    const journal = createTelegramUpdateJournalStore({ path, profileName: profile, botIdentity: identity, getNowMs: () => now });
+    const binding = runtime.resolveActive()!, path = getBaleUpdateJournalBindingPath(binding.recoveryKey)!;
+    const journal = createBaleUpdateJournalStore({ path, profileName: profile, botIdentity: identity, getNowMs: () => now });
     journal.appendBatch([{ update_id: 1, message: { text: "expires without archive" } },
       { update_id: 2, message: { text: "independent accepted sibling" } }]);
     const armed = journal.routingInputs!.arm({ entries: journal.read().entries, journalBindingKey: binding.recoveryKey,
@@ -5244,11 +5244,11 @@ test("Historical chooser expiry proof is body-free, exact-scope and read-only", 
     successor.journal.appendBatch([{ update_id: 1, message: { text: "independent same-ID source" } }]);
     const before = await readJournalFixtureTree(dir);
     assert.deepEqual(runtime.inspectSourceGroupExpiry(binding.recoveryKey, [1])?.[0], {
-      journalBindingKey: binding.recoveryKey, updateId: 1, operatorAuthorityId: "telegram-owner:7",
+      journalBindingKey: binding.recoveryKey, updateId: 1, operatorAuthorityId: "bale-owner:7",
     });
     assert.equal(runtime.inspectSourceGroupExpiry(successor.recoveryKey, [1]), undefined);
     assert.deepEqual(runtime.inspectSourceGroupExpiry(binding.recoveryKey, [1, 2]), [1, 2].map(updateId => ({
-      journalBindingKey: binding.recoveryKey, updateId, operatorAuthorityId: "telegram-owner:7",
+      journalBindingKey: binding.recoveryKey, updateId, operatorAuthorityId: "bale-owner:7",
     })), "An absent earlier member does not leave a partially acknowledged donor cohort pending forever");
     assert.equal(runtime.inspectSourceGroupExpiry(successor.recoveryKey, [1, 2]), undefined);
     assert.equal(runtime.inspectSourceAbandonment(binding.recoveryKey, 1), undefined, "There is no retained prompt body");
@@ -5261,13 +5261,13 @@ test("Session-aware journal bindings keep the same recipient's sessions separate
     let sessionId: string | undefined;
     let follower = true;
     let pathCalls = 0;
-    const runtime = createTelegramUpdateJournalBindingRuntime({
+    const runtime = createBaleUpdateJournalBindingRuntime({
       base: { getProfileName: () => "work", getBotToken: () => "synthetic-session-token", getBotId: () => 7 },
       getLeaderJournalPath: () => join(dir, "inbox.work.json"),
       getFollowerJournalPath(bindingKey, profileName, recipientSessionId) {
         pathCalls++;
         return recipientSessionId === undefined ? join(dir, `legacy-${bindingKey}.json`)
-          : resolveTelegramSessionJournalPath(recipientSessionId, bindingKey, dir, profileName);
+          : resolveBaleSessionJournalPath(recipientSessionId, bindingKey, dir, profileName);
       },
       getActiveFollowerBindingKey: () => "manual:same-process",
       getActiveFollowerSessionId: () => sessionId,
@@ -5282,13 +5282,13 @@ test("Session-aware journal bindings keep the same recipient's sessions separate
     sessionId = "session-a";
     const original = runtime.resolveFollower()!;
     const resolveOriginalRecipient = runtime.createRecipientResolver("manual:same-process", sessionId);
-    const originalPath = resolveTelegramSessionJournalPath(sessionId, "manual:same-process", dir, "work");
-    assert.equal(getTelegramUpdateJournalBindingPath(original.recoveryKey), originalPath);
+    const originalPath = resolveBaleSessionJournalPath(sessionId, "manual:same-process", dir, "work");
+    assert.equal(getBaleUpdateJournalBindingPath(original.recoveryKey), originalPath);
     original.journal.appendBatch([{ update_id: 11, message: { text: "old-session-custody" } }]);
     sessionId = "session-b";
     const replacement = runtime.resolveActive()!;
-    const replacementPath = resolveTelegramSessionJournalPath(sessionId, "manual:same-process", dir, "work");
-    assert.equal(getTelegramUpdateJournalBindingPath(replacement.recoveryKey), replacementPath);
+    const replacementPath = resolveBaleSessionJournalPath(sessionId, "manual:same-process", dir, "work");
+    assert.equal(getBaleUpdateJournalBindingPath(replacement.recoveryKey), replacementPath);
     assert.notEqual(original.recoveryKey, replacement.recoveryKey);
     assert.notEqual(original.runtimeKey, replacement.runtimeKey);
     replacement.journal.appendBatch([{ update_id: 22, message: { text: "new-session-custody" } }]);
@@ -5298,12 +5298,12 @@ test("Session-aware journal bindings keep the same recipient's sessions separate
     sessionId = undefined;
     assert.equal(runtime.resolveActive(), undefined);
     const legacy = runtime.createLegacyRecipientResolver("manual:same-process")()!;
-    assert.equal(getTelegramUpdateJournalBindingPath(legacy.recoveryKey), join(dir, "legacy-manual:same-process.json"));
+    assert.equal(getBaleUpdateJournalBindingPath(legacy.recoveryKey), join(dir, "legacy-manual:same-process.json"));
     assert.equal(runtime.resolveActive(), undefined, "Explicit legacy inspection cannot restore active readiness");
     assert.deepEqual(runtime.createPathResolver(originalPath)()!.journal.read().entries.map(entry => entry.updateId), [11],
       "Unprepared active state does not erase retained old-session custody");
     follower = false;
-    assert.equal(getTelegramUpdateJournalBindingPath(runtime.resolveActive()!.recoveryKey), join(dir, "inbox.work.json"));
+    assert.equal(getBaleUpdateJournalBindingPath(runtime.resolveActive()!.recoveryKey), join(dir, "inbox.work.json"));
   });
 });
 
@@ -5311,7 +5311,7 @@ test("Update journal binding runtime selects leader, follower, and recipient aut
   await withJournalTempDir(async ({ dir }) => {
     let follower = false;
     let writerAdmissions = 0;
-    const runtime = createTelegramUpdateJournalBindingRuntime({
+    const runtime = createBaleUpdateJournalBindingRuntime({
       base: {
         getProfileName: () => "work",
         getBotToken: () => "token-a",
@@ -5333,16 +5333,16 @@ test("Update journal binding runtime selects leader, follower, and recipient aut
       isFollowerRegistered: () => follower,
     });
     const leader = runtime.resolveActive()!;
-    assert.equal(getTelegramUpdateJournalBindingPath(leader.recoveryKey), join(dir, "leader.json"));
+    assert.equal(getBaleUpdateJournalBindingPath(leader.recoveryKey), join(dir, "leader.json"));
     leader.journal.appendBatch([{ update_id: 10 }]);
     follower = true;
     const activeFollower = runtime.resolveActive()!;
-    assert.equal(getTelegramUpdateJournalBindingPath(activeFollower.recoveryKey),
+    assert.equal(getBaleUpdateJournalBindingPath(activeFollower.recoveryKey),
       join(dir, "active-follower.json"));
     activeFollower.journal.appendBatch([{ update_id: 11 }]);
     const recipient = runtime.createRecipientResolver("recipient")()!;
     assert.equal(
-      getTelegramUpdateJournalBindingPath(recipient.recoveryKey),
+      getBaleUpdateJournalBindingPath(recipient.recoveryKey),
       join(dir, "recipient.json"),
     );
     recipient.journal.appendBatch([{ update_id: 1 }]);
@@ -5364,7 +5364,7 @@ test("Update journal binding runtime selects leader, follower, and recipient aut
       join(dir, "follower-inbox-0123456789abcdef.work.json"),
     )()!;
     assert.equal(
-      getTelegramUpdateJournalBindingPath(discovered.recoveryKey),
+      getBaleUpdateJournalBindingPath(discovered.recoveryKey),
       join(dir, "follower-inbox-0123456789abcdef.work.json"),
     );
     discovered.journal.appendBatch([{ update_id: 12 }]);
@@ -5377,11 +5377,11 @@ test("Update journal binding runtime selects leader, follower, and recipient aut
 });
 
 test("Update journal bot identity is deterministic without persisting tokens", () => {
-  const first = createTelegramUpdateJournalBotIdentity({
+  const first = createBaleUpdateJournalBotIdentity({
     botToken: "123:abc",
     botId: 7,
   });
-  const second = createTelegramUpdateJournalBotIdentity({
+  const second = createBaleUpdateJournalBotIdentity({
     botToken: "123:abc",
     botId: 7,
   });
@@ -5390,12 +5390,12 @@ test("Update journal bot identity is deterministic without persisting tokens", (
   assert.match(first.tokenSha256, /^[a-f0-9]{64}$/u);
   assert.equal(first.tokenSha256.includes("123:abc"), false);
   assert.throws(
-    () => createTelegramUpdateJournalBotIdentity({ botToken: "" }),
+    () => createBaleUpdateJournalBotIdentity({ botToken: "" }),
     /configured bot token/u,
   );
   assert.throws(
     () =>
-      createTelegramUpdateJournalBotIdentity({
+      createBaleUpdateJournalBotIdentity({
         botToken: "123:abc",
         botId: 0,
       }),
@@ -5404,30 +5404,30 @@ test("Update journal bot identity is deterministic without persisting tokens", (
 });
 
 test("Update journal receipt scope is profile-bound and stable across proven token rotation", () => {
-  const first = createTelegramUpdateJournalReceiptScope({
+  const first = createBaleUpdateJournalReceiptScope({
     profileName: "work",
-    botIdentity: createTelegramUpdateJournalBotIdentity({
+    botIdentity: createBaleUpdateJournalBotIdentity({
       botToken: "token-a",
       botId: 42,
     }),
   });
-  const rotated = createTelegramUpdateJournalReceiptScope({
+  const rotated = createBaleUpdateJournalReceiptScope({
     profileName: "work",
-    botIdentity: createTelegramUpdateJournalBotIdentity({
+    botIdentity: createBaleUpdateJournalBotIdentity({
       botToken: "token-b",
       botId: 42,
     }),
   });
-  const otherProfile = createTelegramUpdateJournalReceiptScope({
+  const otherProfile = createBaleUpdateJournalReceiptScope({
     profileName: "other",
-    botIdentity: createTelegramUpdateJournalBotIdentity({
+    botIdentity: createBaleUpdateJournalBotIdentity({
       botToken: "token-b",
       botId: 42,
     }),
   });
-  const unknownBot = createTelegramUpdateJournalReceiptScope({
+  const unknownBot = createBaleUpdateJournalReceiptScope({
     profileName: "work",
-    botIdentity: createTelegramUpdateJournalBotIdentity({
+    botIdentity: createBaleUpdateJournalBotIdentity({
       botToken: "token-a",
     }),
   });
@@ -5441,7 +5441,7 @@ test("Update journal receipt scope is profile-bound and stable across proven tok
 test("Update journal receipt scope resolver freezes same-transport bot enrichment", () => {
   let botId: number | undefined;
   let botToken = "token-a";
-  const resolve = createTelegramUpdateJournalReceiptScopeResolver({
+  const resolve = createBaleUpdateJournalReceiptScopeResolver({
     getProfileName: () => "work",
     getBotToken: () => botToken,
     getBotId: () => botId,
@@ -5454,9 +5454,9 @@ test("Update journal receipt scope resolver freezes same-transport bot enrichmen
   assert.notEqual(rotated, initial);
   assert.equal(
     rotated,
-    createTelegramUpdateJournalReceiptScope({
+    createBaleUpdateJournalReceiptScope({
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken,
         botId,
       }),
@@ -5466,7 +5466,7 @@ test("Update journal receipt scope resolver freezes same-transport bot enrichmen
 
 test("Update journal derives conservative Workspace admission scopes", () => {
   assert.deepEqual(
-    getTelegramUpdateJournalAdmissionScopes([
+    getBaleUpdateJournalAdmissionScopes([
       {
         update_id: 1,
         message: { chat: { id: 100 }, message_thread_id: 10 },
@@ -5484,7 +5484,7 @@ test("Update journal derives conservative Workspace admission scopes", () => {
     ],
   );
   assert.deepEqual(
-    getTelegramUpdateJournalAdmissionScopes([
+    getBaleUpdateJournalAdmissionScopes([
       {
         update_id: 3,
         message: { chat: { id: 100 }, message_thread_id: 10 },
@@ -5494,13 +5494,13 @@ test("Update journal derives conservative Workspace admission scopes", () => {
     [{ kind: "chat", chatId: 100 }],
   );
   assert.deepEqual(
-    getTelegramUpdateJournalAdmissionScopes([
+    getBaleUpdateJournalAdmissionScopes([
       { update_id: 5, callback_query: { inline_message_id: "opaque" } },
     ]),
     [{ kind: "profile" }],
   );
   assert.deepEqual(
-    getTelegramUpdateJournalAdmissionScopes([
+    getBaleUpdateJournalAdmissionScopes([
       {
         update_id: 6,
         message: { chat: { id: 100 }, message_thread_id: "invalid" },
@@ -5508,7 +5508,7 @@ test("Update journal derives conservative Workspace admission scopes", () => {
     ]),
     [{ kind: "profile" }],
   );
-  assert.deepEqual(getTelegramUpdateJournalAdmissionScopes([]), [
+  assert.deepEqual(getBaleUpdateJournalAdmissionScopes([]), [
     { kind: "profile" },
   ]);
 });
@@ -5516,7 +5516,7 @@ test("Update journal derives conservative Workspace admission scopes", () => {
 test("Update journal holds Workspace admission through publication and releases it", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
     const admissionPath = join(dir, "workspace-admission.json");
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: admissionPath,
       profileKey: "profile:journal",
       owner: {
@@ -5565,7 +5565,7 @@ test("Update journal holds Workspace admission through publication and releases 
 
 test("Update journal rejects fenced targets and releases admission after failure", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "workspace-admission.json"),
       profileKey: "profile:journal",
       owner: {
@@ -5598,7 +5598,7 @@ test("Update journal rejects fenced targets and releases admission after failure
           },
         ]),
       (error) =>
-        error instanceof TelegramWorkspaceAdmissionError &&
+        error instanceof BaleWorkspaceAdmissionError &&
         error.code === "admission-blocked",
     );
     assert.equal(admission.read().leases.length, 0);
@@ -5631,7 +5631,7 @@ test("Update journal rejects fenced targets and releases admission after failure
 
 test("Update journal cursor-only admission is profile-wide", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "workspace-admission.json"),
       profileKey: "profile:journal",
       owner: {
@@ -5654,7 +5654,7 @@ test("Update journal cursor-only admission is profile-wide", async () => {
     assert.throws(
       () => store.appendBatch([], 1),
       (error) =>
-        error instanceof TelegramWorkspaceAdmissionError &&
+        error instanceof BaleWorkspaceAdmissionError &&
         error.code === "admission-blocked",
     );
     assert.equal(existsSync(path), false);
@@ -5673,7 +5673,7 @@ test("Update journal appends batches, deduplicates exact replay, and removes ent
       serializedBytes: 0,
     });
 
-    const updates: TelegramJournaledUpdate[] = [
+    const updates: BaleJournaledUpdate[] = [
       { update_id: 10, message: { text: "first" } },
       { update_id: 11, callback_query: { data: "next" } },
     ];
@@ -5735,14 +5735,14 @@ for (const liveSource of [false, true]) {
     test(`Exact completed-source removal is atomic and never guesses missing evidence (${scenario}, live=${liveSource})`,
       async () => {
       await withJournalTempDir(async ({ dir, path }) => {
-        const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+        const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
         const store = createStore(path, { ...(liveSource ? { sourceAccess: { directory: dir, limits: sourceLimits } } : {}),
           withSourceSerialization: journalSerialization, onPublicationBoundary() {
             assert.equal(existsSync(`${path}.transaction`), true);
             assert.equal(existsSync(join(dir, "journals.transaction")), true);
           } });
         store.appendBatch([{ update_id: 1, message: { text: "first" } }, { update_id: 2, message: { text: "second" } }], 2);
-        const sources = store.read().entries.map(createTelegramUpdateJournalEntryDigest);
+        const sources = store.read().entries.map(createBaleUpdateJournalEntryDigest);
         if (scenario === "content") {
           const file = JSON.parse(await readFile(path, "utf8"));
           file.entries[0].update.message.text = "changed original";
@@ -5753,7 +5753,7 @@ for (const liveSource of [false, true]) {
           ...(scenario === "retry" ? { nextRetryAtMs: 2000 } : { terminalReason: "fixture" }) });
         if (scenario === "queued") store.markQueued({ queueKind: "prompt", receiptId: "independent", sourceUpdateIds: [1],
           owner: queueOwnerIdentity });
-        if (scenario === "queued" || scenario === "failed") sources[0] = createTelegramUpdateJournalEntryDigest(store.read().entries[0]!);
+        if (scenario === "queued" || scenario === "failed") sources[0] = createBaleUpdateJournalEntryDigest(store.read().entries[0]!);
         if (scenario === "missing") store.removeCompleted([1]);
         const fingerprint = async () => {
           const names = existsSync(`${path}.segments`) ? (await readdir(`${path}.segments`)).sort() : [];
@@ -5791,7 +5791,7 @@ for (const scenario of ["match", "missing", "pending", "completed", "subset", "s
   "detached", "invalid", "corrupt", "foreign-token", "unprepared", "offered"] as const) {
   test(`Strict queued receipt inspection observes complete immutable source authority without publication (${scenario})`, async () => {
     await withJournalTempDir(async ({ dir, path }) => {
-      const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+      const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
       const options = { sourceAccess: { directory: dir, limits: sourceLimits }, withSourceSerialization: journalSerialization };
       const store = createStore(path, options);
       store.appendBatch([1, 2, 99].map(update_id => ({ update_id, message: { text: `original-${update_id}` } })), 99);
@@ -5806,7 +5806,7 @@ for (const scenario of ["match", "missing", "pending", "completed", "subset", "s
       if (scenario === "completed") store.completeQueued([expected]);
       if (scenario === "offered") store.offerQueuedHandoff({ ...expected, expectedOwner: expected.queueOwner,
         recipientOwner: { ...queueOwnerIdentity, instanceId: "another-instance", processId: queueOwnerIdentity.processId + 1,
-          processBirthId: "another-birth" }, handoffToken: createTelegramUpdateQueueHandoffToken() });
+          processBirthId: "another-birth" }, handoffToken: createBaleUpdateQueueHandoffToken() });
       if (scenario === "subset") expected.sourceUpdateIds = [1];
       if (scenario === "superset") expected.sourceUpdateIds = [1, 2, 99];
       if (scenario === "kind") Object.assign(expected, { queueKind: "control" });
@@ -5816,8 +5816,8 @@ for (const scenario of ["match", "missing", "pending", "completed", "subset", "s
       const fingerprint = async () => [await readFile(path, "utf8"), ...await Promise.all(
         (existsSync(`${path}.segments`) ? (await readdir(`${path}.segments`)).sort() : []).map(async name => [name, await readFile(join(`${path}.segments`, name), "utf8")]))];
       const before = await fingerprint();
-      const reader = scenario === "unprepared" ? createStore(path) : scenario === "foreign-token" ? createTelegramUpdateJournalStore({ path,
-        ...options, botIdentity: createTelegramUpdateJournalBotIdentity({ botToken: "foreign-fixture" }) }) : createStore(path, options);
+      const reader = scenario === "unprepared" ? createStore(path) : scenario === "foreign-token" ? createBaleUpdateJournalStore({ path,
+        ...options, botIdentity: createBaleUpdateJournalBotIdentity({ botToken: "foreign-fixture" }) }) : createStore(path, options);
       if (scenario === "invalid") {
         for (const bad of [{ ...expected, sourceUpdateIds: [] }, { ...expected, sourceUpdateIds: [2, 1] },
           { ...expected, sourceUpdateIds: [1, 1] }, { ...expected, sourceUpdateIds: [-1] },
@@ -5829,7 +5829,7 @@ for (const scenario of ["match", "missing", "pending", "completed", "subset", "s
       } else if (scenario === "match" || scenario === "detached") {
         const proof = reader.inspectQueuedReceipt(expected)!;
         assert.deepEqual(proof.receipt, expected);
-        assert.deepEqual(proof.sources, entries.map(createTelegramUpdateJournalEntryDigest));
+        assert.deepEqual(proof.sources, entries.map(createBaleUpdateJournalEntryDigest));
         assert.match(proof.queueOwnerSha256, /^[a-f0-9]{64}$/u);
         const cold = createStore(path, options).inspectQueuedReceipt(expected)!;
         assert.deepEqual(cold, proof);
@@ -5849,7 +5849,7 @@ for (const scenario of ["normal", "control", "subset-proof", "ordinary", "before
   "partial-receipt", "owner", "runtime", "offered", "pending-digest", "unrelated-source", "malformed", "unprepared", "writer-ended", "capacity", "resolver"] as const) {
   test(`Queued source completion requires whole receipt ownership and one atomic scoped ACK (${scenario})`, async () => {
     await withJournalTempDir(async ({ dir, path }) => {
-      const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+      const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
       let armed = false;
       const options = { sourceAccess: { directory: dir, limits: sourceLimits }, withSourceSerialization: journalSerialization,
         ...(scenario === "capacity" ? { maxEntries: 2 } : {}), queueRuntimeIdentity: queueOwnerIdentity,
@@ -5860,11 +5860,11 @@ for (const scenario of ["normal", "control", "subset-proof", "ordinary", "before
         } };
       const store = createStore(path, options);
       store.appendBatch([1, 2].map(update_id => ({ update_id, message: { text: `queued-original-${update_id}` } })), 2);
-      const pending = createTelegramUpdateJournalEntryDigest(store.read().entries[0]!);
+      const pending = createBaleUpdateJournalEntryDigest(store.read().entries[0]!);
       const queueKind = scenario === "control" ? "control" as const : "prompt" as const;
       const admitted = store.markQueued({ queueKind, receiptId: "owned", sourceUpdateIds: [1, 2], owner: queueOwnerIdentity });
       const receipt = { queueKind, receiptId: "owned", sourceUpdateIds: [1, 2], queueOwner: admitted.queueOwner! };
-      const completions = store.read().entries.map(entry => ({ ...createTelegramUpdateJournalEntryDigest(entry),
+      const completions = store.read().entries.map(entry => ({ ...createBaleUpdateJournalEntryDigest(entry),
         completionSha256: String(entry.updateId === 1 ? "a" : "b").repeat(64) }));
       const expected = structuredClone(scenario === "subset-proof" ? completions.slice(0, 1) : completions);
       for (const marker of expected) assert.equal(store.inspectSourceCompletion(marker), undefined, "queue readiness is not terminal proof");
@@ -5875,15 +5875,15 @@ for (const scenario of ["normal", "control", "subset-proof", "ordinary", "before
       if (scenario === "malformed") completions[0]!.completionSha256 = "invalid";
       if (scenario === "offered") store.offerQueuedHandoff({ ...receipt, expectedOwner: receipt.queueOwner,
         recipientOwner: { ...queueOwnerIdentity, instanceId: "recipient", processId: queueOwnerIdentity.processId + 1,
-          processBirthId: "recipient-birth" }, handoffToken: createTelegramUpdateQueueHandoffToken() });
+          processBirthId: "recipient-birth" }, handoffToken: createBaleUpdateQueueHandoffToken() });
       const fingerprint = async () => [await readFile(path, "utf8"), ...await Promise.all(
         (existsSync(`${path}.segments`) ? (await readdir(`${path}.segments`)).sort() : []).map(async name => [name, await readFile(join(`${path}.segments`, name), "utf8")]))];
       const before = await fingerprint(); armed = true;
-      const disposer = scenario === "unprepared" ? createStore(path) : scenario === "writer-ended" ? createTelegramUpdateJournalStore({ ...options,
+      const disposer = scenario === "unprepared" ? createStore(path) : scenario === "writer-ended" ? createBaleUpdateJournalStore({ ...options,
         path, profileName: "work", botIdentity: identity, withWriterAdmission() { throw new Error("Fixture writer admission ended"); } })
-        : scenario === "runtime" ? createTelegramUpdateJournalStore({ ...options,
+        : scenario === "runtime" ? createBaleUpdateJournalStore({ ...options,
         path, profileName: "work", botIdentity: identity, queueRuntimeIdentity: { ...queueOwnerIdentity, instanceId: "foreign" } }) : scenario === "resolver"
-        ? createTelegramUpdateJournalRuntimeBindingResolver({ getProfileName: () => "work", getBotToken: () => "123:journal-secret",
+        ? createBaleUpdateJournalRuntimeBindingResolver({ getProfileName: () => "work", getBotToken: () => "123:journal-secret",
             getBotId: () => identity.botId, getJournalPath: () => path, getQueueRuntimeIdentity: () => queueOwnerIdentity,
             withSourceSerialization: journalSerialization })()!.journal : store;
       const rejected = ["before-write", "after-write-before-rename", "partial-receipt", "owner", "runtime", "offered", "pending-digest",
@@ -5917,7 +5917,7 @@ for (const scenario of ["normal", "control", "subset-proof", "ordinary", "before
         if (scenario === "capacity") {
           cold.appendBatch([{ update_id: 3 }, { update_id: 4 }], 4);
           const next = cold.markQueued({ queueKind: "prompt", receiptId: "next", sourceUpdateIds: [3, 4], owner: queueOwnerIdentity });
-          const marker = { ...createTelegramUpdateJournalEntryDigest(cold.read().entries[0]!), completionSha256: "c".repeat(64) };
+          const marker = { ...createBaleUpdateJournalEntryDigest(cold.read().entries[0]!), completionSha256: "c".repeat(64) };
           const full = await fingerprint();
           assert.throws(() => cold.completeQueuedExact([{ queueKind: "prompt", receiptId: "next", sourceUpdateIds: [3, 4], queueOwner: next.queueOwner! }], [marker]),
             error => isJournalError(error, "capacity"));
@@ -5934,12 +5934,12 @@ for (const scenario of ["partial", "reintroduced", "digest", "erasure"] as const
   test(`Cold queued completion rejects incomplete or contradictory receipt disposal (${scenario})`, async () => {
     await withJournalTempDir(async ({ dir, path }) => {
       const options = { sourceAccess: { directory: dir, limits: sourceLimits },
-        withSourceSerialization: createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction")) };
+        withSourceSerialization: createBaleJournalSourceSerialization(() => join(dir, "journals.transaction")) };
       const store = createStore(path, options);
       store.appendBatch([{ update_id: 1 }, { update_id: 2 }], 2);
       const queued = store.markQueued({ queueKind: "prompt", receiptId: "group", sourceUpdateIds: [1, 2], owner: queueOwnerIdentity });
       const entries = store.read().entries;
-      const marker = { ...createTelegramUpdateJournalEntryDigest(entries[0]!), completionSha256: "a".repeat(64) };
+      const marker = { ...createBaleUpdateJournalEntryDigest(entries[0]!), completionSha256: "a".repeat(64) };
       store.completeQueuedExact([{ queueKind: "prompt", receiptId: "group", sourceUpdateIds: [1, 2], queueOwner: queued.queueOwner! }], [marker]);
       let segmentPath = join(`${path}.segments`, "0000000000000002.json");
       const segment = JSON.parse(await readFile(segmentPath, "utf8"));
@@ -5962,9 +5962,9 @@ for (const scenario of ["partial", "reintroduced", "digest", "erasure"] as const
 for (const scenario of ["normal", "before-write", "after-write-before-rename", "lost-ack", "changed", "detached-input", "capacity", "work-bound"] as const) {
   test(`Journal source completion is one atomic, scoped removal ACK (${scenario})`, async () => {
     await withJournalTempDir(async ({ dir, path }) => {
-      const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+      const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
       let armed = false;
-      let completion: ReturnType<typeof createTelegramUpdateJournalEntryDigest> & { completionSha256: string };
+      let completion: ReturnType<typeof createBaleUpdateJournalEntryDigest> & { completionSha256: string };
       const options = { sourceAccess: { directory: dir, limits: sourceLimits }, withSourceSerialization: journalSerialization,
         ...(scenario === "capacity" ? { maxEntries: 1 } : {}), onPublicationBoundary(boundary: string) {
           assert.equal(existsSync(`${path}.transaction`) && existsSync(join(dir, "journals.transaction")), true);
@@ -5974,7 +5974,7 @@ for (const scenario of ["normal", "before-write", "after-write-before-rename", "
       const store = createStore(path, options);
       store.appendBatch((scenario === "capacity" ? [1] : [1, 2]).map(update_id => ({ update_id, message: { text: "original" } })),
         scenario === "capacity" ? 1 : 2);
-      const source = createTelegramUpdateJournalEntryDigest(store.read().entries[0]!);
+      const source = createBaleUpdateJournalEntryDigest(store.read().entries[0]!);
       completion = { ...source, completionSha256: "a".repeat(64) };
       const expected = { ...completion };
       assert.equal(store.inspectSourceCompletion(expected), undefined, "pending input is not a completion ACK");
@@ -6016,7 +6016,7 @@ for (const scenario of ["normal", "before-write", "after-write-before-rename", "
         assert.deepEqual(await fingerprint(), disposed, "all observations and conflicts are read-only");
         if (scenario === "capacity") {
           cold.appendBatch([{ update_id: 2 }], 2);
-          const nextSource = createTelegramUpdateJournalEntryDigest(cold.read().entries[0]!);
+          const nextSource = createBaleUpdateJournalEntryDigest(cold.read().entries[0]!);
           const next = { ...nextSource, completionSha256: "b".repeat(64) };
           const full = await fingerprint();
           assert.throws(() => cold.removeCompletedExact([2], [nextSource], [next]), error => isJournalError(error, "capacity"));
@@ -6039,14 +6039,14 @@ for (const scenario of ["bad-hash", "duplicate-id", "duplicate-scope", "foreign-
   test(`Cold source completion retains unknown or contradictory evidence (${scenario})`, async () => {
     await withJournalTempDir(async ({ dir, path }) => {
       const options = { sourceAccess: { directory: dir, limits: sourceLimits },
-        withSourceSerialization: createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction")) };
+        withSourceSerialization: createBaleJournalSourceSerialization(() => join(dir, "journals.transaction")) };
       const store = createStore(path, options);
       store.appendBatch([{ update_id: 1 }, { update_id: 2 }], 2);
-      const source = createTelegramUpdateJournalEntryDigest(store.read().entries[0]!);
+      const source = createBaleUpdateJournalEntryDigest(store.read().entries[0]!);
       const completion = { ...source, completionSha256: "a".repeat(64) };
       store.removeCompletedExact([1, 2], [source], [completion]);
       const segmentPath = join(`${path}.segments`, "0000000000000001.json");
-      const other = { ...createTelegramUpdateJournalEntryDigest(JSON.parse(await readFile(path, "utf8")).entries[1]), completionSha256: "b".repeat(64) };
+      const other = { ...createBaleUpdateJournalEntryDigest(JSON.parse(await readFile(path, "utf8")).entries[1]), completionSha256: "b".repeat(64) };
       const segment = JSON.parse(await readFile(segmentPath, "utf8"));
       if (scenario === "bad-hash") segment.sourceCompletions[0].completionSha256 = "invalid";
       if (scenario === "duplicate-id") segment.sourceCompletions.push({ ...completion });
@@ -6079,10 +6079,10 @@ for (const scenario of ["bad-hash", "duplicate-id", "duplicate-scope", "foreign-
 test("Source completion survives ordinary publishers and compaction without replay or empty-scope rebinding", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
     const options = { sourceAccess: { directory: dir, limits: sourceLimits },
-      withSourceSerialization: createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction")) };
+      withSourceSerialization: createBaleJournalSourceSerialization(() => join(dir, "journals.transaction")) };
     const store = createStore(path, options);
     store.appendBatch([{ update_id: 1 }], 1);
-    const source = createTelegramUpdateJournalEntryDigest(store.read().entries[0]!);
+    const source = createBaleUpdateJournalEntryDigest(store.read().entries[0]!);
     const completion = { ...source, completionSha256: "a".repeat(64) };
     store.removeCompletedExact([1], [source], [completion]);
     const replay = store.appendBatch([{ update_id: 1 }, { update_id: 3 }, { update_id: 4 }, { update_id: 5 }], 5);
@@ -6093,23 +6093,23 @@ test("Source completion survives ordinary publishers and compaction without repl
     const failed = store.markExecutionFailure({ updateId: 4, expectedAttemptCount: 0, failedAtMs: 2000, failureClass: "fixture", summary: "fixture",
       disposition: "failed", terminalReason: "fixture" });
     store.applyOperatorDisposition({ action: "discard", updateId: 4, failureId: failed.entry.terminalFailureId! });
-    store.abandonPending({ journalBindingKey: createTelegramUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
-      entry: store.read().entries[0]!, operatorAuthorityId: "telegram-owner:7", isCurrent: () => true });
-    for (let revision = 6; revision < TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 10; revision++) store.appendBatch([], revision);
+    store.abandonPending({ journalBindingKey: createBaleUpdateJournalBindingKey({ path, profileName: "work", botIdentity: identity }),
+      entry: store.read().entries[0]!, operatorAuthorityId: "bale-owner:7", isCurrent: () => true });
+    for (let revision = 6; revision < BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 10; revision++) store.appendBatch([], revision);
     assert.deepEqual(JSON.parse(await readFile(path, "utf8")).sourceCompletions, [completion], "snapshot compaction owns the ACK after deleting old segments");
     assert.deepEqual(createStore(path, options).inspectSourceCompletion(completion), completion);
     const before = await readFile(path, "utf8");
     for (const foreign of [
       { profileName: "foreign", botIdentity: identity },
-      { profileName: "work", botIdentity: createTelegramUpdateJournalBotIdentity({ botToken: "changed", botId: identity.botId }) },
-    ]) assert.throws(() => createTelegramUpdateJournalStore({ path, ...foreign }).read(), error => isJournalError(error, "identity-mismatch"));
+      { profileName: "work", botIdentity: createBaleUpdateJournalBotIdentity({ botToken: "changed", botId: identity.botId }) },
+    ]) assert.throws(() => createBaleUpdateJournalStore({ path, ...foreign }).read(), error => isJournalError(error, "identity-mismatch"));
     assert.equal(await readFile(path, "utf8"), before, "empty entries do not make retained source proof disposable");
   });
 });
 
 test("Scoped queued completion is absent from the raw input custody surface", async () => {
   await withInputCustodyFixture(async ({ options }) => {
-    const raw = createTelegramInputJournalStore(options);
+    const raw = createBaleInputJournalStore(options);
     assert.equal("completeQueuedExact" in raw, false);
     assert.equal("routingInputs" in raw, false);
   });
@@ -6118,9 +6118,9 @@ test("Scoped queued completion is absent from the raw input custody surface", as
 test("Source completion refuses unguarded, malformed, unsupported and foreign-scope publication", async () => {
   await withJournalTempDir(async ({ dir, path }) => {
     const store = createStore(path, { sourceAccess: { directory: dir, limits: sourceLimits },
-      withSourceSerialization: createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction")) });
+      withSourceSerialization: createBaleJournalSourceSerialization(() => join(dir, "journals.transaction")) });
     store.appendBatch([{ update_id: 1 }], 1);
-    const source = createTelegramUpdateJournalEntryDigest(store.read().entries[0]!);
+    const source = createBaleUpdateJournalEntryDigest(store.read().entries[0]!);
     const completion = { ...source, completionSha256: "a".repeat(64) };
     const before = await readFile(path, "utf8");
     for (const input of [[], [{ ...completion, completionSha256: "invalid" }], [{ ...completion, updateId: 2 }],
@@ -6134,7 +6134,7 @@ test("Source completion refuses unguarded, malformed, unsupported and foreign-sc
     for (const version of [2, 3] as const) {
       const file = JSON.parse(before); file.version = version; file.entries = []; file.sourceCompletions = [completion];
       await writeFile(path, JSON.stringify(file));
-      assert.throws(() => inspectTelegramUpdateJournalFamily({ path, directory: dir, profile: "work", botIdentity: identity, limits: sourceLimits }),
+      assert.throws(() => inspectBaleUpdateJournalFamily({ path, directory: dir, profile: "work", botIdentity: identity, limits: sourceLimits }),
         error => isJournalError(error, "invalid"));
     }
   });
@@ -6182,7 +6182,7 @@ test("Update journal accepts revision-zero snapshots and publishes private atomi
       upsertedEntries: [],
       removedUpdateIds: [1],
     };
-    const published = publishTelegramUpdateJournalSegment(path, segment);
+    const published = publishBaleUpdateJournalSegment(path, segment);
     assert.equal(published.revision, 1);
     assert.ok(published.serializedBytes > 0);
     assert.equal(
@@ -6197,7 +6197,7 @@ test("Update journal accepts revision-zero snapshots and publishes private atomi
       assert.equal((await stat(published.path)).mode & 0o777, 0o600);
     }
     assert.deepEqual(
-      publishTelegramUpdateJournalSegment(path, segment),
+      publishBaleUpdateJournalSegment(path, segment),
       published,
     );
     const reconstructed = store.read();
@@ -6205,7 +6205,7 @@ test("Update journal accepts revision-zero snapshots and publishes private atomi
     assert.deepEqual(reconstructed.entries, []);
     assert.throws(
       () =>
-        publishTelegramUpdateJournalSegment(path, {
+        publishBaleUpdateJournalSegment(path, {
           ...segment,
           revision: 3,
           previousRevision: 2,
@@ -6214,7 +6214,7 @@ test("Update journal accepts revision-zero snapshots and publishes private atomi
     );
     assert.throws(
       () =>
-        publishTelegramUpdateJournalSegment(path, {
+        publishBaleUpdateJournalSegment(path, {
           ...segment,
           removedUpdateIds: [],
         }),
@@ -6227,7 +6227,7 @@ test("Update journal reconstructs ordered segments, rejects foreign identity, an
   await withJournalTempDir(async ({ path }) => {
     const store = createStore(path);
     store.appendBatch([{ update_id: 1 }]);
-    publishTelegramUpdateJournalSegment(path, {
+    publishBaleUpdateJournalSegment(path, {
       version: 1,
       revision: 1,
       previousRevision: 0,
@@ -6243,7 +6243,7 @@ test("Update journal reconstructs ordered segments, rejects foreign identity, an
       ],
       removedUpdateIds: [1],
     });
-    publishTelegramUpdateJournalSegment(path, {
+    publishBaleUpdateJournalSegment(path, {
       version: 1,
       revision: 2,
       previousRevision: 1,
@@ -6265,7 +6265,7 @@ test("Update journal reconstructs ordered segments, rejects foreign identity, an
     assert.throws(
       () => store.read(),
       (error: unknown) =>
-        error instanceof TelegramUpdateJournalError &&
+        error instanceof BaleUpdateJournalError &&
         error.code === "identity-mismatch",
     );
 
@@ -6279,11 +6279,11 @@ test("Update journal reconstructs ordered segments, rejects foreign identity, an
 });
 
 test("Follower, recipient and path journal bindings expose the same exact queue receipt ports as the leader", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-telegram-binding-ports-")));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-bale-binding-ports-")));
   try {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(dir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(dir, "journals.transaction"));
     const runtime = { instanceId: "binding-owner", processId: process.pid, processBirthId: `${process.pid}:binding-ports` };
-    const bindings = createTelegramUpdateJournalBindingRuntime({
+    const bindings = createBaleUpdateJournalBindingRuntime({
       base: { getProfileName: () => "work", getBotToken: () => "123:synthetic-binding-ports", getBotId: () => 42,
         getQueueRuntimeIdentity: () => runtime, withSourceSerialization: journalSerialization },
       getLeaderJournalPath: () => join(dir, "inbox.work.json"),
@@ -6348,13 +6348,13 @@ test("Unsupported journal schemas remain byte-preserved even behind recoverable 
 
 test("Journal recovery identity codecs keep their fixed v1 wire encoding", () => {
   const receiptScope = '{"version":1,"profile":"work","bot":{"botId":42}}';
-  assert.equal(createTelegramUpdateJournalReceiptScope({ profileName: "work", botIdentity: identity }), receiptScope);
-  const binding = createTelegramUpdateJournalBindingKey({ path: "/fixture/inbox.json", profileName: "work", botIdentity: identity });
+  assert.equal(createBaleUpdateJournalReceiptScope({ profileName: "work", botIdentity: identity }), receiptScope);
+  const binding = createBaleUpdateJournalBindingKey({ path: "/fixture/inbox.json", profileName: "work", botIdentity: identity });
   assert.equal(binding, JSON.stringify({ version: 1, path: "/fixture/inbox.json", receiptScope }));
-  assert.equal(getTelegramUpdateJournalBindingPath(binding), "/fixture/inbox.json");
-  assert.equal(getTelegramUpdateJournalBindingPath(JSON.stringify({ version: 2, path: "/fixture/inbox.json", receiptScope })), undefined);
+  assert.equal(getBaleUpdateJournalBindingPath(binding), "/fixture/inbox.json");
+  assert.equal(getBaleUpdateJournalBindingPath(JSON.stringify({ version: 2, path: "/fixture/inbox.json", receiptScope })), undefined);
   const tokenSha256 = "a".repeat(64);
-  assert.equal(createTelegramUpdateJournalReceiptScope({ botIdentity: { tokenSha256 } }),
+  assert.equal(createBaleUpdateJournalReceiptScope({ botIdentity: { tokenSha256 } }),
     JSON.stringify({ version: 1, profile: "default", bot: { tokenSha256 } }));
 });
 
@@ -6406,7 +6406,7 @@ test("Update journal deletes and resets an uncertain orphaned segment history", 
       onRecovery: (event) => recoveryEvents.push(event),
     });
     store.appendBatch([{ update_id: 1 }]);
-    publishTelegramUpdateJournalSegment(path, {
+    publishBaleUpdateJournalSegment(path, {
       version: 1,
       revision: 1,
       previousRevision: 0,
@@ -6435,7 +6435,7 @@ test("Update journal replaces a corrupt snapshot and deletes its segments withou
     const recoveryEvents: Array<{ kind: "repaired" | "reset"; deletedPaths?: string[] }> = [];
     const store = createStore(path, { onRecovery: (event) => recoveryEvents.push(event) });
     store.appendBatch([{ update_id: 1, message: { text: "lost with the damaged journal" } }]);
-    publishTelegramUpdateJournalSegment(path, {
+    publishBaleUpdateJournalSegment(path, {
       version: 1, revision: 1, previousRevision: 0, profile: "work", botIdentity: identity,
       upsertedEntries: [], removedUpdateIds: [],
     });
@@ -6454,7 +6454,7 @@ test("Update journal reset publication failure leaves no replayable damaged segm
   await withJournalTempDir(async ({ dir, path }) => {
     const seed = createStore(path);
     seed.appendBatch([{ update_id: 1 }]);
-    publishTelegramUpdateJournalSegment(path, {
+    publishBaleUpdateJournalSegment(path, {
       version: 1,
       revision: 1,
       previousRevision: 0,
@@ -6487,7 +6487,7 @@ test("Update journal repairs a cleanup-orphaned empty segment history", async ()
       onRecovery: (event) => recoveryEvents.push(event),
     });
     store.appendBatch([{ update_id: 1 }]);
-    publishTelegramUpdateJournalSegment(path, {
+    publishBaleUpdateJournalSegment(path, {
       version: 1,
       revision: 1,
       previousRevision: 0,
@@ -6496,7 +6496,7 @@ test("Update journal repairs a cleanup-orphaned empty segment history", async ()
       upsertedEntries: [],
       removedUpdateIds: [1],
     });
-    publishTelegramUpdateJournalSegment(path, {
+    publishBaleUpdateJournalSegment(path, {
       version: 1,
       revision: 2,
       previousRevision: 1,
@@ -6512,7 +6512,7 @@ test("Update journal repairs a cleanup-orphaned empty segment history", async ()
       ],
       removedUpdateIds: [],
     });
-    publishTelegramUpdateJournalSegment(path, {
+    publishBaleUpdateJournalSegment(path, {
       version: 1,
       revision: 3,
       previousRevision: 2,
@@ -6570,7 +6570,7 @@ test("Update journal compacts at the segment-count threshold without losing auth
     store.appendBatch([{ update_id: 1 }], 1);
     for (
       let revision = 1;
-      revision < TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT;
+      revision < BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT;
       revision += 1
     ) {
       const removedUpdateIds = revision % 2 === 1 ? [1] : [];
@@ -6585,7 +6585,7 @@ test("Update journal compacts at the segment-count threshold without losing auth
               },
             ]
           : [];
-      publishTelegramUpdateJournalSegment(path, {
+      publishBaleUpdateJournalSegment(path, {
         version: 1,
         revision,
         previousRevision: revision - 1,
@@ -6597,12 +6597,12 @@ test("Update journal compacts at the segment-count threshold without losing auth
     }
     assert.equal(
       (await readdir(`${path}.segments`)).length,
-      TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT - 1,
+      BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT - 1,
     );
     const before = store.read();
     assert.equal(
       before.revision,
-      TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT - 1,
+      BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT - 1,
     );
     assert.deepEqual(before.entries, []);
     assert.equal(before.acceptedThroughUpdateId, 1);
@@ -6611,7 +6611,7 @@ test("Update journal compacts at the segment-count threshold without losing auth
     const compacted = store.read();
     assert.equal(
       compacted.revision,
-      TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
+      BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
     );
     assert.deepEqual(
       compacted.entries.map((entry) => entry.updateId),
@@ -6626,7 +6626,7 @@ test("Update journal compacts at the segment-count threshold without losing auth
     };
     assert.equal(
       snapshot.revision,
-      TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
+      BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
     );
     assert.equal(snapshot.acceptedThroughUpdateId, 2);
     assert.deepEqual(snapshot.entries.map((entry) => entry.updateId), [2]);
@@ -6640,9 +6640,9 @@ test("Update journal compacts at the segment-byte threshold", async () => {
     const payload = "x".repeat(350_000);
     let revision = 0;
     let segmentBytes = 0;
-    while (segmentBytes < TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES) {
+    while (segmentBytes < BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_BYTES) {
       revision += 1;
-      const published = publishTelegramUpdateJournalSegment(path, {
+      const published = publishBaleUpdateJournalSegment(path, {
         version: 1,
         revision,
         previousRevision: revision - 1,
@@ -6661,7 +6661,7 @@ test("Update journal compacts at the segment-byte threshold", async () => {
       segmentBytes += published.serializedBytes;
     }
     assert.ok(
-      revision < TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
+      revision < BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
       "byte threshold must trigger before the count threshold",
     );
 
@@ -6703,7 +6703,7 @@ test("Update journal retains authority when compaction cleanup is interrupted", 
     await mkdir(join(`${path}.segments`, "0000000000000001.json"));
     for (
       let revision = 2;
-      revision <= TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 1;
+      revision <= BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 1;
       revision += 1
     ) {
       await writeFile(
@@ -6728,7 +6728,7 @@ test("Update journal retains authority when compaction cleanup is interrupted", 
     const reconstructed = store.read();
     assert.equal(
       reconstructed.revision,
-      TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 2,
+      BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 2,
     );
     assert.deepEqual(
       reconstructed.entries.map((entry) => entry.updateId),
@@ -6745,7 +6745,7 @@ test("Update journal retains authority when compaction cleanup is interrupted", 
     };
     assert.equal(
       snapshot.revision,
-      TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 2,
+      BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT + 2,
     );
     assert.deepEqual(snapshot.entries.map((entry) => entry.updateId), [1, 2]);
   });
@@ -6758,7 +6758,7 @@ test("Update journal compaction thresholds exclude redundant old segments", asyn
       `${JSON.stringify(
         {
           version: 1,
-          revision: TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT - 1,
+          revision: BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT - 1,
           profile: "work",
           botIdentity: identity,
           entries: [],
@@ -6770,7 +6770,7 @@ test("Update journal compaction thresholds exclude redundant old segments", asyn
     await mkdir(`${path}.segments`);
     for (
       let revision = 1;
-      revision < TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT;
+      revision < BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT;
       revision += 1
     ) {
       await mkdir(
@@ -6784,16 +6784,16 @@ test("Update journal compaction thresholds exclude redundant old segments", asyn
     };
     assert.equal(
       rawSnapshot.revision,
-      TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT - 1,
+      BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT - 1,
       "one unapplied segment must not compact because redundant cleanup remains",
     );
     assert.equal(
       store.read().revision,
-      TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
+      BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT,
     );
     assert.ok(
       (await readdir(`${path}.segments`)).includes(
-        `${String(TELEGRAM_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT).padStart(16, "0")}.json`,
+        `${String(BALE_UPDATE_JOURNAL_COMPACTION_SEGMENT_COUNT).padStart(16, "0")}.json`,
       ),
     );
   });
@@ -6805,7 +6805,7 @@ test("Update journal bounds aggregate unapplied segment bytes", async () => {
     store.appendBatch([{ update_id: 1 }]);
     const payload = "x".repeat(1_000);
     for (let revision = 1; revision <= 2; revision += 1) {
-      publishTelegramUpdateJournalSegment(path, {
+      publishBaleUpdateJournalSegment(path, {
         version: 1,
         revision,
         previousRevision: revision - 1,
@@ -6838,7 +6838,7 @@ test("Update journal bounds aggregate unapplied segment bytes", async () => {
     assert.throws(
       () => constrained.read(),
       (error: unknown) =>
-        error instanceof TelegramUpdateJournalError &&
+        error instanceof BaleUpdateJournalError &&
         error.code === "capacity" &&
         /unapplied-segment limit/u.test(error.message),
     );
@@ -6850,7 +6850,7 @@ test("Update journal accepts a newer snapshot with a redundant old segment", asy
   await withJournalTempDir(async ({ path }) => {
     const store = createStore(path);
     store.appendBatch([{ update_id: 1 }]);
-    publishTelegramUpdateJournalSegment(path, {
+    publishBaleUpdateJournalSegment(path, {
       version: 1,
       revision: 1,
       previousRevision: 0,
@@ -6912,7 +6912,7 @@ test("Update journal publication interruption preserves prior authority", async 
       assert.throws(
         () => interrupted.removeCompleted([1]),
         (error: unknown) =>
-          error instanceof TelegramUpdateJournalError &&
+          error instanceof BaleUpdateJournalError &&
           (error.cause as Error | undefined)?.message ===
             `interrupted:${boundary}`,
       );
@@ -6947,7 +6947,7 @@ test("Update journal cursor publication interruption retains the prior batch and
       assert.throws(
         () => interrupted.appendBatch([{ update_id: 2 }], 2),
         (error: unknown) =>
-          error instanceof TelegramUpdateJournalError &&
+          error instanceof BaleUpdateJournalError &&
           (error.cause as Error | undefined)?.message ===
             `cursor-interrupted:${boundary}`,
       );
@@ -6983,7 +6983,7 @@ test("Update journal queue and completion interruption retain prior authority", 
           owner,
         }),
       (error: unknown) =>
-        error instanceof TelegramUpdateJournalError &&
+        error instanceof BaleUpdateJournalError &&
         (error.cause as Error | undefined)?.message === "interrupted:queue",
     );
     assert.equal(store.read().entries[0]?.state, "pending");
@@ -7006,7 +7006,7 @@ test("Update journal queue and completion interruption retain prior authority", 
           },
         ]),
       (error: unknown) =>
-        error instanceof TelegramUpdateJournalError &&
+        error instanceof BaleUpdateJournalError &&
         (error.cause as Error | undefined)?.message ===
           "interrupted:completion",
     );
@@ -7051,7 +7051,7 @@ test("Update journal capacity rejection preserves exact snapshot and segment byt
           terminalReason: "capacity-boundary",
         }),
       (error: unknown) =>
-        error instanceof TelegramUpdateJournalError && error.code === "capacity",
+        error instanceof BaleUpdateJournalError && error.code === "capacity",
     );
     assert.equal(await readFile(path, "utf8"), snapshotBefore);
     assert.deepEqual(await readdir(segmentDirectory), segmentNamesBefore);
@@ -7787,7 +7787,7 @@ test("Update journal live handoff retains donor authority until exact recipient 
       processBirthId: `${process.pid + 1}:recipient`,
       sessionGeneration: 4,
     };
-    const handoffToken = createTelegramUpdateQueueHandoffToken();
+    const handoffToken = createBaleUpdateQueueHandoffToken();
     const handoff = {
       ...receipt,
       expectedOwner: donorOwner,
@@ -7840,12 +7840,12 @@ test("Update journal live handoff retains donor authority until exact recipient 
       () =>
         donorStore.acceptQueuedHandoff({
           ...handoff,
-          handoffToken: createTelegramUpdateQueueHandoffToken(),
+          handoffToken: createBaleUpdateQueueHandoffToken(),
         }),
       (error) => isJournalError(error, "conflict"),
     );
 
-    const recipientStore = createTelegramUpdateJournalStore({
+    const recipientStore = createBaleUpdateJournalStore({
       path,
       profileName: "work",
       botIdentity: identity,
@@ -7876,7 +7876,7 @@ test("Update journal live handoff retains donor authority until exact recipient 
       () =>
         recipientStore.acceptQueuedHandoff({
           ...handoff,
-          handoffToken: createTelegramUpdateQueueHandoffToken(),
+          handoffToken: createBaleUpdateQueueHandoffToken(),
         }),
       (error) => isJournalError(error, "conflict"),
     );
@@ -7918,14 +7918,14 @@ test("Update journal donor can cancel only its exact unaccepted handoff", async 
       ...receipt,
       expectedOwner: donorOwner,
       recipientOwner,
-      handoffToken: createTelegramUpdateQueueHandoffToken(),
+      handoffToken: createBaleUpdateQueueHandoffToken(),
     };
     donorStore.offerQueuedHandoff(handoff);
     assert.throws(
       () =>
         donorStore.cancelQueuedHandoff({
           ...handoff,
-          handoffToken: createTelegramUpdateQueueHandoffToken(),
+          handoffToken: createBaleUpdateQueueHandoffToken(),
         }),
       (error) => isJournalError(error, "conflict"),
     );
@@ -7973,7 +7973,7 @@ test("Update journal handoff metadata capacity failure preserves queue owner", a
             processBirthId: `${process.pid + 1}:recipient`,
             sessionGeneration: 2,
           },
-          handoffToken: createTelegramUpdateQueueHandoffToken(),
+          handoffToken: createBaleUpdateQueueHandoffToken(),
         }),
       (error) => isJournalError(error, "capacity"),
     );
@@ -8135,7 +8135,7 @@ test("Update journal dead-owner cleanup requires exact negative liveness proof",
     const currentBirthOwner = {
       instanceId: "current-birth-instance",
       processId: process.pid,
-      processBirthId: getTelegramProcessBirthIdentity(
+      processBirthId: getBaleProcessBirthIdentity(
         process.pid,
         "current-test-process",
       ),
@@ -8163,7 +8163,7 @@ test("Update journal dead-owner cleanup requires exact negative liveness proof",
       }),
       "utf8",
     );
-    const defaultProofStore = createTelegramUpdateJournalStore({
+    const defaultProofStore = createBaleUpdateJournalStore({
       path,
       profileName: "work",
       botIdentity: identity,
@@ -8353,20 +8353,20 @@ test("Update journal fails closed on malformed schema and identity mismatch", as
 
 test("Update journal permits token rotation only when bot identity remains provable", async () => {
   await withJournalTempDir(async ({ path }) => {
-    const original = createTelegramUpdateJournalStore({
+    const original = createBaleUpdateJournalStore({
       path,
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken: "token-a",
         botId: 42,
       }),
     });
     original.appendBatch([{ update_id: 1 }]);
 
-    const rotated = createTelegramUpdateJournalStore({
+    const rotated = createBaleUpdateJournalStore({
       path,
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken: "token-b",
         botId: 42,
       }),
@@ -8375,16 +8375,16 @@ test("Update journal permits token rotation only when bot identity remains prova
     rotated.appendBatch([{ update_id: 1 }]);
     assert.equal(
       rotated.read().botIdentity.tokenSha256,
-      createTelegramUpdateJournalBotIdentity({
+      createBaleUpdateJournalBotIdentity({
         botToken: "token-b",
         botId: 42,
       }).tokenSha256,
     );
 
-    const conflictingBot = createTelegramUpdateJournalStore({
+    const conflictingBot = createBaleUpdateJournalStore({
       path,
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken: "token-b",
         botId: 99,
       }),
@@ -8396,18 +8396,18 @@ test("Update journal permits token rotation only when bot identity remains prova
   });
 
   await withJournalTempDir(async ({ path }) => {
-    const unknownBot = createTelegramUpdateJournalStore({
+    const unknownBot = createBaleUpdateJournalStore({
       path,
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken: "token-a",
       }),
     });
     unknownBot.appendBatch([{ update_id: 1 }]);
-    const unprovableRotation = createTelegramUpdateJournalStore({
+    const unprovableRotation = createBaleUpdateJournalStore({
       path,
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken: "token-b",
       }),
     });
@@ -8420,10 +8420,10 @@ test("Update journal permits token rotation only when bot identity remains prova
 
 test("Update journal atomically rebinds a fully drained journal", async () => {
   await withJournalTempDir(async ({ path }) => {
-    const original = createTelegramUpdateJournalStore({
+    const original = createBaleUpdateJournalStore({
       path,
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken: "token-a",
         botId: 42,
       }),
@@ -8433,11 +8433,11 @@ test("Update journal atomically rebinds a fully drained journal", async () => {
     assert.equal(original.read().entries.length, 0);
     assert.equal(original.read().acceptedThroughUpdateId, 1);
 
-    const reboundIdentity = createTelegramUpdateJournalBotIdentity({
+    const reboundIdentity = createBaleUpdateJournalBotIdentity({
       botToken: "token-b",
       botId: 99,
     });
-    const rebound = createTelegramUpdateJournalStore({
+    const rebound = createBaleUpdateJournalStore({
       path,
       profileName: "other",
       botIdentity: reboundIdentity,
@@ -8455,7 +8455,7 @@ test("Update journal atomically rebinds a fully drained journal", async () => {
     assert.throws(
       () => original.read(),
       (error: unknown) =>
-        error instanceof TelegramUpdateJournalError &&
+        error instanceof BaleUpdateJournalError &&
         error.code === "identity-mismatch",
     );
   });
@@ -8468,10 +8468,10 @@ test("Update journal reads published state without serialization and repairs onl
       serialized += 1;
       return operation();
     };
-    const store = createTelegramUpdateJournalStore({
+    const store = createBaleUpdateJournalStore({
       path,
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({ botToken: "token-a", botId: 42 }),
+      botIdentity: createBaleUpdateJournalBotIdentity({ botToken: "token-a", botId: 42 }),
       withSourceSerialization,
     });
     store.appendBatch([{ update_id: 1 }], 1);
@@ -8484,8 +8484,8 @@ test("Update journal reads published state without serialization and repairs onl
     assert.equal(serialized, 0, "An idle cursor read takes no transaction");
     assert.deepEqual((await readdir(dirname(path))).sort(), entriesBefore, "No guard or staging entry is created");
 
-    const reboundIdentity = createTelegramUpdateJournalBotIdentity({ botToken: "token-b", botId: 99 });
-    const rebound = createTelegramUpdateJournalStore({
+    const reboundIdentity = createBaleUpdateJournalBotIdentity({ botToken: "token-b", botId: 99 });
+    const rebound = createBaleUpdateJournalStore({
       path,
       profileName: "other",
       botIdentity: reboundIdentity,
@@ -8500,10 +8500,10 @@ test("Update journal reads published state without serialization and repairs onl
 
 test("Journal source serialization is lock-only and never touches config", async () => {
   await withJournalTempDir(async ({ dir }) => {
-    const configPath = join(dir, "telegram.json");
+    const configPath = join(dir, "bale.json");
     const transactionPath = join(dir, "runtime", "journals.transaction");
     await writeFile(configPath, "{broken");
-    const serialize = createTelegramJournalSourceSerialization(() => transactionPath);
+    const serialize = createBaleJournalSourceSerialization(() => transactionPath);
     const result = {};
     assert.equal(serialize(() => {
       assert.equal(existsSync(transactionPath), true);
@@ -8515,7 +8515,7 @@ test("Journal source serialization is lock-only and never touches config", async
     assert.equal(existsSync(transactionPath), false);
     assert.equal(serialize(() => "retry"), "retry");
     assert.equal(await readFile(configPath, "utf8"), "{broken");
-    assert.deepEqual((await readdir(dir)).sort(), ["runtime", "telegram.json"]);
+    assert.deepEqual((await readdir(dir)).sort(), ["runtime", "bale.json"]);
     // Misuse witness: an async continuation is outside this synchronous contract.
     let lockAfterAwait: boolean | undefined;
     const unsupported = serialize(async () => {
@@ -8531,10 +8531,10 @@ test("Journal source serialization is lock-only and never touches config", async
 
 test("Update journal serializes concurrent rebind and old-identity append", async () => {
   await withJournalTempDir(async ({ path }) => {
-    const original = createTelegramUpdateJournalStore({
+    const original = createBaleUpdateJournalStore({
       path,
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken: "123:journal-worker",
         botId: 77,
       }),
@@ -8559,10 +8559,10 @@ test("Update journal serializes concurrent rebind and old-identity append", asyn
       profile: string;
       botIdentity: { botId?: number };
     };
-    const winner = createTelegramUpdateJournalStore({
+    const winner = createBaleUpdateJournalStore({
       path,
       profileName: source.profile,
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken:
           source.profile === "rebound"
             ? "123:journal-rebound"
@@ -8580,14 +8580,14 @@ for (const scenario of ["expire", "half-hour", "selected", "cancel", "restart", 
   test(`Routing input lifetime preserves one hour, exact source custody and no delivery inference (${scenario})`, async () => {
     await withJournalTempDir(async ({ path }) => {
       let now = 1000, active = true, fault: string | undefined;
-      const options = { path, botIdentity: createTelegramUpdateJournalBotIdentity({ botToken: "fixture:routing-lifetime" }), getNowMs: () => now,
+      const options = { path, botIdentity: createBaleUpdateJournalBotIdentity({ botToken: "fixture:routing-lifetime" }), getNowMs: () => now,
         onPublicationBoundary(point: string) {
           if (fault && point === (fault === "before-publication" ? "before-write" : "after-write-before-rename")) {
             throw new Error("fixture routing expiry interrupted");
           }
         } };
-      let journal = createTelegramUpdateJournalStore(options);
-      const binding = createTelegramUpdateJournalBindingKey(options);
+      let journal = createBaleUpdateJournalStore(options);
+      const binding = createBaleUpdateJournalBindingKey(options);
       journal.appendBatch([{ update_id: 1, message: { message_id: 11, text: "never selected", from: { id: 7, is_bot: false }, chat: { id: 7, type: "private" } } }]);
       const original = journal.read().entries[0]!;
       const input = { journalBindingKey: binding, entries: [original], operatorUserId: 7, publishedAtMs: now, isCurrent: () => active };
@@ -8612,7 +8612,7 @@ for (const scenario of ["expire", "half-hour", "selected", "cancel", "restart", 
         return;
       }
       if (scenario === "cancel") {
-        journal.abandonPending({ journalBindingKey: binding, entry: armed, operatorAuthorityId: "telegram-owner:7", isCurrent: () => active });
+        journal.abandonPending({ journalBindingKey: binding, entry: armed, operatorAuthorityId: "bale-owner:7", isCurrent: () => active });
         assert.equal(journal.read().entries.length, 0); return;
       }
       if (scenario === "foreign" || scenario === "authority" || scenario === "changed") {
@@ -8628,7 +8628,7 @@ for (const scenario of ["expire", "half-hour", "selected", "cancel", "restart", 
         assert.throws(() => journal.routingInputs!.select({ ...input, entries: before.entries }), /not armed/);
         assert.deepEqual(journal.read(), before, "A later source failure cannot partially freeze a batch"); return;
       }
-      if (scenario === "restart") journal = createTelegramUpdateJournalStore(options);
+      if (scenario === "restart") journal = createBaleUpdateJournalStore(options);
       const duplicate = journal.routingInputs!.arm({ ...input, entries: [armed] })[0]!;
       assert.deepEqual(duplicate, armed, "Neither refresh nor reconstruction renews the clock");
       assert.throws(() => journal.routingInputs!.expire(expiry), /not expired/);
@@ -8645,7 +8645,7 @@ for (const scenario of ["expire", "half-hour", "selected", "cancel", "restart", 
       assert.equal("retainedPath" in ack, false);
       assert.equal((await readdir(dirname(path))).some(name => name.startsWith(`${basename(path)}.retained`)), false, "Expiry never archives a prompt body");
       assert.equal(journal.inspectAbandonedPending(1), undefined, "Expiry is not retained cancellation");
-      assert.equal(journal.routingInputs!.inspectExpiry(1)?.operatorAuthorityId, "telegram-owner:7");
+      assert.equal(journal.routingInputs!.inspectExpiry(1)?.operatorAuthorityId, "bale-owner:7");
       assert.deepEqual(journal.appendBatch([original.update]).duplicateUpdateIds, [1]);
       if (scenario === "duplicate") assert.equal(journal.routingInputs!.expire(expiry).duplicate, true);
     });
@@ -8662,10 +8662,10 @@ test("Update journal transaction serializes concurrent process appenders", async
       ),
     );
 
-    const store = createTelegramUpdateJournalStore({
+    const store = createBaleUpdateJournalStore({
       path,
       profileName: "work",
-      botIdentity: createTelegramUpdateJournalBotIdentity({
+      botIdentity: createBaleUpdateJournalBotIdentity({
         botToken: "123:journal-worker",
         botId: 77,
       }),
@@ -8680,9 +8680,9 @@ test("Update journal transaction serializes concurrent process appenders", async
 test("Routing clocks record their chooser location once and reject malformed locations", async () => {
   await withJournalTempDir(async ({ path }) => {
     let now = 1000;
-    const options = { path, botIdentity: createTelegramUpdateJournalBotIdentity({ botToken: "fixture:routing-chooser" }), getNowMs: () => now };
-    const journal = createTelegramUpdateJournalStore(options);
-    const binding = createTelegramUpdateJournalBindingKey(options);
+    const options = { path, botIdentity: createBaleUpdateJournalBotIdentity({ botToken: "fixture:routing-chooser" }), getNowMs: () => now };
+    const journal = createBaleUpdateJournalStore(options);
+    const binding = createBaleUpdateJournalBindingKey(options);
     journal.appendBatch([{ update_id: 1, message: { message_id: 11, text: "chooser", from: { id: 7, is_bot: false }, chat: { id: 7, type: "private" } } }]);
     const input = { journalBindingKey: binding, entries: journal.read().entries, operatorUserId: 7, publishedAtMs: now, isCurrent: () => true };
     assert.throws(() => journal.routingInputs!.arm({ ...input, chooser: { chatId: 7, messageId: 0 } }), /chooser location/);
@@ -8692,7 +8692,7 @@ test("Routing clocks record their chooser location once and reject malformed loc
     now += 60_000;
     const [again] = journal.routingInputs!.arm({ ...input, entries: [armed!], publishedAtMs: now, chooser: { ...chooser, messageId: 999 } });
     assert.deepEqual(again!.routingInput, armed!.routingInput, "re-arming never renews the deadline or moves the chooser");
-    assert.deepEqual(createTelegramUpdateJournalStore(options).read().entries[0]!.routingInput, armed!.routingInput,
+    assert.deepEqual(createBaleUpdateJournalStore(options).read().entries[0]!.routingInput, armed!.routingInput,
       "the location survives a cold reload");
   });
 });

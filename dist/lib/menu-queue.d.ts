@@ -1,15 +1,15 @@
 /**
- * Telegram queue menu UI helpers
- * Zones: telegram ui, queue controls, menu composition
+ * Bale queue menu UI helpers
+ * Zones: bale ui, queue controls, menu composition
  * Owns queue-menu rendering, queue item callbacks, and queue-menu runtime adapters while core queue mechanics stay in queue
  */
-import type { TelegramInlineKeyboardMarkup } from "./keyboard.ts";
-import { type TelegramMenuMessageRuntimeDeps, type TelegramModelMenuState } from "./menu-model.ts";
+import type { BaleInlineKeyboardMarkup } from "./keyboard.ts";
+import { type BaleMenuMessageRuntimeDeps, type BaleModelMenuState } from "./menu-model.ts";
 import type { MenuModel } from "./model.ts";
 import * as Queue from "./queue.ts";
-import type { TelegramApiCallOptions } from "./telegram-api.ts";
-type TelegramQueueMenuReplyMarkup = TelegramInlineKeyboardMarkup;
-interface TelegramQueueMenuCallbackQuery {
+import type { BaleApiCallOptions } from "./bale-api.ts";
+type BaleQueueMenuReplyMarkup = BaleInlineKeyboardMarkup;
+interface BaleQueueMenuCallbackQuery {
     id: string;
     data?: string;
     message?: {
@@ -19,22 +19,22 @@ interface TelegramQueueMenuCallbackQuery {
         message_id?: number;
     };
 }
-interface TelegramQueueMenuRuntime<Context> {
-    openQueueMenu: (chatId: number, replyToMessageId: number, ctx: Context, threadId?: number, options?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<void>;
-    handleCallbackQuery: (query: TelegramQueueMenuCallbackQuery, ctx: Context) => Promise<boolean>;
+interface BaleQueueMenuRuntime<Context> {
+    openQueueMenu: (chatId: number, replyToMessageId: number, ctx: Context, threadId?: number, options?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<void>;
+    handleCallbackQuery: (query: BaleQueueMenuCallbackQuery, ctx: Context) => Promise<boolean>;
 }
-export declare function createTelegramQueueMenuRuntime<Context, TModel extends MenuModel = MenuModel>(deps: {
+export declare function createBaleQueueMenuRuntime<Context, TModel extends MenuModel = MenuModel>(deps: {
     hasPendingDispatch?: () => boolean;
-    telegramQueueStore: Queue.TelegramQueueStateStore<Context>;
-    queueMutationRuntime: Queue.TelegramQueueMutationController<Context>;
-    sendInteractiveMessage: TelegramMenuMessageRuntimeDeps["sendInteractiveMessage"];
-    editInteractiveMessage: (chatId: number, messageId: number, text: string, mode: "html", replyMarkup: TelegramQueueMenuReplyMarkup) => Promise<void>;
+    baleQueueStore: Queue.BaleQueueStateStore<Context>;
+    queueMutationRuntime: Queue.BaleQueueMutationController<Context>;
+    sendInteractiveMessage: BaleMenuMessageRuntimeDeps["sendInteractiveMessage"];
+    editInteractiveMessage: (chatId: number, messageId: number, text: string, mode: "html", replyMarkup: BaleQueueMenuReplyMarkup) => Promise<void>;
     answerCallbackQuery: (callbackQueryId: string, text?: string) => Promise<void>;
-    getModelMenuState: (chatId: number, ctx: Context, threadId?: number) => Promise<TelegramModelMenuState<TModel>>;
-    getStoredModelMenuState: (messageId: number | undefined, chatId?: number) => TelegramModelMenuState<TModel> | undefined;
-    storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
-    updateStatusMessage: (state: TelegramModelMenuState<TModel>, ctx: Context) => Promise<void>;
+    getModelMenuState: (chatId: number, ctx: Context, threadId?: number) => Promise<BaleModelMenuState<TModel>>;
+    getStoredModelMenuState: (messageId: number | undefined, chatId?: number) => BaleModelMenuState<TModel> | undefined;
+    storeModelMenuState: (state: BaleModelMenuState<TModel>) => void;
+    updateStatusMessage: (state: BaleModelMenuState<TModel>, ctx: Context) => Promise<void>;
     updateStatus: (ctx: Context) => void;
     dismissGuestPlaceholder?: (inlineMessageId: string) => Promise<void>;
-}): TelegramQueueMenuRuntime<Context>;
+}): BaleQueueMenuRuntime<Context>;
 export {};

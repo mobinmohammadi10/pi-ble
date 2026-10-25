@@ -1,13 +1,13 @@
 /**
- * Telegram activity lifecycle normalization and extension dispatch
+ * Bale activity lifecycle normalization and extension dispatch
  * Zones: pi agent lifecycle, extension API, operational delivery
- * Owns stable handler registration, evidence-based activity/source identity, assistant segment and reasoning normalization, ordered public-output projection, executed-tool and compaction events, isolated non-blocking queues, shutdown fencing, diagnostics, and fresh delivery contexts; excludes Pi hook wiring, Telegram rendering implementation, raw transport clients, and consumer-extension behavior
+ * Owns stable handler registration, evidence-based activity/source identity, assistant segment and reasoning normalization, ordered public-output projection, executed-tool and compaction events, isolated non-blocking queues, shutdown fencing, diagnostics, and fresh delivery contexts; excludes Pi hook wiring, Bale rendering implementation, raw transport clients, and consumer-extension behavior
  */
-import { deleteTelegramView, editTelegramView, sendTelegramChatAction, sendTelegramView, } from "./delivery.js";
-const TELEGRAM_ACTIVITY_REGISTRY_KEY = "__piTelegramActivityRegistry__";
-function getOrCreateTelegramActivityRegistry() {
+import { deleteBaleView, editBaleView, sendBaleChatAction, sendBaleView, } from "./delivery.js";
+const BALE_ACTIVITY_REGISTRY_KEY = "__piBaleActivityRegistry__";
+function getOrCreateBaleActivityRegistry() {
     const globals = globalThis;
-    const existing = globals[TELEGRAM_ACTIVITY_REGISTRY_KEY];
+    const existing = globals[BALE_ACTIVITY_REGISTRY_KEY];
     if (existing &&
         typeof existing === "object" &&
         "handlers" in existing &&
@@ -15,16 +15,16 @@ function getOrCreateTelegramActivityRegistry() {
         return existing;
     }
     const registry = { handlers: new Map() };
-    globals[TELEGRAM_ACTIVITY_REGISTRY_KEY] = registry;
+    globals[BALE_ACTIVITY_REGISTRY_KEY] = registry;
     return registry;
 }
-export function registerTelegramActivityHandler(registration) {
+export function registerBaleActivityHandler(registration) {
     const id = registration.id.trim();
     if (!id)
-        throw new Error("Telegram activity handler id is required.");
-    const registry = getOrCreateTelegramActivityRegistry();
+        throw new Error("Bale activity handler id is required.");
+    const registry = getOrCreateBaleActivityRegistry();
     if (registry.handlers.has(id)) {
-        throw new Error(`Telegram activity handler is already registered: ${id}`);
+        throw new Error(`Bale activity handler is already registered: ${id}`);
     }
     const handler = {
         ...registration,
@@ -38,11 +38,11 @@ export function registerTelegramActivityHandler(registration) {
     };
 }
 /** @internal */
-export function clearTelegramActivityHandlers() {
-    getOrCreateTelegramActivityRegistry().handlers.clear();
+export function clearBaleActivityHandlers() {
+    getOrCreateBaleActivityRegistry().handlers.clear();
 }
-function getTelegramActivityHandlers() {
-    return Array.from(getOrCreateTelegramActivityRegistry().handlers.values()).sort(function (left, right) {
+function getBaleActivityHandlers() {
+    return Array.from(getOrCreateBaleActivityRegistry().handlers.values()).sort(function (left, right) {
         return left.order - right.order || left.id.localeCompare(right.id);
     });
 }
@@ -51,16 +51,16 @@ function cloneActivityTarget(target) {
         ? { chatId: target.chatId }
         : { chatId: target.chatId, threadId: target.threadId });
 }
-function createTelegramActivityContext(event, isActive) {
+function createBaleActivityContext(event, isActive) {
     const defaultScope = event.target
         ? { kind: "target", target: cloneActivityTarget(event.target) }
-        : event.source === "telegram"
+        : event.source === "bale"
             ? { kind: "active-turn" }
             : { kind: "instance" };
     const inactive = () => Promise.resolve({
         ok: false,
         reason: "runtime-unavailable",
-        message: "Telegram activity context belongs to an inactive session.",
+        message: "Bale activity context belongs to an inactive session.",
     });
     return {
         activityId: event.activityId,
@@ -70,21 +70,21 @@ function createTelegramActivityContext(event, isActive) {
         send(view, options) {
             if (!isActive())
                 return inactive();
-            return sendTelegramView(view, {
+            return sendBaleView(view, {
                 scope: options?.scope ?? defaultScope,
                 replyToMessageId: options?.replyToMessageId,
             });
         },
         edit(handle, view) {
-            return isActive() ? editTelegramView(handle, view) : inactive();
+            return isActive() ? editBaleView(handle, view) : inactive();
         },
         delete(handle) {
-            return isActive() ? deleteTelegramView(handle) : inactive();
+            return isActive() ? deleteBaleView(handle) : inactive();
         },
         chatAction(action, options) {
             if (!isActive())
                 return inactive();
-            return sendTelegramChatAction(action, {
+            return sendBaleChatAction(action, {
                 scope: options?.scope ?? defaultScope,
             });
         },
@@ -134,7 +134,7 @@ function captureActivityDrainObserver(capture) {
     }
 }
 /** @internal */
-export function createTelegramActivityDispatcher(deps = {}) {
+export function createBaleActivityDispatcher(deps = {}) {
     const queues = new Map();
     let stopped = false;
     const hasPending = () => Array.from(queues.values()).some(queue => queue.active && (queue.running || queue.events.length > 0));
@@ -147,15 +147,15 @@ export function createTelegramActivityDispatcher(deps = {}) {
                 const event = queue.events.shift();
                 if (!event)
                     break;
-                if (getOrCreateTelegramActivityRegistry().handlers.get(queue.registration.id) !== queue.registration) {
+                if (getOrCreateBaleActivityRegistry().handlers.get(queue.registration.id) !== queue.registration) {
                     queue.active = false;
                     queue.events = [];
                     break;
                 }
                 try {
-                    await queue.registration.handle(event, createTelegramActivityContext(event, () => queue.active &&
+                    await queue.registration.handle(event, createBaleActivityContext(event, () => queue.active &&
                         !stopped &&
-                        getOrCreateTelegramActivityRegistry().handlers.get(queue.registration.id) === queue.registration));
+                        getOrCreateBaleActivityRegistry().handlers.get(queue.registration.id) === queue.registration));
                 }
                 catch (error) {
                     deps.recordFailure?.(queue.registration.id, event, error);
@@ -173,7 +173,7 @@ export function createTelegramActivityDispatcher(deps = {}) {
         dispatch(event) {
             if (stopped)
                 return;
-            for (const registration of getTelegramActivityHandlers()) {
+            for (const registration of getBaleActivityHandlers()) {
                 let queue = queues.get(registration.id);
                 if (!queue || queue.registration !== registration) {
                     queue = {
@@ -209,7 +209,7 @@ export function createTelegramActivityDispatcher(deps = {}) {
     };
 }
 /** @internal */
-export function createTelegramActivityBridgeRuntime(deps) {
+export function createBaleActivityBridgeRuntime(deps) {
     let generationSequence = 0;
     let runtime;
     const getRuntime = () => runtime;
@@ -217,15 +217,15 @@ export function createTelegramActivityBridgeRuntime(deps) {
         hasPending: () => getRuntime()?.hasPending?.(),
         onSessionStart() {
             runtime?.onSessionShutdown();
-            runtime = createTelegramActivityRuntime({
+            runtime = createBaleActivityRuntime({
                 generation: `${deps.generation}:${++generationSequence}`,
-                dispatcher: createTelegramActivityDispatcher({
+                dispatcher: createBaleActivityDispatcher({
                     captureDrain: deps.captureDrain,
                     recordFailure: deps.recordFailure,
                 }),
                 observeEvent: deps.observeEvent,
                 recordObserverFailure: deps.recordFailure
-                    ? (event, error) => deps.recordFailure("@llblab/pi-telegram/proactive", event, error)
+                    ? (event, error) => deps.recordFailure("@llblab/pi-bale/proactive", event, error)
                     : undefined,
                 now: deps.now,
             });
@@ -279,7 +279,7 @@ export function createTelegramActivityBridgeRuntime(deps) {
     };
 }
 /** @internal */
-export function createTelegramActivityRuntime(deps) {
+export function createBaleActivityRuntime(deps) {
     const now = deps.now ?? Date.now;
     let nextActivityNumber = 0;
     let activityId;
@@ -292,20 +292,20 @@ export function createTelegramActivityRuntime(deps) {
     let compactionInProgress = false;
     let compactionOwnedActivity = false;
     let uiPromptInProgress = false;
-    const ensureActivity = (activeTelegramTarget) => {
+    const ensureActivity = (activeBaleTarget) => {
         if (activityId)
             return activityId;
         nextActivityNumber += 1;
         activityId = `${deps.generation}:${nextActivityNumber}`;
-        activitySource = activeTelegramTarget
-            ? "telegram"
+        activitySource = activeBaleTarget
+            ? "bale"
             : pendingInputSource === "interactive" || pendingInputSource === "rpc"
                 ? "local"
                 : pendingInputSource === "extension"
                     ? "autonomous"
                     : "unknown";
-        activityTarget = activeTelegramTarget
-            ? cloneActivityTarget(activeTelegramTarget)
+        activityTarget = activeBaleTarget
+            ? cloneActivityTarget(activeBaleTarget)
             : undefined;
         sequence = 0;
         pendingInputSource = "unknown";
@@ -370,11 +370,11 @@ export function createTelegramActivityRuntime(deps) {
         recordInputSource(source) {
             pendingInputSource = source;
         },
-        onAgentStart(activeTelegramTarget, replyToMessageId) {
+        onAgentStart(activeBaleTarget, replyToMessageId) {
             abandonCompaction();
-            ensureActivity(activeTelegramTarget);
+            ensureActivity(activeBaleTarget);
             activityReplyToMessageId =
-                activitySource === "telegram" ? replyToMessageId : undefined;
+                activitySource === "bale" ? replyToMessageId : undefined;
             emit({ type: "agent-start" });
         },
         onAssistantEvent(event) {
@@ -493,7 +493,7 @@ export function createTelegramActivityRuntime(deps) {
         },
     };
 }
-export function createTelegramActivityPublicationRuntime(deps = {}) {
+export function createBaleActivityPublicationRuntime(deps = {}) {
     let generation = 0;
     let tail = Promise.resolve();
     let outstanding = 0, unconfirmed = false;
@@ -573,13 +573,13 @@ export function createTelegramActivityPublicationRuntime(deps = {}) {
         },
     };
 }
-export function createTelegramAssistantOutputRuntime(deps) {
+export function createBaleAssistantOutputRuntime(deps) {
     let generation = 0;
     let running = false;
     let tail = Promise.resolve();
     const admitted = new Set();
-    const admittedTelegramIntermediateText = new Set();
-    const isEligibleEvent = (event) => (event.source === "telegram" && event.placement === "intermediate") ||
+    const admittedBaleIntermediateText = new Set();
+    const isEligibleEvent = (event) => (event.source === "bale" && event.placement === "intermediate") ||
         event.source === "local" ||
         event.source === "autonomous" ||
         event.source === "unknown";
@@ -588,11 +588,11 @@ export function createTelegramAssistantOutputRuntime(deps) {
             generation += 1;
             running = true;
             admitted.clear();
-            admittedTelegramIntermediateText.clear();
+            admittedBaleIntermediateText.clear();
             tail = Promise.resolve();
         },
         beginTurn() {
-            admittedTelegramIntermediateText.clear();
+            admittedBaleIntermediateText.clear();
         },
         accept(event) {
             if (!running || !isEligibleEvent(event) || !event.text.trim())
@@ -601,8 +601,8 @@ export function createTelegramAssistantOutputRuntime(deps) {
             if (admitted.has(key))
                 return;
             admitted.add(key);
-            if (event.source === "telegram" && event.placement === "intermediate") {
-                admittedTelegramIntermediateText.add(event.text.trim());
+            if (event.source === "bale" && event.placement === "intermediate") {
+                admittedBaleIntermediateText.add(event.text.trim());
             }
             const admittedGeneration = generation;
             const admittedAuthority = deps.captureAuthority?.();
@@ -628,8 +628,8 @@ export function createTelegramAssistantOutputRuntime(deps) {
                 }
             }).finally(() => preparation?.settle());
         },
-        hasAdmittedTelegramIntermediate(text) {
-            return admittedTelegramIntermediateText.has(text.trim());
+        hasAdmittedBaleIntermediate(text) {
+            return admittedBaleIntermediateText.has(text.trim());
         },
         waitForIdle() {
             return tail;
@@ -638,7 +638,7 @@ export function createTelegramAssistantOutputRuntime(deps) {
             generation += 1;
             running = false;
             admitted.clear();
-            admittedTelegramIntermediateText.clear();
+            admittedBaleIntermediateText.clear();
         },
     };
 }

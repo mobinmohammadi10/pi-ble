@@ -1,12 +1,12 @@
 /**
- * Telegram status rendering helpers
- * Zones: telegram ui, pi agent diagnostics, tui
+ * Bale status rendering helpers
+ * Zones: bale ui, pi agent diagnostics, tui
  * Owns status summaries, redacted diagnostics, projection lifecycle and compact connection-failure copy
  * Excludes canonical state, transport admission and filesystem policy
  */
 import { isDeepStrictEqual } from "node:util";
 /** UI copy is allowlisted; raw exception text belongs only in redacted diagnostics. */
-export function formatTelegramConnectionFailure(error) {
+export function formatBaleConnectionFailure(error) {
     const message = error instanceof Error
         ? error.message
         : typeof error === "string"
@@ -19,42 +19,42 @@ export function formatTelegramConnectionFailure(error) {
         ? error.code
         : undefined;
     if (status === 401)
-        return "Telegram token rejected. Run /telegram-setup.";
+        return "Bale token rejected. Run /bale-setup.";
     if (status === 403)
-        return "Telegram access denied. Check /telegram-status --debug.";
+        return "Bale access denied. Check /bale-status --debug.";
     if ((typeof code === "string" &&
         ["ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "ECONNRESET"].includes(code)) ||
         /network unavailable|fetch failed/i.test(message)) {
-        return "Telegram network unavailable. Retry /telegram-connect.";
+        return "Bale network unavailable. Retry /bale-connect.";
     }
     if (/Workspace slots?.*(?:unavailable|exhausted)|no free.*slot/i.test(message)) {
-        return "No Telegram slot available. Check /telegram-status --debug.";
+        return "No Bale slot available. Check /bale-status --debug.";
     }
     if (code === "incompatible-protocol" ||
         /protocol.*(?:incompatible|mismatch)|incompatible.*protocol/i.test(message)) {
-        return "Telegram instances are incompatible. Update them together.";
+        return "Bale instances are incompatible. Update them together.";
     }
     if (/unsupported.*(?:journal|version)|(?:journal|version).*unsupported/i.test(message)) {
-        return "Telegram state version unsupported. Use a compatible runtime.";
+        return "Bale state version unsupported. Use a compatible runtime.";
     }
     if (/follower registration failed|active in another Pi instance/i.test(message)) {
-        return "Telegram leader is active but unavailable. Check /telegram-status --debug.";
+        return "Bale leader is active but unavailable. Check /bale-status --debug.";
     }
     if (/unfinished Thread creation does not match/i.test(message)) {
-        return "Telegram Thread creation is unresolved. Check /telegram-status --debug.";
+        return "Bale Thread creation is unresolved. Check /bale-status --debug.";
     }
-    return "Telegram connection failed. Check /telegram-status --debug.";
+    return "Bale connection failed. Check /bale-status --debug.";
 }
-const TELEGRAM_STATUS_DEFAULT_PROFILE_NAME = "default";
-const TELEGRAM_STATUS_LINE_PROVIDER_REGISTRY_KEY = "__piTelegramStatusLineProviders__";
-const MAX_RECENT_TELEGRAM_RUNTIME_EVENTS = 10;
-const MAX_TELEGRAM_RUNTIME_EVENT_MESSAGE_LENGTH = 1000;
-const MAX_TELEGRAM_RUNTIME_EVENT_DETAIL_LENGTH = 1000;
+const BALE_STATUS_DEFAULT_PROFILE_NAME = "default";
+const BALE_STATUS_LINE_PROVIDER_REGISTRY_KEY = "__piBaleStatusLineProviders__";
+const MAX_RECENT_BALE_RUNTIME_EVENTS = 10;
+const MAX_BALE_RUNTIME_EVENT_MESSAGE_LENGTH = 1000;
+const MAX_BALE_RUNTIME_EVENT_DETAIL_LENGTH = 1000;
 /**
  * Project a config store into the status view without moving token-reference
  * resolution into this structural leaf domain.
  */
-export function createTelegramBridgeStatusConfigGetter(source) {
+export function createBaleBridgeStatusConfigGetter(source) {
     return () => {
         const config = source.get();
         return {
@@ -66,18 +66,18 @@ export function createTelegramBridgeStatusConfigGetter(source) {
         };
     };
 }
-function truncateTelegramRuntimeEventText(text, maxLength) {
+function truncateBaleRuntimeEventText(text, maxLength) {
     if (text.length <= maxLength)
         return text;
     return `${text.slice(0, maxLength).trimEnd()}… [truncated ${text.length - maxLength} chars]`;
 }
-function redactTelegramRuntimeText(text, botToken, maxLength) {
+function redactBaleRuntimeText(text, botToken, maxLength) {
     const redacted = botToken
         ? text.split(botToken).join("<redacted-token>")
         : text;
-    return truncateTelegramRuntimeEventText(redacted, maxLength);
+    return truncateBaleRuntimeEventText(redacted, maxLength);
 }
-function normalizeTelegramRuntimeEventDetails(details, botToken) {
+function normalizeBaleRuntimeEventDetails(details, botToken) {
     if (!details)
         return undefined;
     const normalized = {};
@@ -85,7 +85,7 @@ function normalizeTelegramRuntimeEventDetails(details, botToken) {
         if (value === undefined)
             continue;
         if (typeof value === "string") {
-            normalized[key] = redactTelegramRuntimeText(value, botToken, MAX_TELEGRAM_RUNTIME_EVENT_DETAIL_LENGTH);
+            normalized[key] = redactBaleRuntimeText(value, botToken, MAX_BALE_RUNTIME_EVENT_DETAIL_LENGTH);
             continue;
         }
         if (typeof value === "number" || typeof value === "boolean") {
@@ -96,55 +96,55 @@ function normalizeTelegramRuntimeEventDetails(details, botToken) {
             normalized[key] = null;
             continue;
         }
-        normalized[key] = redactTelegramRuntimeText(String(value), botToken, MAX_TELEGRAM_RUNTIME_EVENT_DETAIL_LENGTH);
+        normalized[key] = redactBaleRuntimeText(String(value), botToken, MAX_BALE_RUNTIME_EVENT_DETAIL_LENGTH);
     }
     return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
-function getTelegramRuntimeEventMessage(input) {
+function getBaleRuntimeEventMessage(input) {
     if (input.message !== undefined)
         return input.message;
     if (input.error instanceof Error)
         return input.error.message;
     return String(input.error);
 }
-export function recordStructuredTelegramRuntimeEvent(events, input, options) {
-    const details = normalizeTelegramRuntimeEventDetails(input.details, options.botToken);
+export function recordStructuredBaleRuntimeEvent(events, input, options) {
+    const details = normalizeBaleRuntimeEventDetails(input.details, options.botToken);
     events.push({
         at: options.now ?? Date.now(),
         category: input.category,
-        message: redactTelegramRuntimeText(getTelegramRuntimeEventMessage(input), options.botToken, MAX_TELEGRAM_RUNTIME_EVENT_MESSAGE_LENGTH),
+        message: redactBaleRuntimeText(getBaleRuntimeEventMessage(input), options.botToken, MAX_BALE_RUNTIME_EVENT_MESSAGE_LENGTH),
         ...(details ? { details } : {}),
     });
     while (events.length > options.maxEvents) {
         events.shift();
     }
 }
-function getOrCreateTelegramStatusLineProviderRegistry() {
-    const existing = globalThis[TELEGRAM_STATUS_LINE_PROVIDER_REGISTRY_KEY];
+function getOrCreateBaleStatusLineProviderRegistry() {
+    const existing = globalThis[BALE_STATUS_LINE_PROVIDER_REGISTRY_KEY];
     if (existing instanceof Map)
         return existing;
     const registry = new Map();
-    globalThis[TELEGRAM_STATUS_LINE_PROVIDER_REGISTRY_KEY] = registry;
+    globalThis[BALE_STATUS_LINE_PROVIDER_REGISTRY_KEY] = registry;
     return registry;
 }
 /**
- * Register a compact extension-provided line for the Telegram status menu.
+ * Register a compact extension-provided line for the Bale status menu.
  *
  * Providers are synchronous and should return undefined when their line is not
  * relevant for the active model. Errors are isolated so optional extension
- * status cannot break the core Telegram menu.
+ * status cannot break the core Bale menu.
  */
-export function registerTelegramStatusLineProvider(provider, options) {
-    const registry = getOrCreateTelegramStatusLineProviderRegistry();
+export function registerBaleStatusLineProvider(provider, options) {
+    const registry = getOrCreateBaleStatusLineProviderRegistry();
     registry.set(options.id, provider);
     return () => {
         if (registry.get(options.id) === provider)
             registry.delete(options.id);
     };
 }
-function getTelegramStatusLineProviderResults(ctx) {
+function getBaleStatusLineProviderResults(ctx) {
     const results = [];
-    const registry = getOrCreateTelegramStatusLineProviderRegistry();
+    const registry = getOrCreateBaleStatusLineProviderRegistry();
     for (const provider of registry.values()) {
         try {
             const result = provider(ctx);
@@ -158,16 +158,16 @@ function getTelegramStatusLineProviderResults(ctx) {
     }
     return results;
 }
-export function clearTelegramStatusLineProviders() {
-    getOrCreateTelegramStatusLineProviderRegistry().clear();
+export function clearBaleStatusLineProviders() {
+    getOrCreateBaleStatusLineProviderRegistry().clear();
 }
-export function createTelegramRuntimeEventRecorder(options) {
+export function createBaleRuntimeEventRecorder(options) {
     const events = [];
     return {
         record: (category, error, details) => {
-            recordStructuredTelegramRuntimeEvent(events, { category, error, details }, {
+            recordStructuredBaleRuntimeEvent(events, { category, error, details }, {
                 botToken: options.getBotToken(),
-                maxEvents: options.maxEvents ?? MAX_RECENT_TELEGRAM_RUNTIME_EVENTS,
+                maxEvents: options.maxEvents ?? MAX_RECENT_BALE_RUNTIME_EVENTS,
                 now: options.now?.(),
             });
         },
@@ -177,13 +177,13 @@ export function createTelegramRuntimeEventRecorder(options) {
         },
     };
 }
-function formatTelegramRuntimeEventCategory(event) {
+function formatBaleRuntimeEventCategory(event) {
     const method = event.details?.method;
     return typeof method === "string"
         ? `${event.category}:${method}`
         : event.category;
 }
-function formatTelegramRuntimeEventDetails(event) {
+function formatBaleRuntimeEventDetails(event) {
     if (!event.details)
         return "";
     const details = Object.entries(event.details)
@@ -191,16 +191,16 @@ function formatTelegramRuntimeEventDetails(event) {
         .map(([key, value]) => `${key}=${JSON.stringify(value)}`);
     return details.length > 0 ? ` (${details.join(", ")})` : "";
 }
-function formatTelegramRuntimeEventSummary(event) {
-    return `${formatTelegramRuntimeEventCategory(event)}: ${event.message}${formatTelegramRuntimeEventDetails(event)}`;
+function formatBaleRuntimeEventSummary(event) {
+    return `${formatBaleRuntimeEventCategory(event)}: ${event.message}${formatBaleRuntimeEventDetails(event)}`;
 }
-function formatTelegramRuntimeEvent(event) {
-    return `${new Date(event.at).toISOString()} ${formatTelegramRuntimeEventSummary(event)}`;
+function formatBaleRuntimeEvent(event) {
+    return `${new Date(event.at).toISOString()} ${formatBaleRuntimeEventSummary(event)}`;
 }
-function buildTelegramRuntimeEventSummary(events) {
+function buildBaleRuntimeEventSummary(events) {
     const counts = new Map();
     for (const event of events) {
-        const category = formatTelegramRuntimeEventCategory(event);
+        const category = formatBaleRuntimeEventCategory(event);
         counts.set(category, (counts.get(category) ?? 0) + 1);
     }
     return Array.from(counts.entries())
@@ -208,19 +208,19 @@ function buildTelegramRuntimeEventSummary(events) {
         .map(([category, count]) => `${category}=${count}`)
         .join(", ");
 }
-export function buildTelegramRuntimeEventLines(events) {
+export function buildBaleRuntimeEventLines(events) {
     if (events.length === 0)
         return ["recent runtime events: none"];
     return [
         "recent runtime events:",
-        `- summary: ${buildTelegramRuntimeEventSummary(events)}`,
+        `- summary: ${buildBaleRuntimeEventSummary(events)}`,
         ...events
             .slice()
             .reverse()
-            .map((event) => `- ${formatTelegramRuntimeEvent(event)}`),
+            .map((event) => `- ${formatBaleRuntimeEvent(event)}`),
     ];
 }
-export function createTelegramStatusHtmlBuilder(deps) {
+export function createBaleStatusHtmlBuilder(deps) {
     return (ctx) => buildStatusHtml({ ...ctx, isCompactionInProgress: deps.isCompactionInProgress }, deps.getActiveModel(ctx), deps.getBridgeStatusLineState?.());
 }
 function resolveStatusBarTheme(ctx) {
@@ -232,21 +232,21 @@ function resolveStatusBarTheme(ctx) {
         return undefined;
     }
 }
-export function createTelegramStatusRuntime(deps) {
-    const statusKey = deps.statusKey ?? "telegram";
+export function createBaleStatusRuntime(deps) {
+    const statusKey = deps.statusKey ?? "bale";
     return {
         updateStatus: (ctx, error) => {
             const theme = resolveStatusBarTheme(ctx);
             if (!theme)
                 return;
-            ctx.ui.setStatus(statusKey, buildTelegramStatusBarText(theme, deps.getStatusBarState(ctx, error)));
+            ctx.ui.setStatus(statusKey, buildBaleStatusBarText(theme, deps.getStatusBarState(ctx, error)));
         },
-        getStatusLines: (options) => buildTelegramBridgeStatusLines(deps.getBridgeStatusLineState(), options),
+        getStatusLines: (options) => buildBaleBridgeStatusLines(deps.getBridgeStatusLineState(), options),
         getStatusState: deps.getBridgeStatusLineState,
     };
 }
-export function createTelegramBridgeStatusRuntime(deps) {
-    return createTelegramStatusRuntime({
+export function createBaleBridgeStatusRuntime(deps) {
+    return createBaleStatusRuntime({
         statusKey: deps.statusKey,
         getStatusBarState: (_ctx, error) => {
             const config = deps.getConfig();
@@ -276,7 +276,7 @@ export function createTelegramBridgeStatusRuntime(deps) {
                     hasPendingModelSwitch ||
                     activeToolExecutions > 0 ||
                     queuedItemCount > 0,
-                processingStatus: getTelegramStatusBarProcessingStatus({
+                processingStatus: getBaleStatusBarProcessingStatus({
                     hasActiveTurn,
                     hasPendingDispatch,
                     hasPendingModelSwitch,
@@ -292,7 +292,7 @@ export function createTelegramBridgeStatusRuntime(deps) {
             const config = deps.getConfig();
             const botThreadMode = deps.getBotThreadMode?.();
             const activeProfileName = deps.getActiveProfileName
-                ? (deps.getActiveProfileName() ?? TELEGRAM_STATUS_DEFAULT_PROFILE_NAME)
+                ? (deps.getActiveProfileName() ?? BALE_STATUS_DEFAULT_PROFILE_NAME)
                 : undefined;
             return {
                 hasBotToken: config.botHasToken ?? Boolean(config.botToken),
@@ -335,7 +335,7 @@ export function createTelegramBridgeStatusRuntime(deps) {
         },
     });
 }
-export function createTelegramRuntimeLogScope(input) {
+export function createBaleRuntimeLogScope(input) {
     return {
         instanceId: input.instanceId,
         role: input.state.busRole ?? "classic-or-disconnected",
@@ -344,7 +344,7 @@ export function createTelegramRuntimeLogScope(input) {
         lockState: input.state.lockState,
     };
 }
-export function createTelegramStatusSnapshot(state) {
+export function createBaleStatusSnapshot(state) {
     return {
         runtime: {
             busRole: state.busRole,
@@ -398,12 +398,12 @@ function isRuntimeProjection(value) {
             !Array.isArray(record[key])));
 }
 /** Observational runtime storage only; Workspace, admission, transport, logs and recovery remain with their owners. */
-export function createTelegramRuntimeProjectionStore(options) {
+export function createBaleRuntimeProjectionStore(options) {
     let publicationQueue = Promise.resolve();
     const { getPath, getProfile: readProfile, captureAuthority } = options;
     const { read, publish } = options.storage;
     const getNowMs = options.getNowMs ?? Date.now;
-    const getProfile = () => readProfile() || TELEGRAM_STATUS_DEFAULT_PROFILE_NAME;
+    const getProfile = () => readProfile() || BALE_STATUS_DEFAULT_PROFILE_NAME;
     return {
         read() {
             try {
@@ -431,7 +431,7 @@ export function createTelegramRuntimeProjectionStore(options) {
                 diagnostics: snapshot.diagnostics,
             }));
             if (!isRuntimeProjection({ ...semantic, writtenAtMs: 0 }))
-                throw new Error("Telegram runtime projection is malformed.");
+                throw new Error("Bale runtime projection is malformed.");
             delete semantic.diagnostics.recentRuntimeEvents;
             // Poll-cycle timestamps change on every response; live status renders them from memory,
             // so persisting them would rewrite state.json each poll for no reader.
@@ -465,7 +465,7 @@ export function createTelegramRuntimeProjectionStore(options) {
                         return { value: current, changed: false };
                     const writtenAtMs = getNowMs();
                     if (!Number.isSafeInteger(writtenAtMs) || writtenAtMs < 0)
-                        throw new Error("Telegram runtime projection timestamp is invalid.");
+                        throw new Error("Bale runtime projection timestamp is invalid.");
                     return { value: { ...semantic, writtenAtMs }, changed: true };
                 }, isCurrent) === true);
             });
@@ -474,8 +474,8 @@ export function createTelegramRuntimeProjectionStore(options) {
         },
     };
 }
-const TELEGRAM_DIAGNOSTICS_SNAPSHOT_COALESCE_MS = 100;
-export function createTelegramRuntimeDiagnosticsSnapshotScheduler(deps) {
+const BALE_DIAGNOSTICS_SNAPSHOT_COALESCE_MS = 100;
+export function createBaleRuntimeDiagnosticsSnapshotScheduler(deps) {
     const setTimer = deps.setTimer ?? setTimeout;
     const clearTimer = deps.clearTimer ??
         ((handle) => clearTimeout(handle));
@@ -561,7 +561,7 @@ export function createTelegramRuntimeDiagnosticsSnapshotScheduler(deps) {
                 arm();
             });
             persistPromise = tracked;
-        }, TELEGRAM_DIAGNOSTICS_SNAPSHOT_COALESCE_MS);
+        }, BALE_DIAGNOSTICS_SNAPSHOT_COALESCE_MS);
         timer = { token, handle };
         if (typeof handle !== "number")
             handle.unref?.();
@@ -589,7 +589,7 @@ export function createTelegramRuntimeDiagnosticsSnapshotScheduler(deps) {
         },
     });
 }
-export function getTelegramStatusBarProcessingStatus(state) {
+export function getBaleStatusBarProcessingStatus(state) {
     if (state.hasPendingModelSwitch)
         return "model";
     if (state.hasActiveTurn || state.activeToolExecutions > 0)
@@ -600,11 +600,11 @@ export function getTelegramStatusBarProcessingStatus(state) {
         return "queued";
     return undefined;
 }
-function getTelegramStatusBarLabel(state) {
-    return state.instanceThreadName?.trim() || "telegram";
+function getBaleStatusBarLabel(state) {
+    return state.instanceThreadName?.trim() || "bale";
 }
-export function buildTelegramStatusBarText(theme, state) {
-    const label = theme.fg("accent", getTelegramStatusBarLabel(state));
+export function buildBaleStatusBarText(theme, state) {
+    const label = theme.fg("accent", getBaleStatusBarLabel(state));
     const queued = state.queuedStatus ? theme.fg("warning", state.queuedStatus) : "";
     if (!state.hasBotToken)
         return `${label} ${theme.fg("muted", "not configured")}${queued}`;
@@ -629,27 +629,27 @@ export function buildTelegramStatusBarText(theme, state) {
         return `${label} ${theme.fg("success", "leader")}${queued}`;
     return `${label} ${theme.fg("success", "connected")}${queued}`;
 }
-function formatTelegramBridgeBotStatus(state) {
+function formatBaleBridgeBotStatus(state) {
     if (state.botUsername)
         return `@${state.botUsername}`;
     if (state.hasBotToken)
         return "unknown";
     return state.botTokenDiagnostic ?? "not configured";
 }
-function formatTelegramStatusTarget(target) {
+function formatBaleStatusTarget(target) {
     if (!target)
         return "";
     return target.threadId === undefined
         ? ` target ${target.chatId}`
         : ` target ${target.chatId}:${target.threadId}`;
 }
-function formatTelegramThreadStatusLabel(input) {
+function formatBaleThreadStatusLabel(input) {
     const threadName = input.threadName?.trim();
     if (threadName)
         return threadName;
     return input.slot ? `[${input.slot}]` : "";
 }
-function formatTelegramBusProtocolIdentity(protocol) {
+function formatBaleBusProtocolIdentity(protocol) {
     if (!protocol)
         return "";
     const capabilities = protocol.capabilities.length > 0
@@ -657,7 +657,7 @@ function formatTelegramBusProtocolIdentity(protocol) {
         : " capabilities=none";
     return ` protocol=v${protocol.protocolVersion} build=${protocol.runtimeBuild}${capabilities}`;
 }
-function buildTelegramBusFollowerLines(state) {
+function buildBaleBusFollowerLines(state) {
     const followers = state.busFollowers ?? [];
     if (followers.length === 0)
         return [];
@@ -668,26 +668,26 @@ function buildTelegramBusFollowerLines(state) {
         `- followers: ${followers.length}`,
         ...followers.map((follower) => {
             const ageSeconds = Math.max(0, Math.round((nowMs - follower.lastHeartbeatMs) / 1000));
-            const label = formatTelegramThreadStatusLabel(follower);
+            const label = formatBaleThreadStatusLabel(follower);
             const labelSuffix = label ? ` ${label}` : "";
             const statusLabel = follower.status ? ` (${follower.status})` : "";
             const cwd = follower.cwd ? ` ${follower.cwd}` : "";
-            const target = formatTelegramStatusTarget(follower.target);
-            const protocol = formatTelegramBusProtocolIdentity(follower.protocol);
+            const target = formatBaleStatusTarget(follower.target);
+            const protocol = formatBaleBusProtocolIdentity(follower.protocol);
             return `- ${follower.instanceId}:${labelSuffix} heartbeat ${ageSeconds}s ago${statusLabel}${target}${cwd}${protocol}`;
         }),
     ];
 }
-function buildTelegramLocalBusLines(state, options = {}) {
+function buildBaleLocalBusLines(state, options = {}) {
     const localBus = state.localBus;
     if (!localBus)
         return [];
-    const target = formatTelegramStatusTarget(localBus.followerTarget);
-    const label = formatTelegramThreadStatusLabel({
+    const target = formatBaleStatusTarget(localBus.followerTarget);
+    const label = formatBaleThreadStatusLabel({
         slot: localBus.followerSlot,
         threadName: localBus.followerThreadName,
     });
-    const protocol = formatTelegramBusProtocolIdentity(localBus.leaderProtocol);
+    const protocol = formatBaleBusProtocolIdentity(localBus.leaderProtocol);
     const followerLine = `- follower registered: ${localBus.followerRegistered ? "yes" : "no"}${label ? ` ${label}` : ""}${target}${protocol}`;
     const lines = ["", "local bus:", followerLine];
     if (options.verbose) {
@@ -706,7 +706,7 @@ function buildTelegramLocalBusLines(state, options = {}) {
     }
     return lines;
 }
-function buildTelegramSyncSliceLines(state) {
+function buildBaleSyncSliceLines(state) {
     const syncState = state.syncState;
     if (!syncState || Object.keys(syncState).length === 0)
         return [];
@@ -722,7 +722,7 @@ function buildTelegramSyncSliceLines(state) {
         }),
     ];
 }
-function buildTelegramThreadReconciliationLines(state) {
+function buildBaleThreadReconciliationLines(state) {
     const reconciliation = state.threadReconciliation;
     if (!reconciliation)
         return [];
@@ -735,7 +735,7 @@ function buildTelegramThreadReconciliationLines(state) {
         `- counts: pending=${reconciliation.pendingProvisionCount}, sync=${reconciliation.syncActionCount}, cleanup=${reconciliation.cleanupActionCount}`,
     ];
 }
-function buildTelegramTopicTargetDiagnosticLines(state) {
+function buildBaleTopicTargetDiagnosticLines(state) {
     const activeTargets = (state.topicTargets ?? []).filter((record) => !!record.instanceId &&
         (record.status === "active" || record.status === "starting"));
     const reservations = state.threadReservations ?? [];
@@ -758,15 +758,15 @@ function buildTelegramTopicTargetDiagnosticLines(state) {
         .map(([instanceId, records]) => {
         const targets = records
             .map((record) => {
-            const label = formatTelegramThreadStatusLabel(record);
-            return `${label}${formatTelegramStatusTarget(record.target) || " unknown"}`.trim();
+            const label = formatBaleThreadStatusLabel(record);
+            return `${label}${formatBaleStatusTarget(record.target) || " unknown"}`.trim();
         })
             .join(", ");
         return `- duplicate ${instanceId}: ${records.length} active threads ${targets}`;
     });
     const twinLines = activeTargets.map((record) => {
-        const label = formatTelegramThreadStatusLabel(record);
-        const target = formatTelegramStatusTarget(record.target) || " unknown";
+        const label = formatBaleThreadStatusLabel(record);
+        const target = formatBaleStatusTarget(record.target) || " unknown";
         const sync = record.syncStatus ? ` sync=${record.syncStatus}` : "";
         const observed = record.lastSyncObservedAtMs
             ? ` observed=${new Date(record.lastSyncObservedAtMs).toISOString()}`
@@ -784,7 +784,7 @@ function buildTelegramTopicTargetDiagnosticLines(state) {
     });
     const reservationLines = reservations.map((reservation) => {
         const slot = reservation.slot ? `[${reservation.slot}]` : "";
-        const target = formatTelegramStatusTarget(reservation.target) || " unknown";
+        const target = formatBaleStatusTarget(reservation.target) || " unknown";
         const reason = reservation.reason ? ` reason=${reservation.reason}` : "";
         const instance = reservation.instanceId
             ? ` instance=${reservation.instanceId}`
@@ -796,7 +796,7 @@ function buildTelegramTopicTargetDiagnosticLines(state) {
     });
     const observationLines = observations.map((observation) => {
         const slot = observation.slot ? `[${observation.slot}]` : "";
-        const target = formatTelegramStatusTarget(observation.target) || " unknown";
+        const target = formatBaleStatusTarget(observation.target) || " unknown";
         const observed = ` observed=${new Date(observation.observedAtMs).toISOString()}`;
         const instance = observation.instanceId
             ? ` instance=${observation.instanceId}`
@@ -818,11 +818,11 @@ function buildTelegramTopicTargetDiagnosticLines(state) {
         ...observationLines,
     ];
 }
-function buildTelegramBridgeCompactThreadLines(state) {
+function buildBaleBridgeCompactThreadLines(state) {
     const activeTargets = (state.topicTargets ?? []).filter((record) => !!record.instanceId &&
         (record.status === "active" || record.status === "starting"));
     const activeLabels = activeTargets
-        .map(formatTelegramThreadStatusLabel)
+        .map(formatBaleThreadStatusLabel)
         .filter((label) => label.length > 0);
     const followers = state.busFollowers ?? [];
     const reservations = state.threadReservations ?? [];
@@ -845,7 +845,7 @@ function buildTelegramBridgeCompactThreadLines(state) {
         lines.push(`- sync issues: ${syncIssueCount}`);
     return lines;
 }
-function formatTelegramPollingLifecycle(state) {
+function formatBalePollingLifecycle(state) {
     const lifecycle = state.pollingActive ? "running" : "stopped";
     if (!state.polling)
         return lifecycle;
@@ -855,7 +855,7 @@ function formatTelegramPollingLifecycle(state) {
         ? `${lifecycle} (${state.polling.stopReason})`
         : lifecycle;
 }
-function buildTelegramPollingDiagnosticLines(polling) {
+function buildBalePollingDiagnosticLines(polling) {
     if (!polling)
         return [];
     return [
@@ -880,13 +880,13 @@ function buildTelegramPollingDiagnosticLines(polling) {
         ...(polling.stopReason ? [`- stop reason: ${polling.stopReason}`] : []),
     ];
 }
-function formatTelegramInboundWorkerState(worker) {
+function formatBaleInboundWorkerState(worker) {
     if (!worker)
         return "not started";
     const depth = worker.journalEntryCount;
     return `${worker.phase} (depth=${depth}, queued=${worker.queuedClaimCount}, foreign=${worker.foreignQueuedCount}, deferred=${worker.deferredClaimCount}, retry=${worker.retryWaitCount}, failed=${worker.failedCount})`;
 }
-function buildTelegramInboundWorkerDiagnosticLines(worker) {
+function buildBaleInboundWorkerDiagnosticLines(worker) {
     if (!worker)
         return ["- state: not started"];
     return [
@@ -944,7 +944,7 @@ function buildTelegramInboundWorkerDiagnosticLines(worker) {
             : []),
     ];
 }
-function countTelegramQueueLanes(items) {
+function countBaleQueueLanes(items) {
     const counts = {
         control: 0,
         steer: 0,
@@ -955,8 +955,8 @@ function countTelegramQueueLanes(items) {
         counts[item.queueLane]++;
     return counts;
 }
-function buildTelegramBridgeCompactStatusLines(state) {
-    const { control: controlQueueCount, priority: priorityQueueCount, default: defaultQueueCount, steer: steerQueueCount, } = countTelegramQueueLanes(state.queuedItems);
+function buildBaleBridgeCompactStatusLines(state) {
+    const { control: controlQueueCount, priority: priorityQueueCount, default: defaultQueueCount, steer: steerQueueCount, } = countBaleQueueLanes(state.queuedItems);
     const queueLine = `- queued turns: ${state.queuedItems.length}${state.queuedItems.length > 0
         ? ` (control=${controlQueueCount}${steerQueueCount > 0 ? `, steer=${steerQueueCount}` : ""}, priority=${priorityQueueCount}, default=${defaultQueueCount})`
         : ""}`;
@@ -966,12 +966,12 @@ function buildTelegramBridgeCompactStatusLines(state) {
             ? "active"
             : "idle";
     const diagnosticsPaths = state.diagnosticPaths ?? {
-        state: "~/.pi/agent/tmp/pi-telegram/state.json",
-        logs: "~/.pi/agent/tmp/pi-telegram/logs.jsonl",
+        state: "~/.pi/agent/tmp/pi-bale/state.json",
+        logs: "~/.pi/agent/tmp/pi-bale/logs.jsonl",
     };
     return [
         "connection:",
-        `- bot: ${formatTelegramBridgeBotStatus(state)}`,
+        `- bot: ${formatBaleBridgeBotStatus(state)}`,
         ...(state.activeProfileName
             ? [`- profile: ${state.activeProfileName}`]
             : []),
@@ -987,10 +987,10 @@ function buildTelegramBridgeCompactStatusLines(state) {
         ...(state.lockState ? [`- owner: ${state.lockState}`] : []),
         "",
         "health:",
-        `- polling: ${formatTelegramPollingLifecycle(state)}`,
+        `- polling: ${formatBalePollingLifecycle(state)}`,
         ...(state.inboundWorker
             ? [
-                `- inbound worker: ${formatTelegramInboundWorkerState(state.inboundWorker)}`,
+                `- inbound worker: ${formatBaleInboundWorkerState(state.inboundWorker)}`,
             ]
             : []),
         `- state: ${executionState}`,
@@ -999,27 +999,27 @@ function buildTelegramBridgeCompactStatusLines(state) {
             ? [`- active tools: ${state.activeToolExecutions}`]
             : []),
         ...(state.pendingModelSwitch ? ["- pending model switch: yes"] : []),
-        ...buildTelegramBridgeCompactThreadLines(state),
-        ...buildTelegramBusFollowerLines(state),
-        ...buildTelegramLocalBusLines(state),
-        ...buildTelegramThreadReconciliationLines(state),
+        ...buildBaleBridgeCompactThreadLines(state),
+        ...buildBaleBusFollowerLines(state),
+        ...buildBaleLocalBusLines(state),
+        ...buildBaleThreadReconciliationLines(state),
         "",
         "diagnostics:",
         `- state: ${diagnosticsPaths.state}`,
         `- logs: ${diagnosticsPaths.logs}`,
-        "- full dump: /telegram-status --debug",
+        "- full dump: /bale-status --debug",
     ];
 }
-export function buildTelegramBridgeStatusLines(state, options = {}) {
+export function buildBaleBridgeStatusLines(state, options = {}) {
     if (options.verbose)
-        return buildTelegramBridgeDiagnosticStatusLines(state);
-    return buildTelegramBridgeCompactStatusLines(state);
+        return buildBaleBridgeDiagnosticStatusLines(state);
+    return buildBaleBridgeCompactStatusLines(state);
 }
-function buildTelegramBridgeDiagnosticStatusLines(state) {
-    const { control: controlQueueCount, priority: priorityQueueCount, default: defaultQueueCount, steer: steerQueueCount, } = countTelegramQueueLanes(state.queuedItems);
+function buildBaleBridgeDiagnosticStatusLines(state) {
+    const { control: controlQueueCount, priority: priorityQueueCount, default: defaultQueueCount, steer: steerQueueCount, } = countBaleQueueLanes(state.queuedItems);
     return [
         "connection:",
-        `- bot: ${formatTelegramBridgeBotStatus(state)}`,
+        `- bot: ${formatBaleBridgeBotStatus(state)}`,
         ...(state.activeProfileName
             ? [`- profile: ${state.activeProfileName}`]
             : []),
@@ -1031,7 +1031,7 @@ function buildTelegramBridgeDiagnosticStatusLines(state) {
             : []),
         ...(state.busRole ? [`- bus role: ${state.busRole}`] : []),
         ...(state.busProtocol
-            ? [`- bus${formatTelegramBusProtocolIdentity(state.busProtocol)}`]
+            ? [`- bus${formatBaleBusProtocolIdentity(state.busProtocol)}`]
             : []),
         ...(state.busLifecyclePhase
             ? [`- bus lifecycle: ${state.busLifecyclePhase}`]
@@ -1042,14 +1042,14 @@ function buildTelegramBridgeDiagnosticStatusLines(state) {
         ...(state.lockState ? [`- owner: ${state.lockState}`] : []),
         "",
         "polling:",
-        `- state: ${formatTelegramPollingLifecycle(state)}`,
-        ...buildTelegramPollingDiagnosticLines(state.polling),
+        `- state: ${formatBalePollingLifecycle(state)}`,
+        ...buildBalePollingDiagnosticLines(state.polling),
         `- last update id: ${state.lastUpdateId ?? "none"}`,
         "",
         ...(state.inboundWorker
             ? [
                 "inbound worker:",
-                ...buildTelegramInboundWorkerDiagnosticLines(state.inboundWorker),
+                ...buildBaleInboundWorkerDiagnosticLines(state.inboundWorker),
                 "",
             ]
             : []),
@@ -1063,13 +1063,13 @@ function buildTelegramBridgeDiagnosticStatusLines(state) {
         "queue:",
         `- queued turns: ${state.queuedItems.length}`,
         `- lanes: control=${controlQueueCount}${steerQueueCount > 0 ? `, steer=${steerQueueCount}` : ""}, priority=${priorityQueueCount}, default=${defaultQueueCount}`,
-        ...buildTelegramBusFollowerLines(state),
-        ...buildTelegramLocalBusLines(state, { verbose: true }),
-        ...buildTelegramTopicTargetDiagnosticLines(state),
-        ...buildTelegramThreadReconciliationLines(state),
-        ...buildTelegramSyncSliceLines(state),
+        ...buildBaleBusFollowerLines(state),
+        ...buildBaleLocalBusLines(state, { verbose: true }),
+        ...buildBaleTopicTargetDiagnosticLines(state),
+        ...buildBaleThreadReconciliationLines(state),
+        ...buildBaleSyncSliceLines(state),
         "",
-        ...buildTelegramRuntimeEventLines(state.recentRuntimeEvents),
+        ...buildBaleRuntimeEventLines(state.recentRuntimeEvents),
     ];
 }
 function formatTokens(count) {
@@ -1161,7 +1161,7 @@ function buildStatusSummary(ctx) {
         return "idle";
     return "unknown";
 }
-function buildTelegramStatusRoleSuffix(state) {
+function buildBaleStatusRoleSuffix(state) {
     if (state?.botThreadMode !== "enabled" || !state.busRole)
         return "";
     return ` @${state.busRole}`;
@@ -1172,7 +1172,7 @@ function buildStatusHtml(ctx, activeModel, bridgeStatus) {
         ? ctx.modelRegistry.isUsingOAuth(activeModel)
         : false;
     const lines = [
-        buildStatusRow("Status", `${buildStatusSummary(ctx)}${buildTelegramStatusRoleSuffix(bridgeStatus)}`),
+        buildStatusRow("Status", `${buildStatusSummary(ctx)}${buildBaleStatusRoleSuffix(bridgeStatus)}`),
     ];
     const usageSummary = buildUsageSummary(stats);
     const cacheSummary = buildCacheSummary(stats);
@@ -1187,7 +1187,7 @@ function buildStatusHtml(ctx, activeModel, bridgeStatus) {
         lines.push(buildStatusRow("Cost", costSummary));
     }
     lines.push(buildStatusRow("Context", buildContextSummary(ctx, activeModel)));
-    for (const row of getTelegramStatusLineProviderResults({ activeModel })) {
+    for (const row of getBaleStatusLineProviderResults({ activeModel })) {
         lines.push(buildStatusRow(row.label, row.value));
     }
     return lines.join("\n");

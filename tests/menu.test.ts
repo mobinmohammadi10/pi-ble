@@ -1,7 +1,7 @@
 /**
- * Regression tests for Telegram menu helpers
+ * Regression tests for Bale menu helpers
  * Covers inline model/status/thinking menu state, callbacks, and transport payloads
- * Zones: telegram ui, pi agent
+ * Zones: bale ui, pi agent
  */
 
 import assert from "node:assert/strict";
@@ -9,68 +9,68 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import type { TelegramInlineKeyboardMarkup } from "../lib/keyboard.ts";
+import type { BaleInlineKeyboardMarkup } from "../lib/keyboard.ts";
 
-import { createTelegramActivityVerbosityRuntime } from "../lib/activity-verbosity.ts";
+import { createBaleActivityVerbosityRuntime } from "../lib/activity-verbosity.ts";
 import {
-  createTelegramConfigControls,
-  createTelegramConfigStore,
+  createBaleConfigControls,
+  createBaleConfigStore,
 } from "../lib/config.ts";
-import { createTelegramQueueMenuRuntime } from "../lib/menu-queue.ts";
+import { createBaleQueueMenuRuntime } from "../lib/menu-queue.ts";
 import * as Queue from "../lib/queue.ts";
-import { createTelegramMenuDelivery } from "../lib/menu-model.ts";
+import { createBaleMenuDelivery } from "../lib/menu-model.ts";
 import {
-  buildTelegramSettingsMenuReplyMarkup,
+  buildBaleSettingsMenuReplyMarkup,
   buildTimeInjectionModeSettingsReplyMarkup,
   buildTimeInjectionModeSettingsText,
   buildVoiceReplyModeSettingsReplyMarkup,
   buildVoiceReplyModeSettingsText,
-  createTelegramSettingsMenuRuntime,
+  createBaleSettingsMenuRuntime,
 } from "../lib/menu-settings.ts";
 import {
-  applyTelegramModelPageSelection,
-  applyTelegramModelScopeSelection,
+  applyBaleModelPageSelection,
+  applyBaleModelScopeSelection,
   buildModelMenuReplyMarkup,
   buildModelPageMenuReplyMarkup,
   buildStatusReplyMarkup,
-  buildTelegramModelCallbackPlan,
-  buildTelegramModelMenuRenderPayload,
-  buildTelegramModelMenuState,
-  buildTelegramModelMenuStateRuntime,
-  buildTelegramModelPageMenuRenderPayload,
-  buildTelegramStatusMenuRenderPayload,
-  buildTelegramThinkingMenuRenderPayload,
+  buildBaleModelCallbackPlan,
+  buildBaleModelMenuRenderPayload,
+  buildBaleModelMenuState,
+  buildBaleModelMenuStateRuntime,
+  buildBaleModelPageMenuRenderPayload,
+  buildBaleStatusMenuRenderPayload,
+  buildBaleThinkingMenuRenderPayload,
   buildThinkingMenuReplyMarkup,
   buildThinkingMenuText,
-  createTelegramMenuActionRuntime,
-  createTelegramMenuCallbackHandler,
-  createTelegramMenuCallbackHandlerForContext,
-  createTelegramModelMenuRuntime,
-  createTelegramModelMenuStateBuilder,
+  createBaleMenuActionRuntime,
+  createBaleMenuCallbackHandler,
+  createBaleMenuCallbackHandlerForContext,
+  createBaleModelMenuRuntime,
+  createBaleModelMenuStateBuilder,
   formatScopedModelButtonText,
   getModelMenuItems,
-  getStoredTelegramModelMenuState,
-  getTelegramModelMenuPage,
-  getTelegramModelSelection,
-  handleStoredTelegramMenuCallback,
-  handleTelegramMenuCallbackEntry,
-  handleTelegramMenuCallbackRuntime,
-  handleTelegramModelMenuCallbackAction,
-  handleTelegramStatusMenuCallbackAction,
-  handleTelegramThinkingMenuCallbackAction,
+  getStoredBaleModelMenuState,
+  getBaleModelMenuPage,
+  getBaleModelSelection,
+  handleStoredBaleMenuCallback,
+  handleBaleMenuCallbackEntry,
+  handleBaleMenuCallbackRuntime,
+  handleBaleModelMenuCallbackAction,
+  handleBaleStatusMenuCallbackAction,
+  handleBaleThinkingMenuCallbackAction,
   MODEL_MENU_TITLE,
   MODEL_PAGE_MENU_TITLE,
-  openTelegramModelMenu,
-  openTelegramStatusMenu,
-  resolveCachedTelegramModelMenuInputs,
-  sendTelegramModelMenuMessage,
-  sendTelegramStatusMessage,
-  storeTelegramModelMenuState,
-  TELEGRAM_MODEL_PAGE_SIZE,
-  type TelegramModelMenuState,
-  updateTelegramModelMenuMessage,
-  updateTelegramStatusMessage,
-  updateTelegramThinkingMenuMessage,
+  openBaleModelMenu,
+  openBaleStatusMenu,
+  resolveCachedBaleModelMenuInputs,
+  sendBaleModelMenuMessage,
+  sendBaleStatusMessage,
+  storeBaleModelMenuState,
+  BALE_MODEL_PAGE_SIZE,
+  type BaleModelMenuState,
+  updateBaleModelMenuMessage,
+  updateBaleStatusMessage,
+  updateBaleThinkingMenuMessage,
 } from "../lib/menu.ts";
 import type { MenuModel, ThinkingLevel } from "../lib/model.ts";
 
@@ -89,15 +89,15 @@ for (const revoke of [false, true]) {
         assert.equal(supplied?.assertAuthority, assertAuthority);
         return 99;
       },
-      storeModelMenuState(state: TelegramModelMenuState) { stored++; assert.equal(state.threadId, 41); },
+      storeModelMenuState(state: BaleModelMenuState) { stored++; assert.equal(state.threadId, 41); },
     };
-    const delivery = createTelegramMenuDelivery(target, options, deps);
+    const delivery = createBaleMenuDelivery(target, options, deps);
     target.chatId = 99; target.threadId = 99; options.assertAuthority = () => {};
     deps.sendInteractiveMessage = async () => assert.fail("Captured adapter cannot be replaced");
     deps.storeModelMenuState = () => assert.fail("Captured state publisher cannot be replaced");
     current = !revoke;
     const send = delivery.sendInteractiveMessage(99, "menu", "html", { inline_keyboard: [] });
-    if (revoke) await assert.rejects(send, { name: "TelegramApiAuthorityError", requestIssued: false });
+    if (revoke) await assert.rejects(send, { name: "BaleApiAuthorityError", requestIssued: false });
     else {
       assert.equal(await send, 99);
       delivery.storeModelMenuState({ chatId: 7, threadId: 41, messageId: 99, mode: "status", page: 0,
@@ -106,13 +106,13 @@ for (const revoke of [false, true]) {
     assert.deepEqual([sends, stored], revoke ? [0, 0] : [1, 1]);
   });
 }
-import type { TelegramQueueItem } from "../lib/queue.ts";
-import { createTelegramExtensionSectionRegistry } from "../lib/sections.ts";
+import type { BaleQueueItem } from "../lib/queue.ts";
+import { createBaleExtensionSectionRegistry } from "../lib/sections.ts";
 
 function createMenuState<TModel extends MenuModel = MenuModel>(
   messageId: number,
-  overrides: Partial<TelegramModelMenuState<TModel>> = {},
-): TelegramModelMenuState<TModel> {
+  overrides: Partial<BaleModelMenuState<TModel>> = {},
+): BaleModelMenuState<TModel> {
   return {
     chatId: 1,
     messageId,
@@ -139,25 +139,25 @@ function createMenuModel(
 
 test("Menu helpers store, refresh, prune, and bound model menu state", () => {
   const menus = new Map();
-  storeTelegramModelMenuState(menus, createMenuState(1), {
+  storeBaleModelMenuState(menus, createMenuState(1), {
     maxAgeMs: 100,
     maxStoredMenus: 2,
     now: 1000,
   });
-  storeTelegramModelMenuState(menus, createMenuState(2), {
+  storeBaleModelMenuState(menus, createMenuState(2), {
     maxAgeMs: 100,
     maxStoredMenus: 2,
     now: 1010,
   });
   assert.equal(
-    getStoredTelegramModelMenuState(menus, 1, {
+    getStoredBaleModelMenuState(menus, 1, {
       maxAgeMs: 100,
       maxStoredMenus: 2,
       now: 1020,
     })?.messageId,
     1,
   );
-  storeTelegramModelMenuState(menus, createMenuState(3), {
+  storeBaleModelMenuState(menus, createMenuState(3), {
     maxAgeMs: 100,
     maxStoredMenus: 2,
     now: 1030,
@@ -166,7 +166,7 @@ test("Menu helpers store, refresh, prune, and bound model menu state", () => {
   assert.equal(menus.has("1:1"), true);
   assert.equal(menus.has("1:3"), true);
   assert.equal(
-    getStoredTelegramModelMenuState(menus, 1, {
+    getStoredBaleModelMenuState(menus, 1, {
       maxAgeMs: 10,
       maxStoredMenus: 2,
       now: 1050,
@@ -177,19 +177,19 @@ test("Menu helpers store, refresh, prune, and bound model menu state", () => {
 
 test("Menu helpers scope stored model menu state by chat and message", () => {
   const menus = new Map();
-  storeTelegramModelMenuState(
+  storeBaleModelMenuState(
     menus,
     { ...createMenuState(1), chatId: 10, note: "chat-10" },
     { maxAgeMs: 100, maxStoredMenus: 5, now: 1000 },
   );
-  storeTelegramModelMenuState(
+  storeBaleModelMenuState(
     menus,
     { ...createMenuState(1), chatId: 20, note: "chat-20" },
     { maxAgeMs: 100, maxStoredMenus: 5, now: 1000 },
   );
 
   assert.equal(
-    getStoredTelegramModelMenuState(
+    getStoredBaleModelMenuState(
       menus,
       1,
       { maxAgeMs: 100, maxStoredMenus: 5, now: 1010 },
@@ -198,7 +198,7 @@ test("Menu helpers scope stored model menu state by chat and message", () => {
     "chat-20",
   );
   assert.equal(
-    getStoredTelegramModelMenuState(
+    getStoredBaleModelMenuState(
       menus,
       1,
       { maxAgeMs: 100, maxStoredMenus: 5, now: 1010 },
@@ -211,7 +211,7 @@ test("Menu helpers scope stored model menu state by chat and message", () => {
 test("Menu helpers resolve and reuse cached model menu inputs", async () => {
   const model = { provider: "test", id: "alpha" };
   let reloadCount = 0;
-  const resolved = await resolveCachedTelegramModelMenuInputs(undefined, {
+  const resolved = await resolveCachedBaleModelMenuInputs(undefined, {
     cacheTtlMs: 100,
     now: 1000,
     reloadSettings: async () => {
@@ -229,7 +229,7 @@ test("Menu helpers resolve and reuse cached model menu inputs", async () => {
   });
   assert.equal(reloadCount, 1);
   assert.equal(
-    await resolveCachedTelegramModelMenuInputs(resolved, {
+    await resolveCachedBaleModelMenuInputs(resolved, {
       cacheTtlMs: 100,
       now: 1099,
       reloadSettings: async () => {
@@ -248,7 +248,7 @@ test("Menu runtime controller owns stored state and cached inputs", async () => 
   let reloadCount = 0;
   let refreshCount = 0;
   const model = createMenuModel("openai", "gpt-5");
-  const runtime = createTelegramModelMenuRuntime({
+  const runtime = createBaleModelMenuRuntime({
     maxAgeMs: 100,
     maxStoredMenus: 2,
   });
@@ -301,8 +301,8 @@ test("Menu state builder wires runtime to settings and model-registry ports", as
   let reloadCount = 0;
   let refreshCount = 0;
   const model = createMenuModel("openai", "gpt-5");
-  const runtime = createTelegramModelMenuRuntime<typeof model>();
-  const getModelMenuState = createTelegramModelMenuStateBuilder({
+  const runtime = createBaleModelMenuRuntime<typeof model>();
+  const getModelMenuState = createBaleModelMenuStateBuilder({
     runtime,
     createSettingsManager: async (cwd) => {
       createdForCwd = cwd;
@@ -336,8 +336,8 @@ test("Menu state builder wires runtime to settings and model-registry ports", as
 
 test("Menu state builder supports settings managers without reload", async () => {
   const model = createMenuModel("openai", "gpt-5");
-  const runtime = createTelegramModelMenuRuntime<typeof model>();
-  const getModelMenuState = createTelegramModelMenuStateBuilder({
+  const runtime = createBaleModelMenuRuntime<typeof model>();
+  const getModelMenuState = createBaleModelMenuStateBuilder({
     runtime,
     createSettingsManager: () => ({
       getEnabledModels: () => ["openai/gpt-5"],
@@ -363,7 +363,7 @@ test("Menu runtime builds menu state from settings and model-registry ports", as
   let reloadCount = 0;
   let refreshCount = 0;
   const model = createMenuModel("openai", "gpt-5");
-  const result = await buildTelegramModelMenuStateRuntime({
+  const result = await buildBaleModelMenuStateRuntime({
     chatId: 42,
     activeModel: model,
     cachedInputs: undefined,
@@ -395,13 +395,13 @@ test("Menu runtime builds menu state from settings and model-registry ports", as
 test("Menu helpers expose UI constants", () => {
   assert.equal(MODEL_MENU_TITLE, "<b>🤖 Choose a model:</b>");
   assert.equal(MODEL_PAGE_MENU_TITLE, "<b>Choose a page:</b>");
-  assert.equal(TELEGRAM_MODEL_PAGE_SIZE, 6);
+  assert.equal(BALE_MODEL_PAGE_SIZE, 6);
 });
 
 test("Menu helpers build model menu state", () => {
   const modelA = createMenuModel("openai", "gpt-5", true);
   const modelB = createMenuModel("anthropic", "claude-3", false);
-  const state = buildTelegramModelMenuState({
+  const state = buildBaleModelMenuState({
     chatId: 1,
     activeModel: modelA,
     availableModels: [modelA, modelB],
@@ -421,19 +421,19 @@ test("Menu helpers apply menu mutations and resolve model selections", () => {
     allModels: [{ model: modelA }],
     mode: "status",
   });
-  assert.equal(applyTelegramModelScopeSelection(state, "scoped"), "changed");
+  assert.equal(applyBaleModelScopeSelection(state, "scoped"), "changed");
   assert.equal(state.scope, "scoped");
-  assert.equal(applyTelegramModelScopeSelection(state, "scoped"), "unchanged");
-  assert.equal(applyTelegramModelScopeSelection(state, "bad"), "invalid");
-  assert.equal(applyTelegramModelPageSelection(state, "2"), "changed");
+  assert.equal(applyBaleModelScopeSelection(state, "scoped"), "unchanged");
+  assert.equal(applyBaleModelScopeSelection(state, "bad"), "invalid");
+  assert.equal(applyBaleModelPageSelection(state, "2"), "changed");
   assert.equal(state.page, 2);
-  assert.equal(applyTelegramModelPageSelection(state, "2"), "unchanged");
-  assert.equal(applyTelegramModelPageSelection(state, "bad"), "invalid");
-  assert.deepEqual(getTelegramModelSelection(state, "bad"), {
+  assert.equal(applyBaleModelPageSelection(state, "2"), "unchanged");
+  assert.equal(applyBaleModelPageSelection(state, "bad"), "invalid");
+  assert.deepEqual(getBaleModelSelection(state, "bad"), {
     kind: "invalid",
   });
-  assert.deepEqual(getTelegramModelSelection(state, "9"), { kind: "missing" });
-  assert.equal(getTelegramModelSelection(state, "0").kind, "selected");
+  assert.deepEqual(getBaleModelSelection(state, "9"), { kind: "missing" });
+  assert.equal(getBaleModelSelection(state, "0").kind, "selected");
 });
 
 test("Menu helpers omit pagination controls for one-page unscoped model lists", () => {
@@ -461,7 +461,7 @@ test("Menu helpers derive normalized menu pages without mutating state", () => {
     scope: "all",
     allModels: [{ model: modelA }, { model: modelB }],
   });
-  const menuPage = getTelegramModelMenuPage(state, 1);
+  const menuPage = getBaleModelMenuPage(state, 1);
   assert.equal(menuPage.page, 1);
   assert.equal(menuPage.pageCount, 2);
   assert.equal(menuPage.start, 1);
@@ -485,8 +485,8 @@ test("Menu helpers build model page selector markup and payloads", () => {
     allModels: models.map((model) => ({ model })),
     mode: "model-pages",
   });
-  const markup = buildModelPageMenuReplyMarkup(state, TELEGRAM_MODEL_PAGE_SIZE);
-  const payload = buildTelegramModelPageMenuRenderPayload(state);
+  const markup = buildModelPageMenuReplyMarkup(state, BALE_MODEL_PAGE_SIZE);
+  const payload = buildBaleModelPageMenuRenderPayload(state);
   assert.equal(markup.inline_keyboard[0]?.[0]?.text, "⬆️ Back");
   assert.equal(
     markup.inline_keyboard[0]?.[0]?.callback_data,
@@ -514,7 +514,7 @@ test("Menu helpers build model callback plans for paging, page menu, selection, 
     allModels: [{ model: modelA }, { model: modelB }],
   });
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:pages",
       state,
       activeModel: modelA,
@@ -527,7 +527,7 @@ test("Menu helpers build model callback plans for paging, page menu, selection, 
   );
   assert.equal(state.mode, "model-pages");
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:pages:back",
       state,
       activeModel: modelA,
@@ -540,7 +540,7 @@ test("Menu helpers build model callback plans for paging, page menu, selection, 
   );
   assert.equal(state.mode, "model");
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:open:1",
       state,
       activeModel: modelA,
@@ -555,7 +555,7 @@ test("Menu helpers build model callback plans for paging, page menu, selection, 
   assert.equal(state.selectedModelIndex, 1);
   assert.equal(state.selectedModelKey, "anthropic/claude-3");
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:scope-toggle",
       state,
       activeModel: modelA,
@@ -571,7 +571,7 @@ test("Menu helpers build model callback plans for paging, page menu, selection, 
     },
   );
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:page:1",
       state,
       activeModel: modelA,
@@ -583,7 +583,7 @@ test("Menu helpers build model callback plans for paging, page menu, selection, 
     { kind: "update-menu" },
   );
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:pick:0",
       state,
       activeModel: modelA,
@@ -600,7 +600,7 @@ test("Menu helpers build model callback plans for paging, page menu, selection, 
     },
   );
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:pick:1",
       state,
       activeModel: modelA,
@@ -618,7 +618,7 @@ test("Menu helpers build model callback plans for paging, page menu, selection, 
     },
   );
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:pick:1",
       state,
       activeModel: modelA,
@@ -641,7 +641,7 @@ test("Menu helpers keep model detail selection stable after scope changes", () =
     scopedModelPatterns: ["openai/gpt-5", "anthropic/claude-3:high"],
   });
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:open:1",
       state,
       activeModel: modelA,
@@ -653,7 +653,7 @@ test("Menu helpers keep model detail selection stable after scope changes", () =
     { kind: "update-menu" },
   );
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:pick-selected",
       state,
       activeModel: modelA,
@@ -670,7 +670,7 @@ test("Menu helpers keep model detail selection stable after scope changes", () =
     },
   );
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:scope-toggle",
       state,
       activeModel: modelA,
@@ -686,7 +686,7 @@ test("Menu helpers keep model detail selection stable after scope changes", () =
     },
   );
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:pick-selected",
       state,
       activeModel: modelA,
@@ -725,7 +725,7 @@ test("Menu helpers expand wildcard scope patterns when disabling one matched mod
     mode: "model-detail",
   });
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:scope-disable",
       state,
       activeModel: modelA,
@@ -757,7 +757,7 @@ test("Menu helpers apply scoped thinking from active model detail", () => {
     mode: "model-detail",
   });
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:pick-selected",
       state,
       activeModel: model,
@@ -789,7 +789,7 @@ test("Menu helpers send active detail selection back to model list page", () => 
     mode: "model-detail",
   });
   assert.deepEqual(
-    buildTelegramModelCallbackPlan({
+    buildBaleModelCallbackPlan({
       data: "model:pick-selected",
       state,
       activeModel,
@@ -813,7 +813,7 @@ test("Menu helpers open status and model menus through runtime ports", async () 
   const events: string[] = [];
   const model = { provider: "test", id: "alpha", reasoning: true };
   const statusState = createMenuState(0);
-  await openTelegramStatusMenu({
+  await openBaleStatusMenu({
     isIdle: () => true,
     sendBusyMessage: async () => {
       events.push("unexpected:busy-status");
@@ -832,7 +832,7 @@ test("Menu helpers open status and model menus through runtime ports", async () 
   });
   const modelState = createMenuState(0);
   modelState.allModels = [{ model }];
-  await openTelegramModelMenu({
+  await openBaleModelMenu({
     isIdle: () => false,
     canOfferInFlightModelSwitch: () => true,
     sendBusyMessage: async () => {
@@ -861,7 +861,7 @@ test("Menu helpers open status and model menus through runtime ports", async () 
 
 test("Menu helpers report model-menu busy and no-model paths", async () => {
   const events: string[] = [];
-  await openTelegramStatusMenu({
+  await openBaleStatusMenu({
     isIdle: () => false,
     sendBusyMessage: async () => {
       events.push("unexpected:busy-status");
@@ -878,7 +878,7 @@ test("Menu helpers report model-menu busy and no-model paths", async () => {
       events.push("store-status");
     },
   });
-  await openTelegramModelMenu({
+  await openBaleModelMenu({
     isIdle: () => true,
     canOfferInFlightModelSwitch: () => false,
     sendBusyMessage: async () => {
@@ -892,7 +892,7 @@ test("Menu helpers report model-menu busy and no-model paths", async () => {
     sendModelMenu: async () => 1,
     storeModelMenuState: () => {},
   });
-  await openTelegramModelMenu({
+  await openBaleModelMenu({
     isIdle: () => false,
     canOfferInFlightModelSwitch: () => false,
     sendBusyMessage: async () => {
@@ -916,7 +916,7 @@ test("Menu helpers report model-menu busy and no-model paths", async () => {
 
 test("Menu helpers route callback entry states before action handlers", async () => {
   const events: string[] = [];
-  await handleTelegramMenuCallbackEntry("callback-1", undefined, undefined, {
+  await handleBaleMenuCallbackEntry("callback-1", undefined, undefined, {
     handleStatusAction: async () => false,
     handleThinkingAction: async () => false,
     handleModelAction: async () => false,
@@ -924,7 +924,7 @@ test("Menu helpers route callback entry states before action handlers", async ()
       events.push(`answer:${text ?? ""}`);
     },
   });
-  await handleTelegramMenuCallbackEntry("callback-2", "menu:model", undefined, {
+  await handleBaleMenuCallbackEntry("callback-2", "menu:model", undefined, {
     handleStatusAction: async () => false,
     handleThinkingAction: async () => false,
     handleModelAction: async () => false,
@@ -932,7 +932,7 @@ test("Menu helpers route callback entry states before action handlers", async ()
       events.push(`answer:${text ?? ""}`);
     },
   });
-  await handleTelegramMenuCallbackEntry(
+  await handleBaleMenuCallbackEntry(
     "callback-3",
     "menu:model",
     {
@@ -966,7 +966,7 @@ test("Menu helpers route callback entry states before action handlers", async ()
 test("Menu helpers route stored callback queries through matching action handlers", async () => {
   const events: string[] = [];
   const state = createMenuState(2);
-  await handleStoredTelegramMenuCallback(
+  await handleStoredBaleMenuCallback(
     { id: "callback-1", data: "menu:model", message: { message_id: 2 } },
     {
       getStoredModelMenuState: (messageId) => {
@@ -990,7 +990,7 @@ test("Menu helpers route stored callback queries through matching action handler
       },
     },
   );
-  await handleStoredTelegramMenuCallback(
+  await handleStoredBaleMenuCallback(
     { id: "callback-2", data: "menu:model" },
     {
       getStoredModelMenuState: (messageId) => {
@@ -1016,14 +1016,14 @@ test("Menu helpers route stored callback queries through matching action handler
 test("Menu runtime routes stored callback queries through callback action ports", async () => {
   const events: string[] = [];
   const model = createMenuModel("openai", "gpt-5", true);
-  const state: TelegramModelMenuState<typeof model> = {
+  const state: BaleModelMenuState<typeof model> = {
     ...createMenuState<typeof model>(2),
     allModels: [{ model, thinkingLevel: "high" }],
     mode: "status",
   };
   let thinkingLevel:
     "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" = "medium";
-  await handleTelegramMenuCallbackRuntime(
+  await handleBaleMenuCallbackRuntime(
     { id: "callback-1", data: "menu:thinking", message: { message_id: 2 } },
     { idle: true },
     {
@@ -1065,13 +1065,13 @@ test("Menu runtime routes stored callback queries through callback action ports"
       stagePendingModelSwitch: (selection) => {
         events.push(`pending:${selection.model.id}`);
       },
-      restartInterruptedTelegramTurn: (selection) => {
+      restartInterruptedBaleTurn: (selection) => {
         events.push(`restart:${selection.model.id}`);
         return true;
       },
     },
   );
-  await handleTelegramMenuCallbackRuntime(
+  await handleBaleMenuCallbackRuntime(
     { id: "callback-2", data: "thinking:set:high", message: { message_id: 2 } },
     { idle: true },
     {
@@ -1103,10 +1103,10 @@ test("Menu runtime routes stored callback queries through callback action ports"
       setModel: async () => true,
       setCurrentModel: () => {},
       stagePendingModelSwitch: () => {},
-      restartInterruptedTelegramTurn: () => true,
+      restartInterruptedBaleTurn: () => true,
     },
   );
-  await handleTelegramMenuCallbackRuntime(
+  await handleBaleMenuCallbackRuntime(
     { id: "callback-3", data: "model:pick:0", message: { message_id: 2 } },
     { idle: false },
     {
@@ -1145,7 +1145,7 @@ test("Menu runtime routes stored callback queries through callback action ports"
       stagePendingModelSwitch: (selection) => {
         events.push(`pending:${selection.model.id}`);
       },
-      restartInterruptedTelegramTurn: (selection) => {
+      restartInterruptedBaleTurn: (selection) => {
         events.push(`restart:${selection.model.id}`);
         return true;
       },
@@ -1173,9 +1173,9 @@ test("Thinking choices remain in the same submenu until explicit Main menu navig
   const model = createMenuModel("openai", "gpt-5", true);
   const state = createMenuState<typeof model>(2, { mode: "status", threadId: 17 });
   let level: ThinkingLevel = "medium";
-  const renders: Array<{ menuMode: typeof state.mode; text: string; markup: TelegramInlineKeyboardMarkup }> = [];
+  const renders: Array<{ menuMode: typeof state.mode; text: string; markup: BaleInlineKeyboardMarkup }> = [];
   const sets: ThinkingLevel[] = [];
-  const actions = createTelegramMenuActionRuntime<{ idle: boolean }, typeof model>({
+  const actions = createBaleMenuActionRuntime<{ idle: boolean }, typeof model>({
     getModelMenuState: async () => state,
     getActiveModel: () => model,
     getThinkingLevel: () => level,
@@ -1202,9 +1202,9 @@ test("Thinking choices remain in the same submenu until explicit Main menu navig
     isIdle: (ctx: { idle: boolean }) => ctx.idle,
     hasAbortHandler: () => false, hasActiveToolExecutions: () => false,
     setModel: async () => { assert.fail("Thinking selection must not select a model"); },
-    setCurrentModel: () => {}, stagePendingModelSwitch: () => {}, restartInterruptedTelegramTurn: () => false,
+    setCurrentModel: () => {}, stagePendingModelSwitch: () => {}, restartInterruptedBaleTurn: () => false,
   };
-  const click = (data: string) => handleTelegramMenuCallbackRuntime({ id: data, data,
+  const click = (data: string) => handleBaleMenuCallbackRuntime({ id: data, data,
     message: { message_id: 2, message_thread_id: 17, chat: { id: state.chatId } } }, { idle: true }, deps);
   await click("menu:thinking");
   for (const next of ["high", "off", "off"] as const) {
@@ -1225,8 +1225,8 @@ test("Thinking choices remain in the same submenu until explicit Main menu navig
 
 test("Menu callback handler captures runtime ports", async () => {
   const events: string[] = [];
-  const state: TelegramModelMenuState = createMenuState(2);
-  const handleCallback = createTelegramMenuCallbackHandler<
+  const state: BaleModelMenuState = createMenuState(2);
+  const handleCallback = createBaleMenuCallbackHandler<
     { id: string; data?: string; message?: { message_id?: number } },
     { idle: boolean }
   >({
@@ -1257,7 +1257,7 @@ test("Menu callback handler captures runtime ports", async () => {
     setModel: async () => true,
     setCurrentModel: () => {},
     stagePendingModelSwitch: () => {},
-    restartInterruptedTelegramTurn: () => false,
+    restartInterruptedBaleTurn: () => false,
   });
   await handleCallback(
     { id: "callback", data: "menu:model", message: { message_id: 2 } },
@@ -1270,7 +1270,7 @@ test("Menu callback adapter converts active tool count into runtime booleans", a
   const events: string[] = [];
   let activeToolExecutions = 1;
   const getActiveToolExecutions = () => activeToolExecutions;
-  const state: TelegramModelMenuState = {
+  const state: BaleModelMenuState = {
     ...createMenuState(2),
     threadId: 42,
     allModels: [
@@ -1278,7 +1278,7 @@ test("Menu callback adapter converts active tool count into runtime booleans", a
       { model: createMenuModel("anthropic", "claude-3", false) },
     ],
   };
-  const handleCallback = createTelegramMenuCallbackHandlerForContext<
+  const handleCallback = createBaleMenuCallbackHandlerForContext<
     { id: string; data?: string; message?: { message_id?: number } },
     { idle: boolean }
   >({
@@ -1307,7 +1307,7 @@ test("Menu callback adapter converts active tool count into runtime booleans", a
         `pending:${selection.model.id}:${continuationTurn.chatId}:${continuationTurn.target?.threadId}:${continuationTurn.replyToMessageId}`,
       );
     },
-    restartInterruptedTelegramTurn: (
+    restartInterruptedBaleTurn: (
       _selection,
       _ctx,
       continuationTurn,
@@ -1348,7 +1348,7 @@ test("Menu helpers execute model callback actions across update, switch, and res
     allModels: [{ model: modelA }, { model: modelB }],
   });
   assert.equal(
-    await handleTelegramModelMenuCallbackAction(
+    await handleBaleModelMenuCallbackAction(
       "callback-1",
       {
         data: "model:page:1",
@@ -1379,7 +1379,7 @@ test("Menu helpers execute model callback actions across update, switch, and res
         stagePendingModelSwitch: (selection) => {
           events.push(`pending:${selection.model.id}`);
         },
-        restartInterruptedTelegramTurn: (selection) => {
+        restartInterruptedBaleTurn: (selection) => {
           events.push(`restart:${selection.model.id}`);
           return true;
         },
@@ -1388,7 +1388,7 @@ test("Menu helpers execute model callback actions across update, switch, and res
     true,
   );
   assert.equal(
-    await handleTelegramModelMenuCallbackAction(
+    await handleBaleModelMenuCallbackAction(
       "callback-2",
       {
         data: "model:pick:1",
@@ -1419,7 +1419,7 @@ test("Menu helpers execute model callback actions across update, switch, and res
         stagePendingModelSwitch: (selection) => {
           events.push(`pending:${selection.model.id}`);
         },
-        restartInterruptedTelegramTurn: (selection) => {
+        restartInterruptedBaleTurn: (selection) => {
           events.push(`restart:${selection.model.id}`);
           return true;
         },
@@ -1428,7 +1428,7 @@ test("Menu helpers execute model callback actions across update, switch, and res
     true,
   );
   assert.equal(
-    await handleTelegramModelMenuCallbackAction(
+    await handleBaleModelMenuCallbackAction(
       "callback-3",
       {
         data: "model:pick:1",
@@ -1459,7 +1459,7 @@ test("Menu helpers execute model callback actions across update, switch, and res
         stagePendingModelSwitch: (selection) => {
           events.push(`pending:${selection.model.id}`);
         },
-        restartInterruptedTelegramTurn: (selection) => {
+        restartInterruptedBaleTurn: (selection) => {
           events.push(`restart:${selection.model.id}`);
           return true;
         },
@@ -1487,7 +1487,7 @@ test("Menu helpers handle status and thinking callback actions", async () => {
   const reasoningModel = createMenuModel("openai", "gpt-5", true);
   const plainModel = createMenuModel("openai", "gpt-4o", false);
   assert.equal(
-    await handleTelegramStatusMenuCallbackAction(
+    await handleBaleStatusMenuCallbackAction(
       "callback-1",
       "menu:model",
       reasoningModel,
@@ -1506,7 +1506,7 @@ test("Menu helpers handle status and thinking callback actions", async () => {
     true,
   );
   assert.equal(
-    await handleTelegramThinkingMenuCallbackAction(
+    await handleBaleThinkingMenuCallbackAction(
       "callback-2",
       "thinking:set:high",
       reasoningModel,
@@ -1526,7 +1526,7 @@ test("Menu helpers handle status and thinking callback actions", async () => {
     true,
   );
   assert.equal(
-    await handleTelegramStatusMenuCallbackAction(
+    await handleBaleStatusMenuCallbackAction(
       "callback-3",
       "menu:thinking",
       plainModel,
@@ -1559,12 +1559,12 @@ test("Menu helpers build pure render payloads before transport", () => {
     allModels: [{ model: modelA }],
     mode: "status",
   });
-  const modelPayload = buildTelegramModelMenuRenderPayload(state, modelA);
-  const thinkingPayload = buildTelegramThinkingMenuRenderPayload(
+  const modelPayload = buildBaleModelMenuRenderPayload(state, modelA);
+  const thinkingPayload = buildBaleThinkingMenuRenderPayload(
     modelA,
     "medium",
   );
-  const statusPayload = buildTelegramStatusMenuRenderPayload(
+  const statusPayload = buildBaleStatusMenuRenderPayload(
     "<b>Status</b>",
     modelA,
     "medium",
@@ -1577,7 +1577,7 @@ test("Menu helpers build pure render payloads before transport", () => {
     allModels: [{ model: modelA }],
     mode: "model-pages",
   });
-  const pagePayload = buildTelegramModelMenuRenderPayload(pageState, modelA);
+  const pagePayload = buildBaleModelMenuRenderPayload(pageState, modelA);
   assert.equal(pagePayload.nextMode, "model-pages");
   assert.equal(pagePayload.text, "<b>Choose a page:</b>");
   assert.equal(pagePayload.mode, "html");
@@ -1599,7 +1599,7 @@ test("Menu action runtime opens and updates interactive menu messages", async ()
     allModels: [{ model: modelA }],
     mode: "status",
   });
-  const runtime = createTelegramMenuActionRuntime<string, typeof modelA>({
+  const runtime = createBaleMenuActionRuntime<string, typeof modelA>({
     getModelMenuState: async () => state,
     getActiveModel: () => modelA,
     getThinkingLevel: () => "medium",
@@ -1657,7 +1657,7 @@ test("Menu action runtime opens menus from a settings-backed state builder", asy
       getAvailable: () => [typeof modelA];
     };
   };
-  const getModelMenuState = createTelegramModelMenuStateBuilder<typeof modelA, Ctx>({
+  const getModelMenuState = createBaleModelMenuStateBuilder<typeof modelA, Ctx>({
     runtime: {
       storeState: () => {},
       getState: () => undefined,
@@ -1679,7 +1679,7 @@ test("Menu action runtime opens menus from a settings-backed state builder", asy
     }),
     getActiveModel: () => modelA,
   });
-  const runtime = createTelegramMenuActionRuntime<Ctx, typeof modelA>({
+  const runtime = createBaleMenuActionRuntime<Ctx, typeof modelA>({
     getModelMenuState,
     getActiveModel: () => modelA,
     getThinkingLevel: () => "medium",
@@ -1744,23 +1744,23 @@ test("Menu helpers update and send interactive menu messages", async () => {
       return 99;
     },
   };
-  await updateTelegramModelMenuMessage(state, modelA, deps);
-  await updateTelegramThinkingMenuMessage(state, modelA, "medium", deps);
-  await updateTelegramStatusMessage(
+  await updateBaleModelMenuMessage(state, modelA, deps);
+  await updateBaleThinkingMenuMessage(state, modelA, "medium", deps);
+  await updateBaleStatusMessage(
     state,
     "<b>Status</b>",
     modelA,
     "medium",
     deps,
   );
-  const sentStatusId = await sendTelegramStatusMessage(
+  const sentStatusId = await sendBaleStatusMessage(
     state,
     "<b>Status</b>",
     modelA,
     "medium",
     deps,
   );
-  const sentModelId = await sendTelegramModelMenuMessage(state, modelA, deps);
+  const sentModelId = await sendBaleModelMenuMessage(state, modelA, deps);
   assert.equal(sentStatusId, 99);
   assert.equal(sentModelId, 99);
   assert.equal(events[0], "edit:1:2:html:<b>🤖 Choose a model:</b>");
@@ -1772,7 +1772,7 @@ test("Menu helpers update and send interactive menu messages", async () => {
 
 test("Queue menu keeps main-menu navigation on top", async () => {
   const state = createMenuState(2);
-  const queuedItems: TelegramQueueItem<string>[] = [
+  const queuedItems: BaleQueueItem<string>[] = [
     {
       kind: "prompt",
       chatId: 1,
@@ -1785,16 +1785,16 @@ test("Queue menu keeps main-menu navigation on top", async () => {
       sourceMessageIds: [10],
       queuedAttachments: [],
       content: [
-        { type: "text", text: "[telegram] queued <prompt>\n\nfull body" },
+        { type: "text", text: "[bale] queued <prompt>\n\nfull body" },
       ],
       historyText: "",
     },
   ];
   const texts: string[] = [];
   const modes: string[] = [];
-  const markups: TelegramInlineKeyboardMarkup[] = [];
-  const runtime = createTelegramQueueMenuRuntime<string>({
-    telegramQueueStore: {
+  const markups: BaleInlineKeyboardMarkup[] = [];
+  const runtime = createBaleQueueMenuRuntime<string>({
+    baleQueueStore: {
       getQueuedItems: () => queuedItems,
       setQueuedItems: () => {},
       hasQueuedItems: () => queuedItems.length > 0,
@@ -1805,7 +1805,7 @@ test("Queue menu keeps main-menu navigation on top", async () => {
       clear: () => 0,
       removeByMessageIds: () => 0,
       applyReactionByMessageId: (messageId, disposition) => {
-        const result = Queue.applyTelegramQueuePromptReactionDisposition(queuedItems, messageId, disposition, 20);
+        const result = Queue.applyBaleQueuePromptReactionDisposition(queuedItems, messageId, disposition, 20);
         queuedItems.splice(0, queuedItems.length, ...result.items);
         return result.changed;
       },
@@ -1904,11 +1904,11 @@ test("Queue menu keeps main-menu navigation on top", async () => {
   assert.equal(texts[0], "<b>⏳ Queue:</b>");
   assert.equal(
     texts[2],
-    "<b>1.</b> 👍\n<pre>[telegram] queued &lt;prompt&gt;\n\nfull body</pre>",
+    "<b>1.</b> 👍\n<pre>[bale] queued &lt;prompt&gt;\n\nfull body</pre>",
   );
   assert.equal(
     texts[3],
-    "<b>1.</b>\n<pre>[telegram] queued &lt;prompt&gt;\n\nfull body</pre>",
+    "<b>1.</b>\n<pre>[bale] queued &lt;prompt&gt;\n\nfull body</pre>",
   );
   assert.equal(texts[4], "<b>⏳ Queue:</b>");
   assert.equal(texts[5], "<b>⌛ Queue is empty</b>");
@@ -1918,11 +1918,11 @@ test("Queue menu keeps main-menu navigation on top", async () => {
 test("Queue item detail renders prompt as raw preformatted HTML", async () => {
   const state = createMenuState(2);
   const longPathPrompt =
-    `[telegram]\n[attachments] /home/user/.pi/agent/tmp/telegram\n` +
-    `- /home/user/.pi/agent/tmp/telegram/file.txt\n${"&<>".repeat(2000)}`;
+    `[bale]\n[attachments] /home/user/.pi/agent/tmp/bale\n` +
+    `- /home/user/.pi/agent/tmp/bale/file.txt\n${"&<>".repeat(2000)}`;
   const texts: string[] = [];
-  const runtime = createTelegramQueueMenuRuntime<string>({
-    telegramQueueStore: {
+  const runtime = createBaleQueueMenuRuntime<string>({
+    baleQueueStore: {
       getQueuedItems: () => [
         {
           kind: "prompt",
@@ -1967,8 +1967,8 @@ test("Queue item detail renders prompt as raw preformatted HTML", async () => {
     },
     "ctx",
   );
-  assert.match(texts[0] ?? "", /^<b>1\.<\/b>\n<pre>\[telegram\]/);
-  assert.match(texts[0] ?? "", /\/home\/user\/\.pi\/agent\/tmp\/telegram/);
+  assert.match(texts[0] ?? "", /^<b>1\.<\/b>\n<pre>\[bale\]/);
+  assert.match(texts[0] ?? "", /\/home\/user\/\.pi\/agent\/tmp\/bale/);
   assert.match(texts[0] ?? "", /&amp;&lt;&gt;/);
   assert.match(texts[0] ?? "", /… \[truncated\]<\/pre>$/);
   assert.ok((texts[0] ?? "").length < 4096);
@@ -1976,7 +1976,7 @@ test("Queue item detail renders prompt as raw preformatted HTML", async () => {
 
 test("Queue item Keep and Skip selectors share deferred-removal state", async () => {
   const state = createMenuState(2);
-  const queuedItems: TelegramQueueItem<string>[] = [
+  const queuedItems: BaleQueueItem<string>[] = [
     {
       kind: "prompt",
       chatId: 1,
@@ -1987,15 +1987,15 @@ test("Queue item Keep and Skip selectors share deferred-removal state", async ()
       statusSummary: "keep or skip",
       sourceMessageIds: [10],
       queuedAttachments: [],
-      content: [{ type: "text", text: "[telegram] keep or skip" }],
+      content: [{ type: "text", text: "[bale] keep or skip" }],
       historyText: "",
     },
   ];
   const texts: string[] = [];
   const notices: Array<string | undefined> = [];
-  const markups: TelegramInlineKeyboardMarkup[] = [];
-  const runtime = createTelegramQueueMenuRuntime<string>({
-    telegramQueueStore: {
+  const markups: BaleInlineKeyboardMarkup[] = [];
+  const runtime = createBaleQueueMenuRuntime<string>({
+    baleQueueStore: {
       getQueuedItems: () => queuedItems,
       setQueuedItems: () => {},
       hasQueuedItems: () => queuedItems.length > 0,
@@ -2006,7 +2006,7 @@ test("Queue item Keep and Skip selectors share deferred-removal state", async ()
       clear: () => 0,
       removeByMessageIds: () => 0,
       applyReactionByMessageId: (messageId, disposition) => {
-        const result = Queue.applyTelegramQueuePromptReactionDisposition(queuedItems, messageId, disposition, 20);
+        const result = Queue.applyBaleQueuePromptReactionDisposition(queuedItems, messageId, disposition, 20);
         queuedItems.splice(0, queuedItems.length, ...result.items);
         return result.changed;
       },
@@ -2046,7 +2046,7 @@ test("Queue item Keep and Skip selectors share deferred-removal state", async ()
       : undefined,
     "👎",
   );
-  assert.equal(texts[0], "<s>1</s>. 👎\n<pre>[telegram] keep or skip</pre>");
+  assert.equal(texts[0], "<s>1</s>. 👎\n<pre>[bale] keep or skip</pre>");
   assert.deepEqual(markups[0]?.inline_keyboard[2], [
     { text: "⚫️ Keep", callback_data: "queue:skip-set:1:10:keep" },
     { text: "🔴 Skip", callback_data: "queue:skip-set:1:10:skip" },
@@ -2092,7 +2092,7 @@ test("Queue item Keep and Skip selectors share deferred-removal state", async ()
     undefined,
   );
   assert.equal(queuedItems[0]?.queueLane, "priority");
-  assert.equal(texts[2], "<b>1.</b> 👍\n<pre>[telegram] keep or skip</pre>");
+  assert.equal(texts[2], "<b>1.</b> 👍\n<pre>[bale] keep or skip</pre>");
   assert.deepEqual(markups[2]?.inline_keyboard[1], [
     { text: "⚫️ Normal", callback_data: "queue:lane-set:1:10:normal" },
     { text: "🟣 Priority", callback_data: "queue:lane-set:1:10:priority" },
@@ -2115,15 +2115,15 @@ test("Queue item Keep and Skip selectors share deferred-removal state", async ()
   assert.equal(queuedItems.length, 1);
 });
 
-function createSteerMenuFixture(item: Queue.PendingTelegramTurn, pending = false) {
-  const store = Queue.createTelegramQueueStore<string>(); store.setQueuedItems([item]);
+function createSteerMenuFixture(item: Queue.PendingBaleTurn, pending = false) {
+  const store = Queue.createBaleQueueStore<string>(); store.setQueuedItems([item]);
   let order = 20;
-  const markup: TelegramInlineKeyboardMarkup[] = [], texts: string[] = [], toasts: Array<string | undefined> = [];
-  const mutation = Queue.createTelegramQueueMutationController<string>({ ...store,
+  const markup: BaleInlineKeyboardMarkup[] = [], texts: string[] = [], toasts: Array<string | undefined> = [];
+  const mutation = Queue.createBaleQueueMutationController<string>({ ...store,
     hasPendingDispatch: () => pending, allocateLaneOrder: () => ++order, updateStatus: () => {} });
   const state = createMenuState(2);
-  const runtime = createTelegramQueueMenuRuntime<string>({
-    telegramQueueStore: store, queueMutationRuntime: mutation, hasPendingDispatch: () => pending,
+  const runtime = createBaleQueueMenuRuntime<string>({
+    baleQueueStore: store, queueMutationRuntime: mutation, hasPendingDispatch: () => pending,
     sendInteractiveMessage: async () => 99,
     editInteractiveMessage: async (_chat, _message, text, _mode, keyboard) => { texts.push(text); markup.push(keyboard); },
     answerCallbackQuery: async (_id, text) => { toasts.push(text); },
@@ -2136,7 +2136,7 @@ function createSteerMenuFixture(item: Queue.PendingTelegramTurn, pending = false
   };
 }
 
-function createSteerMenuPrompt(overrides: Partial<Queue.PendingTelegramTurn> = {}): Queue.PendingTelegramTurn {
+function createSteerMenuPrompt(overrides: Partial<Queue.PendingBaleTurn> = {}): Queue.PendingBaleTurn {
   return { kind: "prompt", chatId: 1, replyToMessageId: 10, queueOrder: 1, queueLane: "default", laneOrder: 1,
     sourceMessageIds: [10], queuedAttachments: [], content: [{ type: "text", text: "prompt" }], historyText: "prompt",
     statusSummary: "prompt", ...overrides };
@@ -2156,17 +2156,17 @@ test("A dispatched guest is inspection-only and stale Skip callbacks retain its 
 test("Steer menu selectors change only their axis and retain FIFO identity", async () => {
   const fixture = createSteerMenuFixture(createSteerMenuPrompt());
   await fixture.click("queue:lane-set:1:10:steer");
-  const steer = fixture.getQueuedItems()[0] as Queue.PendingTelegramTurn;
+  const steer = fixture.getQueuedItems()[0] as Queue.PendingBaleTurn;
   assert.equal(steer.queueOrder, 1); assert.equal(steer.queueLane, "steer");
   assert.deepEqual(fixture.markup[0]!.inline_keyboard[1]!.map(cell => cell.text), ["⚫️ Normal", "⚫️ Priority", "🟡 Steer"]);
   await fixture.click("queue:skip-set:1:10:skip");
-  const skipped = fixture.getQueuedItems()[0] as Queue.PendingTelegramTurn;
+  const skipped = fixture.getQueuedItems()[0] as Queue.PendingBaleTurn;
   assert.equal(skipped.laneOrder, steer.laneOrder); assert.equal(skipped.queueLane, "steer");
   assert.equal(skipped.priorityEmoji, "🔥"); assert.equal(skipped.reactionSuppressionEmoji, "👎");
   await fixture.click("queue:skip-set:1:10:keep");
-  assert.equal((fixture.getQueuedItems()[0] as Queue.PendingTelegramTurn).laneOrder, steer.laneOrder);
+  assert.equal((fixture.getQueuedItems()[0] as Queue.PendingBaleTurn).laneOrder, steer.laneOrder);
   await fixture.click("queue:prio-set:1:10:priority"); // Retained published legacy buttons still have explicit lane intent.
-  const priority = fixture.getQueuedItems()[0] as Queue.PendingTelegramTurn;
+  const priority = fixture.getQueuedItems()[0] as Queue.PendingBaleTurn;
   assert.equal(priority.queueLane, "priority"); assert.equal(priority.priorityEmoji, "👍");
   assert.deepEqual(fixture.markup.at(-1)!.inline_keyboard[1]!.map(cell => [cell.text, cell.callback_data]), [
     ["⚫️ Normal", "queue:lane-set:1:10:normal"],
@@ -2184,7 +2184,7 @@ test("Steer menus expose capacity and frozen truth without granting protected mu
   for (const mode of ["frozen", "pending", "capacity", "control"] as const) {
     const item = createSteerMenuPrompt({ queueLane: mode === "control" ? "control" : "steer",
       ...(mode === "frozen" ? { steerAttempted: true } : {}),
-      ...(mode === "capacity" ? { content: [{ type: "text", text: "x".repeat(Queue.TELEGRAM_QUEUE_HANDOFF_PAYLOAD_MAX_BYTES) }] } : {}),
+      ...(mode === "capacity" ? { content: [{ type: "text", text: "x".repeat(Queue.BALE_QUEUE_HANDOFF_PAYLOAD_MAX_BYTES) }] } : {}),
       ...(mode === "control" ? { sourceMessageIds: [] } : {}),
     });
     const fixture = createSteerMenuFixture(item, mode === "pending");
@@ -2209,7 +2209,7 @@ test("Steer menus expose capacity and frozen truth without granting protected mu
 
 test("Queue menu discards the selected guest prompt by queue order and dismisses its placeholder", async () => {
   const state = createMenuState(2);
-  let queuedItems: TelegramQueueItem<string>[] = [
+  let queuedItems: BaleQueueItem<string>[] = [
     {
       kind: "prompt",
       chatId: 0,
@@ -2241,12 +2241,12 @@ test("Queue menu discards the selected guest prompt by queue order and dismisses
       guestInlineMessageId: "inline-2",
     },
   ];
-  const markups: TelegramInlineKeyboardMarkup[] = [];
+  const markups: BaleInlineKeyboardMarkup[] = [];
   const notices: Array<string | undefined> = [];
   const dismissed: string[] = [];
   const discardedOrders: number[] = [];
-  const runtime = createTelegramQueueMenuRuntime<string>({
-    telegramQueueStore: {
+  const runtime = createBaleQueueMenuRuntime<string>({
+    baleQueueStore: {
       getQueuedItems: () => queuedItems,
       setQueuedItems: (items) => {
         queuedItems = items;
@@ -2333,9 +2333,9 @@ test("Queue menu discards the selected guest prompt by queue order and dismisses
 test("Queue refresh rotates empty queue title", async () => {
   const state = createMenuState(2);
   const texts: string[] = [];
-  const markups: TelegramInlineKeyboardMarkup[] = [];
-  const runtime = createTelegramQueueMenuRuntime<string>({
-    telegramQueueStore: {
+  const markups: BaleInlineKeyboardMarkup[] = [];
+  const runtime = createBaleQueueMenuRuntime<string>({
+    baleQueueStore: {
       getQueuedItems: () => [],
       setQueuedItems: () => {},
       hasQueuedItems: () => false,
@@ -2421,7 +2421,7 @@ test("Menu helpers build model, thinking, and status UI payloads", () => {
   state.mode = "model-detail";
   state.selectedModelKey = "openai/gpt-5";
   state.allModels = [{ model: modelA }];
-  const detailPayload = buildTelegramModelMenuRenderPayload(state, modelA);
+  const detailPayload = buildBaleModelMenuRenderPayload(state, modelA);
   assert.deepEqual(detailPayload.replyMarkup.inline_keyboard[1], [
     { text: "🟢 Active", callback_data: "model:pick-selected" },
   ]);
@@ -2429,7 +2429,7 @@ test("Menu helpers build model, thinking, and status UI payloads", () => {
     { text: "🟡 Scoped", callback_data: "model:scope-enable" },
     { text: "⚫️ All", callback_data: "model:scope-disable" },
   ]);
-  const disabledDetailPayload = buildTelegramModelMenuRenderPayload(
+  const disabledDetailPayload = buildBaleModelMenuRenderPayload(
     state,
     modelB,
   );
@@ -2502,7 +2502,7 @@ test("Menu helpers build model, thinking, and status UI payloads", () => {
 });
 
 test("Section callback actions preserve callback thread target", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   const enqueued: Array<unknown> = [];
   const opened: Array<unknown> = [];
   registry.register({
@@ -2516,7 +2516,7 @@ test("Section callback actions preserve callback thread target", async () => {
     },
   });
 
-  await handleTelegramMenuCallbackRuntime(
+  await handleBaleMenuCallbackRuntime(
     {
       id: "cb-section",
       data: "section:0:run",
@@ -2543,7 +2543,7 @@ test("Section callback actions preserve callback thread target", async () => {
       setModel: async () => true,
       setCurrentModel: () => {},
       stagePendingModelSwitch: () => {},
-      restartInterruptedTelegramTurn: () => false,
+      restartInterruptedBaleTurn: () => false,
       sectionRegistry: registry,
       sendInteractiveMessage: async (
         _chatId,
@@ -2571,7 +2571,7 @@ test("Section callback actions preserve callback thread target", async () => {
 
 test("Settings menu exposes time injection mode selection", () => {
   assert.deepEqual(
-    buildTelegramSettingsMenuReplyMarkup(false, "manual", "hidden")
+    buildBaleSettingsMenuReplyMarkup(false, "manual", "hidden")
       .inline_keyboard[5],
     [
       {
@@ -2581,7 +2581,7 @@ test("Settings menu exposes time injection mode selection", () => {
     ],
   );
   assert.deepEqual(
-    buildTelegramSettingsMenuReplyMarkup(false, "manual", "interval")
+    buildBaleSettingsMenuReplyMarkup(false, "manual", "interval")
       .inline_keyboard[5],
     [
       {
@@ -2620,7 +2620,7 @@ test("Settings menu marks voice mode selection with model-style dot", () => {
     [{ text: "🟢 mirror", callback_data: "settings:set:voice-reply:mirror" }],
   );
   assert.deepEqual(
-    buildTelegramSettingsMenuReplyMarkup(
+    buildBaleSettingsMenuReplyMarkup(
       false,
       "manual",
       "hidden",
@@ -2635,7 +2635,7 @@ test("Settings menu marks voice mode selection with model-style dot", () => {
     ],
   );
   assert.deepEqual(
-    buildTelegramSettingsMenuReplyMarkup(false, "always", "hidden")
+    buildBaleSettingsMenuReplyMarkup(false, "always", "hidden")
       .inline_keyboard[3],
     [
       {
@@ -2650,7 +2650,7 @@ test("Settings menu rehydrates expired state before persisting and rendering voi
   let mode: "manual" | "mirror" | "always" | undefined;
   let configured = false;
   const events: string[] = [];
-  const runtime = createTelegramSettingsMenuRuntime({
+  const runtime = createBaleSettingsMenuRuntime({
     getModelMenuState: async (chatId) => {
       events.push(`rehydrate:${chatId}`);
       return {
@@ -2716,16 +2716,16 @@ test("Settings menu rehydrates expired state before persisting and rendering voi
 });
 
 test("Settings activity callback persists through the real config store while agent work remains active", async () => {
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-live-activity-setting-"));
-  const configPath = join(agentDir, "telegram.json");
-  const store = createTelegramConfigStore({
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-live-activity-setting-"));
+  const configPath = join(agentDir, "bale.json");
+  const store = createBaleConfigStore({
     agentDir,
     configPath,
     initialConfig: { assistant: { activity: "verbose" } },
   });
-  const controls = createTelegramConfigControls(store);
+  const controls = createBaleConfigControls(store);
   await store.persist();
-  const activity = createTelegramActivityVerbosityRuntime({
+  const activity = createBaleActivityVerbosityRuntime({
     getActivityMode: controls.getActivityVerbosity,
     refreshActivityMode: controls.refreshActivityVerbosity,
     resolveTarget: (event) => event.target,
@@ -2739,7 +2739,7 @@ test("Settings activity callback persists through the real config store while ag
     type: "agent-start",
     activityId: "active-agent-work",
     sequence: 1,
-    source: "telegram",
+    source: "bale",
     target: { chatId: 1 },
     timestamp: Date.now(),
   });
@@ -2754,7 +2754,7 @@ test("Settings activity callback persists through the real config store while ag
     scopedModels: [],
     allModels: [],
   };
-  const runtime = createTelegramSettingsMenuRuntime({
+  const runtime = createBaleSettingsMenuRuntime({
     reloadConfig: store.load,
     getModelMenuState: async () => state,
     getStoredModelMenuState: () => state,

@@ -1,6 +1,6 @@
 /**
  * Workspace slot rotation
- * Zones: telegram, workspace identity, lifecycle
+ * Zones: bale, workspace identity, lifecycle
  * Owns fail-closed protection, demand-driven pressure retirement, exact-intent admission,
  * successor recovery, and fenced one-shot deletion before durable slot reuse.
  */
@@ -8,50 +8,50 @@
 import { isDeepStrictEqual } from "node:util";
 
 import type {
-  TelegramJournalNamespaceInspection,
-  TelegramUpdateJournalDeadQueueOwnerRecoveryInput,
-  TelegramUpdateJournalDeadQueueOwnerRecoveryResult,
-  TelegramUpdateJournalEntry,
-  TelegramUpdateJournalQueueOwnerIdentity,
+  BaleJournalNamespaceInspection,
+  BaleUpdateJournalDeadQueueOwnerRecoveryInput,
+  BaleUpdateJournalDeadQueueOwnerRecoveryResult,
+  BaleUpdateJournalEntry,
+  BaleUpdateJournalQueueOwnerIdentity,
 } from "./journal.ts";
 import {
-  areTelegramTargetsEqual as sameTarget,
-  type TelegramTarget,
+  areBaleTargetsEqual as sameTarget,
+  type BaleTarget,
 } from "./target.ts";
 import {
-  getTelegramApiErrorRequestTarget,
-  isTelegramApiRequestRejected,
-  type TelegramWorkspaceThreadDeletionTransport,
-} from "./telegram-api.ts";
-import { isTelegramTopicDeletedErrorMessage } from "./thread-reconciler.ts";
+  getBaleApiErrorRequestTarget,
+  isBaleApiRequestRejected,
+  type BaleWorkspaceThreadDeletionTransport,
+} from "./bale-api.ts";
+import { isBaleTopicDeletedErrorMessage } from "./thread-reconciler.ts";
 import type {
-  TelegramTopicTargetStore,
-  TelegramWorkspaceExternalProtectionEvidence,
-  TelegramWorkspaceJournalSource,
-  TelegramWorkspaceProtectionState,
-  TelegramWorkspaceRetirementIntent,
-  TelegramWorkspaceThreadBinding,
+  BaleTopicTargetStore,
+  BaleWorkspaceExternalProtectionEvidence,
+  BaleWorkspaceJournalSource,
+  BaleWorkspaceProtectionState,
+  BaleWorkspaceRetirementIntent,
+  BaleWorkspaceThreadBinding,
 } from "./threads.ts";
 import {
-  createTelegramWorkspaceAdmissionOperationId,
-  isTelegramWorkspaceRetirementFence,
-  runWithTelegramWorkspaceAdmissionsAsync,
-  type TelegramWorkspaceAdmissionLedger,
-  type TelegramWorkspaceAdmissionScope,
-  type TelegramWorkspaceDeletionPermit,
-  type TelegramWorkspaceRetirementFence,
+  createBaleWorkspaceAdmissionOperationId,
+  isBaleWorkspaceRetirementFence,
+  runWithBaleWorkspaceAdmissionsAsync,
+  type BaleWorkspaceAdmissionLedger,
+  type BaleWorkspaceAdmissionScope,
+  type BaleWorkspaceDeletionPermit,
+  type BaleWorkspaceRetirementFence,
 } from "./workspace-admission.ts";
 import {
-  planTelegramWorkspaceSlotAllocation,
-  TelegramWorkspaceSlotUnavailableError,
-  type TelegramWorkspaceSlotOccupancy,
+  planBaleWorkspaceSlotAllocation,
+  BaleWorkspaceSlotUnavailableError,
+  type BaleWorkspaceSlotOccupancy,
 } from "./workspace-slots.ts";
 
-export interface TelegramWorkspaceOperationGate {
+export interface BaleWorkspaceOperationGate {
   runExclusive: <T>(operation: () => Promise<T>) => Promise<T>;
 }
 
-export function createTelegramWorkspaceOperationGate(): TelegramWorkspaceOperationGate {
+export function createBaleWorkspaceOperationGate(): BaleWorkspaceOperationGate {
   let tail: Promise<void> = Promise.resolve();
   return {
     runExclusive<T>(operation: () => Promise<T>): Promise<T> {
@@ -65,39 +65,39 @@ export function createTelegramWorkspaceOperationGate(): TelegramWorkspaceOperati
   };
 }
 
-export type TelegramWorkspaceOperationRunner = <T>(
+export type BaleWorkspaceOperationRunner = <T>(
   input: {
     operationId: string;
     operationKind: string;
-    scopes: readonly TelegramWorkspaceAdmissionScope[];
+    scopes: readonly BaleWorkspaceAdmissionScope[];
   },
   operation: () => Promise<T>,
 ) => Promise<T>;
 
-export interface TelegramWorkspaceOperationRuntime extends TelegramWorkspaceOperationGate {
-  run: TelegramWorkspaceOperationRunner;
+export interface BaleWorkspaceOperationRuntime extends BaleWorkspaceOperationGate {
+  run: BaleWorkspaceOperationRunner;
 }
 
-export function createTelegramWorkspaceOperationRuntime(
+export function createBaleWorkspaceOperationRuntime(
   input: {
     getWorkspaceAdmission?: () =>
       | Pick<
-          TelegramWorkspaceAdmissionLedger,
+          BaleWorkspaceAdmissionLedger,
           "acquireAdmission" | "releaseAdmission"
         >
       | undefined;
     onReleaseError?: (error: unknown, operationKind: string) => void;
   } = {},
-): TelegramWorkspaceOperationRuntime {
-  const gate = createTelegramWorkspaceOperationGate();
-  const run: TelegramWorkspaceOperationRunner = (metadata, operation) => {
+): BaleWorkspaceOperationRuntime {
+  const gate = createBaleWorkspaceOperationGate();
+  const run: BaleWorkspaceOperationRunner = (metadata, operation) => {
     const gated = () => gate.runExclusive(operation);
     if (!input.getWorkspaceAdmission) return gated();
     const admission = input.getWorkspaceAdmission();
     if (!admission) {
-      throw new Error("Telegram Workspace admission authority is unavailable.");
+      throw new Error("Bale Workspace admission authority is unavailable.");
     }
-    return runWithTelegramWorkspaceAdmissionsAsync({
+    return runWithBaleWorkspaceAdmissionsAsync({
       ledger: admission,
       ...metadata,
       operation: gated,
@@ -109,12 +109,12 @@ export function createTelegramWorkspaceOperationRuntime(
   return { run, runExclusive: gate.runExclusive };
 }
 
-export interface TelegramWorkspaceJournalProtectionCapture {
-  sources: TelegramWorkspaceJournalProtectionSource[];
+export interface BaleWorkspaceJournalProtectionCapture {
+  sources: BaleWorkspaceJournalProtectionSource[];
   complete: boolean;
 }
 
-interface TelegramWorkspaceJournalReader {
+interface BaleWorkspaceJournalReader {
   recoveryKey?: string;
   journal: {
     read: () => { entries: readonly { update: unknown }[]; exists?: boolean };
@@ -125,18 +125,18 @@ interface TelegramWorkspaceJournalReader {
   };
 }
 
-export function captureTelegramWorkspaceJournalProtectionSources(input: {
-  binding: TelegramWorkspaceThreadBinding;
-  resolveLeader: () => TelegramWorkspaceJournalReader | undefined;
+export function captureBaleWorkspaceJournalProtectionSources(input: {
+  binding: BaleWorkspaceThreadBinding;
+  resolveLeader: () => BaleWorkspaceJournalReader | undefined;
   createFollowerResolver: (
     journalBindingKey: string,
-  ) => () => TelegramWorkspaceJournalReader | undefined;
+  ) => () => BaleWorkspaceJournalReader | undefined;
   createSessionResolver?: (
     recipientBindingKey: string,
     sessionId: string,
-  ) => () => TelegramWorkspaceJournalReader | undefined;
+  ) => () => BaleWorkspaceJournalReader | undefined;
   withJournalReference?: <T>(
-    binding: TelegramWorkspaceJournalReader,
+    binding: BaleWorkspaceJournalReader,
     operation: () => T,
   ) => T;
   discovery?: {
@@ -144,18 +144,18 @@ export function captureTelegramWorkspaceJournalProtectionSources(input: {
     complete: boolean;
     createResolver: (
       path: string,
-    ) => () => TelegramWorkspaceJournalReader | undefined;
+    ) => () => BaleWorkspaceJournalReader | undefined;
   };
   /** Snapshot-scoped reuse of binding-independent (shared/discovered) source reads. */
-  sharedSourceReads?: Map<string, TelegramWorkspaceJournalProtectionSource>;
-}): TelegramWorkspaceJournalProtectionCapture {
-  const sources: TelegramWorkspaceJournalProtectionSource[] = [];
+  sharedSourceReads?: Map<string, BaleWorkspaceJournalProtectionSource>;
+}): BaleWorkspaceJournalProtectionCapture {
+  const sources: BaleWorkspaceJournalProtectionSource[] = [];
   let complete =
     input.binding.journalBindingsComplete === true ||
     input.discovery?.complete === true;
   const capture = (
-    scope: TelegramWorkspaceJournalProtectionSource["scope"],
-    resolve: () => TelegramWorkspaceJournalReader | undefined,
+    scope: BaleWorkspaceJournalProtectionSource["scope"],
+    resolve: () => BaleWorkspaceJournalReader | undefined,
   ): void => {
     const sharedKey =
       scope.kind === "shared"
@@ -176,9 +176,9 @@ export function captureTelegramWorkspaceJournalProtectionSources(input: {
     sources.push(source);
   };
   const readSource = (
-    scope: TelegramWorkspaceJournalProtectionSource["scope"],
-    resolve: () => TelegramWorkspaceJournalReader | undefined,
-  ): TelegramWorkspaceJournalProtectionSource => {
+    scope: BaleWorkspaceJournalProtectionSource["scope"],
+    resolve: () => BaleWorkspaceJournalReader | undefined,
+  ): BaleWorkspaceJournalProtectionSource => {
     try {
       const binding = resolve();
       if (!binding) return { kind: "unknown", scope };
@@ -230,7 +230,7 @@ export function captureTelegramWorkspaceJournalProtectionSources(input: {
   return { sources, complete };
 }
 
-export type TelegramWorkspaceJournalProtectionSource =
+export type BaleWorkspaceJournalProtectionSource =
   | {
       kind: "available";
       scope:
@@ -289,14 +289,14 @@ function getJournalUpdateTarget(
   };
 }
 
-export function resolveTelegramWorkspaceAcceptedWorkProtection(input: {
-  binding: TelegramWorkspaceThreadBinding;
+export function resolveBaleWorkspaceAcceptedWorkProtection(input: {
+  binding: BaleWorkspaceThreadBinding;
   localAcceptedTargets: readonly { chatId: number; threadId?: number }[];
-  journalSources: readonly TelegramWorkspaceJournalProtectionSource[];
+  journalSources: readonly BaleWorkspaceJournalProtectionSource[];
   sourcesComplete: boolean;
-  /** Relocation cannot infer execution ownership from the original Telegram message target. */
+  /** Relocation cannot infer execution ownership from the original Bale message target. */
   requireBindingProvenance?: boolean;
-}): TelegramWorkspaceProtectionState {
+}): BaleWorkspaceProtectionState {
   if (
     input.localAcceptedTargets.some((target) =>
       sameTarget(target, input.binding.target),
@@ -341,12 +341,12 @@ export function resolveTelegramWorkspaceAcceptedWorkProtection(input: {
   return unknown ? "unknown" : "clear";
 }
 
-export type TelegramWorkspaceJournalPruneResult =
+export type BaleWorkspaceJournalPruneResult =
   | {
       kind: "committed";
-      binding: TelegramWorkspaceThreadBinding;
+      binding: BaleWorkspaceThreadBinding;
       removedKeys: string[];
-      removedSources?: TelegramWorkspaceJournalSource[];
+      removedSources?: BaleWorkspaceJournalSource[];
     }
   | {
       kind: "blocked";
@@ -357,28 +357,28 @@ export type TelegramWorkspaceJournalPruneResult =
         | "publication-refused";
     };
 
-export async function pruneTelegramWorkspaceJournalEvidence(input: {
+export async function pruneBaleWorkspaceJournalEvidence(input: {
   store: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     "commitWorkspaceJournalEvidence" | "persistWorkspaceJournalEvidence"
   >;
-  binding: TelegramWorkspaceThreadBinding;
+  binding: BaleWorkspaceThreadBinding;
   /** Capture fresh source evidence after admission, not a snapshot taken before the lease. */
-  capture: () => TelegramWorkspaceJournalProtectionCapture;
-  runExclusive: TelegramWorkspaceOperationGate["runExclusive"];
+  capture: () => BaleWorkspaceJournalProtectionCapture;
+  runExclusive: BaleWorkspaceOperationGate["runExclusive"];
   getJournalWriterProtection: (
     journalBindingKey: string,
-  ) => TelegramWorkspaceProtectionState;
+  ) => BaleWorkspaceProtectionState;
   getLeaderEpoch: () => number | string | undefined;
   getProfileKey: () => string;
   admission: Pick<
-    TelegramWorkspaceAdmissionLedger,
+    BaleWorkspaceAdmissionLedger,
     "acquireAdmission" | "releaseAdmission"
   >;
   isCurrent?: () => boolean;
   onAdmissionReleaseError?: (error: unknown) => void;
-}): Promise<TelegramWorkspaceJournalPruneResult> {
-  const operation = async (): Promise<TelegramWorkspaceJournalPruneResult> => {
+}): Promise<BaleWorkspaceJournalPruneResult> {
+  const operation = async (): Promise<BaleWorkspaceJournalPruneResult> => {
     const leaderEpoch = input.getLeaderEpoch();
     const profileKey = input.getProfileKey();
     const isCurrent = () =>
@@ -388,10 +388,10 @@ export async function pruneTelegramWorkspaceJournalEvidence(input: {
       input.isCurrent?.() !== false;
     if (!isCurrent()) {
       throw new Error(
-        "Telegram Workspace journal pruning requires current leader authority.",
+        "Bale Workspace journal pruning requires current leader authority.",
       );
     }
-    let capture: TelegramWorkspaceJournalProtectionCapture;
+    let capture: BaleWorkspaceJournalProtectionCapture;
     try {
       capture = input.capture();
     } catch {
@@ -477,7 +477,7 @@ export async function pruneTelegramWorkspaceJournalEvidence(input: {
     );
     if (!isCurrent()) {
       throw new Error(
-        "Telegram Workspace journal pruning lost leader authority.",
+        "Bale Workspace journal pruning lost leader authority.",
       );
     }
     const binding = input.store.commitWorkspaceJournalEvidence(
@@ -494,13 +494,13 @@ export async function pruneTelegramWorkspaceJournalEvidence(input: {
       );
       if (!isCurrent())
         throw new Error(
-          "Telegram Workspace journal pruning lost leader authority.",
+          "Bale Workspace journal pruning lost leader authority.",
         );
       if (!published) return { kind: "blocked", reason: "publication-refused" };
     }
     if (!isCurrent()) {
       throw new Error(
-        "Telegram Workspace journal pruning lost leader authority.",
+        "Bale Workspace journal pruning lost leader authority.",
       );
     }
     return {
@@ -512,9 +512,9 @@ export async function pruneTelegramWorkspaceJournalEvidence(input: {
         : {}),
     };
   };
-  return runWithTelegramWorkspaceAdmissionsAsync({
+  return runWithBaleWorkspaceAdmissionsAsync({
     ledger: input.admission,
-    operationId: createTelegramWorkspaceAdmissionOperationId(),
+    operationId: createBaleWorkspaceAdmissionOperationId(),
     operationKind: "workspace.prune-journal-evidence",
     scopes: [{ kind: "target", target: input.binding.target }],
     operation: () => input.runExclusive(operation),
@@ -524,26 +524,26 @@ export async function pruneTelegramWorkspaceJournalEvidence(input: {
   });
 }
 
-export function captureTelegramWorkspaceExternalProtection(input: {
-  binding: TelegramWorkspaceThreadBinding;
+export function captureBaleWorkspaceExternalProtection(input: {
+  binding: BaleWorkspaceThreadBinding;
   requireBindingProvenance?: boolean;
   getLiveOwnerProtection: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceProtectionState;
-  getLocalAcceptedTargets: (binding: TelegramWorkspaceThreadBinding) => {
-    targets: readonly TelegramTarget[];
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceProtectionState;
+  getLocalAcceptedTargets: (binding: BaleWorkspaceThreadBinding) => {
+    targets: readonly BaleTarget[];
     complete: boolean;
   };
   captureJournalSources: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceJournalProtectionCapture;
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceJournalProtectionCapture;
   getDeliveryAuthorityProtection?: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceProtectionState;
-}): TelegramWorkspaceExternalProtectionEvidence {
-  let liveOwner: TelegramWorkspaceProtectionState = "unknown";
-  let acceptedWork: TelegramWorkspaceProtectionState = "unknown";
-  let deliveryAuthority: TelegramWorkspaceProtectionState = "unknown";
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceProtectionState;
+}): BaleWorkspaceExternalProtectionEvidence {
+  let liveOwner: BaleWorkspaceProtectionState = "unknown";
+  let acceptedWork: BaleWorkspaceProtectionState = "unknown";
+  let deliveryAuthority: BaleWorkspaceProtectionState = "unknown";
   try {
     liveOwner = input.getLiveOwnerProtection(input.binding);
   } catch {
@@ -552,7 +552,7 @@ export function captureTelegramWorkspaceExternalProtection(input: {
   try {
     const journals = input.captureJournalSources(input.binding);
     const local = input.getLocalAcceptedTargets(input.binding);
-    acceptedWork = resolveTelegramWorkspaceAcceptedWorkProtection({
+    acceptedWork = resolveBaleWorkspaceAcceptedWorkProtection({
       binding: input.binding,
       localAcceptedTargets: local.targets,
       journalSources: journals.sources,
@@ -571,68 +571,68 @@ export function captureTelegramWorkspaceExternalProtection(input: {
   return { liveOwner, acceptedWork, deliveryAuthority };
 }
 
-interface TelegramWorkspaceProtectionObserverDeps {
-  listFollowers: () => readonly { target?: TelegramTarget }[];
-  getActiveTurnTarget: () => TelegramTarget | undefined;
-  getQueuedItems: () => readonly { chatId: number; target?: TelegramTarget }[];
-  resolveLeaderJournal: () => TelegramWorkspaceJournalReader | undefined;
+interface BaleWorkspaceProtectionObserverDeps {
+  listFollowers: () => readonly { target?: BaleTarget }[];
+  getActiveTurnTarget: () => BaleTarget | undefined;
+  getQueuedItems: () => readonly { chatId: number; target?: BaleTarget }[];
+  resolveLeaderJournal: () => BaleWorkspaceJournalReader | undefined;
   createFollowerJournalResolver: (
     journalBindingKey: string,
-  ) => () => TelegramWorkspaceJournalReader | undefined;
+  ) => () => BaleWorkspaceJournalReader | undefined;
   createSessionJournalResolver?: (
     recipientBindingKey: string,
     sessionId: string,
-  ) => () => TelegramWorkspaceJournalReader | undefined;
+  ) => () => BaleWorkspaceJournalReader | undefined;
   discoverFollowerJournals?: () => {
     paths: readonly string[];
     complete: boolean;
   };
   /** Strict read-only namespace evidence; it never substitutes for writer closure. */
-  inspectJournalNamespace?: () => TelegramJournalNamespaceInspection;
+  inspectJournalNamespace?: () => BaleJournalNamespaceInspection;
   createJournalPathResolver?: (
     path: string,
-  ) => () => TelegramWorkspaceJournalReader | undefined;
+  ) => () => BaleWorkspaceJournalReader | undefined;
   withJournalReference?: <T>(
-    binding: TelegramWorkspaceJournalReader,
+    binding: BaleWorkspaceJournalReader,
     operation: () => T,
   ) => T;
   getJournalWriterProtection?: (
     journalBindingKey: string,
-  ) => TelegramWorkspaceProtectionState;
+  ) => BaleWorkspaceProtectionState;
   getDeliveryAuthorityProtection?: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceProtectionState;
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceProtectionState;
 }
 
-export interface TelegramWorkspaceProtectionObserver {
+export interface BaleWorkspaceProtectionObserver {
   capture: ((
-    binding: TelegramWorkspaceThreadBinding,
+    binding: BaleWorkspaceThreadBinding,
     options?: { requireBindingProvenance?: boolean },
-  ) => TelegramWorkspaceExternalProtectionEvidence) & {
+  ) => BaleWorkspaceExternalProtectionEvidence) & {
     withSnapshot?: <T>(capture: () => T) => T;
   };
   captureJournalSources: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceJournalProtectionCapture;
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceJournalProtectionCapture;
   getJournalWriterProtection: (
     journalBindingKey: string,
-  ) => TelegramWorkspaceProtectionState;
+  ) => BaleWorkspaceProtectionState;
 }
 
 /** Shared read-only observer: protection and metadata pruning use the same scoped evidence path. */
-export function createTelegramWorkspaceProtectionObserver(
-  deps: TelegramWorkspaceProtectionObserverDeps,
-): TelegramWorkspaceProtectionObserver {
+export function createBaleWorkspaceProtectionObserver(
+  deps: BaleWorkspaceProtectionObserverDeps,
+): BaleWorkspaceProtectionObserver {
   // One occupancy snapshot probes every binding synchronously; namespace and shared/discovered
   // journal reads are binding-independent, so read them once per snapshot instead of per binding.
   // Never widen this beyond one synchronous capture: post-fence rechecks need fresh evidence.
   let snapshot:
     | {
-        namespace?: { value?: TelegramJournalNamespaceInspection; error?: unknown };
-        reads: Map<string, TelegramWorkspaceJournalProtectionSource>;
+        namespace?: { value?: BaleJournalNamespaceInspection; error?: unknown };
+        reads: Map<string, BaleWorkspaceJournalProtectionSource>;
       }
     | undefined;
-  const inspectNamespace = (): TelegramJournalNamespaceInspection | undefined => {
+  const inspectNamespace = (): BaleJournalNamespaceInspection | undefined => {
     if (!snapshot) return deps.inspectJournalNamespace?.();
     if (!snapshot.namespace) {
       try {
@@ -653,7 +653,7 @@ export function createTelegramWorkspaceProtectionObserver(
       snapshot = undefined;
     }
   };
-  const captureJournalSources: TelegramWorkspaceProtectionObserver["captureJournalSources"] =
+  const captureJournalSources: BaleWorkspaceProtectionObserver["captureJournalSources"] =
     (candidate) => {
       const namespace = inspectNamespace();
       if (
@@ -663,7 +663,7 @@ export function createTelegramWorkspaceProtectionObserver(
             .length !== 1)
       )
         throw new Error(
-          "Telegram strict namespace evidence is unavailable or incomplete.",
+          "Bale strict namespace evidence is unavailable or incomplete.",
         );
       if (
         namespace?.retainedInputs?.some(
@@ -671,7 +671,7 @@ export function createTelegramWorkspaceProtectionObserver(
         )
       )
         throw new Error(
-          "Telegram namespace contains uncommitted private retention evidence.",
+          "Bale namespace contains uncommitted private retention evidence.",
         );
       const discovery = namespace
         ? {
@@ -689,9 +689,9 @@ export function createTelegramWorkspaceProtectionObserver(
           : deps.discoverFollowerJournals?.();
       if (namespace && !deps.createJournalPathResolver)
         throw new Error(
-          "Telegram strict namespace protection requires discovered source resolution.",
+          "Bale strict namespace protection requires discovered source resolution.",
         );
-      return captureTelegramWorkspaceJournalProtectionSources({
+      return captureBaleWorkspaceJournalProtectionSources({
         binding: candidate,
         resolveLeader: deps.resolveLeaderJournal,
         createFollowerResolver: deps.createFollowerJournalResolver,
@@ -713,10 +713,10 @@ export function createTelegramWorkspaceProtectionObserver(
       });
     };
   const captureOne = function (
-    binding: TelegramWorkspaceThreadBinding,
+    binding: BaleWorkspaceThreadBinding,
     options?: { requireBindingProvenance?: boolean },
-  ): TelegramWorkspaceExternalProtectionEvidence {
-    return captureTelegramWorkspaceExternalProtection({
+  ): BaleWorkspaceExternalProtectionEvidence {
+    return captureBaleWorkspaceExternalProtection({
       binding,
       requireBindingProvenance: options?.requireBindingProvenance,
       getLiveOwnerProtection(candidate) {
@@ -747,7 +747,7 @@ export function createTelegramWorkspaceProtectionObserver(
       },
       getLocalAcceptedTargets(candidate) {
         const items = deps.getQueuedItems();
-        const targets: TelegramTarget[] = [];
+        const targets: BaleTarget[] = [];
         const activeTarget = deps.getActiveTurnTarget();
         if (activeTarget) targets.push(activeTarget);
         let complete = true;
@@ -774,31 +774,31 @@ export function createTelegramWorkspaceProtectionObserver(
 }
 
 /** Callable protection view retained for callers that need no metadata observation ports. */
-export function createTelegramWorkspaceExternalProtectionCapture(
-  deps: TelegramWorkspaceProtectionObserverDeps,
-): TelegramWorkspaceProtectionObserver["capture"] {
-  return createTelegramWorkspaceProtectionObserver(deps).capture;
+export function createBaleWorkspaceExternalProtectionCapture(
+  deps: BaleWorkspaceProtectionObserverDeps,
+): BaleWorkspaceProtectionObserver["capture"] {
+  return createBaleWorkspaceProtectionObserver(deps).capture;
 }
 
-export function createTelegramWorkspaceJournalEvidencePruner(
-  deps: TelegramWorkspaceOperationGate & {
-    store: TelegramTopicTargetStore;
-    getAdmission: () => TelegramWorkspaceAdmissionLedger | undefined;
+export function createBaleWorkspaceJournalEvidencePruner(
+  deps: BaleWorkspaceOperationGate & {
+    store: BaleTopicTargetStore;
+    getAdmission: () => BaleWorkspaceAdmissionLedger | undefined;
     getLeaderEpoch: () => number | string | undefined;
     protection: Pick<
-      TelegramWorkspaceProtectionObserver,
+      BaleWorkspaceProtectionObserver,
       "captureJournalSources" | "getJournalWriterProtection"
     >;
   },
 ): (
-  binding: TelegramWorkspaceThreadBinding,
+  binding: BaleWorkspaceThreadBinding,
   isCurrent: () => boolean,
-) => Promise<TelegramWorkspaceJournalPruneResult> {
+) => Promise<BaleWorkspaceJournalPruneResult> {
   return async (binding, isCurrent) => {
     const admission = deps.getAdmission();
     if (!admission) return { kind: "blocked", reason: "state-changed" };
     const profileKey = admission.getProfileKey();
-    return pruneTelegramWorkspaceJournalEvidence({
+    return pruneBaleWorkspaceJournalEvidence({
       store: deps.store,
       binding,
       admission,
@@ -813,26 +813,26 @@ export function createTelegramWorkspaceJournalEvidencePruner(
   };
 }
 
-export function isCurrentTelegramWorkspaceBinding(
-  store: Pick<TelegramTopicTargetStore, "listWorkspaceBindings">,
-  expected: TelegramWorkspaceThreadBinding,
+export function isCurrentBaleWorkspaceBinding(
+  store: Pick<BaleTopicTargetStore, "listWorkspaceBindings">,
+  expected: BaleWorkspaceThreadBinding,
 ): boolean {
   return store
     .listWorkspaceBindings()
     .some((binding) => isDeepStrictEqual(binding, expected));
 }
 
-export interface TelegramWorkspaceDeadQueueJournalBinding {
+export interface BaleWorkspaceDeadQueueJournalBinding {
   recoveryKey?: string;
-  readForProtection?: () => { entries: readonly TelegramUpdateJournalEntry[] };
+  readForProtection?: () => { entries: readonly BaleUpdateJournalEntry[] };
   journal: {
     recoverDeadQueueOwner: (
-      input: TelegramUpdateJournalDeadQueueOwnerRecoveryInput,
-    ) => TelegramUpdateJournalDeadQueueOwnerRecoveryResult;
+      input: BaleUpdateJournalDeadQueueOwnerRecoveryInput,
+    ) => BaleUpdateJournalDeadQueueOwnerRecoveryResult;
   };
 }
 
-export type TelegramWorkspaceDeadQueueReclamation =
+export type BaleWorkspaceDeadQueueReclamation =
   | { kind: "not-needed" }
   | { kind: "recovered"; receipts: number; updateIds: number[] }
   | {
@@ -854,45 +854,45 @@ export type TelegramWorkspaceDeadQueueReclamation =
  * owned by the journal's exact dead-owner CAS; this function never clears local
  * queue memory or turns unknown evidence into deletion authority.
  */
-export function createTelegramWorkspaceDeadOwnerQueueReclaimer(deps: {
+export function createBaleWorkspaceDeadOwnerQueueReclaimer(deps: {
   getExternalProtection: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceExternalProtectionEvidence;
-  getActiveTurnTarget: () => TelegramTarget | undefined;
-  getQueuedItems: () => readonly { chatId: number; target?: TelegramTarget }[];
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceExternalProtectionEvidence;
+  getActiveTurnTarget: () => BaleTarget | undefined;
+  getQueuedItems: () => readonly { chatId: number; target?: BaleTarget }[];
   resolveLeaderJournal: () =>
-    TelegramWorkspaceDeadQueueJournalBinding | undefined;
+    BaleWorkspaceDeadQueueJournalBinding | undefined;
   createFollowerJournalResolver: (
     journalBindingKey: string,
-  ) => () => TelegramWorkspaceDeadQueueJournalBinding | undefined;
+  ) => () => BaleWorkspaceDeadQueueJournalBinding | undefined;
   createSessionJournalResolver?: (
     recipientBindingKey: string,
     sessionId: string,
-  ) => () => TelegramWorkspaceDeadQueueJournalBinding | undefined;
+  ) => () => BaleWorkspaceDeadQueueJournalBinding | undefined;
   discoverFollowerJournals?: () => {
     paths: readonly string[];
     complete: boolean;
   };
   createJournalPathResolver?: (
     path: string,
-  ) => () => TelegramWorkspaceDeadQueueJournalBinding | undefined;
+  ) => () => BaleWorkspaceDeadQueueJournalBinding | undefined;
   withJournalReference?: <T>(
-    binding: TelegramWorkspaceDeadQueueJournalBinding,
+    binding: BaleWorkspaceDeadQueueJournalBinding,
     operation: () => T,
   ) => T;
-  getRecoveryOwner: () => TelegramUpdateJournalQueueOwnerIdentity;
+  getRecoveryOwner: () => BaleUpdateJournalQueueOwnerIdentity;
   getQueueOwnerLiveness: (owner: {
     processId: number;
     processBirthId: string;
   }) => "alive" | "dead" | "unverifiable";
-  isBindingCurrent: (binding: TelegramWorkspaceThreadBinding) => boolean;
+  isBindingCurrent: (binding: BaleWorkspaceThreadBinding) => boolean;
   onMutationError?: (error: unknown) => void;
 }): (
-  binding: TelegramWorkspaceThreadBinding,
+  binding: BaleWorkspaceThreadBinding,
   isCurrent: () => boolean,
-) => Promise<TelegramWorkspaceDeadQueueReclamation> {
+) => Promise<BaleWorkspaceDeadQueueReclamation> {
   const localProtection = (
-    binding: TelegramWorkspaceThreadBinding,
+    binding: BaleWorkspaceThreadBinding,
   ): "clear" | "protected" | "unknown" => {
     const active = deps.getActiveTurnTarget();
     if (active && sameTarget(active, binding.target)) return "protected";
@@ -931,13 +931,13 @@ export function createTelegramWorkspaceDeadOwnerQueueReclaimer(deps: {
       binding.journalBindingsComplete === true || discovery?.complete === true;
     const sources: Array<{
       scope: "shared" | "binding" | "discovered";
-      binding: TelegramWorkspaceDeadQueueJournalBinding;
-      entries: readonly TelegramUpdateJournalEntry[];
+      binding: BaleWorkspaceDeadQueueJournalBinding;
+      entries: readonly BaleUpdateJournalEntry[];
     }> = [];
     const recoveryKeys = new Set<string>();
     const capture = (
       scope: "shared" | "binding" | "discovered",
-      resolve: () => TelegramWorkspaceDeadQueueJournalBinding | undefined,
+      resolve: () => BaleWorkspaceDeadQueueJournalBinding | undefined,
     ): void => {
       try {
         const source = resolve();
@@ -978,8 +978,8 @@ export function createTelegramWorkspaceDeadOwnerQueueReclaimer(deps: {
     if (!complete) return { kind: "blocked", reason: "incomplete-source" };
 
     const plans: Array<{
-      source: TelegramWorkspaceDeadQueueJournalBinding;
-      recovery: TelegramUpdateJournalDeadQueueOwnerRecoveryInput;
+      source: BaleWorkspaceDeadQueueJournalBinding;
+      recovery: BaleUpdateJournalDeadQueueOwnerRecoveryInput;
     }> = [];
     for (const source of sources) {
       const relevant =
@@ -1073,7 +1073,7 @@ export function createTelegramWorkspaceDeadOwnerQueueReclaimer(deps: {
       if (localProtection(binding) !== "clear") {
         return { kind: "blocked", reason: "local-work" };
       }
-      let result: TelegramUpdateJournalDeadQueueOwnerRecoveryResult;
+      let result: BaleUpdateJournalDeadQueueOwnerRecoveryResult;
       try {
         result = deps.withJournalReference
           ? deps.withJournalReference(plan.source, () =>
@@ -1115,8 +1115,8 @@ export function createTelegramWorkspaceDeadOwnerQueueReclaimer(deps: {
   };
 }
 
-export type TelegramWorkspaceRetirementAdoption =
-  | { kind: "adopted"; intent: TelegramWorkspaceRetirementIntent }
+export type BaleWorkspaceRetirementAdoption =
+  | { kind: "adopted"; intent: BaleWorkspaceRetirementIntent }
   | {
       kind: "blocked";
       reason:
@@ -1127,23 +1127,23 @@ export type TelegramWorkspaceRetirementAdoption =
         | "commit-rejected";
     };
 
-export async function adoptTelegramWorkspaceRetirementIntent(input: {
+export async function adoptBaleWorkspaceRetirementIntent(input: {
   store: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     | "captureWorkspaceSlotOccupancy"
     | "listWorkspaceBindings"
     | "listWorkspaceRetirementIntents"
     | "replaceWorkspaceRetirementIntent"
   >;
-  intent: TelegramWorkspaceRetirementIntent;
+  intent: BaleWorkspaceRetirementIntent;
   getExternalProtection: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceExternalProtectionEvidence;
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceExternalProtectionEvidence;
   getLeaderEpoch: () => number | string | undefined;
   getProfileKey: () => string;
   isCurrent?: () => boolean;
   runExclusive: <T>(operation: () => Promise<T>) => Promise<T>;
-}): Promise<TelegramWorkspaceRetirementAdoption> {
+}): Promise<BaleWorkspaceRetirementAdoption> {
   return input.runExclusive(async () => {
     const leaderEpoch = input.getLeaderEpoch();
     const profileKey = input.getProfileKey();
@@ -1154,7 +1154,7 @@ export async function adoptTelegramWorkspaceRetirementIntent(input: {
       input.isCurrent?.() !== false;
     if (!isCurrent())
       throw new Error(
-        "Telegram Workspace retirement adoption requires current leader authority.",
+        "Bale Workspace retirement adoption requires current leader authority.",
       );
     const intents = input.store.listWorkspaceRetirementIntents();
     if (intents.length !== 1 || !isDeepStrictEqual(intents[0], input.intent)) {
@@ -1183,7 +1183,7 @@ export async function adoptTelegramWorkspaceRetirementIntent(input: {
     const replacement = { ...input.intent, leaderEpoch: leaderEpoch! };
     if (!isCurrent())
       throw new Error(
-        "Telegram Workspace retirement adoption lost leader authority.",
+        "Bale Workspace retirement adoption lost leader authority.",
       );
     if (
       !(await input.store.replaceWorkspaceRetirementIntent(
@@ -1197,16 +1197,16 @@ export async function adoptTelegramWorkspaceRetirementIntent(input: {
   });
 }
 
-function isTelegramWorkspaceDeletionConfirmedAbsent(error: unknown): boolean {
+function isBaleWorkspaceDeletionConfirmedAbsent(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const status =
     "status" in error && typeof error.status === "number"
       ? error.status
       : undefined;
-  return status === 400 && isTelegramTopicDeletedErrorMessage(error.message);
+  return status === 400 && isBaleTopicDeletedErrorMessage(error.message);
 }
 
-export type TelegramWorkspaceRetirementExecution =
+export type BaleWorkspaceRetirementExecution =
   | { kind: "retired"; bindingKey: string; slot: string }
   | { kind: "cancelled"; reason: "delete-rejected" }
   | {
@@ -1223,12 +1223,12 @@ export type TelegramWorkspaceRetirementExecution =
         | "fence-release-unconfirmed";
     };
 
-export type TelegramWorkspaceRetirementAbsence =
+export type BaleWorkspaceRetirementAbsence =
   "absent" | "present" | "unknown";
 
-function matchesTelegramWorkspaceRetirementFence(
-  fence: TelegramWorkspaceRetirementFence,
-  intent: TelegramWorkspaceRetirementIntent,
+function matchesBaleWorkspaceRetirementFence(
+  fence: BaleWorkspaceRetirementFence,
+  intent: BaleWorkspaceRetirementIntent,
 ): boolean {
   return (
     fence.retirementIntentId === intent.id &&
@@ -1241,13 +1241,13 @@ function matchesTelegramWorkspaceRetirementFence(
   );
 }
 
-async function cancelRejectedTelegramWorkspaceRetirement(
+async function cancelRejectedBaleWorkspaceRetirement(
   input: Pick<
-    Parameters<typeof executeTelegramWorkspaceRetirement>[0],
+    Parameters<typeof executeBaleWorkspaceRetirement>[0],
     "store" | "admission" | "getLeaderEpoch" | "getProfileKey" | "isCurrent"
   >,
-  retained: TelegramWorkspaceRetirementFence,
-): Promise<Exclude<TelegramWorkspaceRetirementExecution, { kind: "retired" }>> {
+  retained: BaleWorkspaceRetirementFence,
+): Promise<Exclude<BaleWorkspaceRetirementExecution, { kind: "retired" }>> {
   const epoch = input.getLeaderEpoch();
   const isCurrent = () =>
     epoch !== undefined &&
@@ -1285,7 +1285,7 @@ async function cancelRejectedTelegramWorkspaceRetirement(
   if (
     !bindingRetained() ||
     intents.length > 1 ||
-    (intents[0] && !matchesTelegramWorkspaceRetirementFence(fence, intents[0]))
+    (intents[0] && !matchesBaleWorkspaceRetirementFence(fence, intents[0]))
   ) {
     return { kind: "retained", reason: "stale-intent" };
   }
@@ -1311,9 +1311,9 @@ async function cancelRejectedTelegramWorkspaceRetirement(
   return { kind: "cancelled", reason: "delete-rejected" };
 }
 
-export async function executeTelegramWorkspaceRetirement(input: {
+export async function executeBaleWorkspaceRetirement(input: {
   store: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     | "captureWorkspaceSlotOccupancy"
     | "listWorkspaceBindings"
     | "listWorkspaceRetirementIntents"
@@ -1323,7 +1323,7 @@ export async function executeTelegramWorkspaceRetirement(input: {
     | "persist"
   >;
   admission: Pick<
-    TelegramWorkspaceAdmissionLedger,
+    BaleWorkspaceAdmissionLedger,
     | "getOwner"
     | "read"
     | "acquireRetirementFence"
@@ -1335,23 +1335,23 @@ export async function executeTelegramWorkspaceRetirement(input: {
     | "releaseUnissuedRetirementFence"
     | "completeRetirementFence"
   >;
-  intent: TelegramWorkspaceRetirementIntent;
+  intent: BaleWorkspaceRetirementIntent;
   getExternalProtection: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceExternalProtectionEvidence;
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceExternalProtectionEvidence;
   getLeaderEpoch: () => number | string | undefined;
   getProfileKey: () => string;
   isCurrent?: () => boolean;
   runExclusive: <T>(operation: () => Promise<T>) => Promise<T>;
   deleteForumTopic: (
-    permit: TelegramWorkspaceDeletionPermit,
+    permit: BaleWorkspaceDeletionPermit,
     body: { chat_id: number; message_thread_id: number },
     options: { maxAttempts: 1 },
   ) => Promise<unknown>;
   confirmTargetAbsent?: (
-    target: TelegramTarget & { threadId: number },
-  ) => Promise<TelegramWorkspaceRetirementAbsence>;
-}): Promise<TelegramWorkspaceRetirementExecution> {
+    target: BaleTarget & { threadId: number },
+  ) => Promise<BaleWorkspaceRetirementAbsence>;
+}): Promise<BaleWorkspaceRetirementExecution> {
   return input.runExclusive(async () => {
     const isCurrent = () =>
       input.getLeaderEpoch() === input.intent.leaderEpoch &&
@@ -1366,13 +1366,13 @@ export async function executeTelegramWorkspaceRetirement(input: {
     }
     const owner = input.admission.getOwner();
     const storedFence = input.admission.read().fence;
-    if (storedFence && !isTelegramWorkspaceRetirementFence(storedFence)) {
+    if (storedFence && !isBaleWorkspaceRetirementFence(storedFence)) {
       return { kind: "retained", reason: "fence-conflict" };
     }
-    let fence: TelegramWorkspaceRetirementFence | undefined = storedFence;
+    let fence: BaleWorkspaceRetirementFence | undefined = storedFence;
     if (
       fence &&
-      !matchesTelegramWorkspaceRetirementFence(fence, input.intent)
+      !matchesBaleWorkspaceRetirementFence(fence, input.intent)
     ) {
       return { kind: "retained", reason: "fence-conflict" };
     }
@@ -1388,7 +1388,7 @@ export async function executeTelegramWorkspaceRetirement(input: {
       });
     }
     if (fence?.phase === "deletion-rejected") {
-      return cancelRejectedTelegramWorkspaceRetirement(
+      return cancelRejectedBaleWorkspaceRetirement(
         { ...input, isCurrent },
         fence,
       );
@@ -1441,7 +1441,7 @@ export async function executeTelegramWorkspaceRetirement(input: {
     if (!fence) {
       const acquired = input.admission.acquireRetirementFence({
         // A fresh attempt after proven rejection must not revive an old permit.
-        operationId: createTelegramWorkspaceAdmissionOperationId(),
+        operationId: createBaleWorkspaceAdmissionOperationId(),
         retirementIntentId: input.intent.id,
         bindingKey: binding.bindingKey,
         slot: binding.slot!,
@@ -1481,16 +1481,16 @@ export async function executeTelegramWorkspaceRetirement(input: {
           { maxAttempts: 1 },
         );
       } catch (error) {
-        if (!isTelegramWorkspaceDeletionConfirmedAbsent(error)) {
-          const target = getTelegramApiErrorRequestTarget(error);
+        if (!isBaleWorkspaceDeletionConfirmedAbsent(error)) {
+          const target = getBaleApiErrorRequestTarget(error);
           if (
             target &&
             sameTarget(target, binding.target) &&
-            isTelegramApiRequestRejected(error, "deleteForumTopic")
+            isBaleApiRequestRejected(error, "deleteForumTopic")
           ) {
             fence = input.admission.confirmRetirementRejection(fence);
             const cancellation =
-              await cancelRejectedTelegramWorkspaceRetirement(
+              await cancelRejectedBaleWorkspaceRetirement(
                 { ...input, isCurrent },
                 fence,
               );
@@ -1534,8 +1534,8 @@ export async function executeTelegramWorkspaceRetirement(input: {
   });
 }
 
-export type TelegramWorkspaceRetirementPreparation =
-  | { kind: "ready"; intent: TelegramWorkspaceRetirementIntent }
+export type BaleWorkspaceRetirementPreparation =
+  | { kind: "ready"; intent: BaleWorkspaceRetirementIntent }
   | { kind: "not-needed"; reason: "free-capacity" }
   | {
       kind: "blocked";
@@ -1547,9 +1547,9 @@ export type TelegramWorkspaceRetirementPreparation =
         | "stale-intent";
     };
 
-export interface TelegramWorkspaceRetirementPreparationDeps {
+export interface BaleWorkspaceRetirementPreparationDeps {
   store: Pick<
-    TelegramTopicTargetStore,
+    BaleTopicTargetStore,
     | "captureWorkspaceSlotOccupancy"
     | "listWorkspaceBindings"
     | "listWorkspaceRetirementIntents"
@@ -1558,8 +1558,8 @@ export interface TelegramWorkspaceRetirementPreparationDeps {
     | "persist"
   >;
   getExternalProtection: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceExternalProtectionEvidence;
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceExternalProtectionEvidence;
   getLeaderEpoch: () => number | string | undefined;
   getProfileKey: () => string;
   isCurrent?: () => boolean;
@@ -1567,13 +1567,13 @@ export interface TelegramWorkspaceRetirementPreparationDeps {
 }
 
 function findEligibleCandidate(
-  occupancy: readonly TelegramWorkspaceSlotOccupancy[],
+  occupancy: readonly BaleWorkspaceSlotOccupancy[],
   reservedSlots: readonly string[],
   nowMs: number,
 ):
-  | { kind: "candidate"; candidate: TelegramWorkspaceSlotOccupancy }
-  | Exclude<TelegramWorkspaceRetirementPreparation, { kind: "ready" }> {
-  const allocation = planTelegramWorkspaceSlotAllocation({
+  | { kind: "candidate"; candidate: BaleWorkspaceSlotOccupancy }
+  | Exclude<BaleWorkspaceRetirementPreparation, { kind: "ready" }> {
+  const allocation = planBaleWorkspaceSlotAllocation({
     bindings: occupancy,
     reservedSlots,
     nowMs,
@@ -1585,9 +1585,9 @@ function findEligibleCandidate(
   return { kind: "candidate", candidate: allocation.candidate };
 }
 
-export async function prepareTelegramWorkspaceRetirement(
-  deps: TelegramWorkspaceRetirementPreparationDeps,
-): Promise<TelegramWorkspaceRetirementPreparation> {
+export async function prepareBaleWorkspaceRetirement(
+  deps: BaleWorkspaceRetirementPreparationDeps,
+): Promise<BaleWorkspaceRetirementPreparation> {
   const getNowMs = deps.getNowMs ?? Date.now;
   const leaderEpoch = deps.getLeaderEpoch();
   const profileKey = deps.getProfileKey();
@@ -1598,7 +1598,7 @@ export async function prepareTelegramWorkspaceRetirement(
     deps.isCurrent?.() !== false;
   if (!isCurrent())
     throw new Error(
-      "Telegram Workspace retirement requires current leader authority.",
+      "Bale Workspace retirement requires current leader authority.",
     );
 
   const existing = deps.store.listWorkspaceRetirementIntents();
@@ -1627,10 +1627,10 @@ export async function prepareTelegramWorkspaceRetirement(
       return { kind: "blocked", reason: "stale-intent" };
     }
     if (!isCurrent())
-      throw new Error("Telegram Workspace retirement lost leader authority.");
+      throw new Error("Bale Workspace retirement lost leader authority.");
     await deps.store.persist();
     if (!isCurrent())
-      throw new Error("Telegram Workspace retirement lost leader authority.");
+      throw new Error("Bale Workspace retirement lost leader authority.");
     return { kind: "ready", intent };
   }
 
@@ -1655,7 +1655,7 @@ export async function prepareTelegramWorkspaceRetirement(
   ) {
     return { kind: "blocked", reason: "state-changed" };
   }
-  const intent: TelegramWorkspaceRetirementIntent = {
+  const intent: BaleWorkspaceRetirementIntent = {
     id: `workspace-retirement:pressure:${binding.bindingKey}:${binding.slot}:${binding.inactiveSinceMs}`,
     reason: "pressure",
     profileKey,
@@ -1664,7 +1664,7 @@ export async function prepareTelegramWorkspaceRetirement(
     requestedAtMs: nowMs,
   };
   if (!isCurrent())
-    throw new Error("Telegram Workspace retirement lost leader authority.");
+    throw new Error("Bale Workspace retirement lost leader authority.");
   if (!deps.store.upsertWorkspaceRetirementIntent(intent)) {
     return { kind: "blocked", reason: "state-changed" };
   }
@@ -1676,65 +1676,65 @@ export async function prepareTelegramWorkspaceRetirement(
   if (rechecked?.protection !== "eligible" || !isCurrent()) {
     deps.store.removeWorkspaceRetirementIntent(intent);
     if (!isCurrent())
-      throw new Error("Telegram Workspace retirement lost leader authority.");
+      throw new Error("Bale Workspace retirement lost leader authority.");
     return { kind: "blocked", reason: "state-changed" };
   }
   await deps.store.persist();
   if (!isCurrent())
-    throw new Error("Telegram Workspace retirement lost leader authority.");
+    throw new Error("Bale Workspace retirement lost leader authority.");
   return { kind: "ready", intent };
 }
 
-export type TelegramWorkspaceRetirementLifecycleResult =
-  | TelegramWorkspaceRetirementExecution
-  | Extract<TelegramWorkspaceRetirementPreparation, { kind: "not-needed" }>
+export type BaleWorkspaceRetirementLifecycleResult =
+  | BaleWorkspaceRetirementExecution
+  | Extract<BaleWorkspaceRetirementPreparation, { kind: "not-needed" }>
   | {
       kind: "blocked";
       stage: "preparation" | "adoption";
       reason: string;
     };
 
-export async function runTelegramWorkspaceRetirementLifecycle(input: {
-  store: TelegramWorkspaceRetirementPreparationDeps["store"] &
+export async function runBaleWorkspaceRetirementLifecycle(input: {
+  store: BaleWorkspaceRetirementPreparationDeps["store"] &
     Pick<
-      TelegramTopicTargetStore,
+      BaleTopicTargetStore,
       | "replaceWorkspaceRetirementIntent"
       | "commitWorkspaceRetirement"
       | "markStaleByTarget"
     >;
   getExternalProtection: (
-    binding: TelegramWorkspaceThreadBinding,
-  ) => TelegramWorkspaceExternalProtectionEvidence;
+    binding: BaleWorkspaceThreadBinding,
+  ) => BaleWorkspaceExternalProtectionEvidence;
   getLeaderEpoch: () => number | string | undefined;
   getProfileKey: () => string;
   isCurrent?: () => boolean;
   getNowMs?: () => number;
   runExclusive: <T>(operation: () => Promise<T>) => Promise<T>;
   admission: Parameters<
-    typeof executeTelegramWorkspaceRetirement
+    typeof executeBaleWorkspaceRetirement
   >[0]["admission"];
   deleteForumTopic: Parameters<
-    typeof executeTelegramWorkspaceRetirement
+    typeof executeBaleWorkspaceRetirement
   >[0]["deleteForumTopic"];
   confirmTargetAbsent?: Parameters<
-    typeof executeTelegramWorkspaceRetirement
+    typeof executeBaleWorkspaceRetirement
   >[0]["confirmTargetAbsent"];
-}): Promise<TelegramWorkspaceRetirementLifecycleResult> {
+}): Promise<BaleWorkspaceRetirementLifecycleResult> {
   let intent = input.store.listWorkspaceRetirementIntents()[0];
   const retainedFence = input.admission.read().fence;
   if (
     retainedFence &&
-    isTelegramWorkspaceRetirementFence(retainedFence) &&
+    isBaleWorkspaceRetirementFence(retainedFence) &&
     retainedFence.phase === "deletion-rejected"
   ) {
     return input.runExclusive(() =>
-      cancelRejectedTelegramWorkspaceRetirement(input, retainedFence),
+      cancelRejectedBaleWorkspaceRetirement(input, retainedFence),
     );
   }
   if (
     !intent &&
     retainedFence &&
-    isTelegramWorkspaceRetirementFence(retainedFence) &&
+    isBaleWorkspaceRetirementFence(retainedFence) &&
     (retainedFence.destructiveKind ?? "pressure-retirement") ===
       "pressure-retirement" &&
     retainedFence.phase === "commit-ready"
@@ -1777,9 +1777,9 @@ export async function runTelegramWorkspaceRetirementLifecycle(input: {
   if (intent) {
     if (
       retainedFence &&
-      isTelegramWorkspaceRetirementFence(retainedFence) &&
+      isBaleWorkspaceRetirementFence(retainedFence) &&
       retainedFence.phase === "commit-ready" &&
-      matchesTelegramWorkspaceRetirementFence(retainedFence, intent)
+      matchesBaleWorkspaceRetirementFence(retainedFence, intent)
     ) {
       const resumed = await input.runExclusive(async () => {
         const epoch = input.getLeaderEpoch();
@@ -1821,7 +1821,7 @@ export async function runTelegramWorkspaceRetirementLifecycle(input: {
         };
       intent = resumed;
     } else {
-      const adoption = await adoptTelegramWorkspaceRetirementIntent({
+      const adoption = await adoptBaleWorkspaceRetirementIntent({
         store: input.store,
         intent,
         getExternalProtection: input.getExternalProtection,
@@ -1836,7 +1836,7 @@ export async function runTelegramWorkspaceRetirementLifecycle(input: {
       intent = adoption.intent;
     }
   } else {
-    const preparation = await prepareTelegramWorkspaceRetirement({
+    const preparation = await prepareBaleWorkspaceRetirement({
       store: input.store,
       getExternalProtection: input.getExternalProtection,
       getLeaderEpoch: input.getLeaderEpoch,
@@ -1854,7 +1854,7 @@ export async function runTelegramWorkspaceRetirementLifecycle(input: {
     }
     intent = preparation.intent;
   }
-  return executeTelegramWorkspaceRetirement({
+  return executeBaleWorkspaceRetirement({
     store: input.store,
     intent,
     getExternalProtection: input.getExternalProtection,
@@ -1868,36 +1868,36 @@ export async function runTelegramWorkspaceRetirementLifecycle(input: {
   });
 }
 
-export type TelegramWorkspaceCapacityRunner = <T>(
+export type BaleWorkspaceCapacityRunner = <T>(
   operation: () => Promise<T>,
 ) => Promise<T>;
 
-export interface TelegramWorkspaceSlotRotationPorts extends TelegramWorkspaceOperationGate {
-  getAdmission: () => TelegramWorkspaceAdmissionLedger | undefined;
-  deleteThread: TelegramWorkspaceThreadDeletionTransport;
+export interface BaleWorkspaceSlotRotationPorts extends BaleWorkspaceOperationGate {
+  getAdmission: () => BaleWorkspaceAdmissionLedger | undefined;
+  deleteThread: BaleWorkspaceThreadDeletionTransport;
   pruneJournalEvidence?: (
-    binding: TelegramWorkspaceThreadBinding,
+    binding: BaleWorkspaceThreadBinding,
     isCurrent: () => boolean,
-  ) => Promise<TelegramWorkspaceJournalPruneResult>;
+  ) => Promise<BaleWorkspaceJournalPruneResult>;
   reclaimDeadOwnerQueuedWork?: (
-    binding: TelegramWorkspaceThreadBinding,
+    binding: BaleWorkspaceThreadBinding,
     isCurrent: () => boolean,
-  ) => Promise<TelegramWorkspaceDeadQueueReclamation>;
+  ) => Promise<BaleWorkspaceDeadQueueReclamation>;
 }
 
 /** Retry allocation once, only after the failed operation released all ordinary leases. */
-export function createTelegramWorkspaceSlotRotation(
-  input: TelegramWorkspaceSlotRotationPorts & {
-    store: TelegramTopicTargetStore;
+export function createBaleWorkspaceSlotRotation(
+  input: BaleWorkspaceSlotRotationPorts & {
+    store: BaleTopicTargetStore;
     getLeaderEpoch: () => number | string | undefined;
     getExternalProtection: (
-      binding: TelegramWorkspaceThreadBinding,
-    ) => TelegramWorkspaceExternalProtectionEvidence;
+      binding: BaleWorkspaceThreadBinding,
+    ) => BaleWorkspaceExternalProtectionEvidence;
     recordEvent: (message: string, details: Record<string, unknown>) => void;
     onSlotReused?: (bindingKey: string, isCurrent: () => boolean) => Promise<void>;
   },
-): TelegramWorkspaceCapacityRunner {
-  const requests = createTelegramWorkspaceOperationGate();
+): BaleWorkspaceCapacityRunner {
+  const requests = createBaleWorkspaceOperationGate();
   return async (operation) => {
     const admission = input.getAdmission();
     const epoch = input.getLeaderEpoch();
@@ -1908,19 +1908,19 @@ export function createTelegramWorkspaceSlotRotation(
       input.getAdmission()?.getProfileKey() === profileKey;
     return requests.runExclusive(async () => {
       if (!isCurrent())
-        throw new Error("Telegram Workspace allocation lost leader authority.");
+        throw new Error("Bale Workspace allocation lost leader authority.");
       const rotate = async (options?: { reuseWhenProtected?: boolean }) => {
         const result = await input.runExclusive(async () => {
           if (!isCurrent())
             throw new Error(
-              "Telegram Workspace rotation lost leader authority.",
+              "Bale Workspace rotation lost leader authority.",
             );
           await input.store.load();
           if (!isCurrent())
             throw new Error(
-              "Telegram Workspace rotation lost leader authority.",
+              "Bale Workspace rotation lost leader authority.",
             );
-          return runTelegramWorkspaceRetirementLifecycle({
+          return runBaleWorkspaceRetirementLifecycle({
             store: input.store,
             admission,
             getExternalProtection: input.getExternalProtection,
@@ -1935,7 +1935,7 @@ export function createTelegramWorkspaceSlotRotation(
                 if (
                   !isCurrent() ||
                   !fence ||
-                  !isTelegramWorkspaceRetirementFence(fence) ||
+                  !isBaleWorkspaceRetirementFence(fence) ||
                   (fence.destructiveKind ?? "pressure-retirement") !==
                     "pressure-retirement" ||
                   (permit.destructiveKind ?? "pressure-retirement") !==
@@ -1954,7 +1954,7 @@ export function createTelegramWorkspaceSlotRotation(
                   body.message_thread_id !== permit.target.threadId
                 ) {
                   throw new Error(
-                    "Telegram Workspace deletion permit is stale.",
+                    "Bale Workspace deletion permit is stale.",
                   );
                 }
                 return { ...permit.target };
@@ -1973,17 +1973,17 @@ export function createTelegramWorkspaceSlotRotation(
           const reused = await input.runExclusive(async () => {
             if (!isCurrent())
               throw new Error(
-                "Telegram Workspace slot reuse lost leader authority.",
+                "Bale Workspace slot reuse lost leader authority.",
               );
             await input.store.load();
             if (!isCurrent())
               throw new Error(
-                "Telegram Workspace slot reuse lost leader authority.",
+                "Bale Workspace slot reuse lost leader authority.",
               );
             return input.store.reuseLeastRecentlyUsedWorkspaceSlot(isCurrent);
           });
           if (!isCurrent())
-            throw new Error("Telegram Workspace rotation lost leader authority.");
+            throw new Error("Bale Workspace rotation lost leader authority.");
           if (reused) {
             if (reused.kind === "reused") {
               // The store commit is final. Await display repair before the next allocation,
@@ -1992,7 +1992,7 @@ export function createTelegramWorkspaceSlotRotation(
                 await input.onSlotReused?.(reused.bindingKey, isCurrent);
               } catch (error) {
                 try {
-                  input.recordEvent("Telegram Workspace slot display update failed.", {
+                  input.recordEvent("Bale Workspace slot display update failed.", {
                     slot: reused.slot,
                     error: error instanceof Error ? error.message : String(error),
                   });
@@ -2001,9 +2001,9 @@ export function createTelegramWorkspaceSlotRotation(
                 }
               }
               if (!isCurrent())
-                throw new Error("Telegram Workspace rotation lost leader authority.");
+                throw new Error("Bale Workspace rotation lost leader authority.");
               try {
-                input.recordEvent("Telegram Workspace slot reused.", {
+                input.recordEvent("Bale Workspace slot reused.", {
                   slot: reused.slot,
                 });
               } catch {
@@ -2019,12 +2019,12 @@ export function createTelegramWorkspaceSlotRotation(
           result.kind !== "cancelled"
         ) {
           throw new Error(
-            `Telegram Workspace slots A-Z are unavailable; rotation blocked (${result.reason}).`,
+            `Bale Workspace slots A-Z are unavailable; rotation blocked (${result.reason}).`,
           );
         }
         if (result.kind === "retired") {
           try {
-            input.recordEvent("Telegram Workspace slot rotated.", {
+            input.recordEvent("Bale Workspace slot rotated.", {
               slot: result.slot,
             });
           } catch {
@@ -2032,14 +2032,14 @@ export function createTelegramWorkspaceSlotRotation(
           }
         }
         if (!isCurrent())
-          throw new Error("Telegram Workspace rotation lost leader authority.");
+          throw new Error("Bale Workspace rotation lost leader authority.");
         return result;
       };
       const pending = await input.runExclusive(async () => {
         await input.store.load();
         if (!isCurrent())
           throw new Error(
-            "Telegram Workspace allocation lost leader authority.",
+            "Bale Workspace allocation lost leader authority.",
           );
         return input.store.listWorkspaceRetirementIntents().length > 0;
       });
@@ -2047,7 +2047,7 @@ export function createTelegramWorkspaceSlotRotation(
       if (
         pending ||
         (fence &&
-          isTelegramWorkspaceRetirementFence(fence) &&
+          isBaleWorkspaceRetirementFence(fence) &&
           (fence.destructiveKind ?? "pressure-retirement") ===
             "pressure-retirement")
       ) {
@@ -2057,19 +2057,19 @@ export function createTelegramWorkspaceSlotRotation(
       try {
         return await operation();
       } catch (error) {
-        if (!(error instanceof TelegramWorkspaceSlotUnavailableError))
+        if (!(error instanceof BaleWorkspaceSlotUnavailableError))
           throw error;
         if (input.pruneJournalEvidence || input.reclaimDeadOwnerQueuedWork) {
           const candidates = await input.runExclusive(async () => {
             await input.store.load();
             if (!isCurrent())
               throw new Error(
-                "Telegram Workspace reclamation lost leader authority.",
+                "Bale Workspace reclamation lost leader authority.",
               );
             const snapshot = input.store.captureWorkspaceSlotOccupancy(
               input.getExternalProtection,
             );
-            const allocation = planTelegramWorkspaceSlotAllocation({
+            const allocation = planBaleWorkspaceSlotAllocation({
               ...snapshot,
               nowMs: Date.now(),
             });
@@ -2111,7 +2111,7 @@ export function createTelegramWorkspaceSlotRotation(
               );
               if (!isCurrent())
                 throw new Error(
-                  "Telegram Workspace pruning lost leader authority.",
+                  "Bale Workspace pruning lost leader authority.",
                 );
               if (pruned.kind !== "committed") continue;
               binding = pruned.binding;
@@ -2121,7 +2121,7 @@ export function createTelegramWorkspaceSlotRotation(
               if (removed > 0) {
                 try {
                   input.recordEvent(
-                    "Telegram Workspace journal evidence pruned.",
+                    "Bale Workspace journal evidence pruned.",
                     { slot: binding.slot, removed },
                   );
                 } catch {
@@ -2144,7 +2144,7 @@ export function createTelegramWorkspaceSlotRotation(
             if (reclaimed.kind === "recovered") {
               try {
                 input.recordEvent(
-                  "Telegram Workspace dead-owner queue reclaimed.",
+                  "Bale Workspace dead-owner queue reclaimed.",
                   {
                     slot: binding.slot,
                     receipts: reclaimed.receipts,

@@ -1,6 +1,6 @@
 /**
- * Telegram thread binding helpers
- * Zones: multi-instance bus, Telegram UI threads, durable Workspace state
+ * Bale thread binding helpers
+ * Zones: multi-instance bus, Bale UI threads, durable Workspace state
  * Owns live mappings, Workspace bindings and guarded Restore transitions; routing and transport effects stay outside.
  */
 import { createHash, randomUUID } from "node:crypto";
@@ -8,18 +8,18 @@ import { chmodSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, open
 import { chmod, mkdir, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { parseTelegramIntegerId as asInteger, getTelegramTargetKey as getTargetRecoveryHintKey, areTelegramTargetsEqual as targetMatches, } from "./target.js";
-import { isTelegramApiCommitUnknownError, TelegramApiCommitUnknownError, } from "./telegram-api.js";
-import { getTelegramTopicName as buildTelegramTopicName, chooseTelegramThreadName, getTelegramManualThreadDisplayNameValidationError, getTelegramThreadNameLeadingSlot, getTelegramTopicIdentityName, getTelegramTopicTitleForThreadName, isTelegramTopicThreadNameValidForSlot, normalizeTelegramTopicTargetThreadName, } from "./thread-naming.js";
+import { parseBaleIntegerId as asInteger, getBaleTargetKey as getTargetRecoveryHintKey, areBaleTargetsEqual as targetMatches, } from "./target.js";
+import { isBaleApiCommitUnknownError, BaleApiCommitUnknownError, } from "./bale-api.js";
+import { getBaleTopicName as buildBaleTopicName, chooseBaleThreadName, getBaleManualThreadDisplayNameValidationError, getBaleThreadNameLeadingSlot, getBaleTopicIdentityName, getBaleTopicTitleForThreadName, isBaleTopicThreadNameValidForSlot, normalizeBaleTopicTargetThreadName, } from "./thread-naming.js";
 import { isWireRecord as restoreObject, isNonEmptyWireString as restoreText, } from "./wire.js";
-import { renameTelegramPathWithRetry, isTelegramOwnerPrivate, TELEGRAM_STRICT_READ_FLAGS, readTelegramRuntimeState, withTelegramFileTransaction, } from "./locks.js";
-import { resolveTelegramProfileTempFilePath } from "./paths.js";
-import { createTelegramRuntimeProjectionStore } from "./status.js";
+import { renameBalePathWithRetry, isBaleOwnerPrivate, BALE_STRICT_READ_FLAGS, readBaleRuntimeState, withBaleFileTransaction, } from "./locks.js";
+import { resolveBaleProfileTempFilePath } from "./paths.js";
+import { createBaleRuntimeProjectionStore } from "./status.js";
 import * as ThreadReconciler from "./thread-reconciler.js";
-import { createTelegramSessionKey, createTelegramWorkspaceBindingIdentityWithKey, createTelegramWorkspaceDirectoryKey, normalizeTelegramSessionId, normalizeTelegramWorkspacePath, TELEGRAM_WORKSPACE_KEY_MAX_LENGTH, } from "./workspace-identity.js";
-import { planTelegramWorkspaceSlotAllocation, selectTelegramWorkspaceReusableSlot, TELEGRAM_WORKSPACE_SLOTS, TelegramWorkspaceSlotUnavailableError, } from "./workspace-slots.js";
-export { createTelegramWorkspaceBindingIdentity, createTelegramWorkspaceDirectoryKey, normalizeTelegramSessionId, normalizeTelegramWorkspacePath, } from "./workspace-identity.js";
-const TELEGRAM_THREAD_RESERVATION_TTL_MS = 15 * 60 * 1000;
+import { createBaleSessionKey, createBaleWorkspaceBindingIdentityWithKey, createBaleWorkspaceDirectoryKey, normalizeBaleSessionId, normalizeBaleWorkspacePath, BALE_WORKSPACE_KEY_MAX_LENGTH, } from "./workspace-identity.js";
+import { planBaleWorkspaceSlotAllocation, selectBaleWorkspaceReusableSlot, BALE_WORKSPACE_SLOTS, BaleWorkspaceSlotUnavailableError, } from "./workspace-slots.js";
+export { createBaleWorkspaceBindingIdentity, createBaleWorkspaceDirectoryKey, normalizeBaleSessionId, normalizeBaleWorkspacePath, } from "./workspace-identity.js";
+const BALE_THREAD_RESERVATION_TTL_MS = 15 * 60 * 1000;
 function getNextMonotonicSlot(records, reservations, pendingProvisions, nowMs, lastSlot) {
     let cursorCode;
     if (lastSlot && /^[A-Z]$/.test(lastSlot)) {
@@ -55,7 +55,7 @@ function getNextMonotonicSlot(records, reservations, pendingProvisions, nowMs, l
         code = "A".charCodeAt(0);
     for (let attempt = 0; attempt < 26; attempt++) {
         const candidate = String.fromCharCode(code);
-        if (!isTelegramTopicTargetSlotOccupied(candidate, records, reservations, pendingProvisions, nowMs)) {
+        if (!isBaleTopicTargetSlotOccupied(candidate, records, reservations, pendingProvisions, nowMs)) {
             return candidate;
         }
         code += 1;
@@ -64,7 +64,7 @@ function getNextMonotonicSlot(records, reservations, pendingProvisions, nowMs, l
     }
     return undefined;
 }
-export function createTelegramCleanupTargetProtection(store, departingRecord) {
+export function createBaleCleanupTargetProtection(store, departingRecord) {
     const records = store.list();
     const reservations = store.listReservations?.() ?? [];
     const provisions = store.listPendingProvisions?.() ?? [];
@@ -148,7 +148,7 @@ export function createTelegramCleanupTargetProtection(store, departingRecord) {
     };
 }
 /** Pending creation evidence cannot bypass an exact target's unresolved cleanup or closure. */
-export function assertTelegramPendingTopicRecoveryAllowed(store, target) {
+export function assertBalePendingTopicRecoveryAllowed(store, target) {
     if (!store
         .listPendingProvisions()
         .some((entry) => entry.target && targetMatches(entry.target, target)))
@@ -159,12 +159,12 @@ export function assertTelegramPendingTopicRecoveryAllowed(store, target) {
         store
             .listSyncObservations()
             .some((entry) => targetMatches(entry.target, target) && entry.syncStatus === "closed")) {
-        throw new Error("Telegram pending topic requires reconciliation before recovery.");
+        throw new Error("Bale pending topic requires reconciliation before recovery.");
     }
 }
 /** Settle creation-title evidence with the exact Workspace claim; caller fences and persists. */
-export function commitTelegramWorkspaceProvisionBinding(input) {
-    assertTelegramPendingTopicRecoveryAllowed(input.store, input.binding.target);
+export function commitBaleWorkspaceProvisionBinding(input) {
+    assertBalePendingTopicRecoveryAllowed(input.store, input.binding.target);
     const pending = input.store
         .listPendingProvisions()
         .filter((provision) => provision.target &&
@@ -178,14 +178,14 @@ export function commitTelegramWorkspaceProvisionBinding(input) {
     if (input.displayTitle !== undefined)
         titles.add(input.displayTitle);
     if (titles.size > 1)
-        throw new Error("Telegram Workspace creation title evidence conflicts.");
+        throw new Error("Bale Workspace creation title evidence conflicts.");
     const displayTitle = titles.values().next().value;
     const committed = input.store.upsertWorkspaceBinding(input.binding, input.instanceId);
     if (!committed)
-        throw new Error("Telegram Workspace binding claim changed.");
+        throw new Error("Bale Workspace binding claim changed.");
     if (displayTitle !== undefined &&
         !input.store.setWorkspaceDisplayTitle(committed, displayTitle)) {
-        throw new Error("Telegram Workspace display title commit changed binding.");
+        throw new Error("Bale Workspace display title commit changed binding.");
     }
     for (const provision of pending)
         input.store.removePendingProvision(provision.id);
@@ -193,10 +193,10 @@ export function commitTelegramWorkspaceProvisionBinding(input) {
         ? committed
         : { ...committed, displayTitle };
 }
-const TELEGRAM_LEADER_SESSION_HANDOFF_KEY = "__piTelegramLeaderSessionHandoff";
-export const TELEGRAM_LEADER_SESSION_HANDOFF_TTL_MS = 30_000;
-export function getTelegramLeaderSessionHandoff() {
-    const value = globalThis[TELEGRAM_LEADER_SESSION_HANDOFF_KEY];
+const BALE_LEADER_SESSION_HANDOFF_KEY = "__piBaleLeaderSessionHandoff";
+export const BALE_LEADER_SESSION_HANDOFF_TTL_MS = 30_000;
+export function getBaleLeaderSessionHandoff() {
+    const value = globalThis[BALE_LEADER_SESSION_HANDOFF_KEY];
     if (!value || typeof value !== "object")
         return undefined;
     const handoff = value;
@@ -210,34 +210,34 @@ export function getTelegramLeaderSessionHandoff() {
     }
     return handoff;
 }
-export function setTelegramLeaderSessionHandoff(handoff) {
+export function setBaleLeaderSessionHandoff(handoff) {
     const store = globalThis;
     if (!handoff)
-        delete store[TELEGRAM_LEADER_SESSION_HANDOFF_KEY];
+        delete store[BALE_LEADER_SESSION_HANDOFF_KEY];
     else
-        store[TELEGRAM_LEADER_SESSION_HANDOFF_KEY] = handoff;
+        store[BALE_LEADER_SESSION_HANDOFF_KEY] = handoff;
 }
-function isTelegramLeaderSessionHandoffFresh(handoff, options = {}) {
+function isBaleLeaderSessionHandoffFresh(handoff, options = {}) {
     if (!handoff)
         return false;
     const pid = options.pid ?? process.pid;
     const nowMs = options.nowMs ?? Date.now();
-    const ttlMs = options.ttlMs ?? TELEGRAM_LEADER_SESSION_HANDOFF_TTL_MS;
+    const ttlMs = options.ttlMs ?? BALE_LEADER_SESSION_HANDOFF_TTL_MS;
     return handoff.pid === pid && nowMs - handoff.createdAtMs <= ttlMs;
 }
-export function getTelegramThreadOwnerKey(owner) {
+export function getBaleThreadOwnerKey(owner) {
     switch (owner.kind) {
         case "leader": {
             const base = owner.cwd
                 ? `cwd:${owner.cwd}`
                 : `leader:${owner.instanceId ?? "default"}`;
-            return owner.telegramProfile
-                ? `profile:${owner.telegramProfile}:${base}`
+            return owner.baleProfile
+                ? `profile:${owner.baleProfile}:${base}`
                 : base;
         }
         case "manual-follower":
-            return owner.telegramProfile
-                ? `profile:${owner.telegramProfile}:manual:${owner.instanceId}`
+            return owner.baleProfile
+                ? `profile:${owner.baleProfile}:manual:${owner.instanceId}`
                 : `manual:${owner.instanceId}`;
         case "pending-topic":
             return `topic:${owner.chatId}:${owner.threadId}`;
@@ -245,16 +245,16 @@ export function getTelegramThreadOwnerKey(owner) {
             return `legacy:${owner.key}`;
     }
 }
-export function getTelegramThreadOwnerFromProfileKey(profileKey) {
+export function getBaleThreadOwnerFromProfileKey(profileKey) {
     if (profileKey.startsWith("profile:")) {
-        const [, telegramProfile, ownerKind, ...rest] = profileKey.split(":");
+        const [, baleProfile, ownerKind, ...rest] = profileKey.split(":");
         const value = rest.join(":");
         if (ownerKind === "cwd")
-            return { kind: "leader", cwd: value, telegramProfile };
+            return { kind: "leader", cwd: value, baleProfile };
         if (ownerKind === "leader")
-            return { kind: "leader", instanceId: value, telegramProfile };
+            return { kind: "leader", instanceId: value, baleProfile };
         if (ownerKind === "manual")
-            return { kind: "manual-follower", instanceId: value, telegramProfile };
+            return { kind: "manual-follower", instanceId: value, baleProfile };
     }
     if (profileKey.startsWith("cwd:"))
         return { kind: "leader", cwd: profileKey.slice(4) };
@@ -283,8 +283,8 @@ function parseThreadOwner(value) {
             kind: "leader",
             cwd: typeof record.cwd === "string" ? record.cwd : undefined,
             instanceId: typeof record.instanceId === "string" ? record.instanceId : undefined,
-            ...(typeof record.telegramProfile === "string"
-                ? { telegramProfile: record.telegramProfile }
+            ...(typeof record.baleProfile === "string"
+                ? { baleProfile: record.baleProfile }
                 : {}),
         };
     }
@@ -293,8 +293,8 @@ function parseThreadOwner(value) {
         return {
             kind: "manual-follower",
             instanceId: record.instanceId,
-            ...(typeof record.telegramProfile === "string"
-                ? { telegramProfile: record.telegramProfile }
+            ...(typeof record.baleProfile === "string"
+                ? { baleProfile: record.baleProfile }
                 : {}),
         };
     }
@@ -314,17 +314,17 @@ function parseThreadOwner(value) {
     return undefined;
 }
 function getRecordOwner(record) {
-    return (record.owner ?? getTelegramThreadOwnerFromProfileKey(record.profileKey));
+    return (record.owner ?? getBaleThreadOwnerFromProfileKey(record.profileKey));
 }
 function getRecordOwnerKey(record) {
-    return getTelegramThreadOwnerKey(getRecordOwner(record));
+    return getBaleThreadOwnerKey(getRecordOwner(record));
 }
 function cloneRecord(record) {
     const owner = getRecordOwner(record);
     return {
         ...record,
         owner: { ...owner },
-        profileKey: getTelegramThreadOwnerKey(owner),
+        profileKey: getBaleThreadOwnerKey(owner),
         target: { ...record.target },
     };
 }
@@ -334,7 +334,7 @@ function getPersistedThreadName(record) {
         : typeof record.displayName === "string"
             ? record.displayName
             : undefined;
-    return value ? normalizeTelegramTopicTargetThreadName(value) : undefined;
+    return value ? normalizeBaleTopicTargetThreadName(value) : undefined;
 }
 function normalizeRecord(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
@@ -343,7 +343,7 @@ function normalizeRecord(value) {
     const target = record.target;
     const owner = parseThreadOwner(record.owner) ??
         (typeof record.profileKey === "string" && record.profileKey.length > 0
-            ? getTelegramThreadOwnerFromProfileKey(record.profileKey)
+            ? getBaleThreadOwnerFromProfileKey(record.profileKey)
             : undefined);
     if (!owner)
         return undefined;
@@ -364,7 +364,7 @@ function normalizeRecord(value) {
         return undefined;
     const threadName = getPersistedThreadName(record);
     const normalized = {
-        profileKey: getTelegramThreadOwnerKey(owner),
+        profileKey: getBaleThreadOwnerKey(owner),
         owner,
         target: parsedTarget,
         status,
@@ -372,9 +372,9 @@ function normalizeRecord(value) {
         updatedAtMs: record.updatedAtMs,
         ...(threadName !== undefined ? { threadName } : {}),
         ...(typeof record.manualThreadName === "string" &&
-            normalizeTelegramTopicTargetThreadName(record.manualThreadName)
+            normalizeBaleTopicTargetThreadName(record.manualThreadName)
             ? {
-                manualThreadName: normalizeTelegramTopicTargetThreadName(record.manualThreadName),
+                manualThreadName: normalizeBaleTopicTargetThreadName(record.manualThreadName),
             }
             : {}),
         instanceId: typeof record.instanceId === "string" ? record.instanceId : undefined,
@@ -427,7 +427,7 @@ function normalizeIdentityRecord(value) {
     };
     const persistedThreadName = getPersistedThreadName(record);
     if (persistedThreadName) {
-        const threadName = normalizeTelegramTopicTargetThreadName(persistedThreadName);
+        const threadName = normalizeBaleTopicTargetThreadName(persistedThreadName);
         if (threadName)
             identity.threadName = threadName;
     }
@@ -458,7 +458,7 @@ function normalizeWorkspaceJournalSources(value) {
         const source = entry;
         if (Object.keys(source).some((key) => key !== "sessionId" && key !== "recipientBindingKey") ||
             typeof source.sessionId !== "string" ||
-            normalizeTelegramSessionId(source.sessionId) !== source.sessionId ||
+            normalizeBaleSessionId(source.sessionId) !== source.sessionId ||
             typeof source.recipientBindingKey !== "string" ||
             !source.recipientBindingKey ||
             source.recipientBindingKey.length > 512)
@@ -482,14 +482,14 @@ function normalizeWorkspaceBindingRecord(value) {
         typeof record.updatedAtMs !== "number") {
         return undefined;
     }
-    const cwd = normalizeTelegramWorkspacePath(record.cwd);
+    const cwd = normalizeBaleWorkspacePath(record.cwd);
     const sessionId = typeof record.sessionId === "string"
-        ? normalizeTelegramSessionId(record.sessionId)
+        ? normalizeBaleSessionId(record.sessionId)
         : undefined;
     const sessionKey = typeof record.sessionKey === "string" ? record.sessionKey : undefined;
     const hasSessionFields = record.sessionId !== undefined || record.sessionKey !== undefined;
     const expectedSessionKey = sessionId
-        ? createTelegramSessionKey(sessionId)
+        ? createBaleSessionKey(sessionId)
         : undefined;
     const legacyBindingKey = record.instanceSlot === "a"
         ? record.workspaceKey
@@ -519,7 +519,7 @@ function normalizeWorkspaceBindingRecord(value) {
     }
     const threadName = getPersistedThreadName(record);
     const manualThreadName = typeof record.manualThreadName === "string"
-        ? normalizeTelegramTopicTargetThreadName(record.manualThreadName)
+        ? normalizeBaleTopicTargetThreadName(record.manualThreadName)
         : undefined;
     const slot = typeof record.slot === "string" && /^[A-Z]$/u.test(record.slot)
         ? record.slot
@@ -580,17 +580,17 @@ function cloneWorkspaceBinding(binding) {
 function cloneSessionReplacementIntent(intent) {
     return { ...intent, target: { ...intent.target } };
 }
-export function normalizeTelegramSessionReplacementIntent(value) {
+export function normalizeBaleSessionReplacementIntent(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
         return undefined;
     const record = value;
     const target = record.target;
     if (typeof record.cwd !== "string" ||
-        !normalizeTelegramWorkspacePath(record.cwd) ||
+        !normalizeBaleWorkspacePath(record.cwd) ||
         typeof record.profileName !== "string" ||
         !record.profileName ||
         typeof record.sourceSessionId !== "string" ||
-        !normalizeTelegramSessionId(record.sourceSessionId) ||
+        !normalizeBaleSessionId(record.sourceSessionId) ||
         typeof record.sourceUpdateId !== "number" ||
         !Number.isSafeInteger(record.sourceUpdateId) ||
         !target ||
@@ -621,9 +621,9 @@ export function normalizeTelegramSessionReplacementIntent(value) {
     }
     return {
         continuity,
-        cwd: normalizeTelegramWorkspacePath(record.cwd),
+        cwd: normalizeBaleWorkspacePath(record.cwd),
         profileName: record.profileName,
-        sourceSessionId: normalizeTelegramSessionId(record.sourceSessionId),
+        sourceSessionId: normalizeBaleSessionId(record.sourceSessionId),
         sourceUpdateId: record.sourceUpdateId,
         target: {
             chatId: target.chatId,
@@ -819,7 +819,7 @@ function normalizeReservation(value) {
             : undefined,
     };
 }
-function normalizeTelegramWorkspaceRelocationRequest(value) {
+function normalizeBaleWorkspaceRelocationRequest(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
         return undefined;
     const request = value;
@@ -861,21 +861,21 @@ function normalizeTelegramWorkspaceRelocationRequest(value) {
 }
 const restoreInteger = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const restoreKeys = (value, allowed) => Object.keys(value).every((key) => allowed.includes(key));
-const isTelegramWorkspaceRestoreExecutor = (value) => restoreObject(value) &&
+const isBaleWorkspaceRestoreExecutor = (value) => restoreObject(value) &&
     restoreKeys(value, ["instanceId", "leaderEpoch"]) &&
     restoreText(value.instanceId) &&
     restoreText(value.leaderEpoch);
-export const isTelegramWorkspaceRestoreRecipient = (value) => restoreObject(value) &&
+export const isBaleWorkspaceRestoreRecipient = (value) => restoreObject(value) &&
     restoreKeys(value, ["kind", "instanceId", "sessionId", "generation"]) &&
     (value.kind === "leader" || value.kind === "follower") &&
     restoreText(value.instanceId) &&
     restoreText(value.sessionId) &&
     restoreText(value.generation);
-export function isTelegramWorkspaceRestoreRequest(value) {
+export function isBaleWorkspaceRestoreRequest(value) {
     if (!restoreObject(value))
         return false;
     const { source, ...relocation } = value;
-    return (!!normalizeTelegramWorkspaceRelocationRequest(relocation) &&
+    return (!!normalizeBaleWorkspaceRelocationRequest(relocation) &&
         restoreObject(source) &&
         restoreKeys(source, ["journalBindingKey", "updateIds"]) &&
         restoreText(source.journalBindingKey) &&
@@ -883,7 +883,7 @@ export function isTelegramWorkspaceRestoreRequest(value) {
         source.updateIds.length > 0 &&
         source.updateIds.every((id, index, ids) => restoreInteger(id) && (index === 0 || id > ids[index - 1])));
 }
-function isTelegramWorkspaceRestoreSettlement(value, source) {
+function isBaleWorkspaceRestoreSettlement(value, source) {
     if (!restoreObject(value) ||
         value.journalBindingKey !== source.journalBindingKey ||
         !Array.isArray(value.updateIds) ||
@@ -912,7 +912,7 @@ function isWorkspaceRestoreSourceAcceptance(value, operation) {
         !operation.request.source.updateIds.includes(value.updateId) ||
         typeof value.sourceSha256 !== "string" ||
         !/^[a-f0-9]{64}$/u.test(value.sourceSha256) ||
-        !isTelegramWorkspaceRestoreRecipient(value.recipient) ||
+        !isBaleWorkspaceRestoreRecipient(value.recipient) ||
         value.recipient.sessionId !== operation.request.binding.sessionId ||
         value.recipient.kind !== operation.recipient?.kind)
         return false;
@@ -929,7 +929,7 @@ function isWorkspaceRestoreSourceAcceptance(value, operation) {
         return (value.recipient.kind === "follower" &&
             restoreKeys(value, [...keys, "deliveryId", "recipientBindingKey"]) &&
             typeof value.deliveryId === "string" &&
-            /^telegram-follower-v1-[a-f0-9]{64}$/u.test(value.deliveryId) &&
+            /^bale-follower-v1-[a-f0-9]{64}$/u.test(value.deliveryId) &&
             restoreText(value.recipientBindingKey));
     return (value.kind === "queued" &&
         value.recipient.kind === "leader" &&
@@ -945,8 +945,8 @@ function isWorkspaceRestoreSourceAcceptance(value, operation) {
         /^[a-f0-9]{64}$/u.test(value.queueOwnerSha256));
 }
 /** Stable acceptance scope, not a removal ACK; adoption and mutable progress cannot change it. */
-export function getTelegramWorkspaceRestoreSourceCompletionSha256(operation, acceptance) {
-    if (!isTelegramWorkspaceRestoreRequest(operation.request) ||
+export function getBaleWorkspaceRestoreSourceCompletionSha256(operation, acceptance) {
+    if (!isBaleWorkspaceRestoreRequest(operation.request) ||
         operation.operatorUserId !== operation.request.target.chatId ||
         !isWorkspaceRestoreSourceAcceptance(acceptance, operation) ||
         !operation.routing?.acceptances?.some((value) => isDeepStrictEqual(value, acceptance))) {
@@ -1015,10 +1015,10 @@ function isWorkspaceRestoreIntent(value) {
             "readyRecipient",
             "routing",
         ]) ||
-        !isTelegramWorkspaceRestoreRequest(value.request) ||
+        !isBaleWorkspaceRestoreRequest(value.request) ||
         !restoreInteger(value.operatorUserId) ||
         value.operatorUserId !== value.request.target.chatId ||
-        !isTelegramWorkspaceRestoreExecutor(value.executor) ||
+        !isBaleWorkspaceRestoreExecutor(value.executor) ||
         !restoreInteger(value.revision) ||
         !restoreInteger(value.createdAtMs) ||
         !restoreInteger(value.updatedAtMs) ||
@@ -1031,7 +1031,7 @@ function isWorkspaceRestoreIntent(value) {
             !restoreObject(value.routing) ||
             !restoreKeys(value.routing, ["acceptances", "settlements", "cleanup"]) ||
             !Array.isArray(value.routing.settlements) ||
-            !value.routing.settlements.every((item) => isTelegramWorkspaceRestoreSettlement(item, source)))
+            !value.routing.settlements.every((item) => isBaleWorkspaceRestoreSettlement(item, source)))
             return false;
         if (value.routing.acceptances !== undefined) {
             const acceptances = value.routing.acceptances;
@@ -1054,13 +1054,13 @@ function isWorkspaceRestoreIntent(value) {
     }
     if (value.readyRecipient !== undefined &&
         (value.phase !== "ready" ||
-            !isTelegramWorkspaceRestoreRecipient(value.readyRecipient) ||
+            !isBaleWorkspaceRestoreRecipient(value.readyRecipient) ||
             value.readyRecipient.sessionId !== value.request.binding.sessionId))
         return false;
     if (value.phase === "relocated")
         return value.recipient === undefined;
     return ((value.phase === "recipient-issued" || value.phase === "ready") &&
-        isTelegramWorkspaceRestoreRecipient(value.recipient) &&
+        isBaleWorkspaceRestoreRecipient(value.recipient) &&
         value.recipient.sessionId === value.request.binding.sessionId);
 }
 function isWorkspaceLiveRebindIntent(value) {
@@ -1080,15 +1080,15 @@ function isWorkspaceLiveRebindIntent(value) {
             "oldTargetProtected",
         ]) ||
         value.kind !== "live-rebind" ||
-        !isTelegramWorkspaceRestoreRequest(value.request) ||
+        !isBaleWorkspaceRestoreRequest(value.request) ||
         !restoreInteger(value.operatorUserId) ||
         value.operatorUserId !== value.request.target.chatId ||
-        !isTelegramWorkspaceRestoreExecutor(value.executor) ||
+        !isBaleWorkspaceRestoreExecutor(value.executor) ||
         !restoreInteger(value.revision) ||
         !restoreInteger(value.createdAtMs) ||
         !restoreInteger(value.updatedAtMs) ||
         value.updatedAtMs < value.createdAtMs ||
-        !isTelegramWorkspaceRestoreRecipient(value.recipient) ||
+        !isBaleWorkspaceRestoreRecipient(value.recipient) ||
         value.recipient.sessionId !== value.request.binding.sessionId ||
         value.recipient.instanceId !== value.request.owner.instanceId ||
         value.recipient.kind !==
@@ -1117,7 +1117,7 @@ function isTemporaryThreadInput(value) {
         value.updateIds.length <= TEMPORARY_THREAD_INPUT_CAPACITY &&
         value.updateIds.every((id, index, ids) => restoreInteger(id) && (index === 0 || id > ids[index - 1])));
 }
-export function getTelegramTemporaryThreadInputs(entry) {
+export function getBaleTemporaryThreadInputs(entry) {
     return structuredClone(entry.inputs ?? [
         {
             journalBindingKey: entry.source.journalBindingKey,
@@ -1126,8 +1126,8 @@ export function getTelegramTemporaryThreadInputs(entry) {
     ]);
 }
 /** Every known group is durably cancelled or Forward-completed; still not deletion authority by itself. */
-export function isTelegramTemporaryThreadFullyResolved(entry) {
-    const inputs = getTelegramTemporaryThreadInputs(entry), resolved = [
+export function isBaleTemporaryThreadFullyResolved(entry) {
+    const inputs = getBaleTemporaryThreadInputs(entry), resolved = [
         ...(entry.cancelledInputs ?? []),
         ...(entry.completedInputs ?? []),
     ];
@@ -1138,7 +1138,7 @@ export function isTelegramTemporaryThreadFullyResolved(entry) {
 function isTemporaryThreadReleasedByCompletion(entry, completed) {
     if (!completed || !isTemporaryThreadInput(completed))
         return false;
-    const inputs = getTelegramTemporaryThreadInputs(entry), cancelled = [
+    const inputs = getBaleTemporaryThreadInputs(entry), cancelled = [
         ...(entry.cancelledInputs ?? []),
         ...(entry.completedInputs ?? []),
     ];
@@ -1150,7 +1150,7 @@ function isTemporaryThreadReleasedByCompletion(entry, completed) {
 /** A created temporary tab may advance one recorded input only while no Restore operation claims its updates. */
 function isTemporaryThreadInputAdvanceable(entry, file, input) {
     return (entry.phase === "created" &&
-        getTelegramTemporaryThreadInputs(entry).some((candidate) => isDeepStrictEqual(candidate, input)) &&
+        getBaleTemporaryThreadInputs(entry).some((candidate) => isDeepStrictEqual(candidate, input)) &&
         !file.operations.some(({ request }) => request.source.journalBindingKey === input.journalBindingKey &&
             request.source.updateIds.some((id) => input.updateIds.includes(id))));
 }
@@ -1189,7 +1189,7 @@ function isTemporaryThreadEntry(value) {
         !restoreInteger(value.source.updateId) ||
         !restoreInteger(value.operatorUserId) ||
         value.operatorUserId === 0 ||
-        !isTelegramWorkspaceRestoreExecutor(value.executor) ||
+        !isBaleWorkspaceRestoreExecutor(value.executor) ||
         typeof value.token !== "string" ||
         !/^[a-f0-9]{32}$/u.test(value.token) ||
         !restoreInteger(value.revision) ||
@@ -1239,7 +1239,7 @@ function isTemporaryThreadEntry(value) {
         return false;
     if (value.cleanupIssued !== undefined &&
         (value.cleanupIssued !== true ||
-            !isTelegramTemporaryThreadFullyResolved(value)))
+            !isBaleTemporaryThreadFullyResolved(value)))
         return false;
     if (value.phase === "creating")
         return (value.target === undefined &&
@@ -1289,7 +1289,7 @@ function conflictsWithWorkspaceRestoreProvision(request, provision) {
                 targetMatches(provision.target, request.target))));
 }
 /** Canonical issuance is distinct from cleanup completion, source disposition and peer dispatch readiness. */
-export function isTelegramLiveRebindInputAuthorized(value) {
+export function isBaleLiveRebindInputAuthorized(value) {
     return value.inputRelease === undefined
         ? value.phase === "released" && value.cleanup === undefined
         : ["issued", "accepted"].includes(value.inputRelease) &&
@@ -1468,7 +1468,7 @@ function parseWorkspaceRestore(value) {
     if (entries.some((entry, index) => entries
         .slice(index + 1)
         .some((other) => other.token === entry.token ||
-        getTelegramTemporaryThreadInputs(entry).some((input) => getTelegramTemporaryThreadInputs(other).some((candidate) => input.journalBindingKey === candidate.journalBindingKey &&
+        getBaleTemporaryThreadInputs(entry).some((input) => getBaleTemporaryThreadInputs(other).some((candidate) => input.journalBindingKey === candidate.journalBindingKey &&
             input.updateIds.some((id) => candidate.updateIds.includes(id)))) ||
         (!!entry.target &&
             !!other.target &&
@@ -1487,13 +1487,13 @@ function parseWorkspaceRestore(value) {
  * Atomic Workspace replacement with the shared bounded Windows sharing retries: a reader, scanner or antivirus
  * briefly holding the target makes rename fail with EPERM there. A vanished staging file is still an error.
  */
-function replaceTelegramWorkspaceFile(temporary, path) {
+function replaceBaleWorkspaceFile(temporary, path) {
     // A real-time scan of the just-published snapshot can outlast the default budget; ~1.35 s is paid only on refusal.
-    if (!renameTelegramPathWithRetry(temporary, path, {
+    if (!renameBalePathWithRetry(temporary, path, {
         attempts: 10,
         retryDelayMs: 30,
     }))
-        throw new Error("Telegram Workspace staging file disappeared before publication.");
+        throw new Error("Bale Workspace staging file disappeared before publication.");
 }
 /** All Restore reads and publishers share these physical-file checks; there is no repairing read. */
 function readWorkspaceSnapshot(path, requirePrivate = true, asynchronous = false) {
@@ -1511,14 +1511,14 @@ function readWorkspaceSnapshot(path, requirePrivate = true, asynchronous = false
             return undefined;
         throw error;
     }
-    const privateFile = isTelegramOwnerPrivate(before);
+    const privateFile = isBaleOwnerPrivate(before);
     if (!before.isFile() ||
         before.isSymbolicLink() ||
         before.nlink !== 1n ||
         before.size > BigInt(WORKSPACE_SNAPSHOT_MAX_BYTES) ||
         (requirePrivate && !privateFile))
         throw new Error("Workspace snapshot must be a bounded private regular file.");
-    const fd = openSync(path, TELEGRAM_STRICT_READ_FLAGS);
+    const fd = openSync(path, BALE_STRICT_READ_FLAGS);
     try {
         const opened = fstatSync(fd, { bigint: true });
         if (opened.dev !== before.dev ||
@@ -1605,7 +1605,7 @@ function parseTopicTargetFile(value) {
             })
             : [],
         ...(workspaceRestore ? { workspaceRestore } : {}),
-        sessionReplacement: normalizeTelegramSessionReplacementIntent(file.sessionReplacement),
+        sessionReplacement: normalizeBaleSessionReplacementIntent(file.sessionReplacement),
         reservations: Array.isArray(file.reservations)
             ? file.reservations.flatMap((reservation) => {
                 const normalized = normalizeReservation(reservation);
@@ -1633,7 +1633,7 @@ function parseTopicTargetFile(value) {
     };
 }
 /** The unified section accepts only lossless current-format Workspace evidence, never tolerant legacy repair. */
-export function parseTelegramWorkspaceStateSection(value, profile) {
+export function parseBaleWorkspaceStateSection(value, profile) {
     if (value === undefined)
         return undefined;
     if (!restoreObject(value) ||
@@ -1666,14 +1666,14 @@ export function parseTelegramWorkspaceStateSection(value, profile) {
         (parsed.sessionReplacement &&
             parsed.sessionReplacement.profileName !== profile) ||
         parsed.threads.some((record) => record.owner &&
-            "telegramProfile" in record.owner &&
-            record.owner.telegramProfile !== undefined &&
-            record.owner.telegramProfile !== profile))
+            "baleProfile" in record.owner &&
+            record.owner.baleProfile !== undefined &&
+            record.owner.baleProfile !== profile))
         throw new Error("Foreign consolidated Workspace profile evidence.");
     assertWorkspaceRestoreBindingProtection(parsed);
     return parsed;
 }
-export function resolveTelegramWorkspaceProvisionRecoveryPath(statePath, profileName = "default", layout) {
+export function resolveBaleWorkspaceProvisionRecoveryPath(statePath, profileName = "default", layout) {
     if (layout !== undefined && layout !== "consolidated")
         throw new Error("Invalid Workspace provisioning recovery layout.");
     return layout === "consolidated"
@@ -1681,22 +1681,22 @@ export function resolveTelegramWorkspaceProvisionRecoveryPath(statePath, profile
         : `${statePath}.provision-recovery.json`;
 }
 /** Prepared Workspace IO adapter; transition/CAS policy remains with the existing Threads owner. */
-export function createTelegramConsolidatedWorkspaceStorage(options) {
+export function createBaleConsolidatedWorkspaceStorage(options) {
     const { getPath, getProfile, captureAuthority, publishIfOwned } = options;
     const profileName = () => getProfile() ?? "default";
     const readRaw = () => {
-        const path = getPath(), profile = profileName(), root = readTelegramRuntimeState(path);
+        const path = getPath(), profile = profileName(), root = readBaleRuntimeState(path);
         const raw = Object.hasOwn(root.profiles, profile)
             ? root.profiles[profile]?.workspace
             : undefined;
-        parseTelegramWorkspaceStateSection(raw, profile);
+        parseBaleWorkspaceStateSection(raw, profile);
         if (path !== getPath() || profile !== profileName())
             throw new Error("Workspace storage scope changed during observation.");
         return raw;
     };
     return {
         readRaw,
-        read: () => parseTelegramWorkspaceStateSection(readRaw(), profileName()),
+        read: () => parseBaleWorkspaceStateSection(readRaw(), profileName()),
         capturePublication() {
             const path = getPath(), profile = profileName(), authority = captureAuthority();
             if (!authority)
@@ -1710,11 +1710,11 @@ export function createTelegramConsolidatedWorkspaceStorage(options) {
                 if (!currentGrant())
                     return { committed: false };
                 return publishIfOwned("workspace", (current) => {
-                    parseTelegramWorkspaceStateSection(current, profile);
+                    parseBaleWorkspaceStateSection(current, profile);
                     const next = mutate(current);
                     if (next.value === undefined && current !== undefined)
                         throw new Error("Consolidated Workspace section removal is not authorized.");
-                    parseTelegramWorkspaceStateSection(next.value, profile);
+                    parseBaleWorkspaceStateSection(next.value, profile);
                     return next;
                 }, {
                     ...publication,
@@ -1725,7 +1725,7 @@ export function createTelegramConsolidatedWorkspaceStorage(options) {
         },
     };
 }
-function getTelegramStateSemanticSnapshot(value) {
+function getBaleStateSemanticSnapshot(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
         return undefined;
     const { writtenAtMs: _writtenAtMs, ...semantic } = value;
@@ -1782,7 +1782,7 @@ function getInstanceProcessKey(instanceId) {
     const [pid] = instanceId.split(":", 1);
     return pid && /^\d+$/.test(pid) ? pid : undefined;
 }
-export function isSameTelegramProcessInstance(left, right) {
+export function isSameBaleProcessInstance(left, right) {
     const leftProcess = getInstanceProcessKey(left);
     return !!leftProcess && leftProcess === getInstanceProcessKey(right);
 }
@@ -1795,7 +1795,7 @@ function isPendingProvisionLiveOrTargeted(provision, nowMs) {
     return !!provision.target;
 }
 /** Resolving selects a scope-bound view of the existing Workspace owner; it creates no files. */
-export function createTelegramWorkspaceRestoreResolver(deps) {
+export function createBaleWorkspaceRestoreResolver(deps) {
     const { getProfileName, getBotToken, threadStore, agentDir } = deps;
     let active;
     return () => {
@@ -1811,7 +1811,7 @@ export function createTelegramWorkspaceRestoreResolver(deps) {
         const store = threadStore.workspaceRestore({
             profileName,
             tokenSha256,
-            legacyPath: resolveTelegramProfileTempFilePath("workspace-restore", "json", agentDir, profile),
+            legacyPath: resolveBaleProfileTempFilePath("workspace-restore", "json", agentDir, profile),
             isCurrentScope: () => (getProfileName() ?? "default") === profileName &&
                 createHash("sha256")
                     .update(getBotToken() ?? "")
@@ -1821,7 +1821,7 @@ export function createTelegramWorkspaceRestoreResolver(deps) {
         return store;
     };
 }
-export function createTelegramTopicTargetStore(options) {
+export function createBaleTopicTargetStore(options) {
     if (options.consolidated && options.commitPersist)
         throw new Error("Workspace must select one publication backend.");
     const consolidated = options.consolidated
@@ -1940,7 +1940,7 @@ export function createTelegramTopicTargetStore(options) {
         const existing = known.find((binding) => binding.cwd === cwd);
         if (existing)
             return existing.workspaceKey;
-        const readable = createTelegramWorkspaceDirectoryKey(cwd);
+        const readable = createBaleWorkspaceDirectoryKey(cwd);
         if (!readable)
             return undefined;
         const collision = known.some((binding) => binding.workspaceKey === readable && binding.cwd !== cwd);
@@ -1948,7 +1948,7 @@ export function createTelegramTopicTargetStore(options) {
             return readable;
         const digest = createHash("sha256").update(cwd).digest("hex").slice(0, 12);
         const prefix = readable.endsWith("--") ? readable.slice(0, -2) : readable;
-        return `${prefix.slice(0, TELEGRAM_WORKSPACE_KEY_MAX_LENGTH - digest.length - 3)}-${digest}--`;
+        return `${prefix.slice(0, BALE_WORKSPACE_KEY_MAX_LENGTH - digest.length - 3)}-${digest}--`;
     };
     const isWorkspaceTargetLive = (binding) => Array.from(records.values()).find((record) => ThreadReconciler.isCurrentThreadRecord(record) &&
         targetMatches(record.target, binding.target));
@@ -1959,9 +1959,9 @@ export function createTelegramTopicTargetStore(options) {
             const owner = getRecordOwner(record);
             const belongsToWorkspace = owner.kind === "leader"
                 ? owner.cwd
-                    ? normalizeTelegramWorkspacePath(owner.cwd) === cwd
+                    ? normalizeBaleWorkspacePath(owner.cwd) === cwd
                     : !!record.instanceId &&
-                        Array.from(processIds).some((processId) => isSameTelegramProcessInstance(record.instanceId, processId))
+                        Array.from(processIds).some((processId) => isSameBaleProcessInstance(record.instanceId, processId))
                 : owner.kind === "manual-follower" &&
                     (processIds.has(owner.instanceId) ||
                         (!!record.instanceId && processIds.has(record.instanceId)));
@@ -1980,38 +1980,38 @@ export function createTelegramTopicTargetStore(options) {
             ? name.replace(/^state/u, "status")
             : `${name}.status`);
     };
-    const getTelegramProfile = () => typeof options.telegramProfile === "function"
-        ? options.telegramProfile()
-        : options.telegramProfile;
+    const getBaleProfile = () => typeof options.baleProfile === "function"
+        ? options.baleProfile()
+        : options.baleProfile;
     const scopeOwnerToActiveProfile = (owner) => {
-        const telegramProfile = getTelegramProfile();
-        if (!telegramProfile ||
+        const baleProfile = getBaleProfile();
+        if (!baleProfile ||
             owner.kind === "pending-topic" ||
             owner.kind === "legacy" ||
-            owner.telegramProfile) {
+            owner.baleProfile) {
             return owner;
         }
-        return { ...owner, telegramProfile };
+        return { ...owner, baleProfile };
     };
-    const activeProfile = () => getTelegramProfile() ?? "default";
+    const activeProfile = () => getBaleProfile() ?? "default";
     const scopeMatches = (path, profile) => getPath() === path && activeProfile() === profile;
     const loadedScopeMatches = (path) => loadedPath === path && (!consolidated || loadedProfile === activeProfile());
     const workspaceIO = consolidated
-        ? createTelegramConsolidatedWorkspaceStorage({
+        ? createBaleConsolidatedWorkspaceStorage({
             getPath,
-            getProfile: getTelegramProfile,
+            getProfile: getBaleProfile,
             ...consolidated,
         })
         : undefined;
     const runtimeProjection = consolidated
-        ? createTelegramRuntimeProjectionStore({
+        ? createBaleRuntimeProjectionStore({
             getPath,
-            getProfile: getTelegramProfile,
+            getProfile: getBaleProfile,
             captureAuthority: consolidated.captureAuthority,
             getNowMs,
             storage: {
                 read({ path, profile }) {
-                    const root = readTelegramRuntimeState(path);
+                    const root = readBaleRuntimeState(path);
                     return Object.hasOwn(root.profiles, profile)
                         ? root.profiles[profile]?.runtime
                         : undefined;
@@ -2042,7 +2042,7 @@ export function createTelegramTopicTargetStore(options) {
     };
     const withStoreTransaction = (path, operation, publication) => {
         if (!workspaceIO)
-            return withTelegramFileTransaction(`${path}.transaction`, operation);
+            return withBaleFileTransaction(`${path}.transaction`, operation);
         if (workspaceFrame)
             throw new Error("Nested Workspace transaction is not allowed.");
         const profile = activeProfile(), publish = workspaceIO.capturePublication();
@@ -2063,8 +2063,8 @@ export function createTelegramTopicTargetStore(options) {
         return outcome.result;
     };
     const getRecoveryPath = (path) => consolidated
-        ? resolveTelegramWorkspaceProvisionRecoveryPath(path, activeProfile(), "consolidated")
-        : resolveTelegramWorkspaceProvisionRecoveryPath(path);
+        ? resolveBaleWorkspaceProvisionRecoveryPath(path, activeProfile(), "consolidated")
+        : resolveBaleWorkspaceProvisionRecoveryPath(path);
     const readProvisionRecoveries = (path, strict = false) => {
         const recoveryPath = getRecoveryPath(path);
         if (strict) {
@@ -2202,7 +2202,7 @@ export function createTelegramTopicTargetStore(options) {
             (consolidated && !scopeMatches(path, profile)))
             return;
         if (consolidated)
-            observedWorkspaceSemantic = getTelegramStateSemanticSnapshot(rawFile);
+            observedWorkspaceSemantic = getBaleStateSemanticSnapshot(rawFile);
         if (rawFile === undefined) {
             if (workspaceRestore?.revision)
                 throw new Error("Workspace Restore evidence disappeared.");
@@ -2241,8 +2241,8 @@ export function createTelegramTopicTargetStore(options) {
         }));
         records = new Map(scopedRecords.map((record) => [getRecordOwnerKey(record), record]));
         identities = new Map((file.identities ?? []).map((identity) => {
-            const owner = scopeOwnerToActiveProfile(getTelegramThreadOwnerFromProfileKey(identity.profileKey));
-            const profileKey = getTelegramThreadOwnerKey(owner);
+            const owner = scopeOwnerToActiveProfile(getBaleThreadOwnerFromProfileKey(identity.profileKey));
+            const profileKey = getBaleThreadOwnerKey(owner);
             return [profileKey, cloneIdentityRecord({ ...identity, profileKey })];
         }));
         workspaceBindings = indexWorkspaceBindings(file.workspaceBindings ?? []);
@@ -2438,7 +2438,7 @@ export function createTelegramTopicTargetStore(options) {
             const expectedRestore = structuredClone(workspaceRestore);
             const assertRestoreEvidenceCurrent = (raw, fromTransaction = false) => {
                 if (isCurrentPublication?.() === false)
-                    throw new Error("Telegram Workspace publication lost its exact frame or authority.");
+                    throw new Error("Bale Workspace publication lost its exact frame or authority.");
                 const disk = parseTopicTargetFile(fromTransaction
                     ? raw
                     : readStoreSnapshot(path, transition?.kind === "relocate" ||
@@ -2448,7 +2448,7 @@ export function createTelegramTopicTargetStore(options) {
                     const recoveries = readProvisionRecoveries(path, true);
                     if (mutationRevision !== persistedRevision || resetProvisions.some(expected => expected.target || Object.hasOwn(recoveries, expected.id) ||
                         !isDeepStrictEqual(disk.pendingProvisions?.find(value => value.id === expected.id), expected)))
-                        throw new Error("Telegram connection recovery provisioning evidence changed.");
+                        throw new Error("Bale connection recovery provisioning evidence changed.");
                 }
                 if (!isDeepStrictEqual(disk.workspaceRestore, expectedRestore))
                     throw new Error("Workspace Restore evidence changed before publication.");
@@ -2600,7 +2600,7 @@ export function createTelegramTopicTargetStore(options) {
                         transition?.isCurrent() === false ||
                         isCurrentPublication?.() === false)
                         return { value: current, result: false };
-                    const semanticCurrent = getTelegramStateSemanticSnapshot(current);
+                    const semanticCurrent = getBaleStateSemanticSnapshot(current);
                     if (!isDeepStrictEqual(semanticCurrent, observedWorkspaceSemantic))
                         throw new Error("Workspace canonical snapshot changed before publication.");
                     // A late whole-Workspace replacement cannot erase a concurrent canonical mutation.
@@ -2614,7 +2614,7 @@ export function createTelegramTopicTargetStore(options) {
                             return { value: current, result: false };
                     }
                     const unchanged = !transition &&
-                        isDeepStrictEqual(semanticCurrent, getTelegramStateSemanticSnapshot(wire));
+                        isDeepStrictEqual(semanticCurrent, getBaleStateSemanticSnapshot(wire));
                     return { value: unchanged ? current : wire, result: true };
                 }, {
                     isCurrent: () => scopeMatches(submittedPath, submittedProfile) &&
@@ -2638,7 +2638,7 @@ export function createTelegramTopicTargetStore(options) {
                 loadedPath = path;
                 loadedProfile = submittedProfile;
                 loaded = true;
-                observedWorkspaceSemantic = getTelegramStateSemanticSnapshot(wire);
+                observedWorkspaceSemantic = getBaleStateSemanticSnapshot(wire);
                 if (resetProvisions) {
                     pendingProvisions = file.pendingProvisions;
                     mutationRevision += 1;
@@ -2658,14 +2658,14 @@ export function createTelegramTopicTargetStore(options) {
             }
             let persistedSemanticSnapshot;
             try {
-                persistedSemanticSnapshot = getTelegramStateSemanticSnapshot(await readStoreSnapshot(path, !!workspaceRestore, true));
+                persistedSemanticSnapshot = getBaleStateSemanticSnapshot(await readStoreSnapshot(path, !!workspaceRestore, true));
             }
             catch {
                 /* Final Restore validation fences missing or unverifiable snapshots before publication. */
             }
             // Normalize optional fields to wire JSON; object key order is not a state change.
             if (!transition &&
-                isDeepStrictEqual(persistedSemanticSnapshot, getTelegramStateSemanticSnapshot(JSON.parse(JSON.stringify(file)))) &&
+                isDeepStrictEqual(persistedSemanticSnapshot, getBaleStateSemanticSnapshot(JSON.parse(JSON.stringify(file)))) &&
                 mutationRevision === persistedRevision) {
                 if (isCurrentPublication?.() === false)
                     return false;
@@ -2713,7 +2713,7 @@ export function createTelegramTopicTargetStore(options) {
                             getPath() !== path ||
                             mutationRevision !== persistedRevision)
                             return;
-                        replaceTelegramWorkspaceFile(tempPath, path);
+                        replaceBaleWorkspaceFile(tempPath, path);
                         loadedPath = path;
                         if (transition.kind === "relocate" ||
                             transition.kind === "live-rebind") {
@@ -2740,7 +2740,7 @@ export function createTelegramTopicTargetStore(options) {
                             transition.kind === "live-rebind")
                             transition.onPublicationBoundary?.("after-rename");
                     };
-                    withTelegramFileTransaction(`${path}.transaction`, () => {
+                    withBaleFileTransaction(`${path}.transaction`, () => {
                         if (commitPersist)
                             commitPersist(commit);
                         else if (!options.canPersist || options.canPersist())
@@ -2752,24 +2752,24 @@ export function createTelegramTopicTargetStore(options) {
                         (transition.kind !== "manual-name" || transition.isCurrent()));
                 }
                 if (commitPersist) {
-                    const committed = withTelegramFileTransaction(`${path}.transaction`, () => commitPersist(() => {
+                    const committed = withBaleFileTransaction(`${path}.transaction`, () => commitPersist(() => {
                         assertRestoreEvidenceCurrent();
                         if (isCurrentPublication?.() === false)
-                            throw new Error("Telegram Workspace publication lost caller authority.");
-                        replaceTelegramWorkspaceFile(tempPath, path);
+                            throw new Error("Bale Workspace publication lost caller authority.");
+                        replaceBaleWorkspaceFile(tempPath, path);
                         chmodSync(path, 0o600);
                     }));
                     if (!committed) {
                         await loadFromDisk();
-                        throw new Error("Telegram thread snapshot lost exact transport ownership before commit.");
+                        throw new Error("Bale thread snapshot lost exact transport ownership before commit.");
                     }
                 }
                 else {
-                    withTelegramFileTransaction(`${path}.transaction`, () => {
+                    withBaleFileTransaction(`${path}.transaction`, () => {
                         assertRestoreEvidenceCurrent();
                         if (isCurrentPublication?.() === false)
-                            throw new Error("Telegram Workspace publication lost caller authority.");
-                        replaceTelegramWorkspaceFile(tempPath, path);
+                            throw new Error("Bale Workspace publication lost caller authority.");
+                        replaceBaleWorkspaceFile(tempPath, path);
                         chmodSync(path, 0o600);
                     });
                 }
@@ -2856,7 +2856,7 @@ export function createTelegramTopicTargetStore(options) {
             try {
                 if ((result?.kind === "automatic" &&
                     (!result.title ||
-                        normalizeTelegramTopicTargetThreadName(result.title) !==
+                        normalizeBaleTopicTargetThreadName(result.title) !==
                             result.title)) ||
                     !valid ||
                     !scopeMatches(path, profile) ||
@@ -2869,7 +2869,7 @@ export function createTelegramTopicTargetStore(options) {
                     }, result))
                     return false;
                 // This is also called inside publication guards: read the existing frame without acquiring a nested transaction.
-                const file = parseTelegramWorkspaceStateSection(readStoreSnapshot(path), profile);
+                const file = parseBaleWorkspaceStateSection(readStoreSnapshot(path), profile);
                 return !!file && scopeMatches(path, profile) && matches(file, result);
             }
             catch {
@@ -2889,9 +2889,9 @@ export function createTelegramTopicTargetStore(options) {
             return false;
         const [sourceKey, sourceBinding] = sourceEntry;
         const replacementIdentity = Array.from({
-            length: TELEGRAM_WORKSPACE_SLOTS.length,
+            length: BALE_WORKSPACE_SLOTS.length,
         })
-            .map((_, ordinal) => createTelegramWorkspaceBindingIdentityWithKey(sourceBinding.cwd, sourceBinding.workspaceKey, ordinal, sessionId))
+            .map((_, ordinal) => createBaleWorkspaceBindingIdentityWithKey(sourceBinding.cwd, sourceBinding.workspaceKey, ordinal, sessionId))
             .find((identity) => identity?.instanceSlot === sourceBinding.instanceSlot);
         if (!replacementIdentity ||
             replacementIdentity.instanceSlot !== sourceBinding.instanceSlot)
@@ -3347,7 +3347,7 @@ export function createTelegramTopicTargetStore(options) {
                                 assertRestoreRecoveryProtection(path, [...provisioningProtectionIntents(before.state), ...provisioningProtectionIntents(next)], provisions);
                                 if (!currentScope() || !isCurrent())
                                     return;
-                                replaceTelegramWorkspaceFile(temporary, path);
+                                replaceBaleWorkspaceFile(temporary, path);
                                 observed = structuredClone(next);
                                 // A read-only Restore view must never bless a stale binding/owner projection.
                                 if (loadedPath === path &&
@@ -3383,9 +3383,9 @@ export function createTelegramTopicTargetStore(options) {
                         if (loadedScopeMatches(path) &&
                             isDeepStrictEqual(workspaceRestore, committedBefore.file.workspaceRestore))
                             workspaceRestore = structuredClone(next);
-                        if (isDeepStrictEqual(observedWorkspaceSemantic, getTelegramStateSemanticSnapshot(committedBefore.file)))
+                        if (isDeepStrictEqual(observedWorkspaceSemantic, getBaleStateSemanticSnapshot(committedBefore.file)))
                             observedWorkspaceSemantic =
-                                getTelegramStateSemanticSnapshot(committedAfter);
+                                getBaleStateSemanticSnapshot(committedAfter);
                         mutationRevision += 1;
                     }
                     return committed;
@@ -3396,7 +3396,7 @@ export function createTelegramTopicTargetStore(options) {
                     return undefined;
                 const executor = structuredClone(authority.executor);
                 const operator = authority.operatorUserId;
-                if (!isTelegramWorkspaceRestoreExecutor(executor) ||
+                if (!isBaleWorkspaceRestoreExecutor(executor) ||
                     !restoreInteger(operator))
                     return undefined;
                 const current = () => authority.isCurrent() &&
@@ -3577,7 +3577,7 @@ export function createTelegramTopicTargetStore(options) {
                         authority.isCurrent() &&
                         authority.operatorUserId === operator &&
                         isDeepStrictEqual(authority.executor, executor);
-                    if (!isTelegramWorkspaceRestoreExecutor(executor) ||
+                    if (!isBaleWorkspaceRestoreExecutor(executor) ||
                         !restoreInteger(operator) ||
                         !current())
                         return undefined;
@@ -3600,7 +3600,7 @@ export function createTelegramTopicTargetStore(options) {
                     if (!expected.cleanupIssued ||
                         expected.operatorUserId !== operator ||
                         !isDeepStrictEqual(expected.executor, executor) ||
-                        !isTelegramWorkspaceRestoreExecutor(executor) ||
+                        !isBaleWorkspaceRestoreExecutor(executor) ||
                         !restoreInteger(operator) ||
                         !current())
                         return false;
@@ -3622,8 +3622,8 @@ export function createTelegramTopicTargetStore(options) {
                         authority.operatorUserId === operatorUserId &&
                         isDeepStrictEqual(authority.executor, executor);
                     if (!current() ||
-                        !isTelegramWorkspaceRestoreRequest(request) ||
-                        !isTelegramWorkspaceRestoreExecutor(executor) ||
+                        !isBaleWorkspaceRestoreRequest(request) ||
+                        !isBaleWorkspaceRestoreExecutor(executor) ||
                         !restoreInteger(operatorUserId) ||
                         request.target.chatId !== operatorUserId)
                         return undefined;
@@ -3682,7 +3682,7 @@ export function createTelegramTopicTargetStore(options) {
                 issueRecipient(expected, recipient, authority) {
                     const intent = advance(expected, authority, (operation) => {
                         if (operation.phase !== "relocated" ||
-                            !isTelegramWorkspaceRestoreRecipient(recipient) ||
+                            !isBaleWorkspaceRestoreRecipient(recipient) ||
                             recipient.sessionId !== operation.request.binding.sessionId)
                             return false;
                         operation.phase = "recipient-issued";
@@ -3734,7 +3734,7 @@ export function createTelegramTopicTargetStore(options) {
                     const evidence = structuredClone(evidenceInput);
                     return advance(expected, authority, (operation) => {
                         if (!operation.routing ||
-                            !isTelegramWorkspaceRestoreSettlement(evidence, operation.request.source) ||
+                            !isBaleWorkspaceRestoreSettlement(evidence, operation.request.source) ||
                             !workspaceRestoreSettlementMatchesAcceptance(evidence, operation.routing.acceptances ?? []))
                             return false;
                         const overlaps = operation.routing.settlements.filter((value) => value.updateIds.some((id) => evidence.updateIds.includes(id)));
@@ -3834,7 +3834,7 @@ export function createTelegramTopicTargetStore(options) {
                         };
                         if (!isTemporaryThreadEntry(next) ||
                             entries.some((value) => value.token === token ||
-                                getTelegramTemporaryThreadInputs(value).some((input) => input.journalBindingKey === source.journalBindingKey &&
+                                getBaleTemporaryThreadInputs(value).some((input) => input.journalBindingKey === source.journalBindingKey &&
                                     input.updateIds.some((id) => group.updateIds.includes(id)))))
                             return undefined;
                         if (entries.length >= TEMPORARY_THREAD_CAPACITY)
@@ -3859,7 +3859,7 @@ export function createTelegramTopicTargetStore(options) {
                         if (target.chatId !== operator ||
                             entries.some((value) => value.token === token ||
                                 (value.target && targetMatches(value.target, target)) ||
-                                getTelegramTemporaryThreadInputs(value).some((other) => other.journalBindingKey === input.journalBindingKey &&
+                                getBaleTemporaryThreadInputs(value).some((other) => other.journalBindingKey === input.journalBindingKey &&
                                     other.updateIds.some((id) => input.updateIds.includes(id)))))
                             return undefined;
                         const at = now();
@@ -3920,13 +3920,13 @@ export function createTelegramTopicTargetStore(options) {
                             input.journalBindingKey !== entry.source.journalBindingKey ||
                             file.operations.some(({ request }) => targetMatches(request.target, entry.target)))
                             return false;
-                        const inputs = getTelegramTemporaryThreadInputs(entry);
+                        const inputs = getBaleTemporaryThreadInputs(entry);
                         if (inputs.some((value) => isDeepStrictEqual(value, input)))
                             return "unchanged";
                         if (entry.cleanupIssued ||
                             inputs.some((value) => value.updateIds.some((id) => input.updateIds.includes(id))) ||
                             file.temporaryThreads.some((value) => value !== entry &&
-                                getTelegramTemporaryThreadInputs(value).some((other) => other.journalBindingKey === input.journalBindingKey &&
+                                getBaleTemporaryThreadInputs(value).some((other) => other.journalBindingKey === input.journalBindingKey &&
                                     other.updateIds.some((id) => input.updateIds.includes(id)))))
                             return false;
                         if (inputs.length >= TEMPORARY_THREAD_INPUT_CAPACITY)
@@ -3950,7 +3950,7 @@ export function createTelegramTopicTargetStore(options) {
                             return (evidence?.journalBindingKey === input.journalBindingKey &&
                                 evidence.updateId === updateId &&
                                 evidence.operatorAuthorityId ===
-                                    `telegram-owner:${operatorUserId}`);
+                                    `bale-owner:${operatorUserId}`);
                         }) &&
                         owned();
                     const recorded = advanceTemporary(expected, { ...authority, isCurrent: current }, (entry, file) => {
@@ -3980,12 +3980,12 @@ export function createTelegramTopicTargetStore(options) {
                             const evidence = inspect(updateId);
                             return (evidence?.journalBindingKey === input.journalBindingKey &&
                                 evidence.updateId === updateId &&
-                                evidence.operatorAuthorityId === `telegram-owner:${operator}`);
+                                evidence.operatorAuthorityId === `bale-owner:${operator}`);
                         }) &&
                         authority.isCurrent();
                     return advanceTemporary(expected, { ...authority, isCurrent: current }, (entry, file) => {
                         if (entry.phase !== "created" ||
-                            !getTelegramTemporaryThreadInputs(entry).some((value) => isDeepStrictEqual(value, input)) ||
+                            !getBaleTemporaryThreadInputs(entry).some((value) => isDeepStrictEqual(value, input)) ||
                             entry.completedInputs?.some((value) => isDeepStrictEqual(value, input)))
                             return false;
                         const cancelled = entry.cancelledInputs ?? [];
@@ -4049,7 +4049,7 @@ export function createTelegramTopicTargetStore(options) {
                     const entry = advanceTemporary(expected, authority, (value) => {
                         if (value.phase !== "created" ||
                             value.cleanupIssued ||
-                            !isTelegramTemporaryThreadFullyResolved(value))
+                            !isBaleTemporaryThreadFullyResolved(value))
                             return false;
                         value.cleanupIssued = true;
                         return true;
@@ -4064,8 +4064,8 @@ export function createTelegramTopicTargetStore(options) {
                         if (!entry ||
                             entry.operatorUserId !== operator ||
                             !isDeepStrictEqual(entry.executor, executor) ||
-                            (getTelegramTemporaryThreadInputs(entry).length > 1 &&
-                                !isTelegramTemporaryThreadFullyResolved(entry) &&
+                            (getBaleTemporaryThreadInputs(entry).length > 1 &&
+                                !isBaleTemporaryThreadFullyResolved(entry) &&
                                 !isTemporaryThreadReleasedByCompletion(entry, completed)))
                             return undefined;
                         const remaining = entries.filter((_value, position) => position !== index);
@@ -4080,7 +4080,7 @@ export function createTelegramTopicTargetStore(options) {
                     if (!authority.isCurrent())
                         return undefined;
                     const executor = structuredClone(authority.executor), operator = authority.operatorUserId;
-                    if (!isTelegramWorkspaceRestoreExecutor(executor) ||
+                    if (!isBaleWorkspaceRestoreExecutor(executor) ||
                         !restoreInteger(operator))
                         return undefined;
                     const current = () => authority.isCurrent() &&
@@ -4145,7 +4145,7 @@ export function createTelegramTopicTargetStore(options) {
                     return advance(expected, authority, (operation) => {
                         if ((operation.phase !== "recipient-issued" &&
                             operation.phase !== "ready") ||
-                            !isTelegramWorkspaceRestoreRecipient(observed) ||
+                            !isBaleWorkspaceRestoreRecipient(observed) ||
                             observed.sessionId !== operation.request.binding.sessionId)
                             return false;
                         operation.phase = "ready";
@@ -4329,7 +4329,7 @@ export function createTelegramTopicTargetStore(options) {
                 const tempPath = `${statusPath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
                 await writeFile(tempPath, `${JSON.stringify({ ...body, writtenAtMs: (options.getNowMs ?? Date.now)() }, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
                 try {
-                    replaceTelegramWorkspaceFile(tempPath, statusPath);
+                    replaceBaleWorkspaceFile(tempPath, statusPath);
                     chmodSync(statusPath, 0o600);
                 }
                 catch (error) {
@@ -4343,7 +4343,7 @@ export function createTelegramTopicTargetStore(options) {
             return write;
         },
         getByProfileKey(profileKey) {
-            const ownerKey = getTelegramThreadOwnerKey(getTelegramThreadOwnerFromProfileKey(profileKey));
+            const ownerKey = getBaleThreadOwnerKey(getBaleThreadOwnerFromProfileKey(profileKey));
             const record = records.get(ownerKey) ?? records.get(profileKey);
             return record ? cloneRecord(record) : undefined;
         },
@@ -4358,12 +4358,12 @@ export function createTelegramTopicTargetStore(options) {
             return undefined;
         },
         getIdentityByProfileKey(profileKey) {
-            const ownerKey = getTelegramThreadOwnerKey(getTelegramThreadOwnerFromProfileKey(profileKey));
+            const ownerKey = getBaleThreadOwnerKey(getBaleThreadOwnerFromProfileKey(profileKey));
             const identity = identities.get(ownerKey) ?? identities.get(profileKey);
             return identity ? cloneIdentityRecord(identity) : undefined;
         },
         forgetIdentityByProfileKey(profileKey) {
-            const ownerKey = getTelegramThreadOwnerKey(getTelegramThreadOwnerFromProfileKey(profileKey));
+            const ownerKey = getBaleThreadOwnerKey(getBaleThreadOwnerFromProfileKey(profileKey));
             const removedOwner = identities.delete(ownerKey);
             const removedProfile = identities.delete(profileKey);
             if (!removedOwner && !removedProfile)
@@ -4385,7 +4385,7 @@ export function createTelegramTopicTargetStore(options) {
                 : undefined;
         },
         async commitSessionReplacementIntent(intent, isCurrent) {
-            const next = normalizeTelegramSessionReplacementIntent(intent);
+            const next = normalizeBaleSessionReplacementIntent(intent);
             if (!next || !isCurrent())
                 return false;
             await loadFromDisk();
@@ -4564,9 +4564,9 @@ export function createTelegramTopicTargetStore(options) {
                 : normalizeWorkspaceBindingRecord(expected);
             const cleanupSessionId = cleanupSnapshot?.sessionId === undefined
                 ? undefined
-                : normalizeTelegramSessionId(cleanupSnapshot.sessionId);
+                : normalizeBaleSessionId(cleanupSnapshot.sessionId);
             const cleanupSessionKey = cleanupSessionId
-                ? createTelegramSessionKey(cleanupSessionId)
+                ? createBaleSessionKey(cleanupSessionId)
                 : undefined;
             if (cleanupSnapshot &&
                 (!cleanupSnapshot.cwd ||
@@ -4789,7 +4789,7 @@ export function createTelegramTopicTargetStore(options) {
                 ...Array.from(workspaceBindings.values()).flatMap((binding) => binding.slot ? [binding.slot] : []),
                 ...currentRecords.flatMap((record) => (record.slot ? [record.slot] : [])),
             ]);
-            if (Array.from(TELEGRAM_WORKSPACE_SLOTS, (slot) => slot.toUpperCase()).some((slot) => !occupied.has(slot)))
+            if (Array.from(BALE_WORKSPACE_SLOTS, (slot) => slot.toUpperCase()).some((slot) => !occupied.has(slot)))
                 return { kind: "free" };
             const claimedKeys = new Set(Array.from(workspaceClaims.values()).map((claim) => claim.identity.bindingKey));
             const candidates = Array.from(workspaceBindings.values()).flatMap((binding) => {
@@ -4819,7 +4819,7 @@ export function createTelegramTopicTargetStore(options) {
                     },
                 ];
             });
-            const selected = selectTelegramWorkspaceReusableSlot(candidates);
+            const selected = selectBaleWorkspaceReusableSlot(candidates);
             if (!selected)
                 return undefined;
             const mapKey = Array.from(workspaceBindings.entries()).find(([, binding]) => binding.bindingKey === selected.bindingKey)?.[0];
@@ -4880,10 +4880,10 @@ export function createTelegramTopicTargetStore(options) {
             }
         },
         hasWorkspaceBinding(cwd, sessionId) {
-            const normalizedCwd = normalizeTelegramWorkspacePath(cwd);
+            const normalizedCwd = normalizeBaleWorkspacePath(cwd);
             const normalizedSessionId = sessionId === undefined
                 ? undefined
-                : normalizeTelegramSessionId(sessionId);
+                : normalizeBaleSessionId(sessionId);
             if (!normalizedCwd || (sessionId !== undefined && !normalizedSessionId)) {
                 return false;
             }
@@ -4923,10 +4923,10 @@ export function createTelegramTopicTargetStore(options) {
             return false;
         },
         getWorkspaceBinding(cwd, instanceSlot = "a", sessionId) {
-            const normalizedCwd = normalizeTelegramWorkspacePath(cwd);
+            const normalizedCwd = normalizeBaleWorkspacePath(cwd);
             const normalizedSessionId = sessionId === undefined
                 ? undefined
-                : normalizeTelegramSessionId(sessionId);
+                : normalizeBaleSessionId(sessionId);
             if (!normalizedCwd ||
                 !/^[a-z]+$/u.test(instanceSlot) ||
                 (sessionId !== undefined && !normalizedSessionId))
@@ -4942,9 +4942,9 @@ export function createTelegramTopicTargetStore(options) {
         adoptWorkspaceThreadBindingForSession(cwd, sourceSessionId, sessionId, target) {
             if (workspaceRetirementCommitInFlight)
                 return false;
-            const normalizedCwd = normalizeTelegramWorkspacePath(cwd);
-            const normalizedSource = normalizeTelegramSessionId(sourceSessionId);
-            const normalizedSession = normalizeTelegramSessionId(sessionId);
+            const normalizedCwd = normalizeBaleWorkspacePath(cwd);
+            const normalizedSource = normalizeBaleSessionId(sourceSessionId);
+            const normalizedSession = normalizeBaleSessionId(sessionId);
             if (!normalizedCwd ||
                 !normalizedSource ||
                 !normalizedSession ||
@@ -4956,10 +4956,10 @@ export function createTelegramTopicTargetStore(options) {
         claimWorkspaceIdentity(cwd, instanceId, previousInstanceId, options) {
             if (workspaceRetirementCommitInFlight)
                 return undefined;
-            const normalizedCwd = normalizeTelegramWorkspacePath(cwd);
+            const normalizedCwd = normalizeBaleWorkspacePath(cwd);
             const normalizedSessionId = options?.sessionId === undefined
                 ? undefined
-                : normalizeTelegramSessionId(options.sessionId);
+                : normalizeBaleSessionId(options.sessionId);
             if (!normalizedCwd ||
                 !instanceId ||
                 (options?.sessionId !== undefined && !normalizedSessionId) ||
@@ -4970,7 +4970,7 @@ export function createTelegramTopicTargetStore(options) {
             if (replacement?.continuity === "workspace-thread" &&
                 normalizedSessionId &&
                 replacement.expiresAtMs > getNowMs() &&
-                replacement.profileName === (getTelegramProfile() ?? "default") &&
+                replacement.profileName === (getBaleProfile() ?? "default") &&
                 replacement.cwd === normalizedCwd &&
                 replacement.sourceSessionId !== normalizedSessionId &&
                 (replacement.sourceInstanceId === undefined ||
@@ -5051,7 +5051,7 @@ export function createTelegramTopicTargetStore(options) {
                     ownProvision ||
                     !options?.sessionHandoff ||
                     !previousInstanceId ||
-                    !isSameTelegramProcessInstance(previousInstanceId, instanceId)
+                    !isSameBaleProcessInstance(previousInstanceId, instanceId)
                     ? []
                     : Array.from(workspaceBindings.values()).filter((candidate) => candidate.cwd === identity.cwd &&
                         candidate.sessionId !== identity.sessionId &&
@@ -5095,13 +5095,13 @@ export function createTelegramTopicTargetStore(options) {
                 const retainedSlotConflicts = !!retainedSlotKey &&
                     otherBindings.some((other) => other.slot === retainedSlotKey);
                 let slot = retainedSlotConflicts
-                    ? Array.from(TELEGRAM_WORKSPACE_SLOTS)
+                    ? Array.from(BALE_WORKSPACE_SLOTS)
                         .find((candidate) => !reservedSlots.includes(candidate) &&
                         !otherBindings.some((other) => other.slot === candidate))
                         ?.toUpperCase()
                     : retainedSlot;
                 if (!slot) {
-                    const allocation = planTelegramWorkspaceSlotAllocation({
+                    const allocation = planBaleWorkspaceSlotAllocation({
                         bindings: otherBindings,
                         reservedSlots,
                         nowMs,
@@ -5163,7 +5163,7 @@ export function createTelegramTopicTargetStore(options) {
             }
             const attemptLimit = workspaceBindings.size + workspaceClaims.size + 1;
             for (let ordinal = 0; ordinal < attemptLimit; ordinal += 1) {
-                const identity = createTelegramWorkspaceBindingIdentityWithKey(normalizedCwd, workspaceKey, ordinal, normalizedSessionId);
+                const identity = createBaleWorkspaceBindingIdentityWithKey(normalizedCwd, workspaceKey, ordinal, normalizedSessionId);
                 if (!identity)
                     return undefined;
                 const mapKey = getWorkspaceBindingMapKey(identity);
@@ -5425,7 +5425,7 @@ export function createTelegramTopicTargetStore(options) {
             if (hasWorkspaceRetirementConflict({ target }))
                 return undefined;
             const nowMs = getNowMs();
-            const normalizedThreadName = normalizeTelegramTopicTargetThreadName(threadName);
+            const normalizedThreadName = normalizeBaleTopicTargetThreadName(threadName);
             if (!normalizedThreadName)
                 return undefined;
             for (const record of records.values()) {
@@ -5452,7 +5452,7 @@ export function createTelegramTopicTargetStore(options) {
             return undefined;
         },
         async renameByTargetAndPersist(target, threadName, options, isCurrent) {
-            const name = normalizeTelegramTopicTargetThreadName(threadName);
+            const name = normalizeBaleTopicTargetThreadName(threadName);
             const path = getPath(), profile = activeProfile();
             const capturedTarget = { ...target };
             const current = () => scopeMatches(path, profile) &&
@@ -5480,11 +5480,11 @@ export function createTelegramTopicTargetStore(options) {
                 !current() ||
                 !renamed ||
                 renamed.manualThreadName !== name)
-                throw new Error("Telegram Workspace manual-name publication lost its exact frame or authority.");
+                throw new Error("Bale Workspace manual-name publication lost its exact frame or authority.");
             return cloneRecord(renamed);
         },
         async clearManualNameByTargetAndPersist(target, automaticTitle, isCurrent) {
-            const title = normalizeTelegramTopicTargetThreadName(automaticTitle);
+            const title = normalizeBaleTopicTargetThreadName(automaticTitle);
             const path = getPath(), profile = activeProfile(), capturedTarget = { ...target };
             const current = () => scopeMatches(path, profile) &&
                 isCurrent() &&
@@ -5513,13 +5513,13 @@ export function createTelegramTopicTargetStore(options) {
                 !binding ||
                 binding.manualThreadName !== undefined ||
                 binding.displayTitle !== title)
-                throw new Error("Telegram Workspace manual-name reset publication lost its exact frame or authority.");
+                throw new Error("Bale Workspace manual-name reset publication lost its exact frame or authority.");
             return cloneRecord(reset);
         },
         clearManualNameByTarget(target, automaticTitle) {
             if (hasWorkspaceRetirementConflict({ target }))
                 return undefined;
-            const title = normalizeTelegramTopicTargetThreadName(automaticTitle);
+            const title = normalizeBaleTopicTargetThreadName(automaticTitle);
             if (!title)
                 return undefined;
             const nowMs = getNowMs();
@@ -5571,7 +5571,7 @@ export function createTelegramTopicTargetStore(options) {
             record.updatedAtMs = nowMs;
             if (!record.threadName &&
                 threadName &&
-                isTelegramTopicThreadNameValidForSlot(threadName, record.slot))
+                isBaleTopicThreadNameValidForSlot(threadName, record.slot))
                 record.threadName = threadName;
             delete record.lastError;
             rememberIdentity(record);
@@ -5585,7 +5585,7 @@ export function createTelegramTopicTargetStore(options) {
             if (!externalReservedSlots)
                 return undefined;
             const isExternalSlotOccupied = (slot) => externalReservedSlots.includes(slot);
-            const ownerKey = getTelegramThreadOwnerKey(getTelegramThreadOwnerFromProfileKey(profileKey));
+            const ownerKey = getBaleThreadOwnerKey(getBaleThreadOwnerFromProfileKey(profileKey));
             const existing = records.get(ownerKey) ?? records.get(profileKey);
             const nowMs = getNowMs();
             const isWorkspaceSlotOccupied = (slot) => Array.from(workspaceBindings.values()).some((binding) => binding.bindingKey !== workspaceBindingKey && binding.slot === slot);
@@ -5616,7 +5616,7 @@ export function createTelegramTopicTargetStore(options) {
                 if (foreignClaim ||
                     foreignBinding ||
                     isExternalSlotOccupied(slot) ||
-                    isTelegramTopicTargetSlotOccupied(slot, records, reservations, pendingProvisions, nowMs))
+                    isBaleTopicTargetSlotOccupied(slot, records, reservations, pendingProvisions, nowMs))
                     return undefined;
                 return slot;
             }
@@ -5624,7 +5624,7 @@ export function createTelegramTopicTargetStore(options) {
                 !isExternalSlotOccupied(preferredSlot) &&
                 !isWorkspaceSlotOccupied(preferredSlot) &&
                 !isWorkspaceClaimSlotOccupied(preferredSlot) &&
-                !isTelegramTopicTargetSlotOccupied(preferredSlot, records, reservations, pendingProvisions, nowMs)) {
+                !isBaleTopicTargetSlotOccupied(preferredSlot, records, reservations, pendingProvisions, nowMs)) {
                 return preferredSlot;
             }
             const next = getNextMonotonicSlot(records, reservations, pendingProvisions, nowMs, botState.lastSlot);
@@ -5633,14 +5633,14 @@ export function createTelegramTopicTargetStore(options) {
                 !isWorkspaceSlotOccupied(next) &&
                 !isWorkspaceClaimSlotOccupied(next))
                 return next;
-            return Array.from(TELEGRAM_WORKSPACE_SLOTS, (slot) => slot.toUpperCase()).find((slot) => !isExternalSlotOccupied(slot) &&
+            return Array.from(BALE_WORKSPACE_SLOTS, (slot) => slot.toUpperCase()).find((slot) => !isExternalSlotOccupied(slot) &&
                 !isWorkspaceSlotOccupied(slot) &&
                 !isWorkspaceClaimSlotOccupied(slot) &&
-                !isTelegramTopicTargetSlotOccupied(slot, records, reservations, pendingProvisions, nowMs));
+                !isBaleTopicTargetSlotOccupied(slot, records, reservations, pendingProvisions, nowMs));
         },
     };
 }
-function isTelegramTopicTargetSlotOccupied(slot, records, reservations = [], pendingProvisions = [], nowMs = Date.now()) {
+function isBaleTopicTargetSlotOccupied(slot, records, reservations = [], pendingProvisions = [], nowMs = Date.now()) {
     for (const record of records.values()) {
         if (record.slot === slot && ThreadReconciler.isCurrentThreadRecord(record))
             return true;
@@ -5662,12 +5662,12 @@ function isTelegramTopicTargetSlotOccupied(slot, records, reservations = [], pen
     }
     return false;
 }
-function listOccupiedTelegramThreadIdentities(input) {
+function listOccupiedBaleThreadIdentities(input) {
     const occupied = new Set();
     const add = (threadName) => {
         if (!threadName)
             return;
-        occupied.add(getTelegramTopicIdentityName(threadName));
+        occupied.add(getBaleTopicIdentityName(threadName));
     };
     for (const record of input.records) {
         if (!ThreadReconciler.isCurrentThreadRecord(record))
@@ -5695,12 +5695,12 @@ function listOccupiedTelegramThreadIdentities(input) {
     }
     return Array.from(occupied);
 }
-function getNextTelegramThreadNamePaletteSlot(records, fallbackSlot) {
+function getNextBaleThreadNamePaletteSlot(records, fallbackSlot) {
     let maxCode = "A".charCodeAt(0) - 1;
     for (const record of records) {
         if (!ThreadReconciler.isCurrentThreadRecord(record) || !record.threadName)
             continue;
-        const identity = getTelegramTopicIdentityName(record.threadName);
+        const identity = getBaleTopicIdentityName(record.threadName);
         const first = identity[0];
         if (!first || !/^[A-Z]$/.test(first))
             continue;
@@ -5724,7 +5724,7 @@ function parseStoredThreadTarget(value) {
         ? { chatId, threadId }
         : undefined;
 }
-export async function promoteTelegramFollowerBindingToLeader(deps) {
+export async function promoteBaleFollowerBindingToLeader(deps) {
     const target = deps.target;
     if (typeof target?.threadId !== "number")
         return undefined;
@@ -5771,10 +5771,10 @@ export async function promoteTelegramFollowerBindingToLeader(deps) {
         kind: "leader",
         cwd: deps.cwd,
         instanceId: deps.instanceId,
-        ...(deps.telegramProfile ? { telegramProfile: deps.telegramProfile } : {}),
+        ...(deps.baleProfile ? { baleProfile: deps.baleProfile } : {}),
     };
     const record = deps.store.upsert({
-        profileKey: getTelegramThreadOwnerKey(owner),
+        profileKey: getBaleThreadOwnerKey(owner),
         owner,
         target: { chatId: target.chatId, threadId: target.threadId },
         status: "active",
@@ -5805,17 +5805,17 @@ export async function promoteTelegramFollowerBindingToLeader(deps) {
  */
 export async function provisionOwnBusTopic(deps) {
     const chatId = deps.getAllowedUserId();
-    let profileKey = getTelegramThreadOwnerKey({
+    let profileKey = getBaleThreadOwnerKey({
         kind: "leader",
         cwd: deps.cwd,
         instanceId: deps.instanceId,
-        telegramProfile: deps.telegramProfile,
+        baleProfile: deps.baleProfile,
     });
     if (typeof chatId !== "number")
         return undefined;
     await deps.store.load();
     const reservationCleanupPorts = {
-        isCleanupTargetProtected: createTelegramCleanupTargetProtection(deps.store),
+        isCleanupTargetProtected: createBaleCleanupTargetProtection(deps.store),
         callApi: deps.callApi,
         markStaleByTarget: (target, syncStatus, lastSyncError) => deps.store.markStaleByTarget(target, syncStatus, lastSyncError),
         removePendingProvisionById: (id) => deps.store.removePendingProvision(id),
@@ -5849,10 +5849,10 @@ export async function provisionOwnBusTopic(deps) {
         kind: "leader",
         cwd: deps.cwd,
         instanceId: deps.instanceId,
-        ...(deps.telegramProfile ? { telegramProfile: deps.telegramProfile } : {}),
+        ...(deps.baleProfile ? { baleProfile: deps.baleProfile } : {}),
     };
-    const leaderSessionHandoff = getTelegramLeaderSessionHandoff();
-    if (isTelegramLeaderSessionHandoffFresh(leaderSessionHandoff) &&
+    const leaderSessionHandoff = getBaleLeaderSessionHandoff();
+    if (isBaleLeaderSessionHandoffFresh(leaderSessionHandoff) &&
         leaderSessionHandoff.profileKey === profileKey) {
         const existingHandoffRecord = deps.store
             .list()
@@ -5878,7 +5878,7 @@ export async function provisionOwnBusTopic(deps) {
             lastReconcileAction: "leader-session-handoff-restored",
         });
         await deps.store.persist();
-        setTelegramLeaderSessionHandoff(undefined);
+        setBaleLeaderSessionHandoff(undefined);
         deps.recordEvent("bus", "Bus leader session handoff restored", {
             phase: "leader-session-handoff-restore",
             chatId: leaderSessionHandoff.target.chatId,
@@ -5890,7 +5890,7 @@ export async function provisionOwnBusTopic(deps) {
         });
     }
     else if (leaderSessionHandoff) {
-        setTelegramLeaderSessionHandoff(undefined);
+        setBaleLeaderSessionHandoff(undefined);
     }
     const recordsBeforePreviousLeaderCleanup = deps.store.list();
     const previousLeaderCleanupPlan = ThreadReconciler.planThreadReconciliation({
@@ -5924,7 +5924,7 @@ export async function provisionOwnBusTopic(deps) {
             });
             continue;
         }
-        if (isSameTelegramProcessInstance(record.instanceId, deps.instanceId)) {
+        if (isSameBaleProcessInstance(record.instanceId, deps.instanceId)) {
             deps.store.upsert({
                 ...record,
                 profileKey,
@@ -5947,7 +5947,7 @@ export async function provisionOwnBusTopic(deps) {
             continue;
         }
         const previousLeaderCleanupStartedAtMs = Date.now();
-        const isCleanupTargetProtected = createTelegramCleanupTargetProtection(deps.store, record);
+        const isCleanupTargetProtected = createBaleCleanupTargetProtection(deps.store, record);
         const cleanup = await ThreadReconciler.applyThreadReconciliationPlan({ actions: [action] }, {
             isCleanupTargetProtected,
             callApi: deps.callApi,
@@ -5976,10 +5976,10 @@ export async function provisionOwnBusTopic(deps) {
                 chatId: record.target.chatId,
                 threadId: record.target.threadId,
             });
-            throw new Error("Telegram leader ownership changed during topic reconciliation.");
+            throw new Error("Bale leader ownership changed during topic reconciliation.");
         }
         if (cleanup.incompleteActions?.length) {
-            throw new Error("Previous Telegram leader topic deletion was not confirmed.");
+            throw new Error("Previous Bale leader topic deletion was not confirmed.");
         }
         if (isCleanupTargetProtected(action.target, action))
             continue;
@@ -5991,7 +5991,7 @@ export async function provisionOwnBusTopic(deps) {
                 reason: "previous-process-cleaned-without-visible-probe",
                 createdAtMs: nowMs,
                 updatedAtMs: nowMs,
-                expiresAtMs: nowMs + TELEGRAM_THREAD_RESERVATION_TTL_MS,
+                expiresAtMs: nowMs + BALE_THREAD_RESERVATION_TTL_MS,
                 instanceId: record.instanceId,
                 lastReconcileAction: "leader-topic-previous-instance-cleaned-no-probe",
             });
@@ -6010,7 +6010,7 @@ export async function provisionOwnBusTopic(deps) {
             instanceId: deps.instanceId,
         });
     }
-    const provision = createTelegramTopicTargetProvisioner({
+    const provision = createBaleTopicTargetProvisioner({
         topicChatId: chatId,
         store: deps.store,
         callApi: deps.callApi,
@@ -6036,7 +6036,7 @@ export async function provisionOwnBusTopic(deps) {
             : {}),
     });
     if (result.reused) {
-        // Reused topics may already have a human-chosen Telegram title. Do not edit
+        // Reused topics may already have a human-chosen Bale title. Do not edit
         // them during leader startup: startup reconciliation must not reset a named
         // topic back to its bare slot or create redundant "renamed the thread" service
         // messages. Also do not probe with Bot API chat actions: every chat action is
@@ -6069,7 +6069,7 @@ export async function provisionOwnBusTopic(deps) {
         reused: result.reused,
     });
     if (!result.record.slot) {
-        throw new Error("Telegram Thread slot authority is unavailable.");
+        throw new Error("Bale Thread slot authority is unavailable.");
     }
     return {
         target: result.target,
@@ -6081,7 +6081,7 @@ export async function provisionOwnBusTopic(deps) {
         reused: result.reused,
     };
 }
-export function resolveTelegramInstanceThreadIdentity(options) {
+export function resolveBaleInstanceThreadIdentity(options) {
     const targetMatchesCandidate = (candidate) => {
         if (!candidate)
             return false;
@@ -6110,7 +6110,7 @@ export function resolveTelegramInstanceThreadIdentity(options) {
             : {}),
     };
 }
-function captureTelegramWorkspaceThreadNameRecipient(deps, operation) {
+function captureBaleWorkspaceThreadNameRecipient(deps, operation) {
     const { store, instanceId, assertAuthority: assertCaller, getAuthority, } = deps;
     const target = { ...deps.target };
     assertCaller();
@@ -6125,7 +6125,7 @@ function captureTelegramWorkspaceThreadNameRecipient(deps, operation) {
         };
     };
     const captured = capture(), authority = captured.identity;
-    const record = findCurrentTelegramInstanceThreadRecord({
+    const record = findCurrentBaleInstanceThreadRecord({
         records: store.list(),
         instanceId,
     });
@@ -6150,7 +6150,7 @@ function captureTelegramWorkspaceThreadNameRecipient(deps, operation) {
         authority.localSlot !== binding.slot ||
         !authority.localTarget ||
         !targetMatches(authority.localTarget, target))
-        throw new Error(`Telegram Workspace Thread ${operation} recipient authority is unavailable.`);
+        throw new Error(`Bale Workspace Thread ${operation} recipient authority is unavailable.`);
     const observation = operation === "reset"
         ? store.captureWorkspaceThreadResetObservation(binding, record)
         : undefined;
@@ -6164,13 +6164,13 @@ function captureTelegramWorkspaceThreadNameRecipient(deps, operation) {
         if (current.context !== captured.context ||
             !isDeepStrictEqual(current.identity, captured.identity) ||
             !observeIdentity())
-            throw new Error(`Telegram Workspace Thread ${operation} lost recipient authority.`);
+            throw new Error(`Bale Workspace Thread ${operation} lost recipient authority.`);
         // Canonical/supplied observations may synchronously revoke the captured caller or Pi recipient.
         const after = capture();
         assertCaller();
         if (after.context !== captured.context ||
             !isDeepStrictEqual(after.identity, captured.identity))
-            throw new Error(`Telegram Workspace Thread ${operation} lost recipient authority.`);
+            throw new Error(`Bale Workspace Thread ${operation} lost recipient authority.`);
     };
     assertAuthority();
     return {
@@ -6181,8 +6181,8 @@ function captureTelegramWorkspaceThreadNameRecipient(deps, operation) {
     };
 }
 /** Prepared recipient identity/result fences; callers retain Workspace admission and transport effects. */
-export function createTelegramWorkspaceThreadRenameRecipient(deps) {
-    const { assertAuthority, target, slot, observeResult } = captureTelegramWorkspaceThreadNameRecipient(deps, "rename");
+export function createBaleWorkspaceThreadRenameRecipient(deps) {
+    const { assertAuthority, target, slot, observeResult } = captureBaleWorkspaceThreadNameRecipient(deps, "rename");
     return {
         assertAuthority,
         assertResult(result) {
@@ -6191,25 +6191,25 @@ export function createTelegramWorkspaceThreadRenameRecipient(deps) {
                 result.slot !== slot ||
                 !targetMatches(result.target, target) ||
                 !observeResult(result.manualThreadName))
-                throw new Error("Telegram Workspace Thread rename result is no longer current.");
+                throw new Error("Bale Workspace Thread rename result is no longer current.");
             assertAuthority();
         },
     };
 }
 /** Exact automatic-title/absent-name result fences, separate from recipient identity and issued effects. */
-export function createTelegramWorkspaceThreadResetRecipient(deps) {
-    const { assertAuthority, observeResult } = captureTelegramWorkspaceThreadNameRecipient(deps, "reset");
+export function createBaleWorkspaceThreadResetRecipient(deps) {
+    const { assertAuthority, observeResult } = captureBaleWorkspaceThreadNameRecipient(deps, "reset");
     return {
         assertAuthority,
         assertResult(title) {
             assertAuthority();
             if (!observeResult(title))
-                throw new Error("Telegram Workspace Thread reset result is no longer current.");
+                throw new Error("Bale Workspace Thread reset result is no longer current.");
             assertAuthority();
         },
     };
 }
-export function createTelegramLeaderThreadStateRuntime() {
+export function createBaleLeaderThreadStateRuntime() {
     let identity;
     return {
         getTarget: () => identity?.target,
@@ -6222,9 +6222,9 @@ export function createTelegramLeaderThreadStateRuntime() {
         },
     };
 }
-export function createTelegramCurrentInstanceThreadRuntime(deps) {
+export function createBaleCurrentInstanceThreadRuntime(deps) {
     const findRecord = function () {
-        return findCurrentTelegramInstanceThreadRecord({
+        return findCurrentBaleInstanceThreadRecord({
             records: deps.listRecords(),
             instanceId: deps.instanceId,
             preferredTarget: deps.getPreferredTarget(),
@@ -6244,13 +6244,13 @@ export function createTelegramCurrentInstanceThreadRuntime(deps) {
         getIdentity(target) {
             const follower = deps.getFollower();
             const record = target
-                ? findCurrentTelegramInstanceThreadRecord({
+                ? findCurrentBaleInstanceThreadRecord({
                     records: deps.listRecords(),
                     instanceId: deps.instanceId,
                     preferredTarget: target,
                 })
                 : getRecord();
-            return resolveTelegramInstanceThreadIdentity({
+            return resolveBaleInstanceThreadIdentity({
                 target,
                 follower: follower?.registered ? follower : undefined,
                 leader: deps.getLeader(),
@@ -6259,7 +6259,7 @@ export function createTelegramCurrentInstanceThreadRuntime(deps) {
         },
         getRestorationIdentity() {
             const follower = deps.getFollower();
-            return resolveTelegramInstanceThreadIdentity({
+            return resolveBaleInstanceThreadIdentity({
                 follower: follower?.registered ? follower : undefined,
                 leader: deps.getLeader(),
                 record: findRecord(),
@@ -6267,7 +6267,7 @@ export function createTelegramCurrentInstanceThreadRuntime(deps) {
         },
     };
 }
-export function findCurrentTelegramInstanceThreadRecord(options) {
+export function findCurrentBaleInstanceThreadRecord(options) {
     const target = options.preferredTarget;
     if (typeof target?.threadId === "number") {
         const targetRecord = options.records.find((record) => {
@@ -6281,7 +6281,7 @@ export function findCurrentTelegramInstanceThreadRecord(options) {
         return (record.instanceId === options.instanceId && record.status === "active");
     });
 }
-export function createTelegramThreadStatusProjectionRuntime(deps) {
+export function createBaleThreadStatusProjectionRuntime(deps) {
     return {
         getBusRole() {
             if (deps.getThreadMode() === "disabled")
@@ -6291,7 +6291,7 @@ export function createTelegramThreadStatusProjectionRuntime(deps) {
             return deps.isFollowerRegistered() ? "follower" : undefined;
         },
         getBusFollowers() {
-            return listTelegramThreadStatusFollowers({
+            return listBaleThreadStatusFollowers({
                 followers: deps.listFollowers(),
                 records: deps.listRecords(),
             }).map((follower) => ({
@@ -6320,12 +6320,12 @@ export function createTelegramThreadStatusProjectionRuntime(deps) {
                 ...(leaderProtocol ? { leaderProtocol } : {}),
             };
         },
-        getTopicTargets: () => listTelegramThreadStatusTargets(deps.listRecords()).map((record) => ({
+        getTopicTargets: () => listBaleThreadStatusTargets(deps.listRecords()).map((record) => ({
             ...record,
             threadName: deps.getDisplayTitle?.(record.target) ?? record.threadName,
         })),
-        getThreadReservations: () => listTelegramThreadStatusReservations(deps.listReservations()),
-        getTopicSyncObservations: () => listTelegramThreadStatusObservations(deps.listSyncObservations()),
+        getThreadReservations: () => listBaleThreadStatusReservations(deps.listReservations()),
+        getTopicSyncObservations: () => listBaleThreadStatusObservations(deps.listSyncObservations()),
         getInstanceSlot() {
             if (deps.getThreadMode() === "disabled")
                 return undefined;
@@ -6339,7 +6339,7 @@ export function createTelegramThreadStatusProjectionRuntime(deps) {
     };
 }
 /** Own current-thread preference and its matching status projection. */
-export function createTelegramCurrentThreadAssembly(deps) {
+export function createBaleCurrentThreadAssembly(deps) {
     const getFollower = () => {
         const target = deps.getFollowerTarget();
         if (!target)
@@ -6351,7 +6351,7 @@ export function createTelegramCurrentThreadAssembly(deps) {
             threadName: deps.getFollowerThreadName(),
         };
     };
-    const namedCurrent = createTelegramCurrentInstanceThreadRuntime({
+    const namedCurrent = createBaleCurrentInstanceThreadRuntime({
         instanceId: deps.instanceId,
         listRecords: deps.listRecords,
         getPreferredTarget: () => deps.getActiveTurnTarget() ??
@@ -6386,7 +6386,7 @@ export function createTelegramCurrentThreadAssembly(deps) {
     return {
         getDisplayTitle,
         current,
-        status: createTelegramThreadStatusProjectionRuntime({
+        status: createBaleThreadStatusProjectionRuntime({
             ...deps.status,
             isFollowerRegistered: deps.isFollowerRegistered,
             listRecords: deps.listRecords,
@@ -6399,15 +6399,15 @@ export function createTelegramCurrentThreadAssembly(deps) {
         }),
     };
 }
-function getTelegramThreadStatusName(record) {
+function getBaleThreadStatusName(record) {
     if (!record)
         return undefined;
     if (record.threadName &&
-        isTelegramTopicThreadNameValidForSlot(record.threadName, record.slot))
+        isBaleTopicThreadNameValidForSlot(record.threadName, record.slot))
         return record.threadName;
-    return chooseTelegramThreadName({ slot: record.slot });
+    return chooseBaleThreadName({ slot: record.slot });
 }
-export function listTelegramThreadStatusFollowers(options) {
+export function listBaleThreadStatusFollowers(options) {
     return options.followers.map((follower) => {
         const record = options.records.find((record) => {
             return (record.target.chatId === follower.target?.chatId &&
@@ -6420,19 +6420,19 @@ export function listTelegramThreadStatusFollowers(options) {
             target: follower.target,
             ...(follower.protocol ? { protocol: follower.protocol } : {}),
             slot: record?.slot,
-            threadName: getTelegramThreadStatusName(record),
+            threadName: getBaleThreadStatusName(record),
             status: record?.status,
         };
     });
 }
-export function listTelegramThreadStatusTargets(records) {
+export function listBaleThreadStatusTargets(records) {
     return records.map((record) => {
         return {
             instanceId: record.instanceId,
             status: record.status,
             target: record.target,
             slot: record.slot,
-            threadName: getTelegramThreadStatusName(record),
+            threadName: getBaleThreadStatusName(record),
             syncStatus: record.syncStatus,
             lastSyncObservedAtMs: record.lastSyncObservedAtMs,
             lastSyncProbeAtMs: record.lastSyncProbeAtMs,
@@ -6441,7 +6441,7 @@ export function listTelegramThreadStatusTargets(records) {
         };
     });
 }
-export function listTelegramThreadStatusReservations(reservations) {
+export function listBaleThreadStatusReservations(reservations) {
     return reservations.map((reservation) => {
         return {
             target: reservation.target,
@@ -6453,7 +6453,7 @@ export function listTelegramThreadStatusReservations(reservations) {
         };
     });
 }
-export function listTelegramThreadStatusObservations(observations) {
+export function listBaleThreadStatusObservations(observations) {
     return observations.map((observation) => {
         return {
             target: observation.target,
@@ -6466,7 +6466,7 @@ export function listTelegramThreadStatusObservations(observations) {
         };
     });
 }
-export function getTelegramTargetFromApiBody(body) {
+export function getBaleTargetFromApiBody(body) {
     if (!body || typeof body !== "object" || Array.isArray(body))
         return undefined;
     const record = body;
@@ -6476,7 +6476,7 @@ export function getTelegramTargetFromApiBody(body) {
         ? { chatId, threadId }
         : undefined;
 }
-export function isTelegramTopicTargetStaleError(error) {
+export function isBaleTopicTargetStaleError(error) {
     if (!(error instanceof Error))
         return false;
     const status = "status" in error && typeof error.status === "number"
@@ -6484,10 +6484,10 @@ export function isTelegramTopicTargetStaleError(error) {
         : undefined;
     if (status !== undefined && status !== 400)
         return false;
-    return (ThreadReconciler.isTelegramTopicDeletedErrorMessage(error.message) ||
-        ThreadReconciler.isTelegramTopicClosedErrorMessage(error.message));
+    return (ThreadReconciler.isBaleTopicDeletedErrorMessage(error.message) ||
+        ThreadReconciler.isBaleTopicClosedErrorMessage(error.message));
 }
-export function isTelegramTopicModeUnavailableError(error) {
+export function isBaleTopicModeUnavailableError(error) {
     if (!(error instanceof Error))
         return false;
     const message = error.message.toLowerCase();
@@ -6497,7 +6497,7 @@ export function isTelegramTopicModeUnavailableError(error) {
         message.includes("threaded mode") ||
         message.includes("method is available only for"));
 }
-export function createTelegramTopicTargetRenamer(deps) {
+export function createBaleTopicTargetRenamer(deps) {
     const { store, callApi, assertAuthority, shouldRenameDisplayedTitle, topicNameTemplate, } = deps;
     const renameByTarget = store.renameByTarget.bind(store);
     return async (request) => {
@@ -6506,20 +6506,20 @@ export function createTelegramTopicTargetRenamer(deps) {
             threadId: request.target.threadId,
         };
         const slot = request.slot;
-        const threadName = normalizeTelegramTopicTargetThreadName(request.threadName);
+        const threadName = normalizeBaleTopicTargetThreadName(request.threadName);
         assertAuthority?.();
         if (!threadName ||
-            getTelegramManualThreadDisplayNameValidationError(threadName))
+            getBaleManualThreadDisplayNameValidationError(threadName))
             return undefined;
-        const occupied = new Set(listOccupiedTelegramThreadIdentities({
+        const occupied = new Set(listOccupiedBaleThreadIdentities({
             records: store.list(),
             workspaceBindings: store.listWorkspaceBindings(),
             pendingProvisions: store.listPendingProvisions(),
             exceptTarget: target,
         }));
-        if (occupied.has(getTelegramTopicIdentityName(threadName)))
+        if (occupied.has(getBaleTopicIdentityName(threadName)))
             return undefined;
-        const name = getTelegramTopicTitleForThreadName(threadName, slot ?? "", topicNameTemplate);
+        const name = getBaleTopicTitleForThreadName(threadName, slot ?? "", topicNameTemplate);
         const updateDisplayTitle = shouldRenameDisplayedTitle?.() ?? true;
         assertAuthority?.();
         if (updateDisplayTitle) {
@@ -6536,7 +6536,7 @@ export function createTelegramTopicTargetRenamer(deps) {
         }
         assertAuthority?.();
         if ((shouldRenameDisplayedTitle?.() ?? true) !== updateDisplayTitle) {
-            throw new Error("Telegram display mode changed during Workspace rename.");
+            throw new Error("Bale display mode changed during Workspace rename.");
         }
         assertAuthority?.();
         const renamed = await renameByTarget(target, threadName, {
@@ -6547,29 +6547,29 @@ export function createTelegramTopicTargetRenamer(deps) {
     };
 }
 /** Caller holds profile Workspace admission; only an explicit connect grants a fresh creation attempt. */
-export async function resetTelegramConnectionProvisioning(input) {
+export async function resetBaleConnectionProvisioning(input) {
     if (!input.isCurrent())
-        throw new Error("Telegram connection recovery authority changed.");
+        throw new Error("Bale connection recovery authority changed.");
     const removed = [];
     for (const pending of input.store.listPendingProvisions()) {
         if (pending.owner !== input.owner || pending.target ||
             (pending.profileKey !== input.profileKey && pending.instanceId !== input.instanceId))
             continue;
         if (!input.isCurrent())
-            throw new Error("Telegram connection recovery authority changed.");
+            throw new Error("Bale connection recovery authority changed.");
         if (!await input.store.resetPendingProvisionForConnect(pending, input.isCurrent))
-            throw new Error("Telegram connection recovery lost publication authority.");
+            throw new Error("Bale connection recovery lost publication authority.");
         if (!input.isCurrent())
-            throw new Error("Telegram connection recovery authority changed.");
+            throw new Error("Bale connection recovery authority changed.");
         removed.push(pending);
     }
     if (removed.length === 0)
         return;
-    input.recordEvent("connection", "Explicit connect reset unfinished Thread creation; an unconfirmed Telegram Thread may remain.", {
+    input.recordEvent("connection", "Explicit connect reset unfinished Thread creation; an unconfirmed Bale Thread may remain.", {
         phase: "connect-provision-reset", count: removed.length, owner: input.owner,
     });
 }
-export function createTelegramTopicTargetProvisioner(deps) {
+export function createBaleTopicTargetProvisioner(deps) {
     const getNowMs = deps.getNowMs ?? (() => 0);
     const getRandom = deps.getRandom;
     return async (request) => {
@@ -6578,7 +6578,7 @@ export function createTelegramTopicTargetProvisioner(deps) {
             if (deps.getCurrentLeaderEpoch &&
                 (leaderEpoch === undefined ||
                     deps.getCurrentLeaderEpoch() !== leaderEpoch)) {
-                throw new Error(`Telegram topic provisioning lost leader ownership (${phase}).`);
+                throw new Error(`Bale topic provisioning lost leader ownership (${phase}).`);
             }
         };
         assertLeaderEpoch("start");
@@ -6598,14 +6598,14 @@ export function createTelegramTopicTargetProvisioner(deps) {
                     .listWorkspaceBindings()
                     .some((binding) => binding.bindingKey === request.workspaceBindingKey &&
                     targetMatches(binding.target, pendingTarget)))) {
-            throw new Error("Telegram unfinished Thread creation does not match this session binding.");
+            throw new Error("Bale unfinished Thread creation does not match this session binding.");
         }
         if (pendingForRequest?.target) {
             const target = pendingForRequest.target;
             const observation = deps.store
                 .listSyncObservations()
                 .find((entry) => targetMatches(entry.target, target));
-            assertTelegramPendingTopicRecoveryAllowed(deps.store, target);
+            assertBalePendingTopicRecoveryAllowed(deps.store, target);
             if (observation?.syncStatus === "deleted") {
                 assertLeaderEpoch("before-deleted-provision-settlement");
                 deps.store.markStaleByTarget(target, "deleted");
@@ -6627,9 +6627,9 @@ export function createTelegramTopicTargetProvisioner(deps) {
             matchesWorkspace(existing.target)) {
             const slot = existing.slot ?? deps.store.allocateSlot(request.profileKey);
             if (!slot) {
-                throw new TelegramWorkspaceSlotUnavailableError();
+                throw new BaleWorkspaceSlotUnavailableError();
             }
-            const occupied = listOccupiedTelegramThreadIdentities({
+            const occupied = listOccupiedBaleThreadIdentities({
                 records: deps.store.list(),
                 workspaceBindings: deps.store.listWorkspaceBindings(),
                 pendingProvisions: deps.store.listPendingProvisions(),
@@ -6637,12 +6637,12 @@ export function createTelegramTopicTargetProvisioner(deps) {
                 exceptWorkspaceBindingKey: request.workspaceBindingKey,
             });
             const identityThreadName = identity?.threadName &&
-                isTelegramTopicThreadNameValidForSlot(identity.threadName, slot) &&
-                !occupied.includes(getTelegramTopicIdentityName(identity.threadName))
+                isBaleTopicThreadNameValidForSlot(identity.threadName, slot) &&
+                !occupied.includes(getBaleTopicIdentityName(identity.threadName))
                 ? identity.threadName
                 : undefined;
-            const bakedThreadName = chooseTelegramThreadName({
-                slot: getNextTelegramThreadNamePaletteSlot(deps.store.list(), slot),
+            const bakedThreadName = chooseBaleThreadName({
+                slot: getNextBaleThreadNamePaletteSlot(deps.store.list(), slot),
                 entropy: nowMs,
                 getRandom,
                 occupied,
@@ -6677,7 +6677,7 @@ export function createTelegramTopicTargetProvisioner(deps) {
         }
         if (pendingForRequest?.target) {
             if (!pendingForRequest.slot) {
-                throw new Error("Telegram Workspace slot reservation is unavailable.");
+                throw new Error("Bale Workspace slot reservation is unavailable.");
             }
             const record = deps.store.upsert({
                 profileKey: request.profileKey,
@@ -6704,12 +6704,12 @@ export function createTelegramTopicTargetProvisioner(deps) {
             };
         }
         if (pendingForRequest) {
-            throw new Error(`Telegram topic provisioning remains ${pendingForRequest.status ?? "in-flight"} for this instance.`);
+            throw new Error(`Bale topic provisioning remains ${pendingForRequest.status ?? "in-flight"} for this instance.`);
         }
         const activeForInstance = deps.store.getActiveByInstanceId(request.instanceId);
         if (activeForInstance && matchesWorkspace(activeForInstance.target)) {
             if (!activeForInstance.slot) {
-                throw new Error("Telegram Workspace slot reservation is unavailable.");
+                throw new Error("Bale Workspace slot reservation is unavailable.");
             }
             return {
                 target: activeForInstance.target,
@@ -6717,27 +6717,27 @@ export function createTelegramTopicTargetProvisioner(deps) {
                 record: activeForInstance,
             };
         }
-        // No profileKey match — try to claim an existing inactive thread before creating another Telegram tab.
+        // No profileKey match — try to claim an existing inactive thread before creating another Bale tab.
         if (deps.claimPendingTargets !== false) {
             const claimed = deps.store.claimReusableTarget(request.instanceId, identity?.threadName);
             if (claimed) {
                 return { target: claimed.target, reused: true, record: claimed };
             }
         }
-        const occupied = listOccupiedTelegramThreadIdentities({
+        const occupied = listOccupiedBaleThreadIdentities({
             records: deps.store.list(),
             workspaceBindings: deps.store.listWorkspaceBindings(),
             pendingProvisions: deps.store.listPendingProvisions(),
             exceptWorkspaceBindingKey: request.workspaceBindingKey,
         });
         const requestedThreadName = request.threadName &&
-            isTelegramTopicThreadNameValidForSlot(request.threadName, undefined) &&
-            !occupied.includes(getTelegramTopicIdentityName(request.threadName))
-            ? normalizeTelegramTopicTargetThreadName(request.threadName)
+            isBaleTopicThreadNameValidForSlot(request.threadName, undefined) &&
+            !occupied.includes(getBaleTopicIdentityName(request.threadName))
+            ? normalizeBaleTopicTargetThreadName(request.threadName)
             : undefined;
         const candidateThreadName = requestedThreadName ?? identity?.threadName;
-        const preferredNameSlot = getTelegramThreadNameLeadingSlot(candidateThreadName) ??
-            getNextTelegramThreadNamePaletteSlot(deps.store.list(), undefined) ??
+        const preferredNameSlot = getBaleThreadNameLeadingSlot(candidateThreadName) ??
+            getNextBaleThreadNamePaletteSlot(deps.store.list(), undefined) ??
             request.preferredSlot;
         const slot = (existing && matchesWorkspace(existing.target)
             ? existing.slot
@@ -6750,15 +6750,15 @@ export function createTelegramTopicTargetProvisioner(deps) {
                 excludeCurrentRecord: !!existing && !matchesWorkspace(existing.target),
             });
         if (!slot) {
-            throw new TelegramWorkspaceSlotUnavailableError();
+            throw new BaleWorkspaceSlotUnavailableError();
         }
         const uniqueCandidate = candidateThreadName &&
-            isTelegramTopicThreadNameValidForSlot(candidateThreadName, slot) &&
-            !occupied.includes(getTelegramTopicIdentityName(candidateThreadName))
+            isBaleTopicThreadNameValidForSlot(candidateThreadName, slot) &&
+            !occupied.includes(getBaleTopicIdentityName(candidateThreadName))
             ? candidateThreadName
             : undefined;
         const requestThreadName = uniqueCandidate ??
-            chooseTelegramThreadName({ slot, entropy: nowMs, getRandom, occupied });
+            chooseBaleThreadName({ slot, entropy: nowMs, getRandom, occupied });
         let displayTitle;
         if (deps.resolveInitialWorkspaceDisplayTitle &&
             request.workspaceBindingKey &&
@@ -6770,9 +6770,9 @@ export function createTelegramTopicTargetProvisioner(deps) {
                 threadName: requestThreadName,
             });
             if (!projectedTitle?.trim()) {
-                throw new Error("Telegram Thread display identity is missing or ambiguous.");
+                throw new Error("Bale Thread display identity is missing or ambiguous.");
             }
-            displayTitle = buildTelegramTopicName({ ...request, threadName: projectedTitle }, "{threadName}", slot);
+            displayTitle = buildBaleTopicName({ ...request, threadName: projectedTitle }, "{threadName}", slot);
         }
         const pendingId = `provision:${request.instanceId}:${slot}:${nowMs}:${randomUUID()}`;
         const pendingOwner = request.owner?.kind === "leader" ? "leader" : "manual-follower";
@@ -6800,7 +6800,7 @@ export function createTelegramTopicTargetProvisioner(deps) {
             const topic = await deps.callApi("createForumTopic", {
                 chat_id: deps.topicChatId,
                 name: displayTitle ??
-                    buildTelegramTopicName({
+                    buildBaleTopicName({
                         ...request,
                         ...(requestThreadName ? { threadName: requestThreadName } : {}),
                     }, deps.topicNameTemplate ??
@@ -6808,7 +6808,7 @@ export function createTelegramTopicTargetProvisioner(deps) {
             }, { maxAttempts: 1 });
             threadId = topic.message_thread_id;
             if (typeof threadId !== "number" || !Number.isInteger(threadId)) {
-                throw new TelegramApiCommitUnknownError("createForumTopic", new Error("Telegram createForumTopic returned no message_thread_id."));
+                throw new BaleApiCommitUnknownError("createForumTopic", new Error("Bale createForumTopic returned no message_thread_id."));
             }
             assertLeaderEpoch("after-createForumTopic");
             const target = { chatId: deps.topicChatId, threadId };
@@ -6863,7 +6863,7 @@ export function createTelegramTopicTargetProvisioner(deps) {
             }
             assertLeaderEpoch("failure-cleanup");
             if (threadId === undefined) {
-                if (isTelegramApiCommitUnknownError(error)) {
+                if (isBaleApiCommitUnknownError(error)) {
                     deps.store.upsertPendingProvision({
                         ...pendingBase,
                         status: "ambiguous",

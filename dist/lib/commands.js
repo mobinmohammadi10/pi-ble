@@ -1,20 +1,20 @@
 /**
- * Telegram command routing helpers
- * Zones: telegram controls, pi agent commands, queue controls
- * Owns Telegram slash-command normalization, bot command metadata, pi-side command registration, and command-initiated session replacement orchestration behind runtime ports
+ * Bale command routing helpers
+ * Zones: bale controls, pi agent commands, queue controls
+ * Owns Bale slash-command normalization, bot command metadata, pi-side command registration, and command-initiated session replacement orchestration behind runtime ports
  */
 import { createHash, randomUUID } from "node:crypto";
 import { addAbortListener } from "node:events";
 import { isDeepStrictEqual } from "node:util";
-import { pairTelegramUserIfNeeded, TELEGRAM_DEFAULT_PROFILE_NAME, } from "./config.js";
+import { pairBaleUserIfNeeded, BALE_DEFAULT_PROFILE_NAME, } from "./config.js";
 import { isPiStaleContextError } from "./pi.js";
-import { createTelegramControlItemBuilder, createTelegramControlQueueController, createTelegramQueueAdmissionReceipt, } from "./queue.js";
+import { createBaleControlItemBuilder, createBaleControlQueueController, createBaleQueueAdmissionReceipt, } from "./queue.js";
 import { escapeHtml } from "./rendering.js";
-import { formatTelegramConnectionFailure, } from "./status.js";
-import { TelegramApiAuthorityError, } from "./telegram-api.js";
-import { acquireTelegramUpdateRouting, carryTelegramUpdateExecutionFence, getTelegramUpdateExecutionFence, inspectTelegramDeferredSource, prepareTelegramDeferredQueueAdmission, reportTelegramQueueAdmission, } from "./updates.js";
+import { formatBaleConnectionFailure, } from "./status.js";
+import { BaleApiAuthorityError, } from "./bale-api.js";
+import { acquireBaleUpdateRouting, carryBaleUpdateExecutionFence, getBaleUpdateExecutionFence, inspectBaleDeferredSource, prepareBaleDeferredQueueAdmission, reportBaleQueueAdmission, } from "./updates.js";
 /** Exact singleton operator-private text command original eligible for a held follower plan. */
-export function isTelegramSelectedHeldOriginal(update, target, operator, name) {
+export function isBaleSelectedHeldOriginal(update, target, operator, name) {
     if (!update ||
         typeof update !== "object" ||
         Array.isArray(update) ||
@@ -25,7 +25,7 @@ export function isTelegramSelectedHeldOriginal(update, target, operator, name) {
         return false;
     const text = Reflect.get(value, "text"), chat = Reflect.get(value, "chat"), from = Reflect.get(value, "from");
     return (typeof text === "string" &&
-        parseTelegramCommand(text)?.name === name &&
+        parseBaleCommand(text)?.name === name &&
         value.caption === undefined &&
         value.media_group_id === undefined &&
         chat?.type === "private" &&
@@ -41,10 +41,10 @@ export function isTelegramSelectedHeldOriginal(update, target, operator, name) {
         Number.isSafeInteger(target.threadId) &&
         target.threadId > 0);
 }
-const TELEGRAM_EXTENSION_COMMAND_REGISTRY_KEY = "__piTelegramCommandRegistry__";
-const TELEGRAM_BOT_COMMAND_NAME_PATTERN = /^[a-z0-9_]{1,32}$/;
-function getOrCreateTelegramCommandRegistry() {
-    const existing = globalThis[TELEGRAM_EXTENSION_COMMAND_REGISTRY_KEY];
+const BALE_EXTENSION_COMMAND_REGISTRY_KEY = "__piBaleCommandRegistry__";
+const BALE_BOT_COMMAND_NAME_PATTERN = /^[a-z0-9_]{1,32}$/;
+function getOrCreateBaleCommandRegistry() {
+    const existing = globalThis[BALE_EXTENSION_COMMAND_REGISTRY_KEY];
     if (existing &&
         typeof existing === "object" &&
         existing !== null &&
@@ -53,38 +53,38 @@ function getOrCreateTelegramCommandRegistry() {
         return existing;
     }
     const registry = { commands: new Map() };
-    globalThis[TELEGRAM_EXTENSION_COMMAND_REGISTRY_KEY] = registry;
+    globalThis[BALE_EXTENSION_COMMAND_REGISTRY_KEY] = registry;
     return registry;
 }
-function normalizeTelegramExtensionCommandName(name) {
+function normalizeBaleExtensionCommandName(name) {
     return name.trim().replace(/^\/+/, "").toLowerCase();
 }
-function isTelegramExtensionCommandName(name) {
-    return TELEGRAM_BOT_COMMAND_NAME_PATTERN.test(name);
+function isBaleExtensionCommandName(name) {
+    return BALE_BOT_COMMAND_NAME_PATTERN.test(name);
 }
-function normalizeTelegramExtensionCommandEmoji(emoji) {
+function normalizeBaleExtensionCommandEmoji(emoji) {
     const normalized = emoji?.trim();
     return normalized ? normalized : undefined;
 }
-export function registerTelegramCommand(registration) {
-    const name = normalizeTelegramExtensionCommandName(registration.name);
+export function registerBaleCommand(registration) {
+    const name = normalizeBaleExtensionCommandName(registration.name);
     const showInMenu = registration.showInMenu ?? false;
-    const emoji = normalizeTelegramExtensionCommandEmoji(registration.emoji);
-    if (!isTelegramExtensionCommandName(name)) {
-        throw new Error(`Invalid Telegram command name: ${registration.name}`);
+    const emoji = normalizeBaleExtensionCommandEmoji(registration.emoji);
+    if (!isBaleExtensionCommandName(name)) {
+        throw new Error(`Invalid Bale command name: ${registration.name}`);
     }
     if (showInMenu && !emoji) {
-        throw new Error(`Visible Telegram command requires emoji: ${name}`);
+        throw new Error(`Visible Bale command requires emoji: ${name}`);
     }
     if (emoji && emoji.length > 8) {
-        throw new Error(`Telegram command emoji is too long: ${name}`);
+        throw new Error(`Bale command emoji is too long: ${name}`);
     }
-    if (isTelegramReservedCommandName(name)) {
-        throw new Error(`Telegram command conflicts with built-in command: ${name}`);
+    if (isBaleReservedCommandName(name)) {
+        throw new Error(`Bale command conflicts with built-in command: ${name}`);
     }
-    const registry = getOrCreateTelegramCommandRegistry();
+    const registry = getOrCreateBaleCommandRegistry();
     if (registry.commands.has(name)) {
-        throw new Error(`Telegram command is already registered: ${name}`);
+        throw new Error(`Bale command is already registered: ${name}`);
     }
     const command = {
         name,
@@ -103,24 +103,24 @@ export function registerTelegramCommand(registration) {
             registry.commands.delete(name);
     };
 }
-function getTelegramExtensionCommands() {
-    return Array.from(getOrCreateTelegramCommandRegistry().commands.values()).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+function getBaleExtensionCommands() {
+    return Array.from(getOrCreateBaleCommandRegistry().commands.values()).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 }
-export function findTelegramExtensionCommand(name) {
+export function findBaleExtensionCommand(name) {
     if (!name)
         return undefined;
-    return getOrCreateTelegramCommandRegistry().commands.get(normalizeTelegramExtensionCommandName(name));
+    return getOrCreateBaleCommandRegistry().commands.get(normalizeBaleExtensionCommandName(name));
 }
 /** Preparation only: no execution, admission, source freeze or binding effects. Routing owns those later. */
-export async function prepareTelegramSelectedExtensionCommand(command, authority) {
-    const registration = findTelegramExtensionCommand(command.name), selected = registration?.selected;
+export async function prepareBaleSelectedExtensionCommand(command, authority) {
+    const registration = findBaleExtensionCommand(command.name), selected = registration?.selected;
     const prepare = selected?.prepare;
     if (!registration || !selected || typeof prepare !== "function")
         return undefined;
     const input = Object.freeze({ name: registration.name, args: command.args });
     const { assertSourceCurrent, assertRecipientCurrent } = authority;
     const assertRegistrationCurrent = () => {
-        if (findTelegramExtensionCommand(input.name) !== registration ||
+        if (findBaleExtensionCommand(input.name) !== registration ||
             registration.selected !== selected ||
             selected.prepare !== prepare)
             throw new Error("Selected extension command registration changed.");
@@ -169,10 +169,10 @@ export async function prepareTelegramSelectedExtensionCommand(command, authority
         return undefined;
     }
 }
-export function clearTelegramExtensionCommands() {
-    getOrCreateTelegramCommandRegistry().commands.clear();
+export function clearBaleExtensionCommands() {
+    getOrCreateBaleCommandRegistry().commands.clear();
 }
-export const TELEGRAM_COMMAND_EMOJI = {
+export const BALE_COMMAND_EMOJI = {
     start: "🟢",
     status: "📊",
     model: "🤖",
@@ -187,20 +187,20 @@ export const TELEGRAM_COMMAND_EMOJI = {
     name: "🏷️",
     new: "🆕",
 };
-function getTelegramCommandEmoji(command) {
-    return TELEGRAM_COMMAND_EMOJI[command];
+function getBaleCommandEmoji(command) {
+    return BALE_COMMAND_EMOJI[command];
 }
-export function formatTelegramCommandEmojiPrefix(command) {
-    return `${getTelegramCommandEmoji(command)} `;
+export function formatBaleCommandEmojiPrefix(command) {
+    return `${getBaleCommandEmoji(command)} `;
 }
-export function formatTelegramPiCommandHtml(command) {
+export function formatBalePiCommandHtml(command) {
     return `<code>${escapeHtml(command)}</code>`;
 }
-export function formatTelegramInformationHeading(emoji, text) {
+export function formatBaleInformationHeading(emoji, text) {
     return `<b>${escapeHtml(emoji)} ${escapeHtml(text)}</b>`;
 }
-export function formatTelegramInvalidInstanceName(validationError) {
-    const details = validationError.replace(/^Invalid Telegram (?:instance name|Thread display name):\s*/, "");
+export function formatBaleInvalidInstanceName(validationError) {
+    const details = validationError.replace(/^Invalid Bale (?:instance name|Thread display name):\s*/, "");
     const items = details
         .split(/;\s+|(?<=\.)\s+(?=[A-Z])/)
         .map((item) => item.trim())
@@ -212,65 +212,65 @@ export function formatTelegramInvalidInstanceName(validationError) {
         ...items.map((item) => `<code>-</code> ${escapeHtml(item)}`),
     ].join("\n");
 }
-export function formatTelegramThreadDisplayNameSavedHeading(name) {
+export function formatBaleThreadDisplayNameSavedHeading(name) {
     return `<b>✅ Thread display name saved as <i>${escapeHtml(name)}</i>.</b>`;
 }
-export function formatTelegramAutomaticThreadDisplayNameRestoredHeading(name) {
+export function formatBaleAutomaticThreadDisplayNameRestoredHeading(name) {
     return `<b>✅ Automatic Thread display name restored as <i>${escapeHtml(name)}</i>.</b>`;
 }
-const TELEGRAM_COMPACTION_STARTED_TEXT = formatTelegramInformationHeading(getTelegramCommandEmoji("compact"), "Compaction started.");
-const TELEGRAM_COMPACTION_COMPLETED_TEXT = formatTelegramInformationHeading("✅", "Compaction completed.");
-export const TELEGRAM_COMPACTION_STARTED_MARKDOWN = `**${formatTelegramCommandEmojiPrefix("compact")}Compaction started.**`;
-export const TELEGRAM_COMPACTION_COMPLETED_MARKDOWN = "**✅ Compaction completed.**";
-function formatTelegramBotCommandDescription(command, description) {
-    return `${formatTelegramCommandEmojiPrefix(command)}${description}`;
+const BALE_COMPACTION_STARTED_TEXT = formatBaleInformationHeading(getBaleCommandEmoji("compact"), "Compaction started.");
+const BALE_COMPACTION_COMPLETED_TEXT = formatBaleInformationHeading("✅", "Compaction completed.");
+export const BALE_COMPACTION_STARTED_MARKDOWN = `**${formatBaleCommandEmojiPrefix("compact")}Compaction started.**`;
+export const BALE_COMPACTION_COMPLETED_MARKDOWN = "**✅ Compaction completed.**";
+function formatBaleBotCommandDescription(command, description) {
+    return `${formatBaleCommandEmojiPrefix(command)}${description}`;
 }
-const TELEGRAM_BUILTIN_BOT_COMMANDS = [
+const BALE_BUILTIN_BOT_COMMANDS = [
     {
         command: "start",
-        description: formatTelegramBotCommandDescription("start", "Open menu / Pair bridge"),
+        description: formatBaleBotCommandDescription("start", "Open menu / Pair bridge"),
     },
     {
         command: "compact",
-        description: formatTelegramBotCommandDescription("compact", "Compact current session"),
+        description: formatBaleBotCommandDescription("compact", "Compact current session"),
     },
     {
         command: "new",
-        description: formatTelegramBotCommandDescription("new", "Start a new session"),
+        description: formatBaleBotCommandDescription("new", "Start a new session"),
     },
     {
         command: "continue",
-        description: formatTelegramBotCommandDescription("continue", "Queue continue prompt"),
+        description: formatBaleBotCommandDescription("continue", "Queue continue prompt"),
     },
     {
         command: "next",
-        description: formatTelegramBotCommandDescription("next", "Force next turn"),
+        description: formatBaleBotCommandDescription("next", "Force next turn"),
     },
     {
         command: "abort",
-        description: formatTelegramBotCommandDescription("abort", "Abort Pi"),
+        description: formatBaleBotCommandDescription("abort", "Abort Pi"),
     },
     {
         command: "stop",
-        description: formatTelegramBotCommandDescription("stop", "Abort Pi & Clear queue"),
+        description: formatBaleBotCommandDescription("stop", "Abort Pi & Clear queue"),
     },
 ];
-export const TELEGRAM_BOT_COMMANDS = TELEGRAM_BUILTIN_BOT_COMMANDS;
-function getVisibleTelegramExtensionBotCommands() {
-    return getTelegramExtensionCommands()
+export const BALE_BOT_COMMANDS = BALE_BUILTIN_BOT_COMMANDS;
+function getVisibleBaleExtensionBotCommands() {
+    return getBaleExtensionCommands()
         .filter((command) => command.showInMenu && command.description)
         .map((command) => ({
         command: command.name,
         description: `${command.emoji} ${command.description ?? command.name}`,
     }));
 }
-export function getTelegramReservedCommandNames() {
+export function getBaleReservedCommandNames() {
     return [
-        ...TELEGRAM_RESERVED_COMMAND_NAMES,
-        ...getTelegramExtensionCommands().map((command) => command.name),
+        ...BALE_RESERVED_COMMAND_NAMES,
+        ...getBaleExtensionCommands().map((command) => command.name),
     ];
 }
-export async function registerTelegramBotCommands(deps, options) {
+export async function registerBaleBotCommands(deps, options) {
     const assertAuthority = options?.assertAuthority, send = deps.setMyCommands;
     const capturedOptions = assertAuthority ? { assertAuthority } : undefined;
     const setMyCommands = async (commands) => {
@@ -279,23 +279,23 @@ export async function registerTelegramBotCommands(deps, options) {
         assertAuthority?.();
     };
     assertAuthority?.();
-    const extensionCommands = getVisibleTelegramExtensionBotCommands();
+    const extensionCommands = getVisibleBaleExtensionBotCommands();
     if (extensionCommands.length === 0) {
-        await setMyCommands(TELEGRAM_BOT_COMMANDS);
+        await setMyCommands(BALE_BOT_COMMANDS);
         return;
     }
-    const nextCommandIndex = TELEGRAM_BOT_COMMANDS.findIndex((command) => command.command === "next");
+    const nextCommandIndex = BALE_BOT_COMMANDS.findIndex((command) => command.command === "next");
     if (nextCommandIndex === -1) {
-        await setMyCommands([...TELEGRAM_BOT_COMMANDS, ...extensionCommands]);
+        await setMyCommands([...BALE_BOT_COMMANDS, ...extensionCommands]);
         return;
     }
     await setMyCommands([
-        ...TELEGRAM_BOT_COMMANDS.slice(0, nextCommandIndex + 1),
+        ...BALE_BOT_COMMANDS.slice(0, nextCommandIndex + 1),
         ...extensionCommands,
-        ...TELEGRAM_BOT_COMMANDS.slice(nextCommandIndex + 1),
+        ...BALE_BOT_COMMANDS.slice(nextCommandIndex + 1),
     ]);
 }
-export function createTelegramBotCommandRegistrar(deps) {
+export function createBaleBotCommandRegistrar(deps) {
     // Only an identical local lifetime may share an in-flight sync; unguarded calls remain separate.
     const pending = new Map();
     return (options) => {
@@ -310,7 +310,7 @@ export function createTelegramBotCommandRegistrar(deps) {
         if (joined)
             return joined;
         let request;
-        request = registerTelegramBotCommands(deps, assertAuthority ? { assertAuthority } : undefined).finally(() => {
+        request = registerBaleBotCommands(deps, assertAuthority ? { assertAuthority } : undefined).finally(() => {
             if (pending.get(assertAuthority) === request)
                 pending.delete(assertAuthority);
         });
@@ -318,7 +318,7 @@ export function createTelegramBotCommandRegistrar(deps) {
         return request;
     };
 }
-export function createTelegramThreadDisplayNameResetBinding() {
+export function createBaleThreadDisplayNameResetBinding() {
     let current, generation = 0;
     return {
         bind(reset) {
@@ -350,7 +350,7 @@ export function createTelegramThreadDisplayNameResetBinding() {
         },
     };
 }
-export function createTelegramThreadDisplayNameRenameBinding() {
+export function createBaleThreadDisplayNameRenameBinding() {
     let current, generation = 0;
     return {
         bind(rename) {
@@ -385,18 +385,18 @@ export function createTelegramThreadDisplayNameRenameBinding() {
         },
     };
 }
-function parseTelegramProfileArg(args) {
+function parseBaleProfileArg(args) {
     const word = args.trim().split(/\s+/)[0];
     if (!word || word.length === 0)
         return undefined;
     if (word.startsWith("-") || /^as=/i.test(word))
         return undefined;
-    return word === TELEGRAM_DEFAULT_PROFILE_NAME ? undefined : word;
+    return word === BALE_DEFAULT_PROFILE_NAME ? undefined : word;
 }
-function formatTelegramTakeoverTitle(ctx) {
-    return ctx.ui.theme.fg("accent", "pi-telegram");
+function formatBaleTakeoverTitle(ctx) {
+    return ctx.ui.theme.fg("accent", "pi-bale");
 }
-function formatTelegramTakeoverPrompt(ctx, owner) {
+function formatBaleTakeoverPrompt(ctx, owner) {
     const theme = ctx.ui.theme;
     const action = theme.fg("warning", "move singleton lock here?");
     const from = theme.fg("muted", "from:");
@@ -404,29 +404,29 @@ function formatTelegramTakeoverPrompt(ctx, owner) {
     const source = owner ?? "another Pi instance";
     return `${action}\n\n${from} ${source}\n${to} ${ctx.cwd}`;
 }
-export function registerTelegramBridgeCommands(pi, deps) {
+export function registerBaleBridgeCommands(pi, deps) {
     const handleInternalAction = deps.handleInternalAction;
-    pi.registerCommand("telegram-setup", {
-        description: "<profile> — Configure Telegram bot token",
+    pi.registerCommand("bale-setup", {
+        description: "<profile> — Configure Bale bot token",
         handler: async (args, ctx) => {
-            await deps.promptForConfig(ctx, parseTelegramProfileArg(args));
+            await deps.promptForConfig(ctx, parseBaleProfileArg(args));
         },
     });
-    pi.registerCommand("telegram-status", {
-        description: "Show Telegram bridge status",
+    pi.registerCommand("bale-status", {
+        description: "Show Bale bridge status",
         handler: async (args, ctx) => {
             const verbose = /(^|\s)(--debug|debug|--verbose|verbose)(\s|$)/i.test(args);
             ctx.ui.notify(deps.getStatusLines({ verbose }).join("\n"), "info");
         },
     });
-    pi.registerCommand(TELEGRAM_CONNECT_COMMAND_NAME, {
-        description: "<profile> — Start Telegram bridge",
+    pi.registerCommand(BALE_CONNECT_COMMAND_NAME, {
+        description: "<profile> — Start Bale bridge",
         handler: async (args, ctx) => {
             const words = args.trim().split(/\s+/);
             // Service dispatch never inherits profile activation or explicit-connect recovery authority.
-            if (words.some(word => word.toLowerCase().startsWith(TELEGRAM_INTERNAL_COMMAND_FLAG))) {
-                if (words[0] !== TELEGRAM_INTERNAL_COMMAND_FLAG || !handleInternalAction) {
-                    ctx.ui.notify(TELEGRAM_INTERNAL_MANUAL_USE_MESSAGE, "warning");
+            if (words.some(word => word.toLowerCase().startsWith(BALE_INTERNAL_COMMAND_FLAG))) {
+                if (words[0] !== BALE_INTERNAL_COMMAND_FLAG || !handleInternalAction) {
+                    ctx.ui.notify(BALE_INTERNAL_MANUAL_USE_MESSAGE, "warning");
                     return;
                 }
                 await handleInternalAction(words.slice(1).join(" "), ctx);
@@ -445,11 +445,11 @@ export function registerTelegramBridgeCommands(pi, deps) {
                 .trim()
                 .split(/\s+/)
                 .some((word) => /^as=/i.test(word))) {
-                ctx.ui.notify("Thread names are configured from Telegram, not from Pi commands.", "warning");
+                ctx.ui.notify("Thread names are configured from Bale, not from Pi commands.", "warning");
                 deps.updateStatus(ctx);
                 return;
             }
-            const profileName = parseTelegramProfileArg(args);
+            const profileName = parseBaleProfileArg(args);
             intentId = deps.connectionIntent?.begin(ctx.cwd, profileName);
             try {
                 if (profileName && deps.activateProfileConfig) {
@@ -475,7 +475,7 @@ export function registerTelegramBridgeCommands(pi, deps) {
                         ctx.ui.notify(botTokenDiagnostic, "error");
                     const profileNames = deps.getProfileNames?.() ?? [];
                     if (!profileName && profileNames.length > 0) {
-                        ctx.ui.notify(`No default Telegram profile configured. Available profiles: ${profileNames.join(", ")}. Use /telegram-connect <profileName> or /telegram-setup to create a default profile.`, "info");
+                        ctx.ui.notify(`No default Bale profile configured. Available profiles: ${profileNames.join(", ")}. Use /bale-connect <profileName> or /bale-setup to create a default profile.`, "info");
                         deps.updateStatus(ctx);
                         return;
                     }
@@ -496,11 +496,11 @@ export function registerTelegramBridgeCommands(pi, deps) {
                 if (!isCurrent())
                     return;
                 if (result && !result.ok && result.canTakeover) {
-                    const confirmed = await ctx.ui.confirm(formatTelegramTakeoverTitle(ctx), formatTelegramTakeoverPrompt(ctx, result.owner));
+                    const confirmed = await ctx.ui.confirm(formatBaleTakeoverTitle(ctx), formatBaleTakeoverPrompt(ctx, result.owner));
                     if (!isCurrent())
                         return;
                     if (!confirmed) {
-                        ctx.ui.notify("Telegram bridge takeover cancelled.", "info");
+                        ctx.ui.notify("Bale bridge takeover cancelled.", "info");
                         deps.updateStatus(ctx);
                         return;
                     }
@@ -514,7 +514,7 @@ export function registerTelegramBridgeCommands(pi, deps) {
                 if (result && !result.ok) {
                     if (result.message)
                         deps.recordConnectionEvent?.(result.message, "connect-refused");
-                    ctx.ui.notify(formatTelegramConnectionFailure(result.message), "warning");
+                    ctx.ui.notify(formatBaleConnectionFailure(result.message), "warning");
                 }
                 else if (result?.message) {
                     ctx.ui.notify(result.message, "info");
@@ -527,7 +527,7 @@ export function registerTelegramBridgeCommands(pi, deps) {
                 if (!isCurrent())
                     return;
                 deps.recordConnectionEvent?.(error, "connect");
-                ctx.ui.notify(formatTelegramConnectionFailure(error), "warning");
+                ctx.ui.notify(formatBaleConnectionFailure(error), "warning");
                 deps.updateStatus(ctx);
             }
             finally {
@@ -536,8 +536,8 @@ export function registerTelegramBridgeCommands(pi, deps) {
             }
         },
     });
-    pi.registerCommand("telegram-disconnect", {
-        description: "Stop Telegram and delete current thread in Threaded Mode",
+    pi.registerCommand("bale-disconnect", {
+        description: "Stop Bale and delete current thread in Threaded Mode",
         handler: async (_args, ctx) => {
             const generation = deps.getSessionGeneration?.();
             const isCurrent = () => (generation === undefined ||
@@ -549,11 +549,11 @@ export function registerTelegramBridgeCommands(pi, deps) {
             try {
                 const threadName = deps.getDisconnectThreadName?.();
                 if (threadName) {
-                    const confirmed = await ctx.ui.confirm(ctx.ui.theme.fg("accent", "pi-telegram"), `Delete Telegram thread ${ctx.ui.theme.fg("warning", threadName)} and disconnect this Pi session?`);
+                    const confirmed = await ctx.ui.confirm(ctx.ui.theme.fg("accent", "pi-bale"), `Delete Bale thread ${ctx.ui.theme.fg("warning", threadName)} and disconnect this Pi session?`);
                     if (!isCurrent())
                         return;
                     if (!confirmed) {
-                        ctx.ui.notify("Telegram disconnect cancelled.", "info");
+                        ctx.ui.notify("Bale disconnect cancelled.", "info");
                         return;
                     }
                 }
@@ -568,7 +568,7 @@ export function registerTelegramBridgeCommands(pi, deps) {
                 deps.recordConnectionEvent?.(error, "disconnect");
                 if (!isCurrent())
                     return;
-                ctx.ui.notify("Telegram disconnect incomplete; keep Pi open. Check /telegram-status --debug.", "warning");
+                ctx.ui.notify("Bale disconnect incomplete; keep Pi open. Check /bale-status --debug.", "warning");
             }
             finally {
                 if (isCurrent())
@@ -577,7 +577,7 @@ export function registerTelegramBridgeCommands(pi, deps) {
         },
     });
 }
-export const TELEGRAM_RESERVED_COMMAND_NAMES = [
+export const BALE_RESERVED_COMMAND_NAMES = [
     "stop",
     "name",
     "new",
@@ -593,23 +593,23 @@ export const TELEGRAM_RESERVED_COMMAND_NAMES = [
     "help",
     "start",
 ];
-const TELEGRAM_RESERVED_COMMAND_NAME_SET = new Set(TELEGRAM_RESERVED_COMMAND_NAMES);
-export function isTelegramReservedCommandName(commandName) {
+const BALE_RESERVED_COMMAND_NAME_SET = new Set(BALE_RESERVED_COMMAND_NAMES);
+export function isBaleReservedCommandName(commandName) {
     return (commandName !== undefined &&
-        TELEGRAM_RESERVED_COMMAND_NAME_SET.has(commandName));
+        BALE_RESERVED_COMMAND_NAME_SET.has(commandName));
 }
-function isTelegramSessionBusy(ports) {
+function isBaleSessionBusy(ports) {
     return (!ports.isIdle() ||
         ports.hasPendingMessages() ||
-        ports.hasActiveTelegramTurn() ||
+        ports.hasActiveBaleTurn() ||
         ports.hasDispatchPending() ||
-        ports.hasQueuedTelegramItems() ||
+        ports.hasQueuedBaleItems() ||
         ports.isCompactionInProgress());
 }
-function canPairTelegramUserFromCommandMessage(message) {
+function canPairBaleUserFromCommandMessage(message) {
     return message.chat.type === undefined || message.chat.type === "private";
 }
-export function getTelegramCommandMessageTarget(message) {
+export function getBaleCommandMessageTarget(message) {
     return {
         chatId: message.chat.id,
         threadId: typeof message.message_thread_id === "number"
@@ -618,7 +618,7 @@ export function getTelegramCommandMessageTarget(message) {
         replyToMessageId: message.message_id,
     };
 }
-export function createTelegramCommandControlEnqueueAdapter(deps) {
+export function createBaleCommandControlEnqueueAdapter(deps) {
     return (target, ctx, controlType, statusSummary, execute, admissionReceipts, onQueued) => {
         deps.enqueueControlItem(deps.createControlItem({
             ...target,
@@ -629,14 +629,14 @@ export function createTelegramCommandControlEnqueueAdapter(deps) {
         }), ctx, onQueued);
     };
 }
-export function createTelegramCommandTargetQueueRuntime(deps) {
-    const { createControlItem, appendControlItem, dispatchNextQueuedTelegramTurn, } = deps;
-    const controlQueueController = createTelegramControlQueueController({
+export function createBaleCommandTargetQueueRuntime(deps) {
+    const { createControlItem, appendControlItem, dispatchNextQueuedBaleTurn, } = deps;
+    const controlQueueController = createBaleControlQueueController({
         appendControlItem,
-        dispatchNextQueuedTelegramTurn,
+        dispatchNextQueuedBaleTurn,
     });
-    return createTelegramCommandTargetRuntime({
-        enqueueControlItem: createTelegramCommandControlEnqueueAdapter({
+    return createBaleCommandTargetRuntime({
+        enqueueControlItem: createBaleCommandControlEnqueueAdapter({
             createControlItem,
             enqueueControlItem: controlQueueController.enqueue,
         }),
@@ -650,18 +650,18 @@ export function createTelegramCommandTargetQueueRuntime(deps) {
         sendTextReply: deps.sendTextReply,
     });
 }
-export function createTelegramCommandTargetRuntime(deps) {
+export function createBaleCommandTargetRuntime(deps) {
     const getReplyTarget = (message, options) => {
-        const source = getTelegramCommandMessageTarget(message);
+        const source = getBaleCommandMessageTarget(message);
         const recipient = options?.assertAuthority
             ? undefined
             : deps.getReplyTarget?.(message);
         if (!recipient)
             return source;
         if (recipient.chatId !== source.chatId)
-            throw new Error("Telegram command reply cannot change its recipient chat.");
+            throw new Error("Bale command reply cannot change its recipient chat.");
         if (source.threadId !== undefined && recipient.threadId === undefined)
-            throw new Error("Telegram command cannot move a Thread reply to All.");
+            throw new Error("Bale command cannot move a Thread reply to All.");
         return {
             ...recipient,
             replyToMessageId: recipient.threadId === source.threadId ? source.replyToMessageId : undefined,
@@ -669,9 +669,9 @@ export function createTelegramCommandTargetRuntime(deps) {
     };
     return {
         enqueueControlItem: (message, ctx, controlType, statusSummary, execute) => {
-            const sourceUpdateId = message.pi_telegram_source_update_id;
+            const sourceUpdateId = message.pi_bale_source_update_id;
             const baseReceipt = typeof sourceUpdateId === "number"
-                ? createTelegramQueueAdmissionReceipt({
+                ? createBaleQueueAdmissionReceipt({
                     queueKind: "control",
                     scope: deps.getAdmissionScope?.() ?? "",
                     sourceUpdateIds: [sourceUpdateId],
@@ -684,7 +684,7 @@ export function createTelegramCommandTargetRuntime(deps) {
                     ...(journalBindingKey ? { journalBindingKey } : {}),
                 }
                 : undefined;
-            deps.enqueueControlItem(getTelegramCommandMessageTarget(message), ctx, controlType, statusSummary, execute, receipt ? [receipt] : undefined, receipt ? () => deps.onControlQueued?.(message, receipt) : undefined);
+            deps.enqueueControlItem(getBaleCommandMessageTarget(message), ctx, controlType, statusSummary, execute, receipt ? [receipt] : undefined, receipt ? () => deps.onControlQueued?.(message, receipt) : undefined);
         },
         showStatus: (message, ctx, options) => {
             const target = getReplyTarget(message, options);
@@ -697,7 +697,7 @@ export function createTelegramCommandTargetRuntime(deps) {
         openSettingsMenu: async (message, ctx, options) => {
             const target = getReplyTarget(message, options);
             if (!deps.openSettingsMenu) {
-                await deps.sendTextReply(target.chatId, target.replyToMessageId, formatTelegramInformationHeading("🚫", "Settings menu is unavailable."), { target, parseMode: "HTML" });
+                await deps.sendTextReply(target.chatId, target.replyToMessageId, formatBaleInformationHeading("🚫", "Settings menu is unavailable."), { target, parseMode: "HTML" });
                 return;
             }
             await deps.openSettingsMenu(target.chatId, target.replyToMessageId, ctx, target.threadId, options);
@@ -713,10 +713,10 @@ export function createTelegramCommandTargetRuntime(deps) {
     };
 }
 /** Pure intro: built-in controls with registered extension lines before the abort controls. */
-function formatTelegramAppMenuIntroHtml(extensionLines) {
-    const line = (name, label) => `${formatTelegramCommandEmojiPrefix(name)}/${name} — ${label}`;
+function formatBaleAppMenuIntroHtml(extensionLines) {
+    const line = (name, label) => `${formatBaleCommandEmojiPrefix(name)}/${name} — ${label}`;
     return [
-        "<b>Pi Telegram</b>",
+        "<b>Pi Bale</b>",
         "",
         line("start", "Open menu / Pair bridge"),
         line("compact", "Compact current session"),
@@ -728,16 +728,16 @@ function formatTelegramAppMenuIntroHtml(extensionLines) {
         line("stop", "Abort Pi & Clear queue"),
     ].join("\n");
 }
-export const TELEGRAM_APP_MENU_INTRO_HTML = formatTelegramAppMenuIntroHtml([]);
-function buildTelegramPromptTemplateMenuHtml(promptTemplates = []) {
+export const BALE_APP_MENU_INTRO_HTML = formatBaleAppMenuIntroHtml([]);
+function buildBalePromptTemplateMenuHtml(promptTemplates = []) {
     if (promptTemplates.length === 0)
         return "";
     return promptTemplates
         .map((template) => `🧩 /${escapeHtml(template.command)}`)
         .join("\n");
 }
-function buildTelegramExtensionCommandMenuLines() {
-    return getTelegramExtensionCommands()
+function buildBaleExtensionCommandMenuLines() {
+    return getBaleExtensionCommands()
         .filter((command) => command.showInMenu)
         .map((command) => {
         const prefix = `${escapeHtml(command.emoji ?? "")} /${escapeHtml(command.name)}`;
@@ -746,26 +746,26 @@ function buildTelegramExtensionCommandMenuLines() {
         return `${prefix} — ${escapeHtml(command.description)}`;
     });
 }
-function buildTelegramAppMenuIntroHtml() {
-    return formatTelegramAppMenuIntroHtml(buildTelegramExtensionCommandMenuLines());
+function buildBaleAppMenuIntroHtml() {
+    return formatBaleAppMenuIntroHtml(buildBaleExtensionCommandMenuLines());
 }
-export function buildTelegramAppMenuHtml(statusHtml, promptTemplates = []) {
-    const introHtml = buildTelegramAppMenuIntroHtml();
-    const promptTemplateHtml = buildTelegramPromptTemplateMenuHtml(promptTemplates);
+export function buildBaleAppMenuHtml(statusHtml, promptTemplates = []) {
+    const introHtml = buildBaleAppMenuIntroHtml();
+    const promptTemplateHtml = buildBalePromptTemplateMenuHtml(promptTemplates);
     if (!promptTemplateHtml)
         return `${introHtml}\n\n${statusHtml}`;
     return `${introHtml}\n\n${promptTemplateHtml}\n\n${statusHtml}`;
 }
-export function createTelegramAppMenuHtmlBuilder(deps) {
+export function createBaleAppMenuHtmlBuilder(deps) {
     return (ctx) => {
-        return buildTelegramAppMenuHtml(deps.buildStatusHtml(ctx), deps.getPromptTemplateCommands?.());
+        return buildBaleAppMenuHtml(deps.buildStatusHtml(ctx), deps.getPromptTemplateCommands?.());
     };
 }
-function getTelegramCommandErrorMessage(error) {
+function getBaleCommandErrorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
-function formatTelegramCompactionFailure(error) {
-    let message = getTelegramCommandErrorMessage(error).trim();
+function formatBaleCompactionFailure(error) {
+    let message = getBaleCommandErrorMessage(error).trim();
     const redundantPrefixes = [
         "Compaction failed: ",
         "Turn prefix summarization failed: ",
@@ -783,7 +783,7 @@ function formatTelegramCompactionFailure(error) {
     const sentence = /[.!?]$/u.test(message) ? message : `${message}.`;
     return `Compaction failed! ${sentence}`;
 }
-export function parseTelegramCommand(text) {
+export function parseBaleCommand(text) {
     const trimmed = text.trim();
     if (!trimmed.startsWith("/"))
         return undefined;
@@ -793,7 +793,7 @@ export function parseTelegramCommand(text) {
         return undefined;
     return { name, args: tail.join(" ").trim() };
 }
-export const TELEGRAM_COMMAND_ACTIONS = {
+export const BALE_COMMAND_ACTIONS = {
     stop: { kind: "stop", executionMode: "immediate" },
     name: { kind: "name", executionMode: "immediate" },
     new: { kind: "new", executionMode: "immediate" },
@@ -809,52 +809,52 @@ export const TELEGRAM_COMMAND_ACTIONS = {
     help: { kind: "help", commandName: "help", executionMode: "immediate" },
     start: { kind: "help", commandName: "start", executionMode: "immediate" },
 };
-export function buildTelegramCommandAction(commandName) {
-    if (!isTelegramReservedCommandName(commandName)) {
+export function buildBaleCommandAction(commandName) {
+    if (!isBaleReservedCommandName(commandName)) {
         return { kind: "ignore", executionMode: "ignored" };
     }
-    return TELEGRAM_COMMAND_ACTIONS[commandName];
+    return BALE_COMMAND_ACTIONS[commandName];
 }
-function formatTelegramQueuedTurnCount(count) {
+function formatBaleQueuedTurnCount(count) {
     return count === 1 ? "1 queued turn" : `${count} queued turns`;
 }
-export async function handleTelegramStopCommand(deps) {
+export async function handleBaleStopCommand(deps) {
     deps.clearPendingModelSwitch();
     deps.cancelNextTransitionAnnouncements?.();
-    const clearedCount = deps.clearQueuedTelegramItems();
+    const clearedCount = deps.clearQueuedBaleItems();
     deps.setFoldQueuedPromptsIntoHistory(false);
     if (!deps.hasAbortHandler()) {
         const clearedSuffix = clearedCount > 0
-            ? ` Cleared ${formatTelegramQueuedTurnCount(clearedCount)}.`
+            ? ` Cleared ${formatBaleQueuedTurnCount(clearedCount)}.`
             : "";
         if (clearedCount > 0)
             deps.updateStatus();
-        await deps.sendTextReply(formatTelegramInformationHeading("💤", `No active turn.${clearedSuffix}`), { parseMode: "HTML" });
+        await deps.sendTextReply(formatBaleInformationHeading("💤", `No active turn.${clearedSuffix}`), { parseMode: "HTML" });
         return;
     }
     deps.abortCurrentTurn();
     deps.updateStatus();
     const clearedSuffix = clearedCount > 0
-        ? ` Cleared ${formatTelegramQueuedTurnCount(clearedCount)}.`
+        ? ` Cleared ${formatBaleQueuedTurnCount(clearedCount)}.`
         : "";
-    await deps.sendTextReply(formatTelegramInformationHeading("⏹️", `Aborted current turn.${clearedSuffix}`), { parseMode: "HTML" });
+    await deps.sendTextReply(formatBaleInformationHeading("⏹️", `Aborted current turn.${clearedSuffix}`), { parseMode: "HTML" });
 }
-export async function handleTelegramAbortCommand(deps) {
+export async function handleBaleAbortCommand(deps) {
     deps.clearPendingModelSwitch();
     deps.cancelNextTransitionAnnouncements?.();
     if (!deps.hasAbortHandler()) {
-        await deps.sendTextReply(formatTelegramInformationHeading("💤", "No active turn."), { parseMode: "HTML" });
+        await deps.sendTextReply(formatBaleInformationHeading("💤", "No active turn."), { parseMode: "HTML" });
         return;
     }
-    deps.setFoldQueuedPromptsIntoHistory(deps.hasActiveTelegramTurn());
+    deps.setFoldQueuedPromptsIntoHistory(deps.hasActiveBaleTurn());
     deps.abortCurrentTurn();
     deps.updateStatus();
-    await deps.sendTextReply(formatTelegramInformationHeading("⏹️", "Aborted current turn."), { parseMode: "HTML" });
+    await deps.sendTextReply(formatBaleInformationHeading("⏹️", "Aborted current turn."), { parseMode: "HTML" });
 }
-export async function handleTelegramNextCommand(deps) {
+export async function handleBaleNextCommand(deps) {
     deps.clearPendingModelSwitch();
     if (!deps.hasQueuedItems()) {
-        await deps.sendTextReply(formatTelegramInformationHeading("⌛", "Queue is empty"), { parseMode: "HTML" });
+        await deps.sendTextReply(formatBaleInformationHeading("⌛", "Queue is empty"), { parseMode: "HTML" });
         return;
     }
     if (!deps.isIdle() && deps.hasAbortHandler()) {
@@ -866,24 +866,24 @@ export async function handleTelegramNextCommand(deps) {
         return;
     }
     if (!deps.isIdle()) {
-        await deps.sendTextReply(formatTelegramInformationHeading("⏳", "Pi is busy. Send /abort or /stop first."), { parseMode: "HTML" });
+        await deps.sendTextReply(formatBaleInformationHeading("⏳", "Pi is busy. Send /abort or /stop first."), { parseMode: "HTML" });
         return;
     }
     deps.requestNextDispatchAnnouncement?.();
     deps.dispatchNextQueuedTurn();
     deps.updateStatus();
 }
-async function handleTelegramContinueCommand(message, ctx, deps) {
+async function handleBaleContinueCommand(message, ctx, deps) {
     await deps.enqueueContinueTurn(message, ctx);
 }
-function dispatchNextQueuedTelegramTurnAfterCompact(deps) {
-    if (deps.requestDeferredDispatchNextQueuedTelegramTurn) {
-        deps.requestDeferredDispatchNextQueuedTelegramTurn(deps.dispatchNextQueuedTelegramTurn);
+function dispatchNextQueuedBaleTurnAfterCompact(deps) {
+    if (deps.requestDeferredDispatchNextQueuedBaleTurn) {
+        deps.requestDeferredDispatchNextQueuedBaleTurn(deps.dispatchNextQueuedBaleTurn);
         return;
     }
-    deps.dispatchNextQueuedTelegramTurn();
+    deps.dispatchNextQueuedBaleTurn();
 }
-function buildTelegramNewConfirmationReplyMarkup() {
+function buildBaleNewConfirmationReplyMarkup() {
     return {
         inline_keyboard: [
             [
@@ -894,7 +894,7 @@ function buildTelegramNewConfirmationReplyMarkup() {
     };
 }
 /** Send one confirmation to an exact copied recipient, with authority checks around the issued request. */
-async function sendTelegramConfirmation(target, deps, html, markup, assertAuthority) {
+async function sendBaleConfirmation(target, deps, html, markup, assertAuthority) {
     const recipientTarget = {
         chatId: target.chatId,
         ...(target.threadId !== undefined ? { threadId: target.threadId } : {}),
@@ -908,13 +908,13 @@ async function sendTelegramConfirmation(target, deps, html, markup, assertAuthor
     await deps.sendInteractiveMessage(recipientTarget.chatId, html, "html", markup, options);
     assertAuthority?.();
 }
-function getTelegramNewConfirmationHtml() {
+function getBaleNewConfirmationHtml() {
     return "<b>Start a new session?</b>";
 }
-export async function openTelegramNewConfirmation(target, deps, assertAuthority) {
-    await sendTelegramConfirmation(target, deps, getTelegramNewConfirmationHtml(), buildTelegramNewConfirmationReplyMarkup(), assertAuthority);
+export async function openBaleNewConfirmation(target, deps, assertAuthority) {
+    await sendBaleConfirmation(target, deps, getBaleNewConfirmationHtml(), buildBaleNewConfirmationReplyMarkup(), assertAuthority);
 }
-export async function handleTelegramNewConfirmationCallback(query, deps) {
+export async function handleBaleNewConfirmationCallback(query, deps) {
     if (query.data !== "new:confirm" && query.data !== "new:cancel")
         return false;
     const chatId = query.message?.chat?.id;
@@ -933,7 +933,7 @@ export async function handleTelegramNewConfirmationCallback(query, deps) {
     await deps.runNew(deps.ctx);
     return true;
 }
-function buildTelegramCompactConfirmationReplyMarkup() {
+function buildBaleCompactConfirmationReplyMarkup() {
     return {
         inline_keyboard: [
             [
@@ -943,13 +943,13 @@ function buildTelegramCompactConfirmationReplyMarkup() {
         ],
     };
 }
-function getTelegramCompactConfirmationHtml() {
+function getBaleCompactConfirmationHtml() {
     return "<b>Compact session?</b>";
 }
-async function openTelegramCompactConfirmation(target, deps, assertAuthority) {
-    await sendTelegramConfirmation(target, deps, getTelegramCompactConfirmationHtml(), buildTelegramCompactConfirmationReplyMarkup(), assertAuthority);
+async function openBaleCompactConfirmation(target, deps, assertAuthority) {
+    await sendBaleConfirmation(target, deps, getBaleCompactConfirmationHtml(), buildBaleCompactConfirmationReplyMarkup(), assertAuthority);
 }
-export async function handleTelegramCompactConfirmationCallback(query, deps) {
+export async function handleBaleCompactConfirmationCallback(query, deps) {
     if (query.data !== "compact:confirm" && query.data !== "compact:cancel") {
         return false;
     }
@@ -965,26 +965,26 @@ export async function handleTelegramCompactConfirmationCallback(query, deps) {
         await deps.answerCallbackQuery(query.id);
         return true;
     }
-    await deps.editInteractiveMessage(chatId, messageId, TELEGRAM_COMPACTION_STARTED_TEXT, "html", { inline_keyboard: [] });
+    await deps.editInteractiveMessage(chatId, messageId, BALE_COMPACTION_STARTED_TEXT, "html", { inline_keyboard: [] });
     await deps.answerCallbackQuery(query.id);
     const threadId = callbackMessage?.message_thread_id;
     await deps.runCompact(deps.ctx, chatId, messageId, typeof threadId === "number" ? { chatId, threadId } : { chatId });
     return true;
 }
-export async function handleTelegramNewCommand(deps) {
-    if (isTelegramSessionBusy(deps)) {
-        await deps.sendTextReply(formatTelegramInformationHeading("⏳", "Cannot start a new session while Pi or the Telegram queue is busy. Wait for queued turns to finish or send /abort first."), { parseMode: "HTML" });
+export async function handleBaleNewCommand(deps) {
+    if (isBaleSessionBusy(deps)) {
+        await deps.sendTextReply(formatBaleInformationHeading("⏳", "Cannot start a new session while Pi or the Bale queue is busy. Wait for queued turns to finish or send /abort first."), { parseMode: "HTML" });
         return;
     }
     if (!deps.requestNewSession) {
-        await deps.sendTextReply(formatTelegramInformationHeading("🚫", "Session replacement is unavailable in this Pi runtime."), { parseMode: "HTML" });
+        await deps.sendTextReply(formatBaleInformationHeading("🚫", "Session replacement is unavailable in this Pi runtime."), { parseMode: "HTML" });
         return;
     }
     deps.requestNewSession();
 }
-export async function handleTelegramCompactCommand(deps) {
-    if (isTelegramSessionBusy(deps)) {
-        await deps.sendTextReply(formatTelegramInformationHeading("⏳", "Cannot compact while Pi or the Telegram queue is busy. Wait for queued turns to finish or send /abort first."), { parseMode: "HTML" });
+export async function handleBaleCompactCommand(deps) {
+    if (isBaleSessionBusy(deps)) {
+        await deps.sendTextReply(formatBaleInformationHeading("⏳", "Cannot compact while Pi or the Bale queue is busy. Wait for queued turns to finish or send /abort first."), { parseMode: "HTML" });
         return;
     }
     deps.setCompactionInProgress(true);
@@ -996,8 +996,8 @@ export async function handleTelegramCompactCommand(deps) {
                 deps.stopTypingLoop?.();
                 deps.setCompactionInProgress(false);
                 deps.updateStatus();
-                dispatchNextQueuedTelegramTurnAfterCompact(deps);
-                void deps.sendTextReply(TELEGRAM_COMPACTION_COMPLETED_TEXT, {
+                dispatchNextQueuedBaleTurnAfterCompact(deps);
+                void deps.sendTextReply(BALE_COMPACTION_COMPLETED_TEXT, {
                     parseMode: "HTML",
                 });
             },
@@ -1005,9 +1005,9 @@ export async function handleTelegramCompactCommand(deps) {
                 deps.stopTypingLoop?.();
                 deps.setCompactionInProgress(false);
                 deps.updateStatus();
-                dispatchNextQueuedTelegramTurnAfterCompact(deps);
+                dispatchNextQueuedBaleTurnAfterCompact(deps);
                 deps.recordRuntimeEvent?.("compact", error);
-                void deps.sendTextReply(formatTelegramInformationHeading("⚠️", formatTelegramCompactionFailure(error)), { parseMode: "HTML" });
+                void deps.sendTextReply(formatBaleInformationHeading("⚠️", formatBaleCompactionFailure(error)), { parseMode: "HTML" });
             },
         });
     }
@@ -1016,16 +1016,16 @@ export async function handleTelegramCompactCommand(deps) {
         deps.setCompactionInProgress(false);
         deps.updateStatus();
         deps.recordRuntimeEvent?.("compact", error);
-        await deps.sendTextReply(formatTelegramInformationHeading("⚠️", formatTelegramCompactionFailure(error)), { parseMode: "HTML" });
+        await deps.sendTextReply(formatBaleInformationHeading("⚠️", formatBaleCompactionFailure(error)), { parseMode: "HTML" });
         return;
     }
     if (!deps.suppressStartNotice) {
-        await deps.sendTextReply(TELEGRAM_COMPACTION_STARTED_TEXT, {
+        await deps.sendTextReply(BALE_COMPACTION_STARTED_TEXT, {
             parseMode: "HTML",
         });
     }
 }
-export async function handleTelegramModelCommand(deps) {
+export async function handleBaleModelCommand(deps) {
     try {
         await deps.openModelMenu(deps.ctx);
     }
@@ -1034,7 +1034,7 @@ export async function handleTelegramModelCommand(deps) {
             throw error;
     }
 }
-export async function executeTelegramCommandAction(action, message, ctx, deps, commandArgs = "") {
+export async function executeBaleCommandAction(action, message, ctx, deps, commandArgs = "") {
     switch (action.kind) {
         case "ignore":
             return false;
@@ -1081,14 +1081,14 @@ export async function executeTelegramCommandAction(action, message, ctx, deps, c
             return true;
     }
 }
-export function createTelegramCommandHandlerTargetRuntime(deps) {
-    const commandTargetRuntime = createTelegramCommandTargetQueueRuntime({
-        createControlItem: createTelegramControlItemBuilder({
+export function createBaleCommandHandlerTargetRuntime(deps) {
+    const commandTargetRuntime = createBaleCommandTargetQueueRuntime({
+        createControlItem: createBaleControlItemBuilder({
             allocateItemOrder: deps.allocateItemOrder,
             allocateControlOrder: deps.allocateControlOrder,
         }),
         appendControlItem: deps.appendControlItem,
-        dispatchNextQueuedTelegramTurn: deps.dispatchNextQueuedTelegramTurn,
+        dispatchNextQueuedBaleTurn: deps.dispatchNextQueuedBaleTurn,
         getReplyTarget: deps.getReplyTarget,
         getAdmissionScope: deps.getAdmissionScope,
         getAdmissionJournalBinding: deps.getAdmissionJournalBinding,
@@ -1098,24 +1098,24 @@ export function createTelegramCommandHandlerTargetRuntime(deps) {
         openSettingsMenu: deps.openSettingsMenu,
         sendTextReply: deps.sendTextReply,
     });
-    return createTelegramCommandHandler({
+    return createBaleCommandHandler({
         assertExecutionCurrent: deps.assertExecutionCurrent,
         hasAbortHandler: deps.hasAbortHandler,
         clearPendingModelSwitch: deps.clearPendingModelSwitch,
-        hasQueuedTelegramItems: deps.hasQueuedTelegramItems,
-        clearQueuedTelegramItems: deps.clearQueuedTelegramItems,
+        hasQueuedBaleItems: deps.hasQueuedBaleItems,
+        clearQueuedBaleItems: deps.clearQueuedBaleItems,
         setFoldQueuedPromptsIntoHistory: deps.setFoldQueuedPromptsIntoHistory,
         abortCurrentTurn: deps.abortCurrentTurn,
         isIdle: deps.isIdle,
         hasPendingMessages: deps.hasPendingMessages,
-        hasActiveTelegramTurn: deps.hasActiveTelegramTurn,
+        hasActiveBaleTurn: deps.hasActiveBaleTurn,
         hasDispatchPending: deps.hasDispatchPending,
         isCompactionInProgress: deps.isCompactionInProgress,
         setCompactionInProgress: deps.setCompactionInProgress,
         updateStatus: deps.updateStatus,
         isContextActive: deps.isContextActive,
         beginCommandEffectWork: deps.beginCommandEffectWork,
-        dispatchNextQueuedTelegramTurn: deps.dispatchNextQueuedTelegramTurn,
+        dispatchNextQueuedBaleTurn: deps.dispatchNextQueuedBaleTurn,
         requestNextDispatchAnnouncement: deps.requestNextDispatchAnnouncement,
         markActiveTurnNextAbortAnnouncement: deps.markActiveTurnNextAbortAnnouncement,
         cancelNextTransitionAnnouncements: deps.cancelNextTransitionAnnouncements,
@@ -1135,7 +1135,7 @@ export function createTelegramCommandHandlerTargetRuntime(deps) {
         handleForumBootstrap: deps.handleForumBootstrap,
         getAllowedUserId: deps.getAllowedUserId,
         persistAllowedUserId: deps.persistAllowedUserId,
-        registerBotCommands: createTelegramBotCommandRegistrar({
+        registerBotCommands: createBaleBotCommandRegistrar({
             setMyCommands: deps.setMyCommands,
         }),
         validateThreadName: deps.validateThreadName,
@@ -1191,13 +1191,13 @@ function copySelectedReplyAnchor(original) {
     };
 }
 function copySelectedMenuCarrier(original) {
-    const message = Object.fromEntries(Object.entries(original).filter(([key]) => key !== "pi_telegram_source_update_id"));
+    const message = Object.fromEntries(Object.entries(original).filter(([key]) => key !== "pi_bale_source_update_id"));
     message.chat = { ...original.chat };
     return message;
 }
-export function createTelegramCommandHandler(deps) {
+export function createBaleCommandHandler(deps) {
     const handle = async (commandName, message, ctx, commandArgs) => {
-        return handleTelegramCommandRuntime(commandName, message, ctx, deps, commandArgs);
+        return handleBaleCommandRuntime(commandName, message, ctx, deps, commandArgs);
     };
     const heldQueueReceipts = new Map();
     const heldQueueOwners = new WeakSet();
@@ -1229,12 +1229,12 @@ export function createTelegramCommandHandler(deps) {
         if (typeof captured.getAllowedUserId !== "function")
             return undefined;
         const command = typeof value.text === "string"
-            ? parseTelegramCommand(value.text)
+            ? parseBaleCommand(value.text)
             : undefined, operator = captured.getAllowedUserId();
         if (!command ||
             !chat ||
             !from ||
-            !isTelegramSelectedHeldOriginal(snapshot.update, target, operator, name))
+            !isBaleSelectedHeldOriginal(snapshot.update, target, operator, name))
             return undefined;
         const source = { ...snapshot.source }, preparedCommand = { ...command };
         const message = {
@@ -1242,7 +1242,7 @@ export function createTelegramCommandHandler(deps) {
             chat: { ...chat },
             message_thread_id: target.threadId,
         };
-        delete message.pi_telegram_source_update_id;
+        delete message.pi_bale_source_update_id;
         let bound, issued = false;
         const ownerCurrent = () => portsCurrent() &&
             readiness.bindCarrier === bind &&
@@ -1257,7 +1257,7 @@ export function createTelegramCommandHandler(deps) {
             if (!ownerCurrent() || !completionCurrent() || !bound)
                 throw new Error(`Held ${name} source owner is unavailable.`);
             captured.assertExecutionCurrent?.(bound.carrier);
-            const current = inspectTelegramDeferredSource(bound.carrier);
+            const current = inspectBaleDeferredSource(bound.carrier);
             if (!current ||
                 current.updateId !== source.updateId ||
                 current.journalBindingKey !== source.journalBindingKey ||
@@ -1358,7 +1358,7 @@ export function createTelegramCommandHandler(deps) {
                     if (replyDelivery === "inline")
                         await deliver();
                     else
-                        scheduleTelegramCommandEffect(ctx, input.command.name, "selected-reply", captured, deliver, input.assertRecipient);
+                        scheduleBaleCommandEffect(ctx, input.command.name, "selected-reply", captured, deliver, input.assertRecipient);
                 });
                 return true;
             },
@@ -1382,10 +1382,10 @@ export function createTelegramCommandHandler(deps) {
                 const { carrier, source } = input;
                 if (!carrier || !source)
                     return false;
-                const signal = getTelegramUpdateExecutionFence(carrier)?.signal;
+                const signal = getBaleUpdateExecutionFence(carrier)?.signal;
                 if (!signal || signal.aborted)
                     return false;
-                const queue = input.queue ?? prepareTelegramDeferredQueueAdmission(carrier);
+                const queue = input.queue ?? prepareBaleDeferredQueueAdmission(carrier);
                 if (!queue || !queue.isCurrent())
                     return false;
                 const ports = {
@@ -1409,10 +1409,10 @@ export function createTelegramCommandHandler(deps) {
                     }
                 };
                 const sameTarget = carrier.message_thread_id === input.message.message_thread_id;
-                const message = carryTelegramUpdateExecutionFence(carrier, {
+                const message = carryBaleUpdateExecutionFence(carrier, {
                     ...carrier,
                     ...input.message,
-                    pi_telegram_source_update_id: source.updateId,
+                    pi_bale_source_update_id: source.updateId,
                     ...(template ? { text: template.expanded, caption: undefined } : {}),
                     ...(sameTarget ? {} : { message_id: 0, reply_to_message: undefined }),
                 });
@@ -1422,7 +1422,7 @@ export function createTelegramCommandHandler(deps) {
                     randomUUID(),
                     source,
                     input.command,
-                    getTelegramCommandMessageTarget(message),
+                    getBaleCommandMessageTarget(message),
                 ]))
                     .digest("hex");
                 const admission = {
@@ -1451,14 +1451,14 @@ export function createTelegramCommandHandler(deps) {
                         };
                         watchHeldQueueOwner(signal);
                         heldQueueReceipts.set(receipt.receiptId, signal.aborted ? null : retained);
-                        if (!reportTelegramQueueAdmission([carrier], [receipt]))
+                        if (!reportBaleQueueAdmission([carrier], [receipt]))
                             throw new Error("Held command queue admission refused.");
                     },
                 };
                 if (template)
                     await enqueue.call(owner, message, ctx, "prompt", admission);
                 else
-                    await handleTelegramContinueCommand(message, ctx, {
+                    await handleBaleContinueCommand(message, ctx, {
                         enqueueContinueTurn: (value, context) => enqueue.call(owner, value, context, "continue", admission),
                     });
                 return !!retained && current();
@@ -1486,7 +1486,7 @@ export function createTelegramCommandHandler(deps) {
                 ...deps,
                 showStatus: scopedStatus
                     ? (message, context, options) => {
-                        const address = getTelegramCommandMessageTarget(message);
+                        const address = getBaleCommandMessageTarget(message);
                         return scopedStatus.call(effects, address.chatId, address.replyToMessageId, context, address.threadId, options);
                     }
                     : deps.showStatus,
@@ -1496,7 +1496,7 @@ export function createTelegramCommandHandler(deps) {
                 portsCurrent: () => !effects || effects.showStatus === scopedStatus,
                 async run({ message, command, assertRecipient }) {
                     const recipientOptions = { assertAuthority: assertRecipient };
-                    return handleTelegramCommandRuntime("status", message, ctx, {
+                    return handleBaleCommandRuntime("status", message, ctx, {
                         ...captured,
                         assertExecutionCurrent: assertRecipient,
                         showStatus: (value, context) => captured.showStatus(value, context, recipientOptions),
@@ -1514,9 +1514,9 @@ export function createTelegramCommandHandler(deps) {
             effect: "sendTextReply",
             prepare(ctx, effects, _command, delivery) {
                 return prepareHeldReplyPlan(ctx, effects, async (captured, semantic, _complete, reply) => {
-                    await handleTelegramAbortCommand({
+                    await handleBaleAbortCommand({
                         hasAbortHandler: semantic(captured.hasAbortHandler),
-                        hasActiveTelegramTurn: semantic(captured.hasActiveTelegramTurn),
+                        hasActiveBaleTurn: semantic(captured.hasActiveBaleTurn),
                         clearPendingModelSwitch: semantic(captured.clearPendingModelSwitch),
                         cancelNextTransitionAnnouncements: captured.cancelNextTransitionAnnouncements &&
                             semantic(captured.cancelNextTransitionAnnouncements),
@@ -1532,14 +1532,14 @@ export function createTelegramCommandHandler(deps) {
             completion: "after-semantics",
             effect: "sendTextReply",
             available: () => typeof deps.cancelNextTransitionAnnouncements === "function" &&
-                typeof deps.clearQueuedTelegramItems === "function",
+                typeof deps.clearQueuedBaleItems === "function",
             prepare(ctx, effects, _command, delivery) {
                 return prepareHeldReplyPlan(ctx, effects, async (captured, semantic, _complete, reply) => {
-                    await handleTelegramStopCommand({
+                    await handleBaleStopCommand({
                         hasAbortHandler: semantic(captured.hasAbortHandler),
                         clearPendingModelSwitch: semantic(captured.clearPendingModelSwitch),
                         cancelNextTransitionAnnouncements: semantic(captured.cancelNextTransitionAnnouncements),
-                        clearQueuedTelegramItems: semantic(() => captured.clearQueuedTelegramItems(ctx)),
+                        clearQueuedBaleItems: semantic(() => captured.clearQueuedBaleItems(ctx)),
                         setFoldQueuedPromptsIntoHistory: semantic(captured.setFoldQueuedPromptsIntoHistory),
                         abortCurrentTurn: semantic(captured.abortCurrentTurn),
                         updateStatus: semantic(() => captured.updateStatus(ctx)),
@@ -1555,13 +1555,13 @@ export function createTelegramCommandHandler(deps) {
                 typeof deps.markActiveTurnNextAbortAnnouncement === "function",
             prepare(ctx, effects, _command, delivery) {
                 return prepareHeldReplyPlan(ctx, effects, async (captured, semantic, complete, reply) => {
-                    await handleTelegramNextCommand({
+                    await handleBaleNextCommand({
                         hasAbortHandler: semantic(captured.hasAbortHandler),
                         isIdle: semantic(() => captured.isIdle(ctx)),
-                        hasQueuedItems: semantic(captured.hasQueuedTelegramItems),
+                        hasQueuedItems: semantic(captured.hasQueuedBaleItems),
                         clearPendingModelSwitch: semantic(captured.clearPendingModelSwitch),
                         abortCurrentTurn: semantic(captured.abortCurrentTurn),
-                        dispatchNextQueuedTurn: semantic(() => captured.dispatchNextQueuedTelegramTurn(ctx)),
+                        dispatchNextQueuedTurn: semantic(() => captured.dispatchNextQueuedBaleTurn(ctx)),
                         requestNextDispatchAnnouncement: semantic(captured.requestNextDispatchAnnouncement),
                         markActiveTurnNextAbortAnnouncement: semantic(captured.markActiveTurnNextAbortAnnouncement),
                         clearFoldForDispatch: semantic(() => captured.setFoldQueuedPromptsIntoHistory(false)),
@@ -1589,8 +1589,8 @@ export function createTelegramCommandHandler(deps) {
             typeof owner.enqueue !== "function" ||
             typeof get !== "function" ||
             typeof expand !== "function" ||
-            getTelegramReservedCommandNames().includes(name) ||
-            findTelegramExtensionCommand(name))
+            getBaleReservedCommandNames().includes(name) ||
+            findBaleExtensionCommand(name))
             return undefined;
         const getIdentity = () => {
             const matching = get
@@ -1618,7 +1618,7 @@ export function createTelegramCommandHandler(deps) {
                 owner.templates !== templates ||
                 templates.getCommands !== get ||
                 templates.expand !== expand ||
-                findTelegramExtensionCommand(name))
+                findBaleExtensionCommand(name))
                 return false;
             try {
                 return (isDeepStrictEqual(getIdentity(), identity) &&
@@ -1626,7 +1626,7 @@ export function createTelegramCommandHandler(deps) {
                     owner.templates === templates &&
                     templates.getCommands === get &&
                     templates.expand === expand &&
-                    !findTelegramExtensionCommand(name));
+                    !findBaleExtensionCommand(name));
             }
             catch {
                 return false;
@@ -1743,7 +1743,7 @@ export function createTelegramCommandHandler(deps) {
         if (command.name !== name ||
             messages.length !== 1 ||
             !original ||
-            !canPairTelegramUserFromCommandMessage(original) ||
+            !canPairBaleUserFromCommandMessage(original) ||
             original.from?.id === undefined ||
             original.from.is_bot)
             return undefined;
@@ -1761,7 +1761,7 @@ export function createTelegramCommandHandler(deps) {
             if (captured.getAllowedUserId() !== userId)
                 throw new Error(`Selected ${name} operator authority is unavailable.`);
         };
-        return issueSelectedOnce(assertSemanticCurrent, () => handleTelegramHelpCommand(name, message, ctx, {
+        return issueSelectedOnce(assertSemanticCurrent, () => handleBaleHelpCommand(name, message, ctx, {
             ...captured,
             persistAllowedUserId: async () => {
                 throw new Error(`Selected ${name} cannot acquire pairing authority.`);
@@ -1775,17 +1775,17 @@ export function createTelegramCommandHandler(deps) {
             !original ||
             !captured.sendInteractiveMessage)
             return undefined;
-        const target = getTelegramCommandMessageTarget(original);
+        const target = getBaleCommandMessageTarget(original);
         const assertRecipientCurrent = admission.assertRecipientCurrent, reportCompleted = admission.reportCompleted;
         const openConfirmation = name === "new"
-            ? openTelegramNewConfirmation
-            : openTelegramCompactConfirmation;
+            ? openBaleNewConfirmation
+            : openBaleCompactConfirmation;
         const assertSemanticCurrent = createSelectedSemanticGuard(admission, () => captured.assertExecutionCurrent?.(original), true);
         return issueSelectedOnce(assertSemanticCurrent, async () => {
             if (!reportCompleted())
                 return false;
             assertRecipientCurrent();
-            scheduleTelegramCommandEffect(ctx, name, "confirmation-render", captured, () => openConfirmation(target, { sendInteractiveMessage: captured.sendInteractiveMessage }, assertRecipientCurrent), assertRecipientCurrent);
+            scheduleBaleCommandEffect(ctx, name, "confirmation-render", captured, () => openConfirmation(target, { sendInteractiveMessage: captured.sendInteractiveMessage }, assertRecipientCurrent), assertRecipientCurrent);
             return true;
         });
     };
@@ -1841,7 +1841,7 @@ export function createTelegramCommandHandler(deps) {
                     assertRecipientCurrent();
                     if (typeof text !== "string")
                         throw new Error("Selected extension reply requires text.");
-                    scheduleTelegramCommandEffect(ctx, "extension", "selected-reply", captured, () => captured.sendTextReply(message, text, {
+                    scheduleBaleCommandEffect(ctx, "extension", "selected-reply", captured, () => captured.sendTextReply(message, text, {
                         assertAuthority: assertRecipientCurrent,
                     }), assertRecipientCurrent);
                 },
@@ -1909,7 +1909,7 @@ export function createTelegramCommandHandler(deps) {
             const assertRecipientCurrent = admission.assertRecipientCurrent, reportCompleted = admission.reportCompleted;
             const assertSemanticCurrent = createSelectedSemanticGuard(admission, () => captured.assertExecutionCurrent?.(original), true);
             return issueSelectedOnce(assertSemanticCurrent, async () => {
-                await handleTelegramNameCommand(message, ctx, threadName, captured, {
+                await handleBaleNameCommand(message, ctx, threadName, captured, {
                     assertSemanticCurrent,
                     assertRecipientCurrent,
                     reportCompleted,
@@ -1926,7 +1926,7 @@ export function createTelegramCommandHandler(deps) {
                 typeof admission.assertRecipientCurrent !== "function")
                 return undefined;
             const raw = Reflect.get(original, "text") ?? Reflect.get(original, "caption"), operator = deps.getAllowedUserId();
-            const actual = typeof raw === "string" ? parseTelegramCommand(raw) : undefined;
+            const actual = typeof raw === "string" ? parseBaleCommand(raw) : undefined;
             if (!isDeepStrictEqual(actual, parsed) ||
                 typeof operator !== "number" ||
                 original.chat.type !== "private" ||
@@ -1940,7 +1940,7 @@ export function createTelegramCommandHandler(deps) {
             const plan = getHeldPlan(parsed.name);
             if (!plan || plan.completion !== "queue-receipt")
                 return undefined;
-            const source = inspectTelegramDeferredSource(original), queue = prepareTelegramDeferredQueueAdmission(original);
+            const source = inspectBaleDeferredSource(original), queue = prepareBaleDeferredQueueAdmission(original);
             if (!source || source.completionSha256 || !queue?.isCurrent())
                 return undefined;
             const prepared = plan.prepare(ctx, undefined, parsed);
@@ -1958,13 +1958,13 @@ export function createTelegramCommandHandler(deps) {
                     !queue.isCurrent() ||
                     !prepared.portsCurrent() ||
                     !isDeepStrictEqual(copySelectedMenuCarrier(original), originalProjection) ||
-                    !isDeepStrictEqual(inspectTelegramDeferredSource(original), source))
+                    !isDeepStrictEqual(inspectBaleDeferredSource(original), source))
                     throw new Error("Selected queue command source/owner changed.");
                 assertSource.call(admission);
                 prepared.captured.assertExecutionCurrent?.(original);
             };
             const execute = issueSelectedOnce(assertCurrent, async () => {
-                const release = acquireTelegramUpdateRouting(original);
+                const release = acquireBaleUpdateRouting(original);
                 try {
                     assertCurrent();
                     return await prepared.run({
@@ -2047,7 +2047,7 @@ export function createTelegramCommandHandler(deps) {
             const command = value &&
                 typeof value === "object" &&
                 typeof Reflect.get(value, "text") === "string"
-                ? parseTelegramCommand(Reflect.get(value, "text"))
+                ? parseBaleCommand(Reflect.get(value, "text"))
                 : undefined;
             const prepared = plan.prepare(ctx, effects, command);
             if (!prepared)
@@ -2056,7 +2056,7 @@ export function createTelegramCommandHandler(deps) {
         },
         /** Warm menu-only issuance; completion reporting is not a receipt or a durable removal ACK. */
         prepareSelectedMenuCommand(command, messages, ctx, admission) {
-            const action = buildTelegramCommandAction(command.name);
+            const action = buildBaleCommandAction(command.name);
             if (messages.length !== 1 ||
                 !messages[0] ||
                 !["status", "model", "thinking", "queue", "settings"].includes(action.kind) ||
@@ -2100,12 +2100,12 @@ export function createTelegramCommandHandler(deps) {
                 if (beforeEffects)
                     await beforeEffects();
                 assertRecipientCurrent();
-                return handleTelegramCommandRuntime(name, message, ctx, recipientDeps, args);
+                return handleBaleCommandRuntime(name, message, ctx, recipientDeps, args);
             });
         },
     });
 }
-export function createTelegramCommandOrPromptDispatcher(deps) {
+export function createBaleCommandOrPromptDispatcher(deps) {
     const dispatchPromptTemplate = async (command, messages, ctx) => {
         const first = messages[0];
         if (!first)
@@ -2131,7 +2131,7 @@ export function createTelegramCommandOrPromptDispatcher(deps) {
             deps.assertExecutionCurrent?.(firstMessage);
             return;
         }
-        const command = parseTelegramCommand(deps.extractRawText(messages));
+        const command = parseBaleCommand(deps.extractRawText(messages));
         const handled = await deps.handleCommand(command?.name, firstMessage, ctx, command?.args);
         deps.assertExecutionCurrent?.(firstMessage);
         if (handled)
@@ -2148,7 +2148,7 @@ export function createTelegramCommandOrPromptDispatcher(deps) {
         await deps.enqueueTurn(messages, ctx);
     };
 }
-function scheduleTelegramCommandEffect(ctx, command, phase, deps, effect, assertExecutionCurrent) {
+function scheduleBaleCommandEffect(ctx, command, phase, deps, effect, assertExecutionCurrent) {
     const work = deps.beginCommandEffectWork?.();
     let started = false, outcome = "settled";
     void Promise.resolve()
@@ -2163,10 +2163,10 @@ function scheduleTelegramCommandEffect(ctx, command, phase, deps, effect, assert
         .catch((error) => {
         // A failed started effect cannot prove non-issuance; never turn its uncertainty into known idle.
         if (started &&
-            !(error instanceof TelegramApiAuthorityError && !error.requestIssued))
+            !(error instanceof BaleApiAuthorityError && !error.requestIssued))
             outcome = "unconfirmed";
         try {
-            deps.recordRuntimeEvent?.("telegram-command", error, {
+            deps.recordRuntimeEvent?.("bale-command", error, {
                 command,
                 phase,
             });
@@ -2177,13 +2177,13 @@ function scheduleTelegramCommandEffect(ctx, command, phase, deps, effect, assert
     })
         .finally(() => work?.settle(outcome));
 }
-async function handleTelegramHelpCommand(commandName, message, ctx, deps, admission) {
+async function handleBaleHelpCommand(commandName, message, ctx, deps, admission) {
     const assertSemanticCurrent = admission?.assertSemanticCurrent ??
         (() => deps.assertExecutionCurrent?.(message));
     admission?.assertSemanticCurrent();
     if (message.from?.id !== undefined &&
-        canPairTelegramUserFromCommandMessage(message)) {
-        const allowed = await pairTelegramUserIfNeeded(message.from.id, {
+        canPairBaleUserFromCommandMessage(message)) {
+        const allowed = await pairBaleUserIfNeeded(message.from.id, {
             allowedUserId: deps.getAllowedUserId(),
             ctx: undefined,
             persistAllowedUserId: deps.persistAllowedUserId,
@@ -2207,7 +2207,7 @@ async function handleTelegramHelpCommand(commandName, message, ctx, deps, admiss
         assertAuthority: admission.assertRecipientCurrent,
     };
     const isContextActive = () => deps.isContextActive?.(ctx) !== false;
-    scheduleTelegramCommandEffect(ctx, commandName, "menu-render", deps, async () => {
+    scheduleBaleCommandEffect(ctx, commandName, "menu-render", deps, async () => {
         let forumBootstrapMessage;
         if (commandName === "start" && deps.handleForumBootstrap) {
             forumBootstrapMessage = await deps.handleForumBootstrap(message, ctx, options);
@@ -2224,10 +2224,10 @@ async function handleTelegramHelpCommand(commandName, message, ctx, deps, admiss
         assertEffectCurrent();
         await deps.showStatus(message, ctx, options);
     }, assertEffectCurrent);
-    scheduleTelegramCommandEffect(ctx, commandName, "bot-command-sync", deps, () => deps.registerBotCommands(options), assertEffectCurrent);
+    scheduleBaleCommandEffect(ctx, commandName, "bot-command-sync", deps, () => deps.registerBotCommands(options), assertEffectCurrent);
     return true;
 }
-async function handleTelegramNameCommand(message, ctx, requestedName, deps, admission) {
+async function handleBaleNameCommand(message, ctx, requestedName, deps, admission) {
     const threadName = requestedName.trim();
     const reply = async (text) => {
         if (admission) {
@@ -2251,12 +2251,12 @@ async function handleTelegramNameCommand(message, ctx, requestedName, deps, admi
         if (deps.openThreadNameDialog)
             await deps.openThreadNameDialog(message, ctx);
         else
-            await reply(formatTelegramInformationHeading("🏷️", "Usage: /name Navigator"));
+            await reply(formatBaleInformationHeading("🏷️", "Usage: /name Navigator"));
         return;
     }
     if (/^[A-Z]$/.test(threadName) && deps.resetCurrentThreadName) {
         admission?.assertSemanticCurrent();
-        const target = getTelegramCommandMessageTarget(message);
+        const target = getBaleCommandMessageTarget(message);
         const result = admission
             ? await deps.resetCurrentThreadName(target, {
                 assertAuthority: admission.assertSemanticCurrent,
@@ -2264,26 +2264,26 @@ async function handleTelegramNameCommand(message, ctx, requestedName, deps, admi
             : await deps.resetCurrentThreadName(target);
         admission?.assertSemanticCurrent();
         await reply(result.ok && !result.message
-            ? formatTelegramAutomaticThreadDisplayNameRestoredHeading(result.threadName ?? threadName)
-            : formatTelegramInformationHeading(result.ok ? "✅" : "⚠️", result.message ?? "Thread display name reset failed."));
+            ? formatBaleAutomaticThreadDisplayNameRestoredHeading(result.threadName ?? threadName)
+            : formatBaleInformationHeading(result.ok ? "✅" : "⚠️", result.message ?? "Thread display name reset failed."));
         return;
     }
     admission?.assertSemanticCurrent();
     const validationError = deps.validateThreadName?.(threadName);
     admission?.assertSemanticCurrent();
     if (validationError) {
-        await reply(formatTelegramInvalidInstanceName(validationError));
+        await reply(formatBaleInvalidInstanceName(validationError));
         return;
     }
     if (!deps.renameCurrentThread) {
-        await reply(formatTelegramInformationHeading("🚫", "Thread display naming is unavailable."));
+        await reply(formatBaleInformationHeading("🚫", "Thread display naming is unavailable."));
         return;
     }
     if (admission)
         admission.assertSemanticCurrent();
     else
         deps.assertExecutionCurrent?.(message);
-    const target = getTelegramCommandMessageTarget(message);
+    const target = getBaleCommandMessageTarget(message);
     const result = admission
         ? await deps.renameCurrentThread(target, threadName, {
             assertAuthority: admission.assertSemanticCurrent,
@@ -2294,10 +2294,10 @@ async function handleTelegramNameCommand(message, ctx, requestedName, deps, admi
     else
         deps.assertExecutionCurrent?.(message);
     await reply(result.ok && !result.message
-        ? formatTelegramThreadDisplayNameSavedHeading(result.threadName ?? threadName)
-        : formatTelegramInformationHeading(result.ok ? "✅" : "⚠️", result.message ?? "Thread display name update failed."));
+        ? formatBaleThreadDisplayNameSavedHeading(result.threadName ?? threadName)
+        : formatBaleInformationHeading(result.ok ? "✅" : "⚠️", result.message ?? "Thread display name update failed."));
 }
-async function handleTelegramCommandRuntime(commandName, message, ctx, deps, commandArgs = "") {
+async function handleBaleCommandRuntime(commandName, message, ctx, deps, commandArgs = "") {
     deps.assertExecutionCurrent?.(message);
     const assertExecutionCurrentFor = (nextMessage) => () => deps.assertExecutionCurrent?.(nextMessage);
     const sendReplyFor = (nextMessage) => async (text, options) => {
@@ -2306,24 +2306,24 @@ async function handleTelegramCommandRuntime(commandName, message, ctx, deps, com
         deps.assertExecutionCurrent?.(nextMessage);
     };
     const updateStatusFor = (commandCtx) => () => deps.updateStatus(commandCtx);
-    return executeTelegramCommandAction(buildTelegramCommandAction(commandName), message, ctx, {
+    return executeBaleCommandAction(buildBaleCommandAction(commandName), message, ctx, {
         handleStop: async (nextMessage, commandCtx) => {
-            await handleTelegramStopCommand({
+            await handleBaleStopCommand({
                 hasAbortHandler: deps.hasAbortHandler,
                 clearPendingModelSwitch: deps.clearPendingModelSwitch,
                 cancelNextTransitionAnnouncements: deps.cancelNextTransitionAnnouncements,
-                clearQueuedTelegramItems: () => deps.clearQueuedTelegramItems(commandCtx),
+                clearQueuedBaleItems: () => deps.clearQueuedBaleItems(commandCtx),
                 setFoldQueuedPromptsIntoHistory: deps.setFoldQueuedPromptsIntoHistory,
                 abortCurrentTurn: deps.abortCurrentTurn,
                 updateStatus: updateStatusFor(commandCtx),
                 sendTextReply: sendReplyFor(nextMessage),
             });
         },
-        handleName: (nextMessage, commandCtx, requestedName) => handleTelegramNameCommand(nextMessage, commandCtx, requestedName, deps),
+        handleName: (nextMessage, commandCtx, requestedName) => handleBaleNameCommand(nextMessage, commandCtx, requestedName, deps),
         handleAbort: async (nextMessage, commandCtx) => {
-            await handleTelegramAbortCommand({
+            await handleBaleAbortCommand({
                 hasAbortHandler: deps.hasAbortHandler,
-                hasActiveTelegramTurn: deps.hasActiveTelegramTurn,
+                hasActiveBaleTurn: deps.hasActiveBaleTurn,
                 clearPendingModelSwitch: deps.clearPendingModelSwitch,
                 cancelNextTransitionAnnouncements: deps.cancelNextTransitionAnnouncements,
                 abortCurrentTurn: deps.abortCurrentTurn,
@@ -2333,13 +2333,13 @@ async function handleTelegramCommandRuntime(commandName, message, ctx, deps, com
             });
         },
         handleNext: async (nextMessage, commandCtx) => {
-            await handleTelegramNextCommand({
+            await handleBaleNextCommand({
                 hasAbortHandler: deps.hasAbortHandler,
                 isIdle: () => deps.isIdle(commandCtx),
-                hasQueuedItems: deps.hasQueuedTelegramItems,
+                hasQueuedItems: deps.hasQueuedBaleItems,
                 clearPendingModelSwitch: deps.clearPendingModelSwitch,
                 abortCurrentTurn: deps.abortCurrentTurn,
-                dispatchNextQueuedTurn: () => deps.dispatchNextQueuedTelegramTurn(commandCtx),
+                dispatchNextQueuedTurn: () => deps.dispatchNextQueuedBaleTurn(commandCtx),
                 requestNextDispatchAnnouncement: deps.requestNextDispatchAnnouncement,
                 markActiveTurnNextAbortAnnouncement: deps.markActiveTurnNextAbortAnnouncement,
                 clearFoldForDispatch: () => deps.setFoldQueuedPromptsIntoHistory(false),
@@ -2349,24 +2349,24 @@ async function handleTelegramCommandRuntime(commandName, message, ctx, deps, com
             });
         },
         handleContinue: async (nextMessage, commandCtx) => {
-            await handleTelegramContinueCommand(nextMessage, commandCtx, {
+            await handleBaleContinueCommand(nextMessage, commandCtx, {
                 enqueueContinueTurn: deps.enqueueContinueTurn,
             });
         },
         handleQueue: async (nextMessage, commandCtx) => {
-            scheduleTelegramCommandEffect(commandCtx, "queue", "menu-render", deps, () => deps.openQueueMenu(nextMessage, commandCtx), assertExecutionCurrentFor(nextMessage));
+            scheduleBaleCommandEffect(commandCtx, "queue", "menu-render", deps, () => deps.openQueueMenu(nextMessage, commandCtx), assertExecutionCurrentFor(nextMessage));
         },
         handleNew: async (nextMessage, commandCtx) => {
             if (deps.sendInteractiveMessage) {
-                await openTelegramNewConfirmation(getTelegramCommandMessageTarget(nextMessage), { sendInteractiveMessage: deps.sendInteractiveMessage });
+                await openBaleNewConfirmation(getBaleCommandMessageTarget(nextMessage), { sendInteractiveMessage: deps.sendInteractiveMessage });
                 return;
             }
-            await handleTelegramNewCommand({
+            await handleBaleNewCommand({
                 isIdle: () => deps.isIdle(commandCtx),
                 hasPendingMessages: () => deps.hasPendingMessages(commandCtx),
-                hasActiveTelegramTurn: deps.hasActiveTelegramTurn,
+                hasActiveBaleTurn: deps.hasActiveBaleTurn,
                 hasDispatchPending: deps.hasDispatchPending,
-                hasQueuedTelegramItems: deps.hasQueuedTelegramItems,
+                hasQueuedBaleItems: deps.hasQueuedBaleItems,
                 isCompactionInProgress: deps.isCompactionInProgress,
                 requestNewSession: deps.requestNewSession
                     ? () => deps.requestNewSession(nextMessage)
@@ -2377,26 +2377,26 @@ async function handleTelegramCommandRuntime(commandName, message, ctx, deps, com
         },
         handleCompact: async (nextMessage, commandCtx) => {
             if (deps.sendInteractiveMessage) {
-                await openTelegramCompactConfirmation(getTelegramCommandMessageTarget(nextMessage), { sendInteractiveMessage: deps.sendInteractiveMessage });
+                await openBaleCompactConfirmation(getBaleCommandMessageTarget(nextMessage), { sendInteractiveMessage: deps.sendInteractiveMessage });
                 return;
             }
-            await handleTelegramCompactCommand({
+            await handleBaleCompactCommand({
                 isIdle: () => deps.isIdle(commandCtx),
                 hasPendingMessages: () => deps.hasPendingMessages(commandCtx),
-                hasActiveTelegramTurn: deps.hasActiveTelegramTurn,
+                hasActiveBaleTurn: deps.hasActiveBaleTurn,
                 hasDispatchPending: deps.hasDispatchPending,
-                hasQueuedTelegramItems: deps.hasQueuedTelegramItems,
+                hasQueuedBaleItems: deps.hasQueuedBaleItems,
                 isCompactionInProgress: deps.isCompactionInProgress,
                 setCompactionInProgress: deps.setCompactionInProgress,
                 updateStatus: updateStatusFor(commandCtx),
-                dispatchNextQueuedTelegramTurn: () => deps.dispatchNextQueuedTelegramTurn(commandCtx),
-                requestDeferredDispatchNextQueuedTelegramTurn: deps.requestDeferredDispatchNextQueuedTelegramTurn
-                    ? (dispatch) => deps.requestDeferredDispatchNextQueuedTelegramTurn?.(() => dispatch())
+                dispatchNextQueuedBaleTurn: () => deps.dispatchNextQueuedBaleTurn(commandCtx),
+                requestDeferredDispatchNextQueuedBaleTurn: deps.requestDeferredDispatchNextQueuedBaleTurn
+                    ? (dispatch) => deps.requestDeferredDispatchNextQueuedBaleTurn?.(() => dispatch())
                     : undefined,
                 compact: (callbacks) => deps.compact(commandCtx, callbacks),
                 startTypingLoop: deps.startTypingLoop
                     ? () => deps.startTypingLoop?.(commandCtx, nextMessage.chat.id, {
-                        target: getTelegramCommandMessageTarget(nextMessage),
+                        target: getBaleCommandMessageTarget(nextMessage),
                     })
                     : undefined,
                 stopTypingLoop: deps.stopTypingLoop,
@@ -2405,34 +2405,34 @@ async function handleTelegramCommandRuntime(commandName, message, ctx, deps, com
             });
         },
         handleStatus: async (nextMessage, commandCtx) => {
-            scheduleTelegramCommandEffect(commandCtx, "status", "menu-render", deps, () => deps.showStatus(nextMessage, commandCtx), assertExecutionCurrentFor(nextMessage));
+            scheduleBaleCommandEffect(commandCtx, "status", "menu-render", deps, () => deps.showStatus(nextMessage, commandCtx), assertExecutionCurrentFor(nextMessage));
         },
         handleModel: async (nextMessage, commandCtx) => {
-            scheduleTelegramCommandEffect(commandCtx, "model", "menu-render", deps, () => handleTelegramModelCommand({
+            scheduleBaleCommandEffect(commandCtx, "model", "menu-render", deps, () => handleBaleModelCommand({
                 ctx: commandCtx,
                 openModelMenu: (controlCtx) => deps.openModelMenu(nextMessage, controlCtx),
             }), assertExecutionCurrentFor(nextMessage));
         },
         handleThinking: async (nextMessage, commandCtx) => {
-            scheduleTelegramCommandEffect(commandCtx, "thinking", "menu-render", deps, () => deps.openThinkingMenu(nextMessage, commandCtx), assertExecutionCurrentFor(nextMessage));
+            scheduleBaleCommandEffect(commandCtx, "thinking", "menu-render", deps, () => deps.openThinkingMenu(nextMessage, commandCtx), assertExecutionCurrentFor(nextMessage));
         },
         handleSettings: deps.openSettingsMenu
             ? async (nextMessage, commandCtx) => {
-                scheduleTelegramCommandEffect(commandCtx, "settings", "menu-render", deps, () => deps.openSettingsMenu(nextMessage, commandCtx), assertExecutionCurrentFor(nextMessage));
+                scheduleBaleCommandEffect(commandCtx, "settings", "menu-render", deps, () => deps.openSettingsMenu(nextMessage, commandCtx), assertExecutionCurrentFor(nextMessage));
             }
             : undefined,
         handleHelp: async (nextMessage, nextCommandName, commandCtx) => {
-            await handleTelegramHelpCommand(nextCommandName, nextMessage, commandCtx, deps);
+            await handleBaleHelpCommand(nextCommandName, nextMessage, commandCtx, deps);
         },
     }, commandArgs);
 }
-export const TELEGRAM_CONNECT_COMMAND_NAME = "telegram-connect";
-export const TELEGRAM_INTERNAL_COMMAND_FLAG = "--internal";
-export const TELEGRAM_INTERNAL_MANUAL_USE_MESSAGE = "This internal Telegram action cannot be run manually.";
-function delayTelegramSessionAction(delayMs) {
+export const BALE_CONNECT_COMMAND_NAME = "bale-connect";
+export const BALE_INTERNAL_COMMAND_FLAG = "--internal";
+export const BALE_INTERNAL_MANUAL_USE_MESSAGE = "This internal Bale action cannot be run manually.";
+function delayBaleSessionAction(delayMs) {
     return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
-export async function settleTelegramSessionReplacement(deps) {
+export async function settleBaleSessionReplacement(deps) {
     const now = deps.now ?? Date.now;
     const sleep = deps.sleep ??
         ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
@@ -2462,7 +2462,7 @@ export async function settleTelegramSessionReplacement(deps) {
     }
     return "stale";
 }
-function createTelegramSessionReplacementSettlementRuntime(deps) {
+function createBaleSessionReplacementSettlementRuntime(deps) {
     let generation = 0;
     return {
         onSessionStart(ctx) {
@@ -2470,14 +2470,14 @@ function createTelegramSessionReplacementSettlementRuntime(deps) {
             const resolved = deps.resolve(ctx);
             if (!resolved)
                 return;
-            void settleTelegramSessionReplacement({
+            void settleBaleSessionReplacement({
                 ...resolved,
                 isCurrent: () => currentGeneration === generation && resolved.isCurrent?.() !== false,
             }).then(deps.onResult, deps.onError);
         },
     };
 }
-export function createTelegramSessionActionAssembly(deps) {
+export function createBaleSessionActionAssembly(deps) {
     const now = deps.now ?? Date.now;
     const report = (error) => deps.recordRuntimeEvent?.("new-session", error);
     const sendTerminalResult = async (target, result) => {
@@ -2493,11 +2493,11 @@ export function createTelegramSessionActionAssembly(deps) {
                 return;
             if (!delivery.retryable)
                 break;
-            await delayTelegramSessionAction(100);
+            await delayBaleSessionAction(100);
         } while (now() < deadline);
-        report(new Error("Telegram new-session result delivery failed."));
+        report(new Error("Bale new-session result delivery failed."));
     };
-    const action = createTelegramSessionActionRuntime({
+    const action = createBaleSessionActionRuntime({
         sendUserMessage: deps.sendUserMessage,
         notifyResult(target, result) {
             return sendTerminalResult(target, result);
@@ -2519,7 +2519,7 @@ export function createTelegramSessionActionAssembly(deps) {
                 : undefined;
             if (typeof target.threadId === "number" &&
                 (!binding || binding.cwd !== ctx.cwd || binding.sessionId !== sessionId)) {
-                throw new Error("Telegram session replacement binding is unavailable.");
+                throw new Error("Bale session replacement binding is unavailable.");
             }
             const createdAtMs = now();
             const intent = {
@@ -2541,12 +2541,12 @@ export function createTelegramSessionActionAssembly(deps) {
             if (!(await (follower
                 ? follower.requestSessionReplacement("publish", intent)
                 : deps.store.commitSessionReplacementIntent(intent, deps.ownsPersistence)))) {
-                throw new Error("Telegram session replacement intent was not persisted.");
+                throw new Error("Bale session replacement intent was not persisted.");
             }
         },
         recordRuntimeEvent: deps.recordRuntimeEvent,
     });
-    const settlement = createTelegramSessionReplacementSettlementRuntime({
+    const settlement = createBaleSessionReplacementSettlementRuntime({
         resolve(ctx) {
             const sessionId = ctx.sessionManager?.getSessionId?.();
             if (!sessionId)
@@ -2584,14 +2584,14 @@ export function createTelegramSessionActionAssembly(deps) {
         },
         onResult(result) {
             if (result === "expired" || result === "failed") {
-                report(new Error(`Telegram session replacement successor settlement ${result}.`));
+                report(new Error(`Bale session replacement successor settlement ${result}.`));
             }
         },
         onError: report,
     });
     return { action, settlement };
 }
-export function createTelegramSessionActionRuntime(deps) {
+export function createBaleSessionActionRuntime(deps) {
     let pendingUpdateId;
     let pendingTarget;
     let pendingAction;
@@ -2609,7 +2609,7 @@ export function createTelegramSessionActionRuntime(deps) {
             const [operation, token, ...extra] = args.trim().split(/\s+/);
             if (!action || operation !== "new" ||
                 token !== action.token || extra.length !== 0) {
-                ctx.ui.notify(TELEGRAM_INTERNAL_MANUAL_USE_MESSAGE, "warning");
+                ctx.ui.notify(BALE_INTERNAL_MANUAL_USE_MESSAGE, "warning");
                 return;
             }
             pendingAction = undefined;
@@ -2646,7 +2646,7 @@ export function createTelegramSessionActionRuntime(deps) {
             const token = randomUUID();
             pendingAction = { kind: "replace-session", token, updateId, target };
             void Promise.resolve()
-                .then(() => deps.sendUserMessage(`/${TELEGRAM_CONNECT_COMMAND_NAME} ${TELEGRAM_INTERNAL_COMMAND_FLAG} new ${token}`, { expandPromptTemplates: true }))
+                .then(() => deps.sendUserMessage(`/${BALE_CONNECT_COMMAND_NAME} ${BALE_INTERNAL_COMMAND_FLAG} new ${token}`, { expandPromptTemplates: true }))
                 .catch((error) => {
                 pendingAction = undefined;
                 reportFailure(error);

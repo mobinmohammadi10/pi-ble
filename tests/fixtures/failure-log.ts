@@ -1,10 +1,10 @@
 /**
  * Repeated-failure diagnostics fixtures
- * Zones: telegram diagnostics
+ * Zones: bale diagnostics
  * Stands in for the logging domain's failure-run log wherever a test asserts raw per-failure recording.
  */
 
-export interface TelegramPassthroughFailureLog {
+export interface BalePassthroughFailureLog {
   record: (error: unknown, details?: Record<string, unknown>) => void;
   settled: () => void;
   reset: () => void;
@@ -13,6 +13,6 @@ export interface TelegramPassthroughFailureLog {
 /** Faithful test double: records every failure without collapsing, so existing assertions stay exact. */
 export function createPassthroughFailureLog(
   record: (error: unknown, details?: Record<string, unknown>) => void = () => {},
-): TelegramPassthroughFailureLog {
+): BalePassthroughFailureLog {
   return { record, settled: () => {}, reset: () => {} };
 }

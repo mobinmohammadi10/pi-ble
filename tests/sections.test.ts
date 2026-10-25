@@ -1,27 +1,27 @@
 /**
- * Telegram Extension Sections tests
- * Zones: telegram ui, extension platform, callback routing
+ * Bale Extension Sections tests
+ * Zones: bale ui, extension platform, callback routing
  */
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  createTelegramExtensionSectionRegistry,
-  getTelegramExtensionSettingsRows,
-  getTelegramSectionMainMenuRows,
-  handleTelegramSectionCallback,
-  handleTelegramSectionOpen,
-  handleTelegramSectionSettingsOpen,
-  parseTelegramSectionCallback,
-  type TelegramSectionRuntimeDeps,
-  type TelegramSectionRegistration,
+  createBaleExtensionSectionRegistry,
+  getBaleExtensionSettingsRows,
+  getBaleSectionMainMenuRows,
+  handleBaleSectionCallback,
+  handleBaleSectionOpen,
+  handleBaleSectionSettingsOpen,
+  parseBaleSectionCallback,
+  type BaleSectionRuntimeDeps,
+  type BaleSectionRegistration,
 } from "../lib/sections.ts";
 
 function stubSection(
   id: string,
   label: string,
-  overrides: Partial<TelegramSectionRegistration> = {},
-): TelegramSectionRegistration {
+  overrides: Partial<BaleSectionRegistration> = {},
+): BaleSectionRegistration {
   return {
     id,
     label,
@@ -31,8 +31,8 @@ function stubSection(
 }
 
 function stubDeps(
-  overrides: Partial<TelegramSectionRuntimeDeps> = {},
-): TelegramSectionRuntimeDeps {
+  overrides: Partial<BaleSectionRuntimeDeps> = {},
+): BaleSectionRuntimeDeps {
   return {
     answerCallbackQuery: async () => {},
     editInteractiveMessage: async () => {},
@@ -47,7 +47,7 @@ function stubDeps(
 // --- Registry ---
 
 test("Registry registers a section and returns a disposer", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   const unregister = registry.register(stubSection("@test/section-a", "A"));
   const sections = registry.getSections();
   assert.equal(sections.length, 1);
@@ -59,7 +59,7 @@ test("Registry registers a section and returns a disposer", () => {
 });
 
 test("Registry assigns unique tokens to each section", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   const u1 = registry.register(stubSection("@test/a", "A"));
   const u2 = registry.register(stubSection("@test/b", "B"));
   const sections = registry.getSections();
@@ -70,7 +70,7 @@ test("Registry assigns unique tokens to each section", () => {
 });
 
 test("Registry rejects duplicate section ids", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/a", "A"));
   assert.throws(
     () => registry.register(stubSection("@test/a", "A2")),
@@ -79,7 +79,7 @@ test("Registry rejects duplicate section ids", () => {
 });
 
 test("Registry sorts sections by order then id", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/c", "C", { order: 2 }));
   registry.register(stubSection("@test/a", "A", { order: 0 }));
   registry.register(stubSection("@test/b", "B", { order: 1 }));
@@ -90,7 +90,7 @@ test("Registry sorts sections by order then id", () => {
 });
 
 test("Registry getByToken resolves token to section", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/a", "A"));
   const sections = registry.getSections();
   const found = registry.getByToken(sections[0].token);
@@ -99,12 +99,12 @@ test("Registry getByToken resolves token to section", () => {
 });
 
 test("Registry getByToken returns undefined for unknown token", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   assert.equal(registry.getByToken("99"), undefined);
 });
 
 test("Registry clear removes all sections and resets tokens", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   const u1 = registry.register(stubSection("@test/a", "A"));
   registry.clear();
   assert.equal(registry.getSections().length, 0);
@@ -117,7 +117,7 @@ test("Registry clear removes all sections and resets tokens", () => {
 });
 
 test("Registry diagnostics reports active and error states", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/a", "A"));
   let diags = registry.getDiagnostics();
   assert.equal(diags.length, 1);
@@ -133,8 +133,8 @@ test("Registry diagnostics reports active and error states", () => {
 
 // --- Settings Rows ---
 
-test("getTelegramExtensionSettingsRows returns rows only for sections with settings", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("getBaleExtensionSettingsRows returns rows only for sections with settings", () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/a", "A"));
   registry.register(
     stubSection("@test/b", "B", {
@@ -144,15 +144,15 @@ test("getTelegramExtensionSettingsRows returns rows only for sections with setti
       },
     }),
   );
-  const rows = getTelegramExtensionSettingsRows(registry);
+  const rows = getBaleExtensionSettingsRows(registry);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].label, "🔧 B Settings");
   assert.ok(rows[0].callback_data.startsWith("section:"));
   assert.ok(rows[0].callback_data.endsWith(":settings:open"));
 });
 
-test("getTelegramExtensionSettingsRows sorts by settings order", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("getBaleExtensionSettingsRows sorts by settings order", () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(
     stubSection("@test/c", "C", {
       settings: { label: "C", open: async () => ({ text: "C" }), order: 2 },
@@ -163,15 +163,15 @@ test("getTelegramExtensionSettingsRows sorts by settings order", () => {
       settings: { label: "A", open: async () => ({ text: "A" }), order: 0 },
     }),
   );
-  const rows = getTelegramExtensionSettingsRows(registry);
+  const rows = getBaleExtensionSettingsRows(registry);
   assert.equal(rows[0].label, "A");
   assert.equal(rows[1].label, "C");
 });
 
 // --- Menu Rows ---
 
-test("getTelegramSectionMainMenuRows omits sections with failing labels", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("getBaleSectionMainMenuRows omits sections with failing labels", () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/a", "A"));
   registry.register(
     stubSection("@test/b", "B", {
@@ -180,7 +180,7 @@ test("getTelegramSectionMainMenuRows omits sections with failing labels", () => 
       },
     }),
   );
-  const rows = getTelegramSectionMainMenuRows(registry);
+  const rows = getBaleSectionMainMenuRows(registry);
   assert.deepEqual(
     rows.map((row) => row.text),
     ["A"],
@@ -190,8 +190,8 @@ test("getTelegramSectionMainMenuRows omits sections with failing labels", () => 
   assert.equal(diagnostics[1].lastError, "label failed");
 });
 
-test("getTelegramExtensionSettingsRows omits settings with failing labels", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("getBaleExtensionSettingsRows omits settings with failing labels", () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(
     stubSection("@test/a", "A", {
       settings: { label: "A", open: async () => ({ text: "A" }) },
@@ -208,7 +208,7 @@ test("getTelegramExtensionSettingsRows omits settings with failing labels", () =
       },
     }),
   );
-  const rows = getTelegramExtensionSettingsRows(registry);
+  const rows = getBaleExtensionSettingsRows(registry);
   assert.deepEqual(
     rows.map((row) => row.label),
     ["A"],
@@ -219,10 +219,10 @@ test("getTelegramExtensionSettingsRows omits settings with failing labels", () =
 });
 
 test("successful labels do not clear unrelated runtime diagnostics", () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/a", "A"));
   registry.recordError("0", "callback failed", "callback");
-  assert.equal(getTelegramSectionMainMenuRows(registry)[0].text, "A");
+  assert.equal(getBaleSectionMainMenuRows(registry)[0].text, "A");
   assert.equal(registry.getDiagnostics()[0].status, "error");
   assert.equal(registry.getDiagnostics()[0].lastError, "callback failed");
   registry.clearError("0", "callback");
@@ -231,40 +231,40 @@ test("successful labels do not clear unrelated runtime diagnostics", () => {
 
 // --- Callback Parsing ---
 
-test("parseTelegramSectionCallback parses section:token:action", () => {
-  const result = parseTelegramSectionCallback("section:00:open");
+test("parseBaleSectionCallback parses section:token:action", () => {
+  const result = parseBaleSectionCallback("section:00:open");
   assert.ok(result);
   assert.equal(result.token, "00");
   assert.equal(result.action, "open");
   assert.equal(result.payload, "");
 });
 
-test("parseTelegramSectionCallback parses section:token:action:payload", () => {
-  const result = parseTelegramSectionCallback("section:01:toggle:on");
+test("parseBaleSectionCallback parses section:token:action:payload", () => {
+  const result = parseBaleSectionCallback("section:01:toggle:on");
   assert.ok(result);
   assert.equal(result.token, "01");
   assert.equal(result.action, "toggle");
   assert.equal(result.payload, "on");
 });
 
-test("parseTelegramSectionCallback parses payload with colons", () => {
-  const result = parseTelegramSectionCallback("section:05:nav:path:to:item");
+test("parseBaleSectionCallback parses payload with colons", () => {
+  const result = parseBaleSectionCallback("section:05:nav:path:to:item");
   assert.ok(result);
   assert.equal(result.token, "05");
   assert.equal(result.action, "nav");
   assert.equal(result.payload, "path:to:item");
 });
 
-test("parseTelegramSectionCallback returns undefined for non-section data", () => {
-  assert.equal(parseTelegramSectionCallback("menu:model"), undefined);
-  assert.equal(parseTelegramSectionCallback("settings:list"), undefined);
-  assert.equal(parseTelegramSectionCallback(""), undefined);
+test("parseBaleSectionCallback returns undefined for non-section data", () => {
+  assert.equal(parseBaleSectionCallback("menu:model"), undefined);
+  assert.equal(parseBaleSectionCallback("settings:list"), undefined);
+  assert.equal(parseBaleSectionCallback(""), undefined);
 });
 
 // --- Section Open ---
 
-test("handleTelegramSectionOpen renders section view with back row", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionOpen renders section view with back row", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(
     stubSection("@test/a", "🗂 A", {
       render: async () => ({
@@ -292,7 +292,7 @@ test("handleTelegramSectionOpen renders section view with back row", async () =>
       editedMarkup = replyMarkup;
     },
   });
-  const handled = await handleTelegramSectionOpen(
+  const handled = await handleBaleSectionOpen(
     registry,
     "0",
     123,
@@ -313,8 +313,8 @@ test("handleTelegramSectionOpen renders section view with back row", async () =>
   assert.equal(markup.inline_keyboard[1][0].text, "Do");
 });
 
-test("section callbackData rejects payloads above Telegram's byte limit", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("section callbackData rejects payloads above Bale's byte limit", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(
     stubSection("@test/a", "A", {
       render: async (ctx) => {
@@ -326,7 +326,7 @@ test("section callbackData rejects payloads above Telegram's byte limit", async 
       },
     }),
   );
-  const handled = await handleTelegramSectionOpen(
+  const handled = await handleBaleSectionOpen(
     registry,
     "0",
     123,
@@ -337,8 +337,8 @@ test("section callbackData rejects payloads above Telegram's byte limit", async 
   assert.equal(handled, true);
 });
 
-test("handleTelegramSectionOpen preserves existing back button", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionOpen preserves existing back button", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(
     stubSection("@test/a", "A", {
       render: async () => ({
@@ -358,7 +358,7 @@ test("handleTelegramSectionOpen preserves existing back button", async () => {
       editedMarkup = replyMarkup;
     },
   });
-  await handleTelegramSectionOpen(registry, "0", 123, 456, "cb-id", deps);
+  await handleBaleSectionOpen(registry, "0", 123, 456, "cb-id", deps);
   const markup = editedMarkup as {
     inline_keyboard: Array<Array<{ text: string }>>;
   };
@@ -367,15 +367,15 @@ test("handleTelegramSectionOpen preserves existing back button", async () => {
   assert.equal(markup.inline_keyboard[0][0].text, "⬆️ Main menu");
 });
 
-test("handleTelegramSectionOpen handles stale token gracefully", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionOpen handles stale token gracefully", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   let answeredText = "";
   const deps = stubDeps({
     answerCallbackQuery: async (_id, text) => {
       answeredText = text ?? "";
     },
   });
-  const handled = await handleTelegramSectionOpen(
+  const handled = await handleBaleSectionOpen(
     registry,
     "99",
     123,
@@ -387,8 +387,8 @@ test("handleTelegramSectionOpen handles stale token gracefully", async () => {
   assert.ok(answeredText.includes("no longer available"));
 });
 
-test("handleTelegramSectionOpen records and clears render errors", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionOpen records and clears render errors", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   let fail = true;
   registry.register(
     stubSection("@test/a", "A", {
@@ -398,18 +398,18 @@ test("handleTelegramSectionOpen records and clears render errors", async () => {
       },
     }),
   );
-  await handleTelegramSectionOpen(registry, "0", 123, 456, "cb-id", stubDeps());
+  await handleBaleSectionOpen(registry, "0", 123, 456, "cb-id", stubDeps());
   assert.equal(registry.getDiagnostics()[0].status, "error");
   assert.equal(registry.getDiagnostics()[0].lastError, "render failed");
   fail = false;
-  await handleTelegramSectionOpen(registry, "0", 123, 456, "cb-id", stubDeps());
+  await handleBaleSectionOpen(registry, "0", 123, 456, "cb-id", stubDeps());
   assert.equal(registry.getDiagnostics()[0].status, "active");
 });
 
 // --- Section Callback ---
 
-test("handleTelegramSectionCallback dispatches to section handler", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionCallback dispatches to section handler", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   let receivedAction = "";
   let receivedPayload = "";
   registry.register(
@@ -422,7 +422,7 @@ test("handleTelegramSectionCallback dispatches to section handler", async () => 
     }),
   );
   const deps = stubDeps();
-  const handled = await handleTelegramSectionCallback(
+  const handled = await handleBaleSectionCallback(
     registry,
     "0",
     "toggle",
@@ -437,8 +437,8 @@ test("handleTelegramSectionCallback dispatches to section handler", async () => 
   assert.equal(receivedPayload, "on");
 });
 
-test("handleTelegramSectionCallback falls back to settings handler", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionCallback falls back to settings handler", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   let settingsAction = "";
   registry.register(
     stubSection("@test/a", "A", {
@@ -454,7 +454,7 @@ test("handleTelegramSectionCallback falls back to settings handler", async () =>
     }),
   );
   const deps = stubDeps();
-  await handleTelegramSectionCallback(
+  await handleBaleSectionCallback(
     registry,
     "0",
     "toggle",
@@ -467,8 +467,8 @@ test("handleTelegramSectionCallback falls back to settings handler", async () =>
   assert.equal(settingsAction, "toggle");
 });
 
-test("handleTelegramSectionCallback gives settings-only handlers settings navigation", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionCallback gives settings-only handlers settings navigation", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(
     stubSection("@test/a", "A", {
       settings: {
@@ -487,7 +487,7 @@ test("handleTelegramSectionCallback gives settings-only handlers settings naviga
       editedMarkup = markup;
     },
   });
-  await handleTelegramSectionCallback(
+  await handleBaleSectionCallback(
     registry,
     "0",
     "toggle",
@@ -504,8 +504,8 @@ test("handleTelegramSectionCallback gives settings-only handlers settings naviga
   assert.equal(markup.inline_keyboard[0][0].callback_data, "settings:list");
 });
 
-test("handleTelegramSectionCallback answers when no handler exists", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionCallback answers when no handler exists", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/a", "A"));
   let answered = false;
   const deps = stubDeps({
@@ -513,7 +513,7 @@ test("handleTelegramSectionCallback answers when no handler exists", async () =>
       answered = true;
     },
   });
-  const handled = await handleTelegramSectionCallback(
+  const handled = await handleBaleSectionCallback(
     registry,
     "0",
     "act",
@@ -527,15 +527,15 @@ test("handleTelegramSectionCallback answers when no handler exists", async () =>
   assert.equal(answered, true);
 });
 
-test("handleTelegramSectionCallback handles stale token", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionCallback handles stale token", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   let answeredText = "";
   const deps = stubDeps({
     answerCallbackQuery: async (_id, text) => {
       answeredText = text ?? "";
     },
   });
-  const handled = await handleTelegramSectionCallback(
+  const handled = await handleBaleSectionCallback(
     registry,
     "99",
     "act",
@@ -551,8 +551,8 @@ test("handleTelegramSectionCallback handles stale token", async () => {
 
 // --- Section Settings Open ---
 
-test("handleTelegramSectionSettingsOpen renders settings view", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionSettingsOpen renders settings view", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(
     stubSection("@test/a", "A", {
       settings: {
@@ -570,7 +570,7 @@ test("handleTelegramSectionSettingsOpen renders settings view", async () => {
       editedText = text;
     },
   });
-  const handled = await handleTelegramSectionSettingsOpen(
+  const handled = await handleBaleSectionSettingsOpen(
     registry,
     "0",
     123,
@@ -582,8 +582,8 @@ test("handleTelegramSectionSettingsOpen renders settings view", async () => {
   assert.equal(editedText, "<b>Settings for A</b>");
 });
 
-test("handleTelegramSectionSettingsOpen handles section without settings gracefully", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+test("handleBaleSectionSettingsOpen handles section without settings gracefully", async () => {
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/a", "A"));
   let answeredText = "";
   const deps = stubDeps({
@@ -591,7 +591,7 @@ test("handleTelegramSectionSettingsOpen handles section without settings gracefu
       answeredText = text ?? "";
     },
   });
-  const handled = await handleTelegramSectionSettingsOpen(
+  const handled = await handleBaleSectionSettingsOpen(
     registry,
     "0",
     123,
@@ -604,7 +604,7 @@ test("handleTelegramSectionSettingsOpen handles section without settings gracefu
 });
 
 test("Section callback openRich sends one native message to the exact target", async () => {
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   const richMessage = {
     blocks: [{ type: "details" as const, summary: "Effective", blocks: [{ type: "pre" as const, text: "{}", language: "json" }] }],
     skip_entity_detection: true,
@@ -616,7 +616,7 @@ test("Section callback openRich sends one native message to the exact target", a
     },
   }));
   const sent: unknown[] = [];
-  await handleTelegramSectionCallback(
+  await handleBaleSectionCallback(
     registry,
     "0",
     "inspect",
@@ -640,7 +640,7 @@ test("Section callback openRich sends one native message to the exact target", a
 test("buildStatusReplyMarkup includes extension section rows before Settings", async () => {
   // Import dynamically to avoid circular deps in test
   const { buildStatusReplyMarkup } = await import("../lib/menu-status.ts");
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(stubSection("@test/a", "Explorer"));
   registry.register(
     stubSection("@test/b", "Status", {
@@ -667,10 +667,10 @@ test("buildStatusReplyMarkup includes extension section rows before Settings", a
 
 // --- Integration: menu-settings rows ---
 
-test("buildTelegramSettingsMenuReplyMarkup injects extension settings rows", async () => {
-  const { buildTelegramSettingsMenuReplyMarkup } =
+test("buildBaleSettingsMenuReplyMarkup injects extension settings rows", async () => {
+  const { buildBaleSettingsMenuReplyMarkup } =
     await import("../lib/menu-settings.ts");
-  const registry = createTelegramExtensionSectionRegistry();
+  const registry = createBaleExtensionSectionRegistry();
   registry.register(
     stubSection("@test/a", "A", {
       settings: {
@@ -690,7 +690,7 @@ test("buildTelegramSettingsMenuReplyMarkup injects extension settings rows", asy
     }),
   );
 
-  const markup = buildTelegramSettingsMenuReplyMarkup(
+  const markup = buildBaleSettingsMenuReplyMarkup(
     false,
     "manual",
     "hidden",

@@ -1,13 +1,13 @@
 /**
- * Proof-only candidate planning for inactive Telegram Workspace Thread cleanup
- * Zones: telegram threads, workspace lifecycle
+ * Proof-only candidate planning for inactive Bale Workspace Thread cleanup
+ * Zones: bale threads, workspace lifecycle
  * Owns fail-closed cleanup eligibility projection without persistence or Bot API effects
  */
 import { createHash, randomUUID } from "node:crypto";
-import { publishTelegramPrivateFile, readTelegramPrivateFile, TelegramPrivateFileError, withTelegramFileTransaction, } from "./locks.js";
-import { getTelegramJournalPublicationPaths } from "./paths.js";
+import { publishBalePrivateFile, readBalePrivateFile, BalePrivateFileError, withBaleFileTransaction, } from "./locks.js";
+import { getBaleJournalPublicationPaths } from "./paths.js";
 import { isWireRecord as isObject, hasOnlyWireKeys as onlyKeys, isNonNegativeWireInteger as safeTime, } from "./wire.js";
-import { isTelegramWorkspaceRetirementFence } from "./workspace-admission.js";
+import { isBaleWorkspaceRetirementFence } from "./workspace-admission.js";
 function targetKey(target) {
     return `${target.chatId}:${target.threadId}`;
 }
@@ -31,7 +31,7 @@ function validSessionIdentity(value) {
         value.sessionKey);
 }
 /** Returns no candidates when any identity/evidence ambiguity exists. */
-export function planTelegramInactiveThreadCleanup(input) {
+export function planBaleInactiveThreadCleanup(input) {
     if (!input.profileName)
         return [];
     const bindingKeys = new Set();
@@ -103,7 +103,7 @@ export function planTelegramInactiveThreadCleanup(input) {
     }
     return candidates.sort((left, right) => left.bindingKey.localeCompare(right.bindingKey));
 }
-export function captureTelegramInactiveThreadCleanupEvidence(input) {
+export function captureBaleInactiveThreadCleanupEvidence(input) {
     const sourceBindings = input.listBindings();
     const bindings = sourceBindings.map((binding) => ({
         cwd: binding.cwd,
@@ -154,7 +154,7 @@ export function captureTelegramInactiveThreadCleanupEvidence(input) {
             .map((entry) => ({ ...entry.target })),
     };
 }
-export function createTelegramInactiveThreadCleanupReviewRuntime(deps) {
+export function createBaleInactiveThreadCleanupReviewRuntime(deps) {
     return {
         review() {
             return deps.runWorkspaceOperation({
@@ -162,7 +162,7 @@ export function createTelegramInactiveThreadCleanupReviewRuntime(deps) {
                 operationKind: "thread-cleanup-review",
                 scopes: [{ kind: "profile" }],
             }, async () => {
-                const evidence = captureTelegramInactiveThreadCleanupEvidence({
+                const evidence = captureBaleInactiveThreadCleanupEvidence({
                     profileName: deps.getProfileName(),
                     listBindings: deps.listBindings,
                     getProtection: deps.getProtection,
@@ -170,7 +170,7 @@ export function createTelegramInactiveThreadCleanupReviewRuntime(deps) {
                     listPendingProvisions: deps.listPendingProvisions,
                     listPendingCleanups: deps.listPendingCleanups,
                 });
-                const candidates = planTelegramInactiveThreadCleanup(evidence);
+                const candidates = planBaleInactiveThreadCleanup(evidence);
                 if (candidates.length === 0)
                     return { count: 0 };
                 const digest = createHash("sha256")
@@ -192,7 +192,7 @@ function validateWorkSet(value, profileName) {
         !safeTime(value.createdAtMs) ||
         !Array.isArray(value.entries) ||
         value.entries.length === 0)
-        throw new Error("Telegram Thread cleanup work-set schema is invalid.");
+        throw new Error("Bale Thread cleanup work-set schema is invalid.");
     const createdAtMs = value.createdAtMs;
     const entries = value.entries.map((raw) => {
         if (!isObject(raw) ||
@@ -234,7 +234,7 @@ function validateWorkSet(value, profileName) {
             !safeTime(raw.bindingUpdatedAtMs) ||
             raw.bindingUpdatedAtMs < raw.inactiveSinceMs ||
             !safeTime(raw.updatedAtMs))
-            throw new Error("Telegram Thread cleanup entry schema is invalid.");
+            throw new Error("Bale Thread cleanup entry schema is invalid.");
         const base = {
             profileName,
             bindingKey: raw.bindingKey,
@@ -255,7 +255,7 @@ function validateWorkSet(value, profileName) {
             updatedAtMs: raw.updatedAtMs,
         };
         if (base.updatedAtMs < base.bindingUpdatedAtMs)
-            throw new Error("Telegram Thread cleanup entry clock is invalid.");
+            throw new Error("Bale Thread cleanup entry clock is invalid.");
         const noPermit = raw.permitOperationId === undefined &&
             raw.permitIntentId === undefined &&
             raw.permitLeaderEpoch === undefined;
@@ -298,13 +298,13 @@ function validateWorkSet(value, profileName) {
                 permitLeaderEpoch: raw.permitLeaderEpoch,
                 deletedAtMs: raw.deletedAtMs,
             };
-        throw new Error("Telegram Thread cleanup entry state is invalid.");
+        throw new Error("Bale Thread cleanup entry state is invalid.");
     });
     if (entries.some((entry) => entry.updatedAtMs < createdAtMs) ||
         new Set(entries.map((entry) => entry.bindingKey)).size !== entries.length ||
         new Set(entries.map((entry) => targetKey(entry.target))).size !==
             entries.length)
-        throw new Error("Telegram Thread cleanup work-set identity is ambiguous.");
+        throw new Error("Bale Thread cleanup work-set identity is ambiguous.");
     return { operationId: value.operationId, createdAtMs, entries };
 }
 function sameCandidates(left, right) {
@@ -314,23 +314,23 @@ function sameCandidates(left, right) {
         return keys.every(key => candidate[key] === other[key]) && targetKey(candidate.target) === targetKey(other.target);
     });
 }
-function parseTelegramThreadCleanupWorkFile(value, profileName, tokenSha256) {
+function parseBaleThreadCleanupWorkFile(value, profileName, tokenSha256) {
     if (!isObject(value) ||
         !onlyKeys(value, ["version", "profileName", "tokenSha256", "workSets"]) ||
         value.version !== 1 ||
         value.profileName !== profileName ||
         value.tokenSha256 !== tokenSha256 ||
         !Array.isArray(value.workSets))
-        throw new Error("Telegram Thread cleanup store identity or schema does not match.");
+        throw new Error("Bale Thread cleanup store identity or schema does not match.");
     const workSets = value.workSets.map((workSet) => validateWorkSet(workSet, profileName));
     if (new Set(workSets.map((workSet) => workSet.operationId)).size !==
         workSets.length)
-        throw new Error("Telegram Thread cleanup operation identity is ambiguous.");
+        throw new Error("Bale Thread cleanup operation identity is ambiguous.");
     return { version: 1, profileName, tokenSha256, workSets };
 }
-export function createTelegramThreadCleanupWorkStore(options) {
+export function createBaleThreadCleanupWorkStore(options) {
     options = { ...options };
-    const publicationPaths = getTelegramJournalPublicationPaths(options.path, options.runtimeDir);
+    const publicationPaths = getBaleJournalPublicationPaths(options.path, options.runtimeDir);
     const maxWorkSets = options.maxWorkSets ?? 32;
     const maxBytes = options.maxBytes ?? 1024 * 1024;
     const now = options.getNowMs ?? Date.now;
@@ -341,7 +341,7 @@ export function createTelegramThreadCleanupWorkStore(options) {
         maxWorkSets <= 0 ||
         !Number.isSafeInteger(maxBytes) ||
         maxBytes <= 0)
-        throw new Error("Telegram Thread cleanup store options are invalid.");
+        throw new Error("Bale Thread cleanup store options are invalid.");
     const empty = () => ({
         version: 1,
         profileName: options.profileName,
@@ -351,45 +351,45 @@ export function createTelegramThreadCleanupWorkStore(options) {
     const read = () => {
         let text;
         try {
-            text = readTelegramPrivateFile(options.path, maxBytes);
+            text = readBalePrivateFile(options.path, maxBytes);
         }
         catch (error) {
-            if (!(error instanceof TelegramPrivateFileError))
+            if (!(error instanceof BalePrivateFileError))
                 throw error;
             throw new Error(error.failure === "changed"
-                ? "Telegram Thread cleanup store changed during inspection."
-                : "Telegram Thread cleanup store is not a bounded private regular file.", { cause: error });
+                ? "Bale Thread cleanup store changed during inspection."
+                : "Bale Thread cleanup store is not a bounded private regular file.", { cause: error });
         }
         return text === undefined
             ? empty()
-            : parseTelegramThreadCleanupWorkFile(JSON.parse(text), options.profileName, options.tokenSha256);
+            : parseBaleThreadCleanupWorkFile(JSON.parse(text), options.profileName, options.tokenSha256);
     };
     const publish = (file) => {
         if (file.workSets.length > maxWorkSets)
-            throw new Error("Telegram Thread cleanup work-set capacity reached.");
+            throw new Error("Bale Thread cleanup work-set capacity reached.");
         const serialized = `${JSON.stringify(file, null, 2)}\n`;
         if (Buffer.byteLength(serialized) > maxBytes)
-            throw new Error("Telegram Thread cleanup byte capacity reached.");
-        publishTelegramPrivateFile(options.path, publicationPaths.temporaryBasePath, serialized, "Telegram Thread cleanup", options.onPublicationBoundary);
+            throw new Error("Bale Thread cleanup byte capacity reached.");
+        publishBalePrivateFile(options.path, publicationPaths.temporaryBasePath, serialized, "Bale Thread cleanup", options.onPublicationBoundary);
     };
-    const mutate = (operation) => withTelegramFileTransaction(publicationPaths.transactionPath, () => operation(read()));
+    const mutate = (operation) => withBaleFileTransaction(publicationPaths.transactionPath, () => operation(read()));
     return {
         prepare(operationId, candidates) {
             if (!operationId ||
                 candidates.length === 0 ||
                 candidates.some((candidate) => candidate.profileName !== options.profileName))
-                throw new Error("Telegram Thread cleanup work-set is invalid.");
+                throw new Error("Bale Thread cleanup work-set is invalid.");
             return mutate((file) => {
                 const existing = file.workSets.find((workSet) => workSet.operationId === operationId);
                 if (existing) {
                     const projected = existing.entries.map(({ state: _state, updatedAtMs: _updated, issuedAtMs: _issued, permitOperationId: _permitOperation, permitIntentId: _permitIntent, permitLeaderEpoch: _permitEpoch, deletedAtMs: _deleted, ...candidate }) => candidate);
                     if (!sameCandidates(projected, candidates))
-                        throw new Error("Telegram Thread cleanup operation conflicts.");
+                        throw new Error("Bale Thread cleanup operation conflicts.");
                     return { prepared: false, workSet: structuredClone(existing) };
                 }
                 const atMs = now();
                 if (!safeTime(atMs))
-                    throw new Error("Telegram Thread cleanup clock is invalid.");
+                    throw new Error("Bale Thread cleanup clock is invalid.");
                 const workSet = validateWorkSet({
                     operationId,
                     createdAtMs: atMs,
@@ -419,20 +419,20 @@ export function createTelegramThreadCleanupWorkStore(options) {
                     !permit.operationId ||
                     permit.retirementIntentId !== workSet.operationId ||
                     !safeTime(permit.issuedAtMs))
-                    throw new Error("Telegram Thread cleanup entry or deletion permit is stale or mismatched.");
+                    throw new Error("Bale Thread cleanup entry or deletion permit is stale or mismatched.");
                 if (entry.state !== "prepared") {
                     const exact = entry.permitOperationId === permit.operationId &&
                         entry.permitIntentId === permit.retirementIntentId &&
                         entry.permitLeaderEpoch === permit.leaderEpoch;
                     if (!exact)
-                        throw new Error("Telegram Thread cleanup deletion permit conflicts with retained work.");
+                        throw new Error("Bale Thread cleanup deletion permit conflicts with retained work.");
                     return { recorded: false, entry: structuredClone(entry) };
                 }
                 const atMs = now();
                 if (!safeTime(atMs) ||
                     atMs < entry.updatedAtMs ||
                     atMs < permit.issuedAtMs)
-                    throw new Error("Telegram Thread cleanup clock is invalid.");
+                    throw new Error("Bale Thread cleanup clock is invalid.");
                 entry.state = "outcome-unknown";
                 entry.issuedAtMs = atMs;
                 entry.updatedAtMs = atMs;
@@ -449,14 +449,14 @@ export function createTelegramThreadCleanupWorkStore(options) {
                     .find((candidate) => candidate.operationId === input.operationId)
                     ?.entries.find((candidate) => candidate.bindingKey === input.bindingKey);
                 if (!entry)
-                    throw new Error("Telegram Thread cleanup entry is missing.");
+                    throw new Error("Bale Thread cleanup entry is missing.");
                 if (entry.state === "deleted")
                     return { confirmed: false, entry: structuredClone(entry) };
                 if (entry.state !== "outcome-unknown")
-                    throw new Error("Telegram Thread cleanup deletion confirmation is premature.");
+                    throw new Error("Bale Thread cleanup deletion confirmation is premature.");
                 const atMs = now();
                 if (!safeTime(atMs) || atMs < entry.updatedAtMs)
-                    throw new Error("Telegram Thread cleanup clock is invalid.");
+                    throw new Error("Bale Thread cleanup clock is invalid.");
                 entry.state = "deleted";
                 entry.deletedAtMs = atMs;
                 entry.updatedAtMs = atMs;
@@ -465,11 +465,11 @@ export function createTelegramThreadCleanupWorkStore(options) {
             });
         },
         list() {
-            return structuredClone(withTelegramFileTransaction(publicationPaths.transactionPath, () => read().workSets));
+            return structuredClone(withBaleFileTransaction(publicationPaths.transactionPath, () => read().workSets));
         },
     };
 }
-export async function commitTelegramInactiveThreadCleanup(input) {
+export async function commitBaleInactiveThreadCleanup(input) {
     if (!(await input.commitBinding()))
         return false;
     input.store.confirmDeleted({
@@ -478,7 +478,7 @@ export async function commitTelegramInactiveThreadCleanup(input) {
     });
     return true;
 }
-export async function executeTelegramInactiveThreadCleanup(input) {
+export async function executeBaleInactiveThreadCleanup(input) {
     return input.withWorkspaceDeletionBoundary(async () => {
         const workSet = input.store
             .list()
@@ -490,7 +490,7 @@ export async function executeTelegramInactiveThreadCleanup(input) {
             return { status: "deleted", entry: retained };
         if (retained.state === "outcome-unknown")
             return { status: "outcome-unknown", entry: retained };
-        const planned = planTelegramInactiveThreadCleanup(await input.loadFreshEvidence());
+        const planned = planBaleInactiveThreadCleanup(await input.loadFreshEvidence());
         const fresh = planned.find((candidate) => candidate.bindingKey === retained.bindingKey);
         const retainedCandidate = (({ state: _state, updatedAtMs: _updated, issuedAtMs: _issued, permitOperationId: _permitOperation, permitIntentId: _permitIntent, permitLeaderEpoch: _permitEpoch, deletedAtMs: _deleted, ...candidate }) => candidate)(retained);
         if (!fresh || !sameCandidates([fresh], [retainedCandidate]))
@@ -514,7 +514,7 @@ export async function executeTelegramInactiveThreadCleanup(input) {
         return { status: "deleted", entry: confirmed.entry };
     });
 }
-export function createTelegramThreadCleanupPermitRuntime(deps) {
+export function createBaleThreadCleanupPermitRuntime(deps) {
     const now = deps.getNowMs ?? Date.now;
     const findExactFence = (candidate, workSetId) => {
         const operationId = `thread-cleanup-fence:${createHash("sha256")
@@ -634,7 +634,7 @@ export function createTelegramThreadCleanupPermitRuntime(deps) {
                 const owner = deps.getOwner();
                 if (deps.getLeaderEpoch() !== fence.leaderEpoch ||
                     owner.processId !== fence.owner.processId || owner.processBirthId !== fence.owner.processBirthId)
-                    throw new Error("Telegram Thread cleanup settlement authority changed.");
+                    throw new Error("Bale Thread cleanup settlement authority changed.");
             };
             assertAuthority();
             const ready = deps.ledger.confirmThreadCleanupAbsence(fence);
@@ -648,7 +648,7 @@ export function createTelegramThreadCleanupPermitRuntime(deps) {
     };
 }
 /** Review owns ordinary admission; confirmed cleanup uses the shared gate and its exclusive manual fence instead. */
-export function createTelegramInactiveThreadCleanupRuntime(deps) {
+export function createBaleInactiveThreadCleanupRuntime(deps) {
     const capture = () => {
         const authority = deps.captureAuthority();
         if (!authority || !authority.isCurrent())
@@ -661,7 +661,7 @@ export function createTelegramInactiveThreadCleanupRuntime(deps) {
         };
         const evidence = () => {
             assertCurrent();
-            return captureTelegramInactiveThreadCleanupEvidence({
+            return captureBaleInactiveThreadCleanupEvidence({
                 profileName: authority.profileName,
                 listBindings: deps.store.listWorkspaceBindings,
                 getProtection: deps.getProtection,
@@ -675,7 +675,7 @@ export function createTelegramInactiveThreadCleanupRuntime(deps) {
     return {
         async review() {
             const scope = capture();
-            return createTelegramInactiveThreadCleanupReviewRuntime({
+            return createBaleInactiveThreadCleanupReviewRuntime({
                 getProfileName: () => scope.authority.profileName,
                 listBindings: deps.store.listWorkspaceBindings,
                 getProtection: deps.getProtection,
@@ -700,7 +700,7 @@ export function createTelegramInactiveThreadCleanupRuntime(deps) {
                 const { authority } = scope;
                 const work = deps.getWorkStore(authority);
                 const exactBinding = (candidate) => {
-                    const fresh = planTelegramInactiveThreadCleanup(scope.evidence()).find(binding => binding.bindingKey === candidate.bindingKey);
+                    const fresh = planBaleInactiveThreadCleanup(scope.evidence()).find(binding => binding.bindingKey === candidate.bindingKey);
                     if (!fresh || !sameCandidates([fresh], [candidate]))
                         return undefined;
                     return deps.store.listWorkspaceBindings().find(binding => binding.bindingKey === fresh.bindingKey);
@@ -711,7 +711,7 @@ export function createTelegramInactiveThreadCleanupRuntime(deps) {
                     scope.assertCurrent();
                     return exactBinding(candidate);
                 };
-                const permitRuntime = createTelegramThreadCleanupPermitRuntime({
+                const permitRuntime = createBaleThreadCleanupPermitRuntime({
                     ledger: authority.ledger,
                     getLeaderEpoch: () => authority.isCurrent() ? authority.leaderEpoch : undefined,
                     getProfileName: () => authority.profileName,
@@ -727,7 +727,7 @@ export function createTelegramInactiveThreadCleanupRuntime(deps) {
                             await deps.deleteThread(() => {
                                 scope.assertCurrent();
                                 const fence = authority.ledger.read().fence;
-                                if (!fence || !isTelegramWorkspaceRetirementFence(fence) ||
+                                if (!fence || !isBaleWorkspaceRetirementFence(fence) ||
                                     fence.destructiveKind !== "manual-thread-cleanup" || fence.phase !== "deletion-issued" ||
                                     fence.operationId !== permit.operationId || fence.retirementIntentId !== operationId ||
                                     fence.profileKey !== permit.profileKey || fence.bindingKey !== candidate.bindingKey ||
@@ -756,17 +756,17 @@ export function createTelegramInactiveThreadCleanupRuntime(deps) {
         },
     };
 }
-export function createTelegramInactiveThreadCleanupSettingsPort(deps) {
+export function createBaleInactiveThreadCleanupSettingsPort(deps) {
     return (operationId) => cleanReviewedInactiveThreads({ ...deps, operationId });
 }
 export async function cleanReviewedInactiveThreads(input) {
     if (!/^thread-cleanup:[a-f0-9]{32}$/u.test(input.operationId))
-        throw new Error("Telegram Thread cleanup confirmation identity is invalid.");
+        throw new Error("Bale Thread cleanup confirmation identity is invalid.");
     const workSet = input.store
         .list()
         .find((candidate) => candidate.operationId === input.operationId);
     if (!workSet)
-        throw new Error("Telegram Thread cleanup review is missing.");
+        throw new Error("Bale Thread cleanup review is missing.");
     let deleted = 0;
     let outcomeUnknown = 0;
     let blocked = 0;
@@ -793,7 +793,7 @@ export async function cleanReviewedInactiveThreads(input) {
                 outcomeUnknown += 1;
                 continue;
             }
-            const settlement = await input.permitRuntime.settleDeleted(ready, () => commitTelegramInactiveThreadCleanup({
+            const settlement = await input.permitRuntime.settleDeleted(ready, () => commitBaleInactiveThreadCleanup({
                 store: input.store,
                 operationId: input.operationId,
                 bindingKey: entry.bindingKey,
@@ -839,7 +839,7 @@ export async function cleanReviewedInactiveThreads(input) {
                 continue;
             }
             await input.deleteWithPermit(authority.permit, entry);
-            const settlement = await input.permitRuntime.settleDeleted(authority.fence, () => commitTelegramInactiveThreadCleanup({
+            const settlement = await input.permitRuntime.settleDeleted(authority.fence, () => commitBaleInactiveThreadCleanup({
                 store: input.store,
                 operationId: input.operationId,
                 bindingKey: entry.bindingKey,

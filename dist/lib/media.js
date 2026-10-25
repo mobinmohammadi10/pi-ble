@@ -1,12 +1,12 @@
 /**
- * Telegram media and text extraction helpers
- * Zones: telegram inbound, media groups, filesystem paths
- * Normalizes inbound Telegram messages into reusable file, text, id, history, and media-group metadata
+ * Bale media and text extraction helpers
+ * Zones: bale inbound, media groups, filesystem paths
+ * Normalizes inbound Bale messages into reusable file, text, id, history, and media-group metadata
  */
 import { basename, dirname } from "node:path";
 import * as Machine from "./machine.js";
-const TELEGRAM_MEDIA_GROUP_DEBOUNCE_MS = 1200;
-const TELEGRAM_REPLY_CONTEXT_MAX_LENGTH = 1000;
+const BALE_MEDIA_GROUP_DEBOUNCE_MS = 1200;
+const BALE_REPLY_CONTEXT_MAX_LENGTH = 1000;
 function guessExtensionFromMime(mimeType, fallback) {
     if (!mimeType)
         return fallback;
@@ -56,17 +56,17 @@ function getObjectField(value, field) {
 function joinRichTextParts(parts, separator = "") {
     return parts.filter(Boolean).join(separator).trim();
 }
-function extractTelegramRichText(value) {
+function extractBaleRichText(value) {
     if (typeof value === "string")
         return value;
     if (Array.isArray(value)) {
-        return joinRichTextParts(value.map(extractTelegramRichText));
+        return joinRichTextParts(value.map(extractBaleRichText));
     }
     if (typeof value !== "object" || value === null)
         return "";
     const text = getObjectField(value, "text");
     if (text !== undefined)
-        return extractTelegramRichText(text);
+        return extractBaleRichText(text);
     const expression = getObjectField(value, "expression");
     if (typeof expression === "string")
         return expression;
@@ -75,20 +75,20 @@ function extractTelegramRichText(value) {
         return alternativeText;
     return "";
 }
-function extractTelegramRichBlockText(block) {
+function extractBaleRichBlockText(block) {
     if (typeof block !== "object" || block === null)
         return "";
-    const directText = extractTelegramRichText(getObjectField(block, "text"));
+    const directText = extractBaleRichText(getObjectField(block, "text"));
     if (directText)
         return directText;
-    const summary = extractTelegramRichText(getObjectField(block, "summary"));
-    const nestedBlocks = extractTelegramRichMessageBlocksText(getObjectField(block, "blocks"));
+    const summary = extractBaleRichText(getObjectField(block, "summary"));
+    const nestedBlocks = extractBaleRichMessageBlocksText(getObjectField(block, "blocks"));
     const items = getObjectField(block, "items");
     const itemText = Array.isArray(items)
         ? items
             .map((item) => {
             const label = getObjectField(item, "label");
-            const body = extractTelegramRichMessageBlocksText(getObjectField(item, "blocks"));
+            const body = extractBaleRichMessageBlocksText(getObjectField(item, "blocks"));
             return typeof label === "string" && body ? `${label} ${body}` : body;
         })
             .filter(Boolean)
@@ -99,36 +99,36 @@ function extractTelegramRichBlockText(block) {
         ? cells
             .map((row) => Array.isArray(row)
             ? row
-                .map((cell) => extractTelegramRichText(getObjectField(cell, "text")))
+                .map((cell) => extractBaleRichText(getObjectField(cell, "text")))
                 .filter(Boolean)
                 .join(" | ")
             : "")
             .filter(Boolean)
             .join("\n")
         : "";
-    const caption = extractTelegramRichText(getObjectField(block, "caption"));
+    const caption = extractBaleRichText(getObjectField(block, "caption"));
     return joinRichTextParts([summary, nestedBlocks, itemText, cellText, caption], "\n");
 }
-function extractTelegramRichMessageBlocksText(blocks) {
+function extractBaleRichMessageBlocksText(blocks) {
     if (!Array.isArray(blocks))
         return "";
-    return joinRichTextParts(blocks.map(extractTelegramRichBlockText), "\n\n");
+    return joinRichTextParts(blocks.map(extractBaleRichBlockText), "\n\n");
 }
-function extractTelegramRichMessageText(richMessage) {
-    return extractTelegramRichMessageBlocksText(richMessage?.blocks);
+function extractBaleRichMessageText(richMessage) {
+    return extractBaleRichMessageBlocksText(richMessage?.blocks);
 }
-export function extractTelegramMessageText(message) {
-    return (extractTelegramRichMessageText(message.rich_message) ||
+export function extractBaleMessageText(message) {
+    return (extractBaleRichMessageText(message.rich_message) ||
         message.text ||
         message.caption ||
         "").trim();
 }
-function truncateTelegramReplyContextText(text) {
-    if (text.length <= TELEGRAM_REPLY_CONTEXT_MAX_LENGTH)
+function truncateBaleReplyContextText(text) {
+    if (text.length <= BALE_REPLY_CONTEXT_MAX_LENGTH)
         return text;
-    return `${text.slice(0, TELEGRAM_REPLY_CONTEXT_MAX_LENGTH).trimEnd()}…`;
+    return `${text.slice(0, BALE_REPLY_CONTEXT_MAX_LENGTH).trimEnd()}…`;
 }
-function formatTelegramUser(user) {
+function formatBaleUser(user) {
     if (!user)
         return undefined;
     if (user.username)
@@ -141,7 +141,7 @@ function formatTelegramUser(user) {
         .trim();
     return name || undefined;
 }
-function formatTelegramForwardOriginIdentifier(message) {
+function formatBaleForwardOriginIdentifier(message) {
     const origin = message.forward_origin;
     const user = origin?.sender_user ?? message.forward_from;
     if (user?.username)
@@ -155,25 +155,25 @@ function formatTelegramForwardOriginIdentifier(message) {
         return String(chat.id);
     return origin?.sender_user_name ?? message.forward_sender_name;
 }
-export function extractTelegramForwardContextText(message, allowedUserId) {
+export function extractBaleForwardContextText(message, allowedUserId) {
     const originUser = message.forward_origin?.sender_user ?? message.forward_from;
     const isOwnerOrigin = typeof allowedUserId === "number" && originUser?.id === allowedUserId;
-    const origin = formatTelegramForwardOriginIdentifier(message);
+    const origin = formatBaleForwardOriginIdentifier(message);
     if (!origin || isOwnerOrigin)
         return "";
     return `from: ${origin}`;
 }
-function extractTelegramReplyContextText(message) {
-    const quoted = (extractTelegramRichMessageText(message.reply_to_message?.rich_message) ||
+function extractBaleReplyContextText(message) {
+    const quoted = (extractBaleRichMessageText(message.reply_to_message?.rich_message) ||
         message.reply_to_message?.text ||
         message.reply_to_message?.caption ||
         "").trim();
-    return quoted ? truncateTelegramReplyContextText(quoted) : "";
+    return quoted ? truncateBaleReplyContextText(quoted) : "";
 }
-export function buildTelegramReplyContextBlock(message, replyFiles = [], replyOutputs = []) {
-    const from = formatTelegramUser(message.reply_to_message?.from);
+export function buildBaleReplyContextBlock(message, replyFiles = [], replyOutputs = []) {
+    const from = formatBaleUser(message.reply_to_message?.from);
     const header = from ? `[reply|from:${from}]` : "[reply]";
-    const text = extractTelegramReplyContextText(message);
+    const text = extractBaleReplyContextText(message);
     const dirs = [...new Set(replyFiles.map((file) => dirname(file.path)))];
     const sameDir = dirs.length === 1;
     const attachmentHeader = sameDir
@@ -196,26 +196,26 @@ export function buildTelegramReplyContextBlock(message, replyFiles = [], replyOu
     }
     return "";
 }
-function appendTelegramReplyContext(text, replyContext) {
+function appendBaleReplyContext(text, replyContext) {
     if (!replyContext)
         return text;
     return text ? `${text}\n\n${replyContext}` : `_\n\n${replyContext}`;
 }
-export function extractTelegramMessagesText(messages) {
-    return messages.map(extractTelegramMessageText).filter(Boolean).join("\n\n");
+export function extractBaleMessagesText(messages) {
+    return messages.map(extractBaleMessageText).filter(Boolean).join("\n\n");
 }
-export function extractTelegramMessagesPromptText(messages) {
-    const text = extractTelegramMessagesText(messages);
+export function extractBaleMessagesPromptText(messages) {
+    const text = extractBaleMessagesText(messages);
     const firstMessage = messages[0];
     if (!firstMessage)
         return text;
-    return appendTelegramReplyContext(text, buildTelegramReplyContextBlock(firstMessage));
+    return appendBaleReplyContext(text, buildBaleReplyContextBlock(firstMessage));
 }
-export function extractFirstTelegramMessageText(messages) {
-    return messages.map(extractTelegramMessageText).find(Boolean) ?? "";
+export function extractFirstBaleMessageText(messages) {
+    return messages.map(extractBaleMessageText).find(Boolean) ?? "";
 }
-function hasTelegramMessagePromptContent(message) {
-    return (!!extractTelegramMessageText(message) ||
+function hasBaleMessagePromptContent(message) {
+    return (!!extractBaleMessageText(message) ||
         (Array.isArray(message.photo) && message.photo.length > 0) ||
         !!message.document ||
         !!message.video ||
@@ -224,13 +224,13 @@ function hasTelegramMessagePromptContent(message) {
         !!message.animation ||
         !!message.sticker);
 }
-export function hasTelegramMessagesPromptContent(messages) {
-    return messages.some(hasTelegramMessagePromptContent);
+export function hasBaleMessagesPromptContent(messages) {
+    return messages.some(hasBaleMessagePromptContent);
 }
-export function collectTelegramMessageIds(messages) {
+export function collectBaleMessageIds(messages) {
     return [...new Set(messages.map((message) => message.message_id))];
 }
-export function getTelegramMediaGroupKey(message) {
+export function getBaleMediaGroupKey(message) {
     if (!message.media_group_id)
         return undefined;
     const threadKey = typeof message.message_thread_id === "number"
@@ -238,7 +238,7 @@ export function getTelegramMediaGroupKey(message) {
         : "private";
     return `${message.chat.id}:${threadKey}:${message.media_group_id}`;
 }
-export function createTelegramPendingGroupsState() {
+export function createBalePendingGroupsState() {
     return { groups: new Map(), nextTimerId: 0, nextDispatchId: 0 };
 }
 /**
@@ -246,7 +246,7 @@ export function createTelegramPendingGroupsState() {
  * time; messages that arrive meanwhile wait for the next batch, a failure keeps the batch for a retry, and suspension
  * keeps every admitted message for the replacement context.
  */
-export function transitionTelegramPendingGroups(state, event, config) {
+export function transitionBalePendingGroups(state, event, config) {
     const groups = new Map(state.groups);
     const effects = [];
     let { nextTimerId, nextDispatchId } = state;
@@ -398,11 +398,11 @@ export function transitionTelegramPendingGroups(state, event, config) {
     return { state: { groups, nextTimerId, nextDispatchId }, effects, result };
 }
 /**
- * The shell around `transitionTelegramPendingGroups`: it owns timer handles and each key's latest dispatcher, turns
+ * The shell around `transitionBalePendingGroups`: it owns timer handles and each key's latest dispatcher, turns
  * every dispatch outcome, including a synchronous throw, into `dispatchSettled`, and keeps each batch's promise for
  * flush callers.
  */
-export function createTelegramPendingGroups(options) {
+export function createBalePendingGroups(options) {
     const config = {
         debounceMs: options.debounceMs,
         requireContext: options.requireContext,
@@ -410,9 +410,9 @@ export function createTelegramPendingGroups(options) {
     const timers = new Map();
     const dispatchers = new Map();
     const batches = new Map();
-    const machine = Machine.createTelegramMachineRunner({
-        initial: createTelegramPendingGroupsState(),
-        transition: (state, event) => transitionTelegramPendingGroups(state, event, config),
+    const machine = Machine.createBaleMachineRunner({
+        initial: createBalePendingGroupsState(),
+        transition: (state, event) => transitionBalePendingGroups(state, event, config),
         run(effect) {
             switch (effect.type) {
                 case "armTimer": {
@@ -520,9 +520,9 @@ export function createTelegramPendingGroups(options) {
         },
     };
 }
-export function createTelegramMediaGroupController(options = {}) {
-    const debounceMs = options.debounceMs ?? TELEGRAM_MEDIA_GROUP_DEBOUNCE_MS;
-    const groups = createTelegramPendingGroups({
+export function createBaleMediaGroupController(options = {}) {
+    const debounceMs = options.debounceMs ?? BALE_MEDIA_GROUP_DEBOUNCE_MS;
+    const groups = createBalePendingGroups({
         debounceMs,
         requireContext: false,
         setTimer: options.setTimer ??
@@ -531,7 +531,7 @@ export function createTelegramMediaGroupController(options = {}) {
     });
     return {
         queueMessage: ({ message, context, dispatchMessages }) => {
-            const key = getTelegramMediaGroupKey(message);
+            const key = getBaleMediaGroupKey(message);
             if (!key)
                 return false;
             groups.queue({
@@ -551,7 +551,7 @@ export function createTelegramMediaGroupController(options = {}) {
         clear: groups.clear,
     };
 }
-export function createTelegramMediaGroupDispatchRuntime(deps) {
+export function createBaleMediaGroupDispatchRuntime(deps) {
     return {
         handleMessage: async (message, ctx) => {
             const queuedMediaGroup = deps.mediaGroups.queueMessage({
@@ -570,13 +570,13 @@ export function createTelegramMediaGroupDispatchRuntime(deps) {
     };
 }
 /** Pure `[title]` bullet section appended after a blank line; empty items leave text unchanged. */
-export function appendTelegramListSection(text, title, items) {
+export function appendBaleListSection(text, title, items) {
     if (items.length === 0)
         return text;
     const prefix = text.length > 0 ? `${text}\n\n` : "";
     return `${prefix}[${title}]\n${items.map((item) => `- ${item}`).join("\n")}`;
 }
-export function appendTelegramAttachmentSection(text, files) {
+export function appendBaleAttachmentSection(text, files) {
     if (files.length === 0)
         return text;
     const dirs = [...new Set(files.map((file) => dirname(file.path)))];
@@ -588,15 +588,15 @@ export function appendTelegramAttachmentSection(text, files) {
     const prefix = text.length > 0 ? `${text}\n\n` : "";
     return `${prefix}${header}\n${items.map((item) => `- ${item}`).join("\n")}`;
 }
-export function formatTelegramHistoryText(rawText, files, handlerOutputs = []) {
+export function formatBaleHistoryText(rawText, files, handlerOutputs = []) {
     let summary = rawText.length > 0 ? rawText : "(no text)";
-    summary = appendTelegramAttachmentSection(summary, files);
-    summary = appendTelegramListSection(summary, "outputs", handlerOutputs);
+    summary = appendBaleAttachmentSection(summary, files);
+    summary = appendBaleListSection(summary, "outputs", handlerOutputs);
     return summary;
 }
-export async function downloadTelegramMessageFiles(messages, deps) {
+export async function downloadBaleMessageFiles(messages, deps) {
     const downloaded = [];
-    for (const file of collectTelegramFileInfos(messages)) {
+    for (const file of collectBaleFileInfos(messages)) {
         downloaded.push({
             path: await deps.downloadFile(file.file_id, file.fileName, file.source),
             fileName: file.fileName,
@@ -607,7 +607,7 @@ export async function downloadTelegramMessageFiles(messages, deps) {
     }
     return downloaded;
 }
-function collectTelegramRichBlockFileInfos(blocks, messageId) {
+function collectBaleRichBlockFileInfos(blocks, messageId) {
     if (!Array.isArray(blocks))
         return [];
     const files = [];
@@ -688,11 +688,11 @@ function collectTelegramRichBlockFileInfos(blocks, messageId) {
     visit(blocks);
     return files;
 }
-export function collectTelegramFileInfos(messages) {
+export function collectBaleFileInfos(messages) {
     const files = [];
     for (const message of messages) {
         const firstOfMessage = files.length;
-        files.push(...collectTelegramRichBlockFileInfos(message.rich_message?.blocks, message.message_id));
+        files.push(...collectBaleRichBlockFileInfos(message.rich_message?.blocks, message.message_id));
         if (Array.isArray(message.photo) && message.photo.length > 0) {
             const photo = [...message.photo]
                 .sort((a, b) => (a.file_size ?? 0) - (b.file_size ?? 0))

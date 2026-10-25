@@ -1,57 +1,57 @@
 /**
- * Telegram singleton lock helpers
- * Zones: telegram ownership, filesystem, transport authority
- * Owns filesystem authority, atomic runtime-section publication and Telegram bridge ownership semantics
+ * Bale singleton lock helpers
+ * Zones: bale ownership, filesystem, transport authority
+ * Owns filesystem authority, atomic runtime-section publication and Bale bridge ownership semantics
  */
 import { randomUUID } from "node:crypto";
 import { chmodSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync, } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { isTelegramSessionPollingJournalPath, resolveTelegramOwnersPath, resolveTelegramSessionPollingJournalPath, resolveTelegramUpdateJournalPathForProfile, } from "./paths.js";
+import { isBaleSessionPollingJournalPath, resolveBaleOwnersPath, resolveBaleSessionPollingJournalPath, resolveBaleUpdateJournalPathForProfile, } from "./paths.js";
 import { isProcessAlive } from "./process-identity.js";
 import { isWireRecord as runtimeStateRecord } from "./wire.js";
-export const TELEGRAM_LOCK_KEY = "default";
-export const TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS = 8_000;
-export const TELEGRAM_OWNERSHIP_CHECK_MS = 1_000;
-export const TELEGRAM_OWNERSHIP_REFRESH_MS = 2_000;
+export const BALE_LOCK_KEY = "default";
+export const BALE_BUS_LEADER_STALE_HEARTBEAT_MS = 8_000;
+export const BALE_OWNERSHIP_CHECK_MS = 1_000;
+export const BALE_OWNERSHIP_REFRESH_MS = 2_000;
 /** Consecutive unverified ownership checks tolerated before standing down; a concurrent shared-state replacement must not stop an owned transport. */
-export const TELEGRAM_OWNERSHIP_CHECK_FAILURE_TOLERANCE = 2;
-const TELEGRAM_LOCK_WRITE_RETRY_ATTEMPTS = 5;
-const TELEGRAM_LOCK_WRITE_RETRY_DELAY_MS = 25;
-const TELEGRAM_LOCK_TRANSACTION_ATTEMPTS = 80;
-const TELEGRAM_LOCK_TRANSACTION_RETRY_DELAY_MS = 25;
-const TELEGRAM_LOCK_RUNTIME_GENERATION_KEY = "__piTelegramLockRuntimeGeneration__";
-function allocateTelegramLockRuntimeGeneration() {
+export const BALE_OWNERSHIP_CHECK_FAILURE_TOLERANCE = 2;
+const BALE_LOCK_WRITE_RETRY_ATTEMPTS = 5;
+const BALE_LOCK_WRITE_RETRY_DELAY_MS = 25;
+const BALE_LOCK_TRANSACTION_ATTEMPTS = 80;
+const BALE_LOCK_TRANSACTION_RETRY_DELAY_MS = 25;
+const BALE_LOCK_RUNTIME_GENERATION_KEY = "__piBaleLockRuntimeGeneration__";
+function allocateBaleLockRuntimeGeneration() {
     const globals = globalThis;
-    const previous = globals[TELEGRAM_LOCK_RUNTIME_GENERATION_KEY];
+    const previous = globals[BALE_LOCK_RUNTIME_GENERATION_KEY];
     const previousGeneration = typeof previous === "number" && Number.isSafeInteger(previous)
         ? previous
         : 0;
     const generation = Math.max(Date.now(), previousGeneration + 1);
-    globals[TELEGRAM_LOCK_RUNTIME_GENERATION_KEY] = generation;
+    globals[BALE_LOCK_RUNTIME_GENERATION_KEY] = generation;
     return generation;
 }
 function getOwnersPath() {
-    return resolveTelegramOwnersPath();
+    return resolveBaleOwnersPath();
 }
 /**
- * Resolve the extension-local owner slot for the active Telegram profile.
+ * Resolve the extension-local owner slot for the active Bale profile.
  * Default profile → default
  * Named profile → the validated profile name
  */
-export function resolveTelegramLockKey(activeProfile) {
-    return activeProfile || TELEGRAM_LOCK_KEY;
+export function resolveBaleLockKey(activeProfile) {
+    return activeProfile || BALE_LOCK_KEY;
 }
-export function createTelegramLockKeyResolver(activeProfile) {
-    return function getTelegramLockKey() {
-        return resolveTelegramLockKey(activeProfile.getActiveProfileName());
+export function createBaleLockKeyResolver(activeProfile) {
+    return function getBaleLockKey() {
+        return resolveBaleLockKey(activeProfile.getActiveProfileName());
     };
 }
 /**
  * Captures exact context, session generation and owned leader epoch before awaits.
  * Session replacement, release or re-election revokes the grant; a successor never renews it.
  */
-export function createTelegramOwnedStateAuthorityCapture(lock, session) {
+export function createBaleOwnedStateAuthorityCapture(lock, session) {
     return () => {
         const ctx = session.get(), generation = session.getGeneration();
         if (ctx === undefined || !session.isCurrent(ctx, generation))
@@ -69,32 +69,32 @@ export function createTelegramOwnedStateAuthorityCapture(lock, session) {
  * Leader polling journal: the path owners.json names, else the session that would host it on acquisition.
  * Without a session identity, the flat root `inbox` remains the compatibility fallback.
  */
-export function createTelegramLeaderJournalPathResolver(deps) {
+export function createBaleLeaderJournalPathResolver(deps) {
     // An existing flat root journal keeps its custody; new installations never create one.
     const createOwn = (profileName = deps.getProfileName()) => {
-        const root = resolveTelegramUpdateJournalPathForProfile(profileName);
+        const root = resolveBaleUpdateJournalPathForProfile(profileName);
         if (existsSync(root))
             return root;
         const sessionId = deps.getSessionId();
         return sessionId === undefined
             ? undefined
-            : resolveTelegramSessionPollingJournalPath(sessionId, undefined, profileName);
+            : resolveBaleSessionPollingJournalPath(sessionId, undefined, profileName);
     };
     return {
         createJournalPath: () => createOwn(),
         resolve(profileName) {
             const named = deps.getNamedJournalPath();
             if (named &&
-                (isTelegramSessionPollingJournalPath(named) ||
-                    named === resolveTelegramUpdateJournalPathForProfile(profileName)))
+                (isBaleSessionPollingJournalPath(named) ||
+                    named === resolveBaleUpdateJournalPathForProfile(profileName)))
                 return named;
             return (createOwn(profileName) ??
-                resolveTelegramUpdateJournalPathForProfile(profileName));
+                resolveBaleUpdateJournalPathForProfile(profileName));
         },
     };
 }
 /** A released key keeps only `{ journalPath }`: no owner, but the successor's polling custody. */
-export function readTelegramLockJournalPath(value) {
+export function readBaleLockJournalPath(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
         return undefined;
     const path = value.journalPath;
@@ -125,7 +125,7 @@ function readLocksForTransaction(path) {
     }
     const value = JSON.parse(source);
     if (!value || typeof value !== "object" || Array.isArray(value)) {
-        throw new Error(`Invalid Telegram owner store: ${path}`);
+        throw new Error(`Invalid Bale owner store: ${path}`);
     }
     return value;
 }
@@ -138,12 +138,12 @@ function sleepSync(ms) {
     Atomics.wait(new Int32Array(buffer), 0, 0, ms);
 }
 /** Typed private-file refusal; owners map the failure into their own error vocabulary. */
-export class TelegramPrivateFileError extends Error {
+export class BalePrivateFileError extends Error {
     failure;
     constructor(failure, message) {
         super(message);
         this.failure = failure;
-        this.name = "TelegramPrivateFileError";
+        this.name = "BalePrivateFileError";
     }
 }
 /**
@@ -152,11 +152,11 @@ export class TelegramPrivateFileError extends Error {
  * lstat-before/fstat-after identity binding every strict reader performs is the guard, so a link swapped in after
  * inspection opens a different file and is refused as changed.
  */
-export const TELEGRAM_STRICT_READ_FLAGS = constants.O_RDONLY |
+export const BALE_STRICT_READ_FLAGS = constants.O_RDONLY |
     (constants.O_NOFOLLOW ?? 0) |
     (constants.O_NONBLOCK ?? 0);
 /** POSIX owner and permission bits; Windows has no uid, so its ACL-protected agent directory carries privacy. */
-export function isTelegramOwnerPrivate(stat) {
+export function isBaleOwnerPrivate(stat) {
     const uid = process.getuid?.();
     return (uid === undefined ||
         (stat.uid === BigInt(uid) && (stat.mode & 63n) === 0n));
@@ -165,7 +165,7 @@ export function isTelegramOwnerPrivate(stat) {
  * Read one owner-private, single-link, bounded regular file without following links. Absence returns undefined;
  * an inode or metadata change between inspection and open refuses as `changed`.
  */
-export function readTelegramPrivateFile(path, maxBytes) {
+export function readBalePrivateFile(path, maxBytes) {
     let before;
     try {
         before = lstatSync(path, { bigint: true });
@@ -177,12 +177,12 @@ export function readTelegramPrivateFile(path, maxBytes) {
     }
     if (!before.isFile() ||
         before.isSymbolicLink() ||
-        !isTelegramOwnerPrivate(before) ||
+        !isBaleOwnerPrivate(before) ||
         before.nlink !== 1n ||
         before.size > BigInt(maxBytes)) {
-        throw new TelegramPrivateFileError(before.size > BigInt(maxBytes) ? "capacity" : "unsafe", "Telegram private file is not a bounded no-follow regular file.");
+        throw new BalePrivateFileError(before.size > BigInt(maxBytes) ? "capacity" : "unsafe", "Bale private file is not a bounded no-follow regular file.");
     }
-    const fd = openSync(path, TELEGRAM_STRICT_READ_FLAGS);
+    const fd = openSync(path, BALE_STRICT_READ_FLAGS);
     try {
         const opened = fstatSync(fd, { bigint: true });
         if (!opened.isFile() ||
@@ -190,10 +190,10 @@ export function readTelegramPrivateFile(path, maxBytes) {
             opened.ino !== before.ino ||
             opened.uid !== before.uid ||
             opened.nlink !== 1n ||
-            !isTelegramOwnerPrivate(opened) ||
+            !isBaleOwnerPrivate(opened) ||
             opened.size !== before.size ||
             opened.mtimeNs !== before.mtimeNs) {
-            throw new TelegramPrivateFileError("changed", "Telegram private file changed during inspection.");
+            throw new BalePrivateFileError("changed", "Bale private file changed during inspection.");
         }
         return readFileSync(fd, "utf8");
     }
@@ -202,7 +202,7 @@ export function readTelegramPrivateFile(path, maxBytes) {
     }
 }
 /** Atomically publish owner-private contents through a unique staging file; the rename consumes staging. */
-export function publishTelegramPrivateFile(path, temporaryBasePath, contents, label, onBoundary) {
+export function publishBalePrivateFile(path, temporaryBasePath, contents, label, onBoundary) {
     const temporaryPath = `${temporaryBasePath}.${process.pid}.${randomUUID()}.tmp`;
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     mkdirSync(dirname(temporaryPath), { recursive: true, mode: 0o700 });
@@ -210,7 +210,7 @@ export function publishTelegramPrivateFile(path, temporaryBasePath, contents, la
         writeFileSync(temporaryPath, contents, { encoding: "utf8", mode: 0o600 });
         chmodSync(temporaryPath, 0o600);
         onBoundary?.("after-write-before-rename");
-        if (!renameTelegramPathWithRetry(temporaryPath, path))
+        if (!renameBalePathWithRetry(temporaryPath, path))
             throw new Error(`${label} staging file disappeared before publication.`);
         chmodSync(path, 0o600);
         onBoundary?.("after-rename");
@@ -224,11 +224,11 @@ export function publishTelegramPrivateFile(path, temporaryBasePath, contents, la
         }
     }
 }
-/** Rename one Telegram runtime artifact with bounded Windows sharing retries. */
-export function renameTelegramPathWithRetry(sourcePath, destinationPath, options = {}) {
+/** Rename one Bale runtime artifact with bounded Windows sharing retries. */
+export function renameBalePathWithRetry(sourcePath, destinationPath, options = {}) {
     const rename = options.rename ?? renameSync;
-    const attempts = Math.max(1, options.attempts ?? TELEGRAM_LOCK_WRITE_RETRY_ATTEMPTS);
-    const retryDelayMs = Math.max(0, options.retryDelayMs ?? TELEGRAM_LOCK_WRITE_RETRY_DELAY_MS);
+    const attempts = Math.max(1, options.attempts ?? BALE_LOCK_WRITE_RETRY_ATTEMPTS);
+    const retryDelayMs = Math.max(0, options.retryDelayMs ?? BALE_LOCK_WRITE_RETRY_DELAY_MS);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
         try {
             rename(sourcePath, destinationPath);
@@ -245,7 +245,7 @@ export function renameTelegramPathWithRetry(sourcePath, destinationPath, options
     }
     return false;
 }
-const TELEGRAM_TRANSACTION_OWNER_PATTERN = /^owner\.([A-Za-z0-9-]+)\.json$/u;
+const BALE_TRANSACTION_OWNER_PATTERN = /^owner\.([A-Za-z0-9-]+)\.json$/u;
 function getLockTransactionOwnerFile(generation) {
     return `owner.${generation}.json`;
 }
@@ -254,15 +254,15 @@ function getLockTransactionOwnerPath(path) {
     if (stat.isDirectory()) {
         const entries = readdirSync(path);
         if (entries.length === 1 &&
-            (TELEGRAM_TRANSACTION_OWNER_PATTERN.test(entries[0]) ||
-                TELEGRAM_TRANSACTION_RECLAIM_PATTERN.test(entries[0]))) {
+            (BALE_TRANSACTION_OWNER_PATTERN.test(entries[0]) ||
+                BALE_TRANSACTION_RECLAIM_PATTERN.test(entries[0]))) {
             return join(path, entries[0]);
         }
-        throw new Error(`Unverifiable Telegram lock transaction guard: ${path}`);
+        throw new Error(`Unverifiable Bale lock transaction guard: ${path}`);
     }
     if (stat.isFile())
         return path;
-    throw new Error(`Unsupported Telegram lock transaction guard: ${path}`);
+    throw new Error(`Unsupported Bale lock transaction guard: ${path}`);
 }
 function readLockTransactionOwner(path) {
     try {
@@ -272,7 +272,7 @@ function readLockTransactionOwner(path) {
             typeof value.generation !== "string") {
             return undefined;
         }
-        const ownerMatch = TELEGRAM_TRANSACTION_OWNER_PATTERN.exec(basename(getLockTransactionOwnerPath(path)));
+        const ownerMatch = BALE_TRANSACTION_OWNER_PATTERN.exec(basename(getLockTransactionOwnerPath(path)));
         if (ownerMatch && ownerMatch[1] !== value.generation)
             return undefined;
         return {
@@ -286,7 +286,7 @@ function readLockTransactionOwner(path) {
     }
 }
 function createLockTransactionContentionError(path) {
-    return Object.assign(new Error(`Telegram lock transaction guard already exists: ${path}`), { code: "EEXIST" });
+    return Object.assign(new Error(`Bale lock transaction guard already exists: ${path}`), { code: "EEXIST" });
 }
 function isLockTransactionContentionError(error) {
     const code = error?.code;
@@ -328,15 +328,15 @@ function releaseLockTransactionGuard(path, owner) {
     if (!current) {
         if (!existsSync(path))
             return;
-        throw new Error(`Cannot verify Telegram lock transaction guard: ${path}`);
+        throw new Error(`Cannot verify Bale lock transaction guard: ${path}`);
     }
     if (current.pid !== owner.pid ||
         current.generation !== owner.generation ||
         current.acquiredAtMs !== owner.acquiredAtMs) {
-        throw new Error(`Telegram lock transaction guard changed ownership: ${path}`);
+        throw new Error(`Bale lock transaction guard changed ownership: ${path}`);
     }
     const releasedPath = `${path}.released.${randomUUID()}`;
-    if (!renameTelegramPathWithRetry(path, releasedPath))
+    if (!renameBalePathWithRetry(path, releasedPath))
         return;
     try {
         removeLockTransactionGuard(releasedPath);
@@ -349,11 +349,11 @@ function isAbandonedLockTransaction(path) {
     const owner = readLockTransactionOwner(path);
     return owner ? !isProcessAlive(owner.pid) : false;
 }
-const TELEGRAM_TRANSACTION_RECLAIM_PATTERN = /^owner\.reclaim\.(\d+)\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/u;
-const TELEGRAM_ACTIVE_TRANSACTION_RECLAIMS = Symbol.for("@llblab/pi-telegram/active-transaction-reclaims");
+const BALE_TRANSACTION_RECLAIM_PATTERN = /^owner\.reclaim\.(\d+)\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/u;
+const BALE_ACTIVE_TRANSACTION_RECLAIMS = Symbol.for("@llblab/pi-bale/active-transaction-reclaims");
 function getActiveTransactionReclaims() {
     const root = globalThis;
-    return (root[TELEGRAM_ACTIVE_TRANSACTION_RECLAIMS] ??= new Set());
+    return (root[BALE_ACTIVE_TRANSACTION_RECLAIMS] ??= new Set());
 }
 function reclaimAbandonedDirectoryGuard(path, options = {}) {
     try {
@@ -376,14 +376,14 @@ function reclaimAbandonedDirectoryGuard(path, options = {}) {
     const entry = entries[0];
     let observedPid;
     let observedReclaimGeneration;
-    if (TELEGRAM_TRANSACTION_OWNER_PATTERN.test(entry)) {
+    if (BALE_TRANSACTION_OWNER_PATTERN.test(entry)) {
         const owner = readLockTransactionOwner(path);
         if (!owner)
             return false;
         observedPid = owner.pid;
     }
     else {
-        const match = TELEGRAM_TRANSACTION_RECLAIM_PATTERN.exec(entry);
+        const match = BALE_TRANSACTION_RECLAIM_PATTERN.exec(entry);
         if (!match)
             return false;
         observedPid = Number.parseInt(match[1], 10);
@@ -416,7 +416,7 @@ function reclaimAbandonedDirectoryGuard(path, options = {}) {
             return false;
         throw error;
     }
-    const renameWithRetry = (fromPath, toPath) => renameTelegramPathWithRetry(fromPath, toPath, { rename: renameRecovery });
+    const renameWithRetry = (fromPath, toPath) => renameBalePathWithRetry(fromPath, toPath, { rename: renameRecovery });
     activeReclaims.add(reclaimGeneration);
     const stalePath = `${path}.stale.${process.pid}.${randomUUID()}`;
     try {
@@ -430,7 +430,7 @@ function reclaimAbandonedDirectoryGuard(path, options = {}) {
                     throw renameError;
             }
             catch (rollbackError) {
-                throw new AggregateError([renameError, rollbackError], `Failed to reclaim or restore Telegram lock transaction guard: ${path}`);
+                throw new AggregateError([renameError, rollbackError], `Failed to reclaim or restore Bale lock transaction guard: ${path}`);
             }
             throw renameError;
         }
@@ -594,8 +594,8 @@ function recoverAbandonedLockTransaction(path, options = {}) {
     }
 }
 function acquireLockTransaction(path, options = {}) {
-    const attempts = Math.max(1, options.attempts ?? TELEGRAM_LOCK_TRANSACTION_ATTEMPTS);
-    const retryDelayMs = Math.max(0, options.retryDelayMs ?? TELEGRAM_LOCK_TRANSACTION_RETRY_DELAY_MS);
+    const attempts = Math.max(1, options.attempts ?? BALE_LOCK_TRANSACTION_ATTEMPTS);
+    const retryDelayMs = Math.max(0, options.retryDelayMs ?? BALE_LOCK_TRANSACTION_RETRY_DELAY_MS);
     mkdirSync(dirname(path), { recursive: true });
     for (let attempt = 0; attempt < attempts; attempt += 1) {
         try {
@@ -608,14 +608,14 @@ function acquireLockTransaction(path, options = {}) {
             if (recoveredOwner !== undefined)
                 return recoveredOwner;
             if (attempt === attempts - 1) {
-                throw new Error(`Timed out acquiring Telegram lock transaction: ${path}`);
+                throw new Error(`Timed out acquiring Bale lock transaction: ${path}`);
             }
             sleepSync(retryDelayMs);
         }
     }
-    throw new Error(`Failed to acquire Telegram lock transaction: ${path}`);
+    throw new Error(`Failed to acquire Bale lock transaction: ${path}`);
 }
-export function withTelegramFileTransaction(transactionPath, operation, options = {}) {
+export function withBaleFileTransaction(transactionPath, operation, options = {}) {
     const owner = acquireLockTransaction(transactionPath, options);
     try {
         return operation();
@@ -624,29 +624,29 @@ export function withTelegramFileTransaction(transactionPath, operation, options 
         releaseLockTransactionGuard(transactionPath, owner);
     }
 }
-export class TelegramRuntimeStateError extends Error {
+export class BaleRuntimeStateError extends Error {
     code;
     constructor(code, message, options) {
         super(message, options);
-        this.name = "TelegramRuntimeStateError";
+        this.name = "BaleRuntimeStateError";
         this.code = code;
     }
 }
-const TELEGRAM_RUNTIME_STATE_SECTIONS = ["transport", "workspace", "admission", "runtime"];
-const TELEGRAM_ACTIVE_STATE_TRANSACTIONS = Symbol.for("@llblab/pi-telegram/active-state-transactions");
+const BALE_RUNTIME_STATE_SECTIONS = ["transport", "workspace", "admission", "runtime"];
+const BALE_ACTIVE_STATE_TRANSACTIONS = Symbol.for("@llblab/pi-bale/active-state-transactions");
 function requireRuntimeStatePath(path) {
     if (typeof path !== "string" || !isAbsolute(path) || resolve(path) !== path)
-        throw new TelegramRuntimeStateError("invalid", "Telegram runtime state path must be canonical and absolute.");
+        throw new BaleRuntimeStateError("invalid", "Bale runtime state path must be canonical and absolute.");
 }
 function requireRuntimeStateProfile(profile) {
     if (typeof profile !== "string" ||
         !profile.length ||
         profile.length > 512 ||
         /[\x00-\x1f]/u.test(profile))
-        throw new TelegramRuntimeStateError("invalid", "Telegram runtime state profile is invalid.");
+        throw new BaleRuntimeStateError("invalid", "Bale runtime state profile is invalid.");
 }
 /** Private single-link regular file read with identity continuity; initial absence only is positive. */
-function readTelegramRuntimeSource(path) {
+function readBaleRuntimeSource(path) {
     requireRuntimeStatePath(path);
     let source;
     let observed = false;
@@ -656,7 +656,7 @@ function readTelegramRuntimeSource(path) {
         if (!stat.isFile() ||
             stat.nlink !== 1 ||
             (process.platform !== "win32" && (stat.mode & 0o077) !== 0))
-            throw new TelegramRuntimeStateError("invalid", "Telegram runtime state must be a private regular file.");
+            throw new BaleRuntimeStateError("invalid", "Bale runtime state must be a private regular file.");
         const fd = openSync(path, "r");
         try {
             const opened = fstatSync(fd);
@@ -665,7 +665,7 @@ function readTelegramRuntimeSource(path) {
                 opened.nlink !== 1 ||
                 !opened.isFile() ||
                 (process.platform !== "win32" && (opened.mode & 0o077) !== 0))
-                throw new TelegramRuntimeStateError("invalid", "Telegram runtime state identity changed before reading.");
+                throw new BaleRuntimeStateError("invalid", "Bale runtime state identity changed before reading.");
             source = readFileSync(fd).toString("utf8");
         }
         finally {
@@ -677,7 +677,7 @@ function readTelegramRuntimeSource(path) {
             after.size !== stat.size ||
             after.mtimeMs !== stat.mtimeMs ||
             after.ctimeMs !== stat.ctimeMs)
-            throw new TelegramRuntimeStateError("invalid", "Telegram runtime state changed during observation.");
+            throw new BaleRuntimeStateError("invalid", "Bale runtime state changed during observation.");
     }
     catch (error) {
         if (!observed && error.code === "ENOENT")
@@ -687,8 +687,8 @@ function readTelegramRuntimeSource(path) {
     return source;
 }
 /** Strict, observational envelope read; section owners validate their own payloads. Legacy state is never adopted here. */
-export function readTelegramRuntimeState(path) {
-    const observed = readTelegramRuntimeSource(path);
+export function readBaleRuntimeState(path) {
+    const observed = readBaleRuntimeSource(path);
     if (observed === undefined)
         return { version: 2, profiles: {} };
     let value;
@@ -696,18 +696,18 @@ export function readTelegramRuntimeState(path) {
         value = JSON.parse(observed);
     }
     catch (error) {
-        throw new TelegramRuntimeStateError("invalid", "Telegram runtime state is unreadable.", { cause: error });
+        throw new BaleRuntimeStateError("invalid", "Bale runtime state is unreadable.", { cause: error });
     }
     if (!runtimeStateRecord(value) ||
         value.version !== 2 ||
         !runtimeStateRecord(value.profiles) ||
         Object.keys(value).some((key) => key !== "version" && key !== "profiles"))
-        throw new TelegramRuntimeStateError("invalid", "Telegram runtime state envelope is unsupported or malformed.");
+        throw new BaleRuntimeStateError("invalid", "Bale runtime state envelope is unsupported or malformed.");
     for (const [profile, sections] of Object.entries(value.profiles)) {
         requireRuntimeStateProfile(profile);
         if (!runtimeStateRecord(sections) ||
-            Object.keys(sections).some((key) => !TELEGRAM_RUNTIME_STATE_SECTIONS.includes(key)))
-            throw new TelegramRuntimeStateError("invalid", "Telegram runtime state sections are malformed.");
+            Object.keys(sections).some((key) => !BALE_RUNTIME_STATE_SECTIONS.includes(key)))
+            throw new BaleRuntimeStateError("invalid", "Bale runtime state sections are malformed.");
     }
     return value;
 }
@@ -716,15 +716,15 @@ export function readTelegramRuntimeState(path) {
  * caller-validated section is damaged, publish a fresh empty envelope instead of refusing. All profiles lose runtime
  * continuity. Filesystem access errors are not damage and still throw. Returns whether a reset was published.
  */
-export function resetDamagedTelegramRuntimeState(path, validateProfile) {
+export function resetDamagedBaleRuntimeState(path, validateProfile) {
     requireRuntimeStatePath(path);
     const runtimeDir = join(dirname(path), "runtime");
     mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
-    return withTelegramFileTransaction(join(runtimeDir, `${basename(path)}.transaction`), () => {
+    return withBaleFileTransaction(join(runtimeDir, `${basename(path)}.transaction`), () => {
         let damaged = false;
         try {
-            for (const [profile, sections] of Object.entries(readTelegramRuntimeState(path).profiles)) {
-                assertTelegramStateTransport(sections.transport);
+            for (const [profile, sections] of Object.entries(readBaleRuntimeState(path).profiles)) {
+                assertBaleStateTransport(sections.transport);
                 try {
                     validateProfile?.(profile, sections);
                 }
@@ -734,7 +734,7 @@ export function resetDamagedTelegramRuntimeState(path, validateProfile) {
             }
         }
         catch (error) {
-            if (!(error instanceof TelegramRuntimeStateError))
+            if (!(error instanceof BaleRuntimeStateError))
                 throw error;
             damaged = true;
         }
@@ -743,8 +743,8 @@ export function resetDamagedTelegramRuntimeState(path, validateProfile) {
         const tempPath = join(runtimeDir, `${basename(path)}.${process.pid}.${randomUUID()}.tmp`);
         try {
             writeFileSync(tempPath, `${JSON.stringify({ version: 2, profiles: {} }, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
-            if (!renameTelegramPathWithRetry(tempPath, path))
-                throw new Error("Telegram runtime state reset publication disappeared.");
+            if (!renameBalePathWithRetry(tempPath, path))
+                throw new Error("Bale runtime state reset publication disappeared.");
         }
         finally {
             try {
@@ -762,26 +762,26 @@ export function resetDamagedTelegramRuntimeState(path, validateProfile) {
  * One physical read/check/write transaction for one named section. The caller supplies domain policy; copies expose
  * current sibling facts without granting writes to them. No await, nested transaction, repair or legacy import.
  */
-export function mutateTelegramRuntimeStateSection(path, profile, section, mutate, options) {
+export function mutateBaleRuntimeStateSection(path, profile, section, mutate, options) {
     requireRuntimeStatePath(path);
     requireRuntimeStateProfile(profile);
-    if (!TELEGRAM_RUNTIME_STATE_SECTIONS.includes(section))
-        throw new TelegramRuntimeStateError("invalid", "Telegram runtime state section is invalid.");
-    const active = (globalThis[TELEGRAM_ACTIVE_STATE_TRANSACTIONS] ??= new Set());
+    if (!BALE_RUNTIME_STATE_SECTIONS.includes(section))
+        throw new BaleRuntimeStateError("invalid", "Bale runtime state section is invalid.");
+    const active = (globalThis[BALE_ACTIVE_STATE_TRANSACTIONS] ??= new Set());
     if (active.has(path))
-        throw new TelegramRuntimeStateError("invalid", "Nested Telegram runtime state transaction is not allowed.");
+        throw new BaleRuntimeStateError("invalid", "Nested Bale runtime state transaction is not allowed.");
     const assertCurrent = () => {
         if (!options.isCurrent())
-            throw new TelegramRuntimeStateError("authority-changed", "Telegram runtime state publication authority changed.");
+            throw new BaleRuntimeStateError("authority-changed", "Bale runtime state publication authority changed.");
     };
     assertCurrent();
     active.add(path);
     try {
         const runtimeDir = join(dirname(path), "runtime");
         mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
-        return withTelegramFileTransaction(join(runtimeDir, `${basename(path)}.transaction`), () => {
+        return withBaleFileTransaction(join(runtimeDir, `${basename(path)}.transaction`), () => {
             assertCurrent();
-            const file = readTelegramRuntimeState(path);
+            const file = readBaleRuntimeState(path);
             const previous = Object.hasOwn(file.profiles, profile)
                 ? file.profiles[profile]
                 : {};
@@ -790,7 +790,7 @@ export function mutateTelegramRuntimeStateSection(path, profile, section, mutate
                 !Object.hasOwn(outcome, "value") ||
                 !Object.hasOwn(outcome, "result") ||
                 "then" in outcome)
-                throw new TelegramRuntimeStateError("invalid", "Telegram runtime state mutations must return a synchronous value and result.");
+                throw new BaleRuntimeStateError("invalid", "Bale runtime state mutations must return a synchronous value and result.");
             // Normalize intentional optional properties to their wire representation before comparison/publication.
             const next = outcome.value === undefined
                 ? undefined
@@ -824,18 +824,18 @@ export function mutateTelegramRuntimeStateSection(path, profile, section, mutate
                 options.onPublicationBoundary?.("after-write-before-rename");
                 assertCurrent();
                 try {
-                    if (!renameTelegramPathWithRetry(tempPath, path, {
+                    if (!renameBalePathWithRetry(tempPath, path, {
                         rename(from, to) {
                             assertCurrent();
                             (options.publishRename ?? renameSync)(from, to);
                         },
                     }))
-                        throw new Error("Telegram runtime state temporary publication disappeared.");
+                        throw new Error("Bale runtime state temporary publication disappeared.");
                     options.onPublicationBoundary?.("after-rename");
                     assertCurrent();
                 }
                 catch (error) {
-                    throw new TelegramRuntimeStateError("publication-unknown", "Telegram runtime state publication outcome is unknown.", { cause: error });
+                    throw new BaleRuntimeStateError("publication-unknown", "Bale runtime state publication outcome is unknown.", { cause: error });
                 }
                 return outcome.result;
             }
@@ -855,7 +855,7 @@ export function mutateTelegramRuntimeStateSection(path, profile, section, mutate
     }
 }
 function withLockTransaction(locksPath, mutate) {
-    return withTelegramFileTransaction(`${locksPath}.transaction`, () => {
+    return withBaleFileTransaction(`${locksPath}.transaction`, () => {
         const locks = readLocksForTransaction(locksPath);
         const outcome = mutate(locks);
         if (outcome.changed)
@@ -867,7 +867,7 @@ export function writeLocks(path, locks) {
     mkdirSync(dirname(path), { recursive: true });
     const payload = `${JSON.stringify(locks, null, 2)}\n`;
     let lastError;
-    for (let attempt = 0; attempt < TELEGRAM_LOCK_WRITE_RETRY_ATTEMPTS; attempt += 1) {
+    for (let attempt = 0; attempt < BALE_LOCK_WRITE_RETRY_ATTEMPTS; attempt += 1) {
         const tempPath = `${path}.${process.pid}.${Date.now()}.${attempt}.tmp`;
         try {
             writeFileSync(tempPath, payload, {
@@ -886,15 +886,15 @@ export function writeLocks(path, locks) {
                 /* best effort */
             }
             if (!isRetryableLockWriteError(error) ||
-                attempt === TELEGRAM_LOCK_WRITE_RETRY_ATTEMPTS - 1) {
+                attempt === BALE_LOCK_WRITE_RETRY_ATTEMPTS - 1) {
                 throw error;
             }
-            sleepSync(TELEGRAM_LOCK_WRITE_RETRY_DELAY_MS * (attempt + 1));
+            sleepSync(BALE_LOCK_WRITE_RETRY_DELAY_MS * (attempt + 1));
         }
     }
     throw lastError;
 }
-export function parseTelegramLockEntry(value) {
+export function parseBaleLockEntry(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
         return undefined;
     const record = value;
@@ -916,18 +916,18 @@ export function parseTelegramLockEntry(value) {
             ? record.busSocketPath
             : undefined,
         busSecret: typeof record.busSecret === "string" ? record.busSecret : undefined,
-        ...(readTelegramLockJournalPath(record)
-            ? { journalPath: readTelegramLockJournalPath(record) }
+        ...(readBaleLockJournalPath(record)
+            ? { journalPath: readBaleLockJournalPath(record) }
             : {}),
     };
 }
-function formatTelegramLockEntry(lock) {
+function formatBaleLockEntry(lock) {
     return lock.cwd ? `pid ${lock.pid}, cwd ${lock.cwd}` : `pid ${lock.pid}`;
 }
-function formatTelegramFollowerRegistrationFailure(message) {
+function formatBaleFollowerRegistrationFailure(message) {
     if (/\b(?:ENOENT|ECONNREFUSED|ETIMEDOUT)\b/u.test(message)) {
         return (`live owner / unreachable bus endpoint after bounded retries (${message}); ` +
-            "wait briefly for owner recovery, then retry /telegram-connect. " +
+            "wait briefly for owner recovery, then retry /bale-connect. " +
             "Do not force takeover while the owner remains live");
     }
     return message;
@@ -962,7 +962,7 @@ function hasSameLockOwner(current, expected) {
         current.runtimeGeneration === expected.runtimeGeneration);
 }
 /** Exact owner identity (pid, cwd, instance, leader epoch, runtime generation); absent entries never match. */
-export function isSameTelegramLockOwner(current, expected) {
+export function isSameBaleLockOwner(current, expected) {
     return hasSameLockOwner(current, expected);
 }
 function canSupersedeSameProcessOwner(current, pid, ctx, instanceId, runtimeGeneration) {
@@ -996,16 +996,16 @@ function formatLockState(state) {
         case "active-here":
             return "active here";
         case "active-elsewhere":
-            return `active elsewhere (${formatTelegramLockEntry(state.lock)})`;
+            return `active elsewhere (${formatBaleLockEntry(state.lock)})`;
         case "stale":
-            return `stale (${formatTelegramLockEntry(state.lock)})`;
+            return `stale (${formatBaleLockEntry(state.lock)})`;
     }
 }
-function assertTelegramStateTransport(value) {
+function assertBaleStateTransport(value) {
     if (value === undefined)
         return;
     if (!runtimeStateRecord(value))
-        throw new TelegramRuntimeStateError("invalid", "Telegram state transport is malformed.");
+        throw new BaleRuntimeStateError("invalid", "Bale state transport is malformed.");
     const keys = [
         "pid",
         "cwd",
@@ -1019,28 +1019,28 @@ function assertTelegramStateTransport(value) {
     ];
     if (Object.keys(value).some((key) => !keys.includes(key)) ||
         (value.pid === undefined
-            ? Object.keys(value).length !== 1 || !readTelegramLockJournalPath(value)
+            ? Object.keys(value).length !== 1 || !readBaleLockJournalPath(value)
             : !Number.isSafeInteger(value.pid) || value.pid <= 0) ||
         ["cwd", "instanceId", "busSocketPath", "busSecret", "journalPath"].some((key) => value[key] !== undefined && typeof value[key] !== "string") ||
         ["heartbeatMs", "runtimeGeneration"].some((key) => value[key] !== undefined &&
             (!Number.isSafeInteger(value[key]) || value[key] < 0)) ||
-        (value.journalPath !== undefined && !readTelegramLockJournalPath(value)) ||
+        (value.journalPath !== undefined && !readBaleLockJournalPath(value)) ||
         (value.leaderEpoch !== undefined &&
             (typeof value.leaderEpoch === "string"
                 ? value.leaderEpoch.length === 0
                 : !Number.isSafeInteger(value.leaderEpoch))))
-        throw new TelegramRuntimeStateError("invalid", "Telegram state transport is malformed.");
+        throw new BaleRuntimeStateError("invalid", "Bale state transport is malformed.");
 }
-export function createTelegramLockRuntime(options = {}) {
-    const key = options.key ?? TELEGRAM_LOCK_KEY;
+export function createBaleLockRuntime(options = {}) {
+    const key = options.key ?? BALE_LOCK_KEY;
     if (options.statePath && options.locksPath)
-        throw new TelegramRuntimeStateError("invalid", "Telegram transport must select one storage identity.");
+        throw new BaleRuntimeStateError("invalid", "Bale transport must select one storage identity.");
     const statePath = options.statePath;
     const locksPath = options.locksPath ?? getOwnersPath();
     const pid = options.pid ?? process.pid;
     const isAlive = options.isProcessAlive ?? isProcessAlive;
     const getNowMs = options.getNowMs ?? Date.now;
-    const runtimeGeneration = options.runtimeGeneration ?? allocateTelegramLockRuntimeGeneration();
+    const runtimeGeneration = options.runtimeGeneration ?? allocateBaleLockRuntimeGeneration();
     let ownedLockKey;
     let ownedLock;
     let deliveryRevoked = false;
@@ -1050,7 +1050,7 @@ export function createTelegramLockRuntime(options = {}) {
     });
     const resolveEffectiveKey = () => {
         if (typeof key === "function")
-            return key() || TELEGRAM_LOCK_KEY;
+            return key() || BALE_LOCK_KEY;
         return key;
     };
     const readOwners = () => {
@@ -1060,10 +1060,10 @@ export function createTelegramLockRuntime(options = {}) {
         // A strict read racing a concurrent atomic replace fails transiently, so retry before failing closed.
         for (let attempt = 0; attempt < 3; attempt += 1) {
             try {
-                const transports = Object.fromEntries(Object.entries(readTelegramRuntimeState(statePath).profiles)
+                const transports = Object.fromEntries(Object.entries(readBaleRuntimeState(statePath).profiles)
                     .filter(([, value]) => Object.hasOwn(value, "transport"))
                     .map(([profile, value]) => [profile, value.transport]));
-                assertTelegramStateTransport(transports[resolveEffectiveKey()]);
+                assertBaleStateTransport(transports[resolveEffectiveKey()]);
                 return transports;
             }
             catch {
@@ -1076,12 +1076,12 @@ export function createTelegramLockRuntime(options = {}) {
         if (!statePath)
             return withLockTransaction(locksPath, mutate);
         const profile = resolveEffectiveKey();
-        return mutateTelegramRuntimeStateSection(statePath, profile, "transport", (current) => {
-            assertTelegramStateTransport(current);
+        return mutateBaleRuntimeStateSection(statePath, profile, "transport", (current) => {
+            assertBaleStateTransport(current);
             const locks = { [profile]: current };
             const outcome = mutate(locks);
             const value = outcome.changed ? locks[profile] : current;
-            assertTelegramStateTransport(value);
+            assertBaleStateTransport(value);
             return { value, result: outcome.result };
         }, {
             ...options.statePublication,
@@ -1090,7 +1090,7 @@ export function createTelegramLockRuntime(options = {}) {
     };
     const readLock = () => {
         const effectiveKey = resolveEffectiveKey();
-        return parseTelegramLockEntry(readOwners()[effectiveKey]);
+        return parseBaleLockEntry(readOwners()[effectiveKey]);
     };
     // A live older-release leader polls the same bot from its own directory. Only identity is exposed: its bus
     // endpoint, secret and epoch belong to another protocol and must never become a follower target.
@@ -1104,9 +1104,9 @@ export function createTelegramLockRuntime(options = {}) {
                 : readLocks(options.legacyLocksPath);
             if (statePath)
                 for (const value of Object.values(records))
-                    assertTelegramStateTransport(value);
+                    assertBaleStateTransport(value);
             const raw = records[effectiveKey];
-            const legacy = parseTelegramLockEntry(raw);
+            const legacy = parseBaleLockEntry(raw);
             if (!legacy ||
                 getLockState(legacy, -1, isAlive, stateOptions()).kind !==
                     "active-elsewhere")
@@ -1151,7 +1151,7 @@ export function createTelegramLockRuntime(options = {}) {
                     result: { ok: false, lock: legacy },
                     changed: false,
                 };
-            const current = parseTelegramLockEntry(locks[effectiveKey]);
+            const current = parseBaleLockEntry(locks[effectiveKey]);
             const observedState = getLockState(current, pid, isAlive, stateOptions());
             const state = observedState.kind === "active-elsewhere" &&
                 hasSameLockOwner(current, acquireOptions.unresponsiveOwner)
@@ -1196,7 +1196,7 @@ export function createTelegramLockRuntime(options = {}) {
                     changed: false,
                 };
             }
-            const journalPath = readTelegramLockJournalPath(locks[effectiveKey]) ??
+            const journalPath = readBaleLockJournalPath(locks[effectiveKey]) ??
                 options.createJournalPath?.(ctx);
             const lock = createLockEntry(pid, ctx, {
                 journalPath,
@@ -1224,11 +1224,11 @@ export function createTelegramLockRuntime(options = {}) {
             deliveryRevoked = true;
             return transactOwners((locks) => {
                 const effectiveKey = resolveEffectiveKey();
-                const state = getLockState(parseTelegramLockEntry(locks[effectiveKey]), pid, isAlive, stateOptions());
+                const state = getLockState(parseBaleLockEntry(locks[effectiveKey]), pid, isAlive, stateOptions());
                 const changed = ownedLockKey === effectiveKey &&
-                    hasSameLockOwner(parseTelegramLockEntry(locks[effectiveKey]), ownedLock);
+                    hasSameLockOwner(parseBaleLockEntry(locks[effectiveKey]), ownedLock);
                 if (changed) {
-                    const journalPath = readTelegramLockJournalPath(locks[effectiveKey]);
+                    const journalPath = readBaleLockJournalPath(locks[effectiveKey]);
                     if (journalPath)
                         locks[effectiveKey] = { journalPath };
                     else
@@ -1240,13 +1240,13 @@ export function createTelegramLockRuntime(options = {}) {
             });
         },
         getState: () => getLockState(readLock(), pid, isAlive, stateOptions()),
-        getJournalPath: () => readTelegramLockJournalPath(readOwners()[resolveEffectiveKey()]),
+        getJournalPath: () => readBaleLockJournalPath(readOwners()[resolveEffectiveKey()]),
         getStatusLabel: () => formatLockState(getLockState(readLock(), pid, isAlive, stateOptions())),
         getOwnedLeaderEpoch: () => {
             if (deliveryRevoked)
                 return undefined;
             const effectiveKey = resolveEffectiveKey();
-            const lock = parseTelegramLockEntry(readOwners()[effectiveKey]);
+            const lock = parseBaleLockEntry(readOwners()[effectiveKey]);
             const exactOwner = adoptCompatibleOwnedLock(effectiveKey, lock);
             return hasSameLockOwner(lock, exactOwner) ? lock?.leaderEpoch : undefined;
         },
@@ -1254,13 +1254,13 @@ export function createTelegramLockRuntime(options = {}) {
             if (deliveryRevoked)
                 return false;
             const effectiveKey = resolveEffectiveKey();
-            const lock = parseTelegramLockEntry(readOwners()[effectiveKey]);
+            const lock = parseBaleLockEntry(readOwners()[effectiveKey]);
             return hasSameLockOwner(lock, adoptCompatibleOwnedLock(effectiveKey, lock, ctx));
         },
         commitIfOwned: (commit) => !deliveryRevoked &&
             transactOwners((locks) => {
                 const effectiveKey = resolveEffectiveKey();
-                const lock = parseTelegramLockEntry(locks[effectiveKey]);
+                const lock = parseBaleLockEntry(locks[effectiveKey]);
                 const exactOwner = ownedLockKey === effectiveKey && hasSameLockOwner(lock, ownedLock);
                 if (!exactOwner) {
                     if (ownedLockKey === effectiveKey) {
@@ -1273,14 +1273,14 @@ export function createTelegramLockRuntime(options = {}) {
                 // External-file commits may retain an independent effect; never acknowledge under a changed unified owner.
                 const current = !statePath ||
                     (!deliveryRevoked &&
-                        hasSameLockOwner(parseTelegramLockEntry(readOwners()[effectiveKey]), ownedLock));
+                        hasSameLockOwner(parseBaleLockEntry(readOwners()[effectiveKey]), ownedLock));
                 return { result: current, changed: false };
             }),
         publishStateSectionIfOwned(section, mutate, publication) {
             if (section !== "workspace" && section !== "runtime")
-                throw new TelegramRuntimeStateError("invalid", "Telegram owner section publication is restricted to Workspace and runtime observations.");
+                throw new BaleRuntimeStateError("invalid", "Bale owner section publication is restricted to Workspace and runtime observations.");
             if (!statePath)
-                throw new TelegramRuntimeStateError("invalid", "Consolidated transport storage is not selected.");
+                throw new BaleRuntimeStateError("invalid", "Consolidated transport storage is not selected.");
             const profile = resolveEffectiveKey(), expected = ownedLock ? { ...ownedLock } : undefined;
             if (publication.expectedScope &&
                 (publication.expectedScope.path !== statePath ||
@@ -1296,12 +1296,12 @@ export function createTelegramLockRuntime(options = {}) {
                 ownedLockKey === profile &&
                 hasSameLockOwner(ownedLock, expected) &&
                 publication.isCurrent() &&
-                hasSameLockOwner(parseTelegramLockEntry(readOwners()[profile]), expected);
+                hasSameLockOwner(parseBaleLockEntry(readOwners()[profile]), expected);
             if (!isCurrent())
                 return { committed: false };
-            return mutateTelegramRuntimeStateSection(statePath, profile, section, (current, observed) => {
-                assertTelegramStateTransport(observed.transport);
-                if (!hasSameLockOwner(parseTelegramLockEntry(observed.transport), expected))
+            return mutateBaleRuntimeStateSection(statePath, profile, section, (current, observed) => {
+                assertBaleStateTransport(observed.transport);
+                if (!hasSameLockOwner(parseBaleLockEntry(observed.transport), expected))
                     return { value: current, result: { committed: false } };
                 const outcome = mutate(current, observed);
                 return {
@@ -1340,7 +1340,7 @@ export function createTelegramLockRuntime(options = {}) {
                 return true;
             }
             return transactOwners((locks) => {
-                const lock = parseTelegramLockEntry(locks[effectiveKey]);
+                const lock = parseBaleLockEntry(locks[effectiveKey]);
                 const expectedOwner = adoptCompatibleOwnedLock(effectiveKey, lock, ctx);
                 if (!lock || !hasSameLockOwner(lock, expectedOwner)) {
                     if (ownedLockKey === effectiveKey) {
@@ -1362,12 +1362,12 @@ export function createTelegramLockRuntime(options = {}) {
         },
     };
 }
-export function createTelegramLockOwnershipGuard(lock) {
+export function createBaleLockOwnershipGuard(lock) {
     return {
         ownsContext: (ctx) => lock.owns(ctx),
     };
 }
-export function createTelegramDirectDeliveryOwnershipChecker(deps) {
+export function createBaleDirectDeliveryOwnershipChecker(deps) {
     return () => {
         const ctx = deps.contextStore.get();
         return ctx ? deps.lock.owns(ctx) : false;
@@ -1376,7 +1376,7 @@ export function createTelegramDirectDeliveryOwnershipChecker(deps) {
 function snapshotLockContext(ctx) {
     return { cwd: ctx.cwd };
 }
-export function createTelegramLockedPollingRuntime(deps) {
+export function createBaleLockedPollingRuntime(deps) {
     let ownershipCheckInterval;
     let ownershipRefreshInterval;
     let ownershipStop;
@@ -1388,8 +1388,8 @@ export function createTelegramLockedPollingRuntime(deps) {
     let suspendedGeneration;
     let suspensionsInFlight = 0;
     let startupsInFlight = 0;
-    const ownershipCheckMs = deps.ownershipCheckMs ?? TELEGRAM_OWNERSHIP_CHECK_MS;
-    const ownershipRefreshMs = deps.ownershipRefreshMs ?? TELEGRAM_OWNERSHIP_REFRESH_MS;
+    const ownershipCheckMs = deps.ownershipCheckMs ?? BALE_OWNERSHIP_CHECK_MS;
+    const ownershipRefreshMs = deps.ownershipRefreshMs ?? BALE_OWNERSHIP_REFRESH_MS;
     const stopOwnershipWatcher = () => {
         if (ownershipCheckInterval)
             clearInterval(ownershipCheckInterval);
@@ -1462,7 +1462,7 @@ export function createTelegramLockedPollingRuntime(deps) {
                 return;
             }
             if (owned === false) {
-                deps.recordRuntimeEvent?.("lock", new Error("Telegram bridge ownership moved away from this instance."), { phase: "ownership-lost" });
+                deps.recordRuntimeEvent?.("lock", new Error("Bale bridge ownership moved away from this instance."), { phase: "ownership-lost" });
                 stopAfterOwnershipLoss();
                 return;
             }
@@ -1470,9 +1470,9 @@ export function createTelegramLockedPollingRuntime(deps) {
             deps.recordRuntimeEvent?.("lock", failure, {
                 phase: "ownership-check-failed",
                 consecutiveFailures: ownershipCheckFailures,
-                tolerance: TELEGRAM_OWNERSHIP_CHECK_FAILURE_TOLERANCE,
+                tolerance: BALE_OWNERSHIP_CHECK_FAILURE_TOLERANCE,
             });
-            if (ownershipCheckFailures > TELEGRAM_OWNERSHIP_CHECK_FAILURE_TOLERANCE)
+            if (ownershipCheckFailures > BALE_OWNERSHIP_CHECK_FAILURE_TOLERANCE)
                 stopAfterOwnershipLoss();
         };
         ownershipCheckInterval = setInterval(() => {
@@ -1543,28 +1543,28 @@ export function createTelegramLockedPollingRuntime(deps) {
     };
     const canStartPolling = (ctx) => deps.canStartPolling?.(ctx) ?? true;
     const formatStartBlockedMessage = (ctx) => deps.formatStartBlockedMessage?.(ctx) ??
-        "Telegram polling is unavailable in this Pi run mode.";
+        "Bale polling is unavailable in this Pi run mode.";
     const stop = async () => {
         const generation = pollingGeneration + 1;
         await suspendPolling();
         if (generation !== pollingGeneration)
-            throw new Error("Telegram disconnect was superseded by a new connection.");
+            throw new Error("Bale disconnect was superseded by a new connection.");
         const state = deps.lock.release();
         deps.onTransportAvailabilityChanged?.();
         if (state.kind === "active-elsewhere") {
-            return `Telegram bridge is active in another Pi instance (${formatTelegramLockEntry(state.lock)}).`;
+            return `Bale bridge is active in another Pi instance (${formatBaleLockEntry(state.lock)}).`;
         }
         if (state.kind === "stale") {
-            return `Removed stale Telegram bridge lock (${formatTelegramLockEntry(state.lock)}).`;
+            return `Removed stale Bale bridge lock (${formatBaleLockEntry(state.lock)}).`;
         }
-        return "Telegram bridge disconnected.";
+        return "Bale bridge disconnected.";
     };
     return {
         start: async (ctx, options = {}) => {
             if (!deps.hasBotToken()) {
                 return {
                     ok: false,
-                    message: deps.getBotTokenDiagnostic?.() ?? "Telegram bot is not configured.",
+                    message: deps.getBotTokenDiagnostic?.() ?? "Bale bot is not configured.",
                 };
             }
             if (!canStartPolling(ctx)) {
@@ -1573,7 +1573,7 @@ export function createTelegramLockedPollingRuntime(deps) {
             const cancelled = {
                 ok: false,
                 canTakeover: false,
-                message: "Telegram polling startup was cancelled or superseded.",
+                message: "Bale polling startup was cancelled or superseded.",
             };
             if (deps.isContextCurrent?.(ctx) === false)
                 return cancelled;
@@ -1587,7 +1587,7 @@ export function createTelegramLockedPollingRuntime(deps) {
             if (!options.election && deps.resetDamagedState) {
                 try {
                     if (deps.resetDamagedState())
-                        deps.recordRuntimeEvent?.("lock", new Error("Damaged Telegram runtime state was reset; previous runtime continuity was discarded."), { phase: "state-reset" });
+                        deps.recordRuntimeEvent?.("lock", new Error("Damaged Bale runtime state was reset; previous runtime continuity was discarded."), { phase: "state-reset" });
                 }
                 catch (error) {
                     deps.recordRuntimeEvent?.("lock", error, { phase: "state-reset" });
@@ -1618,8 +1618,8 @@ export function createTelegramLockedPollingRuntime(deps) {
                     return {
                         ok: false,
                         canTakeover: false,
-                        owner: formatTelegramLockEntry(acquired.lock),
-                        message: "Telegram leadership election lost to another live owner.",
+                        owner: formatBaleLockEntry(acquired.lock),
+                        message: "Bale leadership election lost to another live owner.",
                     };
                 }
                 if (deps.registerFollowerWithOwner) {
@@ -1651,23 +1651,23 @@ export function createTelegramLockedPollingRuntime(deps) {
                             acquired = deps.lock.acquire(ctx, { unresponsiveOwner });
                         }
                         if (!acquired.ok) {
-                            const owner = formatTelegramLockEntry(acquired.lock);
+                            const owner = formatBaleLockEntry(acquired.lock);
                             return {
                                 ok: false,
                                 canTakeover: false,
                                 owner,
-                                message: `Telegram bridge is active in another Pi instance (${owner}); follower registration failed: ${formatTelegramFollowerRegistrationFailure(failureMessage)}.`,
+                                message: `Bale bridge is active in another Pi instance (${owner}); follower registration failed: ${formatBaleFollowerRegistrationFailure(failureMessage)}.`,
                             };
                         }
                     }
                 }
                 if (!acquired.ok) {
-                    const owner = formatTelegramLockEntry(acquired.lock);
+                    const owner = formatBaleLockEntry(acquired.lock);
                     return {
                         ok: false,
                         canTakeover: true,
                         owner,
-                        message: `Telegram bridge is active in another Pi instance (${owner}).`,
+                        message: `Bale bridge is active in another Pi instance (${owner}).`,
                     };
                 }
             }
@@ -1678,7 +1678,7 @@ export function createTelegramLockedPollingRuntime(deps) {
                 return {
                     ok: false,
                     canTakeover: false,
-                    message: "Telegram leadership changed during polling startup.",
+                    message: "Bale leadership changed during polling startup.",
                 };
             }
             if (!isCurrent())
@@ -1686,7 +1686,7 @@ export function createTelegramLockedPollingRuntime(deps) {
             deps.onTransportAvailabilityChanged?.();
             deps.updateStatus(ctx);
             const staleSuffix = acquired.replacedStale ? " Replaced stale lock." : "";
-            return { ok: true, message: `Telegram bridge connected.${staleSuffix}` };
+            return { ok: true, message: `Bale bridge connected.${staleSuffix}` };
         },
         stop,
         captureStop() {
@@ -1696,7 +1696,7 @@ export function createTelegramLockedPollingRuntime(deps) {
                 isCurrent,
                 async stop() {
                     if (!isCurrent())
-                        throw new Error("Telegram disconnect was superseded by a new connection.");
+                        throw new Error("Bale disconnect was superseded by a new connection.");
                     return stop();
                 },
             };
@@ -1748,8 +1748,8 @@ export function createTelegramLockedPollingRuntime(deps) {
                 .finally(() => {
                 ownershipStop = undefined;
                 deps.recordRuntimeEvent?.("polling", ownership === "lost"
-                    ? "Telegram transport stopped: local ownership lost; check for another Pi instance."
-                    : "Telegram transport stopped: competing getUpdates client or ownership mismatch.", {
+                    ? "Bale transport stopped: local ownership lost; check for another Pi instance."
+                    : "Bale transport stopped: competing getUpdates client or ownership mismatch.", {
                     phase: "persistent-conflict",
                     count,
                     ownership,
@@ -1784,7 +1784,7 @@ export function createTelegramLockedPollingRuntime(deps) {
             const isCurrent = () => generation === pollingGeneration &&
                 (deps.isContextCurrent?.(ctx) ?? true);
             const startedAtMs = Date.now();
-            deps.recordRuntimeEvent?.("lock", "Telegram auto-start scheduled", {
+            deps.recordRuntimeEvent?.("lock", "Bale auto-start scheduled", {
                 phase: "auto-start-scheduled",
                 mode: canRestoreRememberedFollower ? "follower-restore" : "leader",
             });
@@ -1800,12 +1800,12 @@ export function createTelegramLockedPollingRuntime(deps) {
                     if (!isCurrent())
                         return;
                     if (!restored) {
-                        deps.recordRuntimeEvent?.("lock", "Telegram follower auto-connect did not restore this session.", { phase: "follower-auto-connect-unavailable" });
+                        deps.recordRuntimeEvent?.("lock", "Bale follower auto-connect did not restore this session.", { phase: "follower-auto-connect-unavailable" });
                         return;
                     }
                     deps.onTransportAvailabilityChanged?.();
                     deps.updateStatus(ctx);
-                    deps.recordRuntimeEvent?.("bus", "Telegram follower auto-connect completed", { phase: "follower-auto-connect" });
+                    deps.recordRuntimeEvent?.("bus", "Bale follower auto-connect completed", { phase: "follower-auto-connect" });
                     return;
                 }
                 if (canResumeStaleSameCwd || canHandoffSameProcess) {
@@ -1823,7 +1823,7 @@ export function createTelegramLockedPollingRuntime(deps) {
                     return;
                 deps.onTransportAvailabilityChanged?.();
                 deps.updateStatus(ctx);
-                deps.recordRuntimeEvent?.("lock", "Telegram auto-start completed", {
+                deps.recordRuntimeEvent?.("lock", "Bale auto-start completed", {
                     phase: "auto-start-complete",
                     durationMs: Date.now() - startedAtMs,
                 });

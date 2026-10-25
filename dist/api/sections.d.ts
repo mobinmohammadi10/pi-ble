@@ -1,7 +1,7 @@
 /**
- * Public Telegram sections API
+ * Public Bale sections API
  * Zones: package boundary, extension interop
- * Exposes the stable managed Telegram menu-section surface while keeping registry internals package-private
+ * Exposes the stable managed Bale menu-section surface while keeping registry internals package-private
  */
-export type { TelegramInputRichBlock, TelegramInputRichMessage, TelegramRichText } from "../lib/telegram-api.ts";
-export { getTelegramSectionDiagnostics, registerTelegramSection, type TelegramSectionCallbackContext, type TelegramSectionCallbackResult, type TelegramSectionContext, type TelegramSectionDiagnostic, type TelegramSectionRegistration, type TelegramSectionSettingsRegistration, type TelegramSectionView, } from "../lib/sections.ts";
+export type { BaleInputRichBlock, BaleInputRichMessage, BaleRichText } from "../lib/bale-api.ts";
+export { getBaleSectionDiagnostics, registerBaleSection, type BaleSectionCallbackContext, type BaleSectionCallbackResult, type BaleSectionContext, type BaleSectionDiagnostic, type BaleSectionRegistration, type BaleSectionSettingsRegistration, type BaleSectionView, } from "../lib/sections.ts";

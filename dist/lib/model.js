@@ -1,11 +1,11 @@
 /**
- * Telegram model control domain helpers
- * Zones: pi agent model control, telegram controls, queue continuation
+ * Bale model control domain helpers
+ * Zones: pi agent model control, bale controls, queue continuation
  * Owns model identity, thinking levels, scoped resolution, current-model state, and in-flight model switching
  */
 import * as Machine from "./machine.js";
-import { truncateTelegramQueueSummary, } from "./queue.js";
-import { TELEGRAM_PREFIX } from "./turns.js";
+import { truncateBaleQueueSummary, } from "./queue.js";
+import { BALE_PREFIX } from "./turns.js";
 export const THINKING_LEVELS = [
     "off",
     "minimal",
@@ -56,21 +56,21 @@ export function getCanonicalModelId(model) {
 export function isThinkingLevel(value) {
     return THINKING_LEVELS.includes(value);
 }
-export function parseTelegramScopedModelPatternList(value) {
+export function parseBaleScopedModelPatternList(value) {
     return value
         .split(",")
         .map((pattern) => pattern.trim())
         .filter(Boolean);
 }
-export function parseTelegramCliScopedModelPatterns(args) {
+export function parseBaleCliScopedModelPatterns(args) {
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         if (arg === "--models") {
-            const patterns = parseTelegramScopedModelPatternList(args[i + 1] ?? "");
+            const patterns = parseBaleScopedModelPatternList(args[i + 1] ?? "");
             return patterns.length > 0 ? patterns : undefined;
         }
         if (arg.startsWith("--models=")) {
-            const patterns = parseTelegramScopedModelPatternList(arg.slice("--models=".length));
+            const patterns = parseBaleScopedModelPatternList(arg.slice("--models=".length));
             return patterns.length > 0 ? patterns : undefined;
         }
     }
@@ -250,23 +250,23 @@ export function sortScopedModels(models, currentModel) {
     });
     return sorted;
 }
-export function canRestartAgentRunForTelegramModelSwitch(state) {
+export function canRestartAgentRunForBaleModelSwitch(state) {
     return !state.isIdle && state.hasAbortHandler;
 }
-export function shouldTriggerPendingTelegramModelSwitchAbort(state) {
+export function shouldTriggerPendingBaleModelSwitchAbort(state) {
     return (state.hasPendingModelSwitch &&
         state.hasContinuationTurn &&
         state.hasAbortHandler &&
         state.activeToolExecutions === 0);
 }
-export function buildTelegramModelSwitchContinuationText(telegramPrefix, model, thinkingLevel) {
+export function buildBaleModelSwitchContinuationText(balePrefix, model, thinkingLevel) {
     const modelLabel = `${model.provider}/${model.id}`;
     const thinkingSuffix = thinkingLevel ? `; thinking: ${thinkingLevel}` : "";
-    return `${telegramPrefix} Continue from the last unfinished step. Model: ${modelLabel}${thinkingSuffix}.`;
+    return `${balePrefix} Continue from the last unfinished step. Model: ${modelLabel}${thinkingSuffix}.`;
 }
-export function buildTelegramModelSwitchContinuationTurn(options) {
+export function buildBaleModelSwitchContinuationTurn(options) {
     const modelLabel = `${options.selection.model.provider}/${options.selection.model.id}`;
-    const statusLabel = truncateTelegramQueueSummary(`continue on ${options.selection.model.id}`, 4, 32);
+    const statusLabel = truncateBaleQueueSummary(`continue on ${options.selection.model.id}`, 4, 32);
     return {
         kind: "prompt",
         chatId: options.turn.chatId,
@@ -280,45 +280,45 @@ export function buildTelegramModelSwitchContinuationTurn(options) {
         content: [
             {
                 type: "text",
-                text: buildTelegramModelSwitchContinuationText(options.telegramPrefix ?? TELEGRAM_PREFIX, options.selection.model, options.selection.thinkingLevel),
+                text: buildBaleModelSwitchContinuationText(options.balePrefix ?? BALE_PREFIX, options.selection.model, options.selection.thinkingLevel),
             },
         ],
         historyText: `Continue interrupted request on ${modelLabel}`,
         statusSummary: `↻ ${statusLabel || "continue"}`,
     };
 }
-export function createTelegramModelSwitchContinuationTurnBuilder(deps) {
-    return (options) => buildTelegramModelSwitchContinuationTurn({
+export function createBaleModelSwitchContinuationTurnBuilder(deps) {
+    return (options) => buildBaleModelSwitchContinuationTurn({
         ...options,
-        telegramPrefix: deps.telegramPrefix,
+        balePrefix: deps.balePrefix,
         queueOrder: deps.allocateItemOrder(),
         laneOrder: deps.allocateControlOrder(),
     });
 }
-export function createTelegramModelSwitchContinuationQueue(deps) {
+export function createBaleModelSwitchContinuationQueue(deps) {
     return (turn, selection, ctx) => {
         deps.appendQueuedItem(deps.createContinuationTurn({ turn, selection }), ctx);
     };
 }
-export function createTelegramModelSwitchContinuationQueueRuntime(deps) {
-    return createTelegramModelSwitchContinuationQueue({
-        createContinuationTurn: createTelegramModelSwitchContinuationTurnBuilder({
-            telegramPrefix: deps.telegramPrefix,
+export function createBaleModelSwitchContinuationQueueRuntime(deps) {
+    return createBaleModelSwitchContinuationQueue({
+        createContinuationTurn: createBaleModelSwitchContinuationTurnBuilder({
+            balePrefix: deps.balePrefix,
             allocateItemOrder: deps.allocateItemOrder,
             allocateControlOrder: deps.allocateControlOrder,
         }),
         appendQueuedItem: deps.appendQueuedItem,
     });
 }
-export function createTelegramModelSwitchControllerRuntime(deps) {
-    return createTelegramModelSwitchController({
+export function createBaleModelSwitchControllerRuntime(deps) {
+    return createBaleModelSwitchController({
         isIdle: deps.isIdle,
         getActiveTurn: deps.getActiveTurn,
         getAbortHandler: deps.getAbortHandler,
         hasAbortHandler: deps.hasAbortHandler,
         getActiveToolExecutions: deps.getActiveToolExecutions,
-        queueContinuation: createTelegramModelSwitchContinuationQueueRuntime({
-            telegramPrefix: deps.telegramPrefix,
+        queueContinuation: createBaleModelSwitchContinuationQueueRuntime({
+            balePrefix: deps.balePrefix,
             allocateItemOrder: deps.allocateItemOrder,
             allocateControlOrder: deps.allocateControlOrder,
             appendQueuedItem: deps.appendQueuedItem,
@@ -326,7 +326,7 @@ export function createTelegramModelSwitchControllerRuntime(deps) {
         updateStatus: deps.updateStatus,
     });
 }
-export function createTelegramModelSwitchMachineState() {
+export function createBaleModelSwitchMachineState() {
     return { pending: null };
 }
 /** The continuation is queued before the abort, so the stopped run always has its successor waiting. */
@@ -339,7 +339,7 @@ const restartFor = (turn, selection) => ({
  * Pure model-switch transition. A staged switch fires only once no tool runs and an abort handler exists; any restart
  * or clear consumes the staged switch too, so a stale selection can never abort the continuation run it started.
  */
-export function transitionTelegramModelSwitch(state, event) {
+export function transitionBaleModelSwitch(state, event) {
     const unchanged = { state, effects: [], result: false };
     switch (event.type) {
         case "staged":
@@ -358,7 +358,7 @@ export function transitionTelegramModelSwitch(state, event) {
             const turn = pending?.turn ?? event.activeTurn;
             if (!pending ||
                 !turn ||
-                !shouldTriggerPendingTelegramModelSwitchAbort({
+                !shouldTriggerPendingBaleModelSwitchAbort({
                     hasPendingModelSwitch: true,
                     hasContinuationTurn: true,
                     hasAbortHandler: event.hasAbortHandler,
@@ -376,15 +376,15 @@ export function transitionTelegramModelSwitch(state, event) {
     }
 }
 /**
- * The shell around `transitionTelegramModelSwitch`: it samples the active turn, abort handler and tool count into
+ * The shell around `transitionBaleModelSwitch`: it samples the active turn, abort handler and tool count into
  * events, and runs the continuation and abort effects with the caller's context and the handler it sampled.
  */
-export function createTelegramModelSwitchController(deps) {
+export function createBaleModelSwitchController(deps) {
     // The context and abort handler of the call being dispatched; effects run synchronously inside that dispatch.
     let call;
-    const machine = Machine.createTelegramMachineRunner({
-        initial: createTelegramModelSwitchMachineState(),
-        transition: transitionTelegramModelSwitch,
+    const machine = Machine.createBaleMachineRunner({
+        initial: createBaleModelSwitchMachineState(),
+        transition: transitionBaleModelSwitch,
         run(effect) {
             if (!call)
                 return;
@@ -414,7 +414,7 @@ export function createTelegramModelSwitchController(deps) {
         });
     };
     return {
-        canOfferInFlightSwitch: (ctx) => canRestartAgentRunForTelegramModelSwitch({
+        canOfferInFlightSwitch: (ctx) => canRestartAgentRunForBaleModelSwitch({
             isIdle: deps.isIdle(ctx),
             hasAbortHandler: deps.hasAbortHandler(),
         }),

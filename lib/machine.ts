@@ -6,12 +6,12 @@
  */
 
 /** One transition result: the next state plus effects as data. A machine may add fields, such as a call result. */
-export interface TelegramMachineStep<State, Effect> {
+export interface BaleMachineStep<State, Effect> {
   state: State;
   effects: readonly Effect[];
 }
 
-export interface TelegramMachineRunner<State, Event, Step> {
+export interface BaleMachineRunner<State, Event, Step> {
   readonly state: State;
   /** Commits the next state, runs its effects (which may dispatch again), wakes waiters and returns the step. */
   dispatch(event: Event): Step;
@@ -19,11 +19,11 @@ export interface TelegramMachineRunner<State, Event, Step> {
   waitFor(ready: (state: State) => boolean): Promise<void>;
 }
 
-export function createTelegramMachineRunner<
+export function createBaleMachineRunner<
   State,
   Event,
   Effect,
-  Step extends TelegramMachineStep<State, Effect> = TelegramMachineStep<
+  Step extends BaleMachineStep<State, Effect> = BaleMachineStep<
     State,
     Effect
   >,
@@ -31,7 +31,7 @@ export function createTelegramMachineRunner<
   initial: State;
   transition: (state: State, event: Event) => Step;
   run: (effect: Effect) => void;
-}): TelegramMachineRunner<State, Event, Step> {
+}): BaleMachineRunner<State, Event, Step> {
   let state = options.initial;
   const waiters = new Set<() => void>();
   return {

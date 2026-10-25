@@ -1,5 +1,5 @@
 /**
- * Regression tests for the Telegram preview domain
+ * Regression tests for the Bale preview domain
  * Covers native rich draft previews, safe-prefix selection, and finalization behavior
  */
 
@@ -7,28 +7,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  allocateTelegramDraftId,
-  buildTelegramPreviewFinalText,
-  createTelegramAssistantPreviewRuntime,
-  createTelegramPreviewController,
-  createTelegramPreviewMachineState,
-  getSafeTelegramRichMarkdownDraftPrefix,
-  isTelegramPreviewBusy,
+  allocateBaleDraftId,
+  buildBalePreviewFinalText,
+  createBaleAssistantPreviewRuntime,
+  createBalePreviewController,
+  createBalePreviewMachineState,
+  getSafeBaleRichMarkdownDraftPrefix,
+  isBalePreviewBusy,
   shouldSuppressPreviewForGuestTurn,
-  transitionTelegramPreview,
-  type TelegramPreviewControllerDeps,
-  type TelegramPreviewEffect,
-  type TelegramPreviewEvent,
-  type TelegramPreviewMachineState,
+  transitionBalePreview,
+  type BalePreviewControllerDeps,
+  type BalePreviewEffect,
+  type BalePreviewEvent,
+  type BalePreviewMachineState,
 } from "../lib/preview.ts";
-import { createTelegramThreadTarget } from "../lib/target.ts";
+import { createBaleThreadTarget } from "../lib/target.ts";
 
 /** A controller without throttling whose draft and diagnostic effects land in one event log. */
 function createPreviewHarness(
-  overrides: Partial<TelegramPreviewControllerDeps> = {},
+  overrides: Partial<BalePreviewControllerDeps> = {},
 ) {
   const events: string[] = [];
-  const preview = createTelegramPreviewController({
+  const preview = createBalePreviewController({
     minDraftIntervalMs: 0,
     maxMessageLength: 100,
     sendDraft: async (chatId, draftId, text) => {
@@ -56,19 +56,19 @@ const REQUEST = { chatId: 7 };
 
 /** Folds events through the pure transition and returns the final state with every effect in order. */
 function runPreviewMachine(
-  events: TelegramPreviewEvent[],
-  state: TelegramPreviewMachineState = createTelegramPreviewMachineState(),
-): { state: TelegramPreviewMachineState; effects: TelegramPreviewEffect[] } {
-  const effects: TelegramPreviewEffect[] = [];
+  events: BalePreviewEvent[],
+  state: BalePreviewMachineState = createBalePreviewMachineState(),
+): { state: BalePreviewMachineState; effects: BalePreviewEffect[] } {
+  const effects: BalePreviewEffect[] = [];
   for (const event of events) {
-    const next = transitionTelegramPreview(state, event, MACHINE_CONFIG);
+    const next = transitionBalePreview(state, event, MACHINE_CONFIG);
     state = next.state;
     effects.push(...next.effects);
   }
   return { state, effects };
 }
 
-const flushAt = (now = AT.now, canSend = true): TelegramPreviewEvent => ({
+const flushAt = (now = AT.now, canSend = true): BalePreviewEvent => ({
   type: "flushRequested",
   request: REQUEST,
   now,
@@ -88,7 +88,7 @@ test("Preview machine keeps one draft in flight and replays the coalesced reques
     sent.effects.map((effect) => effect.type),
     ["sendDraft"],
   );
-  assert.equal(isTelegramPreviewBusy(sent.state), true);
+  assert.equal(isBalePreviewBusy(sent.state), true);
   assert.deepEqual(sent.state.pending, REQUEST);
   const settled = runPreviewMachine(
     [
@@ -163,7 +163,7 @@ test("Preview machine detaches predecessor dependencies and ignores their late s
     { type: "draftSettled", segmentId: 1, generation: 1, text: "Old", ...AT },
     { type: "publicationSettled", id: 1, ...AT },
     { type: "timerFired", request: REQUEST, segmentId: 1, ...AT },
-  ] satisfies TelegramPreviewEvent[]) {
+  ] satisfies BalePreviewEvent[]) {
     const result = runPreviewMachine([stale], replacement.state);
     assert.equal(result.state, replacement.state);
     assert.deepEqual(result.effects, [], "Predecessor completion has no replacement authority");
@@ -215,8 +215,8 @@ test("Preview machine holds requests behind open publications and clears through
     flushAt(),
   ]);
   assert.deepEqual(blocked.effects, []);
-  assert.equal(isTelegramPreviewBusy(blocked.state), true);
-  assert.equal(isTelegramPreviewBusy(blocked.state, false), false);
+  assert.equal(isBalePreviewBusy(blocked.state), true);
+  assert.equal(isBalePreviewBusy(blocked.state, false), false);
   const released = runPreviewMachine(
     [{ type: "publicationSettled", id: 1, ...AT }],
     blocked.state,
@@ -248,18 +248,18 @@ test("Preview machine invariants hold across random event sequences", () => {
   for (let seed = 1; seed <= 2000; seed++) {
     const random = createSeededRandom(seed);
     const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)]!;
-    let state = createTelegramPreviewMachineState();
+    let state = createBalePreviewMachineState();
     let now = 10_000;
     // The environment the runner provides: outstanding draft requests, the armed timer and open publications.
-    const drafts: Array<Extract<TelegramPreviewEffect, { type: "sendDraft" }>> = [];
-    let timer: Extract<TelegramPreviewEffect, { type: "armTimer" }> | undefined;
+    const drafts: Array<Extract<BalePreviewEffect, { type: "sendDraft" }>> = [];
+    let timer: Extract<BalePreviewEffect, { type: "armTimer" }> | undefined;
     const publications: Array<{ id: number; generation: number }> = [];
     let publicationIds = 0;
     const trace: string[] = [];
     for (let index = 0; index < 60; index++) {
       now += Math.floor(random() * 1500);
       const canSend = random() > 0.1;
-      const candidates: Array<() => TelegramPreviewEvent | undefined> = [
+      const candidates: Array<() => BalePreviewEvent | undefined> = [
         () => ({ type: "reset" }),
         () => ({ type: "invalidated" }),
         () => ({ type: "segmentStarted" }),
@@ -293,7 +293,7 @@ test("Preview machine invariants hold across random event sequences", () => {
         publications.push({ id: event.id, generation: state.generation });
       trace.push(event.type);
       const before = state;
-      const next = transitionTelegramPreview(before, event, MACHINE_CONFIG);
+      const next = transitionBalePreview(before, event, MACHINE_CONFIG);
       state = next.state;
       const context = `seed ${seed}: ${trace.join(" > ")}`;
       for (const effect of next.effects) {
@@ -342,14 +342,14 @@ test("Preview helpers create draft-only state and allocate draft ids", () => {
   assert.equal(state?.lastSentText, "");
   assert.equal(state?.draftId, undefined);
   assert.equal(state?.sealed, false);
-  assert.equal(allocateTelegramDraftId(0, 2), 1);
-  assert.equal(allocateTelegramDraftId(1, 2), 2);
-  assert.equal(allocateTelegramDraftId(2, 2), 1);
+  assert.equal(allocateBaleDraftId(0, 2), 1);
+  assert.equal(allocateBaleDraftId(1, 2), 2);
+  assert.equal(allocateBaleDraftId(2, 2), 1);
 });
 
 test("Preview final text prefers pending text then last sent draft text", () => {
   assert.equal(
-    buildTelegramPreviewFinalText({
+    buildBalePreviewFinalText({
       mode: "draft",
       pendingText: "  final  ",
       lastSentText: "old",
@@ -357,7 +357,7 @@ test("Preview final text prefers pending text then last sent draft text", () => 
     "final",
   );
   assert.equal(
-    buildTelegramPreviewFinalText({
+    buildBalePreviewFinalText({
       mode: "draft",
       pendingText: "   ",
       lastSentText: "  old  ",
@@ -365,7 +365,7 @@ test("Preview final text prefers pending text then last sent draft text", () => 
     "old",
   );
   assert.equal(
-    buildTelegramPreviewFinalText({
+    buildBalePreviewFinalText({
       mode: "draft",
       pendingText: "   ",
       lastSentText: "   ",
@@ -376,42 +376,42 @@ test("Preview final text prefers pending text then last sent draft text", () => 
 
 test("Native Markdown draft prefix keeps only structurally closed Markdown", () => {
   assert.equal(
-    getSafeTelegramRichMarkdownDraftPrefix("**Bold** and *italic*", 100),
+    getSafeBaleRichMarkdownDraftPrefix("**Bold** and *italic*", 100),
     "**Bold** and *italic*",
   );
   assert.equal(
-    getSafeTelegramRichMarkdownDraftPrefix("**Bold** and *ita", 100),
+    getSafeBaleRichMarkdownDraftPrefix("**Bold** and *ita", 100),
     "**Bold** and",
   );
   assert.equal(
-    getSafeTelegramRichMarkdownDraftPrefix("**Heading still streaming", 100),
+    getSafeBaleRichMarkdownDraftPrefix("**Heading still streaming", 100),
     undefined,
   );
   assert.equal(
-    getSafeTelegramRichMarkdownDraftPrefix("Before\n\n```ts\nconst x = 1", 100),
+    getSafeBaleRichMarkdownDraftPrefix("Before\n\n```ts\nconst x = 1", 100),
     "Before",
   );
   assert.equal(
-    getSafeTelegramRichMarkdownDraftPrefix(
+    getSafeBaleRichMarkdownDraftPrefix(
       "Before\n\n```ts\nconst x = 1\n```",
       100,
     ),
     "Before\n\n```ts\nconst x = 1\n```",
   );
   assert.equal(
-    getSafeTelegramRichMarkdownDraftPrefix(
+    getSafeBaleRichMarkdownDraftPrefix(
       "[OpenAI](https://openai.com) and [half",
       100,
     ),
     "[OpenAI](https://openai.com) and",
   );
   assert.equal(
-    getSafeTelegramRichMarkdownDraftPrefix("Block math:\n\n$$\nx^2", 100),
+    getSafeBaleRichMarkdownDraftPrefix("Block math:\n\n$$\nx^2", 100),
     "Block math:",
   );
   assert.equal(
-    getSafeTelegramRichMarkdownDraftPrefix(
-      "<!-- telegram_button label=Ok",
+    getSafeBaleRichMarkdownDraftPrefix(
+      "<!-- bale_button label=Ok",
       100,
     ),
     undefined,
@@ -435,7 +435,7 @@ test("Preview runtime sends draft previews into thread target", async () => {
     },
   });
   start("thread draft");
-  await preview.flush(7, { target: createTelegramThreadTarget(7, 42) });
+  await preview.flush(7, { target: createBaleThreadTarget(7, 42) });
   assert.deepEqual(sentOptions, [{ message_thread_id: 42 }]);
 });
 
@@ -447,7 +447,7 @@ test("Preview runtime clears thread drafts in thread target", async () => {
     },
   });
   start("new draft");
-  const target = createTelegramThreadTarget(7, 42);
+  const target = createBaleThreadTarget(7, 42);
   await preview.flush(7, { target });
   await preview.clear(7, { target });
   assert.deepEqual(sentOptions, [
@@ -458,7 +458,7 @@ test("Preview runtime clears thread drafts in thread target", async () => {
 
 test("Preview runtime does not send thinking placeholder for unsafe draft tails", async () => {
   const { events, preview, start } = createPreviewHarness();
-  start("<!-- telegram_button label=Ok");
+  start("<!-- bale_button label=Ok");
   await preview.flush(7);
   assert.deepEqual(events, []);
   assert.equal(preview.getState()?.draftId, undefined);
@@ -535,7 +535,7 @@ test("Preview runtime optional send gate clears without sending new content", as
 test("Draft throttle holds the first frame for one interval then sends the latest snapshot without debounce starvation", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 10_000 });
   const drafts: Array<{ text: string | undefined; at: number }> = [];
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true, getMessageText: (message) => message.text,
     sendDraft: async (_chat, _id, text) => { drafts.push({ text, at: Date.now() }); },
     sendMarkdownReply: async () => 100,
@@ -559,7 +559,7 @@ test("Draft throttle holds the first frame for one interval then sends the lates
 test("Message rollover after a long tool gap reopens the opening draft window", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 10_000 });
   const drafts: Array<{ text: string; at: number }> = [];
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true, getMessageText: (message) => message.text,
     sendDraft: async (_chat, _id, text) => { drafts.push({ text: text!, at: Date.now() }); },
     sendMarkdownReply: async () => 100,
@@ -584,7 +584,7 @@ test("Message rollover after a long tool gap reopens the opening draft window", 
 test("Final publication cancels the draft throttle timer without waiting for its deadline", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 10_000 });
   const effects: string[] = [];
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true, getMessageText: (message) => message.text,
     sendDraft: async (_chat, _id, text) => { effects.push(`draft:${text}`); },
     sendMarkdownReply: async () => { effects.push("final"); return 100; },
@@ -604,7 +604,7 @@ test("Replacing a throttled preview cancels old text and retains the interval wi
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 10_000 });
   let threadId = 42;
   const drafts: Array<{ text: string | undefined; thread: number | undefined }> = [];
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7, target: { chatId: 7, threadId } }),
     isAssistantMessage: () => true, getMessageText: (message) => message.text,
     sendDraft: async (_chat, _id, text, options) => { drafts.push({ text, thread: options?.message_thread_id }); },
@@ -627,7 +627,7 @@ test("Slow draft requests remain single-flight and coalesce updates past the thr
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const texts: string[] = [];
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true, getMessageText: (message) => message.text,
     sendDraft: async (_chat, _id, text) => { texts.push(text!); if (texts.length === 1) await gate; },
     sendMarkdownReply: async () => 100,
@@ -650,7 +650,7 @@ test("Slow draft requests remain single-flight and coalesce updates past the thr
 test("Sealed preview ignores late updates while a replacement preview can stream", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 10_000 });
   const drafts: string[] = [];
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7, replyToMessageId: 55 }),
     isAssistantMessage: () => true,
     getMessageText: (message) => message.text,
@@ -678,7 +678,7 @@ test("Native Markdown finalizer drains only the issued draft and suppresses queu
   const events: string[] = [];
   const releases: Array<() => void> = [];
   let sends = 0;
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true,
     getMessageText: (message) => message.text, minDraftIntervalMs: 0,
     sendDraft: async (chatId, draftId, text) => {
@@ -714,7 +714,7 @@ test("Native Markdown finalizer drains only the issued draft and suppresses queu
 test("A deferred draft does not consume its latest text snapshot", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 10_000 });
   const texts: string[] = [];
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true,
     getMessageText: (message) => message.text,
     sendDraft: async (_chat, _draft, text) => { texts.push(text!); return texts.length > 1; },
@@ -738,7 +738,7 @@ test("Prepared final rechecks delivery authority after its original draft flush"
   const gate = new Promise<void>((resolve) => { release = resolve; });
   let active = true;
   const effects: string[] = [];
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true,
     getMessageText: (message) => message.text,
     sendDraft: async () => { effects.push("draft"); await gate; },
@@ -764,7 +764,7 @@ test("Prepared final rechecks delivery authority after its original draft flush"
 test("Native Markdown finalizer stops when preview generation changes during flush", async () => {
   let release: (() => void) | undefined;
   let finalSends = 0;
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true,
     getMessageText: (message) => message.text, minDraftIntervalMs: 0,
     sendDraft: async () =>
@@ -806,14 +806,14 @@ test("Plain preview finalization does not send fallback messages", async () => {
 
 test("Assistant preview rollover does not republish intermediate assistant text", async () => {
   const events: string[] = [];
-  const runtime = createTelegramAssistantPreviewRuntime<{
+  const runtime = createBaleAssistantPreviewRuntime<{
     role: string;
     text?: string;
   }>({
     getActiveTurn: () => ({
       chatId: 7,
       replyToMessageId: 24,
-      target: createTelegramThreadTarget(7, 42),
+      target: createBaleThreadTarget(7, 42),
     }),
     isAssistantMessage: (message) => message.role === "assistant",
     getMessageText: (message) => message.text ?? "",
@@ -841,7 +841,7 @@ test("Preview rollover waits for admitted publication without holding the messag
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const drafts: string[] = [];
-  const runtime = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const runtime = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true,
     getMessageText: (message) => message.text,
     sendDraft: async (_chat, _id, text) => {
@@ -877,7 +877,7 @@ for (const replacement of ["rollover", "reset"] as const) {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const drafts: string[] = [];
-    const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+    const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
       getActiveTurn: () => ({ chatId: 7 }),
       isAssistantMessage: () => true,
       getMessageText: (message) => message.text,
@@ -951,7 +951,7 @@ for (const settlement of ["old-first", "new-first"] as const) {
     const gates = [0, 1].map(() => new Promise<void>((resolve) => { releases.push(resolve); }));
     const drafts: string[] = [];
     const finals: string[] = [];
-    const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+    const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
       getActiveTurn: () => ({ chatId: 7 }),
       isAssistantMessage: () => true,
       getMessageText: (message) => message.text,
@@ -1004,7 +1004,7 @@ for (const operation of ["final", "clear"] as const) {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const effects: string[] = [];
-    const runtime = createTelegramAssistantPreviewRuntime<{ text: string }>({
+    const runtime = createBaleAssistantPreviewRuntime<{ text: string }>({
       getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true,
       getMessageText: (message) => message.text,
       sendDraft: async (_chat, _id, text) => { effects.push(text ? "draft" : "clear"); if (text) await gate; },
@@ -1027,7 +1027,7 @@ for (const operation of ["final", "clear"] as const) {
 test("Assistant preview runtime suppresses text preview for voice-tagged turns", async () => {
   const events: string[] = [];
   const activeTurn = { chatId: 7, voiceReplyPreferred: true };
-  const runtime = createTelegramAssistantPreviewRuntime<{
+  const runtime = createBaleAssistantPreviewRuntime<{
     role: string;
     text?: string;
   }>({
@@ -1052,7 +1052,7 @@ test("Assistant preview runtime suppresses text preview for voice-tagged turns",
 test("Assistant preview runtime suppresses text preview for guest turns", async () => {
   const events: string[] = [];
   const activeTurn = { chatId: 0, guestQueryId: "guest-1" };
-  const runtime = createTelegramAssistantPreviewRuntime<{
+  const runtime = createBaleAssistantPreviewRuntime<{
     role: string;
     text?: string;
   }>({
@@ -1080,7 +1080,7 @@ test("Assistant preview runtime suppresses text preview for guest turns", async 
 
 test("Preview controller runtime binds Bot API draft transport", async () => {
   const events: string[] = [];
-  const runtime = createTelegramPreviewController({
+  const runtime = createBalePreviewController({
     sendDraft: async (chatId, draftId, text) => {
       events.push(`draft:${chatId}:${draftId}:${text}`);
     },

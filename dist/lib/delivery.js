@@ -1,21 +1,21 @@
 /**
- * Telegram target-aware operational delivery and logical message lifecycle
- * Zones: telegram delivery, extension API, runtime binding
- * Owns the public extension delivery contract, authorized scope resolution, operational rendering adapter, per-target serialization, chunk reconciliation, generation-fenced logical handles, and process-local runtime membrane; composes the established reply renderer with bus-aware Telegram API ports and excludes bot clients, Pi contexts, and consumer-extension policy
+ * Bale target-aware operational delivery and logical message lifecycle
+ * Zones: bale delivery, extension API, runtime binding
+ * Owns the public extension delivery contract, authorized scope resolution, operational rendering adapter, per-target serialization, chunk reconciliation, generation-fenced logical handles, and process-local runtime membrane; composes the established reply renderer with bus-aware Bale API ports and excludes bot clients, Pi contexts, and consumer-extension policy
  */
-import { assertTelegramInlineKeyboardCallbackData, } from "./keyboard.js";
-import { renderTelegramMessage, withTelegramReplyParameters, } from "./replies.js";
-import { areTelegramTargetsEqual as areDeliveryTargetsEqual, getTelegramTargetThreadParams, } from "./target.js";
-import { getTelegramApiRetryAfterMs, isRetryableTelegramApiError, isTelegramApiCommitUnknownError, isTelegramMessageUnavailableError, } from "./telegram-api.js";
-const TELEGRAM_DELIVERY_RUNTIME_KEY = "__piTelegramDeliveryRuntime__";
-class TelegramDeliveryTransportGenerationError extends Error {
+import { assertBaleInlineKeyboardCallbackData, } from "./keyboard.js";
+import { renderBaleMessage, withBaleReplyParameters, } from "./replies.js";
+import { areBaleTargetsEqual as areDeliveryTargetsEqual, getBaleTargetThreadParams, } from "./target.js";
+import { getBaleApiRetryAfterMs, isRetryableBaleApiError, isBaleApiCommitUnknownError, isBaleMessageUnavailableError, } from "./bale-api.js";
+const BALE_DELIVERY_RUNTIME_KEY = "__piBaleDeliveryRuntime__";
+class BaleDeliveryTransportGenerationError extends Error {
     constructor() {
-        super("Telegram Delivery transport generation is no longer active.");
-        this.name = "TelegramDeliveryTransportGenerationError";
+        super("Bale Delivery transport generation is no longer active.");
+        this.name = "BaleDeliveryTransportGenerationError";
     }
 }
 /** @internal */
-export function createTelegramDeliveryLifecycleHooks(createRuntime) {
+export function createBaleDeliveryLifecycleHooks(createRuntime) {
     let runtime;
     let unbind;
     const stopCurrentRuntime = () => {
@@ -29,22 +29,22 @@ export function createTelegramDeliveryLifecycleHooks(createRuntime) {
         onSessionStart: async () => {
             stopCurrentRuntime();
             runtime = createRuntime();
-            unbind = bindTelegramDeliveryRuntime(runtime);
+            unbind = bindBaleDeliveryRuntime(runtime);
         },
         onSessionShutdown: async () => {
             stopCurrentRuntime();
         },
     };
 }
-export function createTelegramDeliveryGenerationSeed(instanceId) {
+export function createBaleDeliveryGenerationSeed(instanceId) {
     return `${instanceId}:${Date.now()}`;
 }
 /** @internal */
-export function createTelegramBridgeDeliveryLifecycleHooks(deps) {
+export function createBaleBridgeDeliveryLifecycleHooks(deps) {
     let generationSequence = 0;
-    return createTelegramDeliveryLifecycleHooks(() => {
+    return createBaleDeliveryLifecycleHooks(() => {
         const transportStamp = deps.getTransportStamp?.();
-        return createTelegramBridgeDeliveryRuntime({
+        return createBaleBridgeDeliveryRuntime({
             ...deps,
             generation: `${deps.generationSeed}:${++generationSequence}`,
             isTransportActive: transportStamp !== undefined && deps.isTransportStampActive
@@ -53,14 +53,14 @@ export function createTelegramBridgeDeliveryLifecycleHooks(deps) {
         });
     });
 }
-function getTelegramDeliveryRuntimeRegistry() {
+function getBaleDeliveryRuntimeRegistry() {
     const globals = globalThis;
-    const existing = globals[TELEGRAM_DELIVERY_RUNTIME_KEY];
+    const existing = globals[BALE_DELIVERY_RUNTIME_KEY];
     if (existing && typeof existing === "object" && "runtime" in existing) {
         return existing;
     }
     const registry = {};
-    globals[TELEGRAM_DELIVERY_RUNTIME_KEY] = registry;
+    globals[BALE_DELIVERY_RUNTIME_KEY] = registry;
     return registry;
 }
 function failure(reason, message, partial, retryAfterMs) {
@@ -69,20 +69,20 @@ function failure(reason, message, partial, retryAfterMs) {
         ? { ok: false, reason, message, ...retry }
         : { ok: false, reason, message, partial, ...retry };
 }
-function classifyTelegramDeliveryTransportError(error) {
-    if (isTelegramApiCommitUnknownError(error))
+function classifyBaleDeliveryTransportError(error) {
+    if (isBaleApiCommitUnknownError(error))
         return { reason: "commit-unknown" };
-    if (isTelegramMessageUnavailableError(error))
+    if (isBaleMessageUnavailableError(error))
         return { reason: "message-unavailable" };
-    const retryAfterMs = getTelegramApiRetryAfterMs(error);
+    const retryAfterMs = getBaleApiRetryAfterMs(error);
     if (retryAfterMs !== undefined)
         return { reason: "rate-limited", retryAfterMs };
-    if (isRetryableTelegramApiError(error))
+    if (isRetryableBaleApiError(error))
         return { reason: "transport-retryable" };
     return { reason: "transport-failed" };
 }
 /** @internal */
-export function createTelegramDeliveryTargetPolicyRuntime(deps) {
+export function createBaleDeliveryTargetPolicyRuntime(deps) {
     return {
         getTargetPolicyView() {
             const ownsDirect = deps.ownsDirect();
@@ -107,7 +107,7 @@ function isThreadedDelivery(view) {
     return view.threaded === true || view.followerTarget?.threadId !== undefined || view.leaderTarget?.threadId !== undefined;
 }
 /** @internal */
-export function resolveTelegramDeliveryInstanceTarget(view) {
+export function resolveBaleDeliveryInstanceTarget(view) {
     if (!view.canDeliver)
         return undefined;
     const target = view.followerTarget ?? view.leaderTarget ??
@@ -115,13 +115,13 @@ export function resolveTelegramDeliveryInstanceTarget(view) {
     return target && (!isThreadedDelivery(view) || target.threadId !== undefined) ? target : undefined;
 }
 /** @internal */
-export function resolveTelegramDeliveryAggregateTarget(view) {
+export function resolveBaleDeliveryAggregateTarget(view) {
     return !view.canDeliver || view.allowedChatId === undefined || isThreadedDelivery(view)
         ? undefined
         : { chatId: view.allowedChatId };
 }
 /** @internal */
-export function isTelegramDeliveryExplicitTargetAuthorized(candidate, view) {
+export function isBaleDeliveryExplicitTargetAuthorized(candidate, view) {
     if (!view.canDeliver ||
         view.allowedChatId === undefined ||
         candidate.chatId !== view.allowedChatId) {
@@ -150,10 +150,10 @@ function cloneTarget(target) {
 function targetKey(target) {
     return `${target.chatId}:${target.threadId ?? "root"}`;
 }
-function resolveTelegramDeliveryTarget(scope, deps) {
+function resolveBaleDeliveryTarget(scope, deps) {
     if (scope.kind === "target") {
         if (!deps.isExplicitTargetAuthorized(scope.target)) {
-            return failure("target-unauthorized", "Telegram delivery target is not authorized for this runtime.");
+            return failure("target-unauthorized", "Bale delivery target is not authorized for this runtime.");
         }
         return { ok: true, value: cloneTarget(scope.target) };
     }
@@ -163,7 +163,7 @@ function resolveTelegramDeliveryTarget(scope, deps) {
             ? deps.getInstanceTarget()
             : deps.getAggregateTarget();
     if (!target) {
-        return failure("target-unavailable", `Telegram delivery ${scope.kind} target is unavailable.`);
+        return failure("target-unavailable", `Bale delivery ${scope.kind} target is unavailable.`);
     }
     return { ok: true, value: cloneTarget(target) };
 }
@@ -184,7 +184,7 @@ function captureDeliveryDrainObserver(capture) {
         return () => { };
     }
 }
-function createTelegramDeliveryTargetQueue(captureDrain) {
+function createBaleDeliveryTargetQueue(captureDrain) {
     const queues = new Map();
     async function run(target, operation) {
         const key = targetKey(target);
@@ -221,10 +221,10 @@ function getChunkTransportOptions(view, index, chunkCount, replyToMessageId, edi
     };
 }
 /** @internal */
-export function createTelegramDeliveryRuntime(deps) {
+export function createBaleDeliveryRuntime(deps) {
     let active = true;
     const handleBindings = new WeakMap();
-    const targetQueue = createTelegramDeliveryTargetQueue(() => {
+    const targetQueue = createBaleDeliveryTargetQueue(() => {
         const notify = deps.captureDrain?.();
         return () => active ? notify?.() : undefined;
     });
@@ -233,20 +233,20 @@ export function createTelegramDeliveryRuntime(deps) {
         const chunks = deps.renderView(view);
         if (chunks.length === 0 ||
             chunks.some((chunk) => typeof chunk.text !== "string" || chunk.text.trim().length === 0)) {
-            return failure("invalid-view", "Telegram delivery view rendered no content.");
+            return failure("invalid-view", "Bale delivery view rendered no content.");
         }
         return { ok: true, value: chunks };
     };
-    const inactive = () => failure("runtime-unavailable", "Telegram delivery runtime generation is inactive.");
+    const inactive = () => failure("runtime-unavailable", "Bale delivery runtime generation is inactive.");
     const transportFailure = (operation, error, target, partial) => {
         deps.recordFailure?.(operation, error, target);
-        if (error instanceof TelegramDeliveryTransportGenerationError) {
+        if (error instanceof BaleDeliveryTransportGenerationError) {
             return inactive();
         }
-        const classified = classifyTelegramDeliveryTransportError(error);
+        const classified = classifyBaleDeliveryTransportError(error);
         return failure(classified.reason, classified.reason === "commit-unknown"
-            ? `Telegram delivery ${operation} may have committed before transport failed.`
-            : `Telegram delivery ${operation} failed.`, partial, classified.retryAfterMs);
+            ? `Bale delivery ${operation} may have committed before transport failed.`
+            : `Bale delivery ${operation} failed.`, partial, classified.retryAfterMs);
     };
     const createHandle = (target, messageIds) => {
         const canonicalTarget = Object.freeze(cloneTarget(target));
@@ -267,9 +267,9 @@ export function createTelegramDeliveryRuntime(deps) {
             return inactive();
         const binding = handleBindings.get(handle);
         if (!binding || handle.generation !== deps.generation) {
-            return failure("stale-handle", "Telegram delivery handle belongs to an inactive runtime generation.");
+            return failure("stale-handle", "Bale delivery handle belongs to an inactive runtime generation.");
         }
-        const authorized = resolveTelegramDeliveryTarget({ kind: "target", target: binding.target }, deps);
+        const authorized = resolveBaleDeliveryTarget({ kind: "target", target: binding.target }, deps);
         if (!authorized.ok) {
             return failure(authorized.reason, authorized.message);
         }
@@ -284,7 +284,7 @@ export function createTelegramDeliveryRuntime(deps) {
         async sendView(view, options) {
             if (!active)
                 return inactive();
-            const resolved = resolveTelegramDeliveryTarget(options.scope, deps);
+            const resolved = resolveBaleDeliveryTarget(options.scope, deps);
             if (!resolved.ok)
                 return failure(resolved.reason, resolved.message);
             const rendered = render(view);
@@ -392,7 +392,7 @@ export function createTelegramDeliveryRuntime(deps) {
         async sendChatAction(action, scope) {
             if (!active)
                 return inactive();
-            const resolved = resolveTelegramDeliveryTarget(scope, deps);
+            const resolved = resolveBaleDeliveryTarget(scope, deps);
             if (!resolved.ok)
                 return failure(resolved.reason, resolved.message);
             const target = resolved.value;
@@ -415,18 +415,18 @@ export function createTelegramDeliveryRuntime(deps) {
     };
 }
 /** @internal */
-export function createTelegramBridgeDeliveryRuntime(deps) {
+export function createBaleBridgeDeliveryRuntime(deps) {
     const getPolicyView = deps.getTargetPolicyView;
     const assertTransportActive = () => {
         if (deps.isTransportActive?.() === false) {
-            throw new TelegramDeliveryTransportGenerationError();
+            throw new BaleDeliveryTransportGenerationError();
         }
     };
     const assertOutputTarget = (target) => {
         if (isThreadedDelivery(getPolicyView()) && target.threadId === undefined)
-            throw new Error("Telegram All is input-only in Threaded Mode.");
+            throw new Error("Bale All is input-only in Threaded Mode.");
     };
-    return createTelegramDeliveryRuntime({
+    return createBaleDeliveryRuntime({
         generation: deps.generation,
         captureDrain: deps.captureDrain,
         getActiveTurnTarget() {
@@ -434,17 +434,17 @@ export function createTelegramBridgeDeliveryRuntime(deps) {
             return target && (!isThreadedDelivery(getPolicyView()) || target.threadId !== undefined) ? target : undefined;
         },
         getInstanceTarget() {
-            return resolveTelegramDeliveryInstanceTarget(getPolicyView());
+            return resolveBaleDeliveryInstanceTarget(getPolicyView());
         },
         getAggregateTarget() {
-            return resolveTelegramDeliveryAggregateTarget(getPolicyView());
+            return resolveBaleDeliveryAggregateTarget(getPolicyView());
         },
         isExplicitTargetAuthorized(target) {
-            return isTelegramDeliveryExplicitTargetAuthorized(target, getPolicyView());
+            return isBaleDeliveryExplicitTargetAuthorized(target, getPolicyView());
         },
         renderView(view) {
-            assertTelegramInlineKeyboardCallbackData(view.replyMarkup);
-            return renderTelegramMessage(view.text, {
+            assertBaleInlineKeyboardCallbackData(view.replyMarkup);
+            return renderBaleMessage(view.text, {
                 mode: view.parseMode ?? "plain",
             }).map(function (chunk) {
                 return {
@@ -456,14 +456,14 @@ export function createTelegramBridgeDeliveryRuntime(deps) {
         async sendChunk(target, chunk, options) {
             assertTransportActive();
             assertOutputTarget(target);
-            const sent = await withTelegramReplyParameters(target.chatId, options.replyToMessageId, target, (replyParameters) => {
+            const sent = await withBaleReplyParameters(target.chatId, options.replyToMessageId, target, (replyParameters) => {
                 const body = {
                     chat_id: target.chatId,
                     text: chunk.text,
                     ...(chunk.parseMode === "html"
                         ? { parse_mode: "HTML" }
                         : {}),
-                    ...getTelegramTargetThreadParams(target),
+                    ...getBaleTargetThreadParams(target),
                     ...(replyParameters ? { reply_parameters: replyParameters } : {}),
                     ...(options.replyMarkup
                         ? { reply_markup: options.replyMarkup }
@@ -506,34 +506,34 @@ export function createTelegramBridgeDeliveryRuntime(deps) {
         recordFailure: deps.recordFailure,
     });
 }
-function getBoundTelegramDeliveryRuntime() {
-    const runtime = getTelegramDeliveryRuntimeRegistry().runtime;
+function getBoundBaleDeliveryRuntime() {
+    const runtime = getBaleDeliveryRuntimeRegistry().runtime;
     return (runtime ??
-        failure("runtime-unavailable", "Telegram delivery runtime is unavailable in this Pi session."));
+        failure("runtime-unavailable", "Bale delivery runtime is unavailable in this Pi session."));
 }
 function isFailure(value) {
     return "ok" in value;
 }
 function validateView(view) {
     if (typeof view.text !== "string" || view.text.trim().length === 0) {
-        return failure("invalid-view", "Telegram delivery view text is empty.");
+        return failure("invalid-view", "Bale delivery view text is empty.");
     }
     return undefined;
 }
 async function runDeliveryOperation(operation) {
-    const runtime = getBoundTelegramDeliveryRuntime();
+    const runtime = getBoundBaleDeliveryRuntime();
     if (isFailure(runtime))
         return runtime;
     try {
         return await operation(runtime);
     }
     catch {
-        return failure("transport-failed", "Telegram delivery failed.");
+        return failure("transport-failed", "Bale delivery failed.");
     }
 }
 /** @internal */
-export function bindTelegramDeliveryRuntime(runtime) {
-    const registry = getTelegramDeliveryRuntimeRegistry();
+export function bindBaleDeliveryRuntime(runtime) {
+    const registry = getBaleDeliveryRuntimeRegistry();
     if (registry.runtime !== runtime)
         registry.runtime?.shutdown();
     registry.runtime = runtime;
@@ -543,41 +543,41 @@ export function bindTelegramDeliveryRuntime(runtime) {
     };
 }
 /** @internal */
-export function clearTelegramDeliveryRuntime() {
-    const registry = getTelegramDeliveryRuntimeRegistry();
+export function clearBaleDeliveryRuntime() {
+    const registry = getBaleDeliveryRuntimeRegistry();
     registry.runtime?.shutdown();
     registry.runtime = undefined;
 }
 /** @internal */
-export function isTelegramDeliveryHandleCurrent(handle) {
-    const runtime = getTelegramDeliveryRuntimeRegistry().runtime;
+export function isBaleDeliveryHandleCurrent(handle) {
+    const runtime = getBaleDeliveryRuntimeRegistry().runtime;
     return runtime !== undefined && runtime.generation === handle.generation;
 }
-export async function sendTelegramView(view, options) {
+export async function sendBaleView(view, options) {
     const invalid = validateView(view);
     if (invalid)
         return invalid;
     return runDeliveryOperation((runtime) => runtime.sendView(view, options));
 }
-export async function editTelegramView(handle, view) {
+export async function editBaleView(handle, view) {
     const invalid = validateView(view);
     if (invalid)
         return invalid;
     return runDeliveryOperation((runtime) => {
         if (runtime.generation !== handle.generation) {
-            return Promise.resolve(failure("stale-handle", "Telegram delivery handle belongs to an inactive runtime generation."));
+            return Promise.resolve(failure("stale-handle", "Bale delivery handle belongs to an inactive runtime generation."));
         }
         return runtime.editView(handle, view);
     });
 }
-export async function deleteTelegramView(handle) {
+export async function deleteBaleView(handle) {
     return runDeliveryOperation((runtime) => {
         if (runtime.generation !== handle.generation) {
-            return Promise.resolve(failure("stale-handle", "Telegram delivery handle belongs to an inactive runtime generation."));
+            return Promise.resolve(failure("stale-handle", "Bale delivery handle belongs to an inactive runtime generation."));
         }
         return runtime.deleteView(handle);
     });
 }
-export async function sendTelegramChatAction(action, options) {
+export async function sendBaleChatAction(action, options) {
     return runDeliveryOperation((runtime) => runtime.sendChatAction(action, options.scope));
 }

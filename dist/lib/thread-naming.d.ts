@@ -1,25 +1,25 @@
 /**
- * Telegram Thread naming rules and manual-name interaction
+ * Bale Thread naming rules and manual-name interaction
  * Zones: thread identity names, palettes, title formatting, runtime controls
  * Owns name/title value policy and one expiring exact-target dialog per session scope.
  * Excludes occupancy/slot allocation, display-mode projection, transport and API/store effects.
  */
-import { type TelegramTarget } from "./target.ts";
-export declare const TELEGRAM_THREAD_NAME_DIALOG_TTL_MS: number;
-export type TelegramThreadNameDialogAction = "reset" | "cancel";
-export interface TelegramThreadNameDialogCandidate {
+import { type BaleTarget } from "./target.ts";
+export declare const BALE_THREAD_NAME_DIALOG_TTL_MS: number;
+export type BaleThreadNameDialogAction = "reset" | "cancel";
+export interface BaleThreadNameDialogCandidate {
     scope: string;
-    target: TelegramTarget;
+    target: BaleTarget;
     dialogMessageId: number;
     phase: "input";
     expiresAtMs: number;
 }
-export interface TelegramThreadNameDialogLifetime {
+export interface BaleThreadNameDialogLifetime {
     /** Independent recipient effect authority; never the input handle's deadline or ownership. */
     readonly assertAuthority?: () => void;
     isCurrent(): boolean;
-    publish(dialogMessageId: number, assertPublicationCurrent?: () => void): TelegramThreadNameDialogCandidate | undefined;
-    select(action: TelegramThreadNameDialogAction): {
+    publish(dialogMessageId: number, assertPublicationCurrent?: () => void): BaleThreadNameDialogCandidate | undefined;
+    select(action: BaleThreadNameDialogAction): {
         kind: "reset" | "cancel" | "expired";
     };
     consumeName(text: string): {
@@ -28,40 +28,40 @@ export interface TelegramThreadNameDialogLifetime {
     } | {
         kind: "none" | "empty";
     };
-    reopen(): TelegramThreadNameDialogCandidate | undefined;
+    reopen(): BaleThreadNameDialogCandidate | undefined;
     finish(): void;
 }
-export declare function createTelegramThreadNameDialogRuntime(options?: {
+export declare function createBaleThreadNameDialogRuntime(options?: {
     ttlMs?: number;
     nowMs?: () => number;
 }): {
     prepare(input: {
         scope: string;
-        target: TelegramTarget;
+        target: BaleTarget;
         isCurrent?: () => boolean;
         assertAuthority?: () => void;
-    }): TelegramThreadNameDialogLifetime | undefined;
+    }): BaleThreadNameDialogLifetime | undefined;
     capture(input: {
         scope: string;
-        target: TelegramTarget;
+        target: BaleTarget;
         dialogMessageId: number;
-    }): TelegramThreadNameDialogLifetime | undefined;
+    }): BaleThreadNameDialogLifetime | undefined;
     open(input: {
         scope: string;
-        target: TelegramTarget;
+        target: BaleTarget;
         dialogMessageId: number;
-    }): TelegramThreadNameDialogCandidate;
+    }): BaleThreadNameDialogCandidate;
     select(input: {
         scope: string;
-        target: TelegramTarget;
+        target: BaleTarget;
         dialogMessageId: number;
-        action: TelegramThreadNameDialogAction;
+        action: BaleThreadNameDialogAction;
     }): {
         kind: "reset" | "cancel" | "expired";
     };
     consumeName(input: {
         scope: string;
-        target: TelegramTarget;
+        target: BaleTarget;
         text: string;
     }): {
         kind: "name";
@@ -70,24 +70,24 @@ export declare function createTelegramThreadNameDialogRuntime(options?: {
         kind: "none" | "empty";
     };
     clearScope(scope: string): void;
-    inspect(target: TelegramTarget): TelegramThreadNameDialogCandidate | undefined;
+    inspect(target: BaleTarget): BaleThreadNameDialogCandidate | undefined;
 };
-export interface TelegramThreadTitleInput {
+export interface BaleThreadTitleInput {
     instanceId: string;
     profileKey: string;
     threadName?: string;
 }
-export declare function normalizeTelegramTopicTargetThreadName(threadName: string): string;
-export declare function getTelegramTopicIdentityName(threadName: string): string;
-export declare function chooseTelegramThreadName(input: {
+export declare function normalizeBaleTopicTargetThreadName(threadName: string): string;
+export declare function getBaleTopicIdentityName(threadName: string): string;
+export declare function chooseBaleThreadName(input: {
     slot: string | undefined;
     entropy?: number | string;
     getRandom?: () => number;
     occupied?: readonly string[];
 }): string | undefined;
-export declare function getTelegramThreadNameLeadingSlot(threadName: string | undefined): string | undefined;
-export declare function getTelegramTopicThreadNameValidationError(threadName: string, _slot: string | undefined): string | undefined;
-export declare function getTelegramManualThreadDisplayNameValidationError(threadName: string): string | undefined;
-export declare function isTelegramTopicThreadNameValidForSlot(threadName: string, slot: string | undefined): boolean;
-export declare function getTelegramTopicName(request: TelegramThreadTitleInput, template?: string, slot?: string): string;
-export declare function getTelegramTopicTitleForThreadName(threadName: string, slot: string, template?: string): string;
+export declare function getBaleThreadNameLeadingSlot(threadName: string | undefined): string | undefined;
+export declare function getBaleTopicThreadNameValidationError(threadName: string, _slot: string | undefined): string | undefined;
+export declare function getBaleManualThreadDisplayNameValidationError(threadName: string): string | undefined;
+export declare function isBaleTopicThreadNameValidForSlot(threadName: string, slot: string | undefined): boolean;
+export declare function getBaleTopicName(request: BaleThreadTitleInput, template?: string, slot?: string): string;
+export declare function getBaleTopicTitleForThreadName(threadName: string, slot: string, template?: string): string;

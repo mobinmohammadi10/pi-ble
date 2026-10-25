@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram runtime storage housekeeping
+ * Regression tests for Bale runtime storage housekeeping
  * Covers legacy recovery-folder removal and orphaned session journal sweeps
  */
 
@@ -18,12 +18,12 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
-  removeTelegramLegacyRecoveryStorage,
-  createTelegramSessionFolderSweeper,
+  removeBaleLegacyRecoveryStorage,
+  createBaleSessionFolderSweeper,
 } from "../lib/recovery.ts";
 
 function createRuntimePaths(): { dir: string } {
-  return { dir: mkdtempSync(join(tmpdir(), "pi-telegram-recovery-")) };
+  return { dir: mkdtempSync(join(tmpdir(), "pi-bale-recovery-")) };
 }
 
 test("Legacy recovery folders are removed from the runtime root and session folders only", () => {
@@ -35,12 +35,12 @@ test("Legacy recovery folders are removed from the runtime root and session fold
     mkdirSync(sessionRecovery, { recursive: true });
     writeFileSync(join(paths.dir, "sessions", "session-a", "journal.0123456789abcdef.json"), "{}");
     writeFileSync(join(paths.dir, "recovery-note"), "kept");
-    assert.deepEqual(removeTelegramLegacyRecoveryStorage(paths.dir).sort(), [join(paths.dir, "recovery"), sessionRecovery].sort());
+    assert.deepEqual(removeBaleLegacyRecoveryStorage(paths.dir).sort(), [join(paths.dir, "recovery"), sessionRecovery].sort());
     assert.equal(existsSync(join(paths.dir, "recovery")), false);
     assert.equal(existsSync(sessionRecovery), false);
     assert.equal(readFileSync(join(paths.dir, "sessions", "session-a", "journal.0123456789abcdef.json"), "utf8"), "{}");
     assert.equal(readFileSync(join(paths.dir, "recovery-note"), "utf8"), "kept");
-    assert.deepEqual(removeTelegramLegacyRecoveryStorage(paths.dir), [], "Idempotent");
+    assert.deepEqual(removeBaleLegacyRecoveryStorage(paths.dir), [], "Idempotent");
   } finally {
     rmSync(paths.dir, { recursive: true, force: true });
   }
@@ -57,7 +57,7 @@ test("Session sweeper removes unbound current-profile journals and empty folders
     family("bound"); family("unbound"); family("shared"); family("shared", ".other"); family("live");
     mkdirSync(join(sessions, "%61"), { recursive: true });
     let now = 0, kept: (string | undefined)[] = ["bound", "live", undefined];
-    const sweeper = createTelegramSessionFolderSweeper({ getSessionsDir: () => sessions, getProfileName: () => "default",
+    const sweeper = createBaleSessionFolderSweeper({ getSessionsDir: () => sessions, getProfileName: () => "default",
       getKeptSessionIds: () => kept, getNowMs: () => now, intervalMs: 1000 });
     const removed = sweeper.sweep();
     assert.deepEqual(readdirSync(sessions).sort(), ["%61", "bound", "live", "shared"].sort(),

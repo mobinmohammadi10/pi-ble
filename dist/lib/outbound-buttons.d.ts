@@ -1,35 +1,35 @@
 /**
- * Telegram outbound button helpers
- * Zones: telegram outbound, assistant markup, callback routing
- * Owns assistant-authored telegram_button extraction, button action storage, callback handling, and prompt-turn construction
+ * Bale outbound button helpers
+ * Zones: bale outbound, assistant markup, callback routing
+ * Owns assistant-authored bale_button extraction, button action storage, callback handling, and prompt-turn construction
  */
-import type { TelegramInlineKeyboardButtonStyle, TelegramInlineKeyboardMarkup } from "./keyboard.ts";
-import { type PendingTelegramTurn, type TelegramQueueTarget } from "./queue.ts";
-export interface TelegramOutboundButtonBinding {
+import type { BaleInlineKeyboardButtonStyle, BaleInlineKeyboardMarkup } from "./keyboard.ts";
+import { type PendingBaleTurn, type BaleQueueTarget } from "./queue.ts";
+export interface BaleOutboundButtonBinding {
     generation: string;
     app: string;
     revision: number;
 }
-export interface TelegramOutboundButtonAction {
+export interface BaleOutboundButtonAction {
     text: string;
     prompt: string;
-    binding?: TelegramOutboundButtonBinding;
-    selectedStyle?: TelegramInlineKeyboardButtonStyle;
+    binding?: BaleOutboundButtonBinding;
+    selectedStyle?: BaleInlineKeyboardButtonStyle;
     disabled?: true;
 }
-export interface TelegramOutboundButtonStoredAction extends TelegramOutboundButtonAction {
+export interface BaleOutboundButtonStoredAction extends BaleOutboundButtonAction {
     createdAt: number;
 }
-export type TelegramOutboundButtonMarkup = TelegramInlineKeyboardMarkup;
-export interface TelegramButtonReplyPlan {
+export type BaleOutboundButtonMarkup = BaleInlineKeyboardMarkup;
+export interface BaleButtonReplyPlan {
     markdown: string;
-    replyMarkup?: TelegramOutboundButtonMarkup;
+    replyMarkup?: BaleOutboundButtonMarkup;
 }
-export interface TelegramButtonActionStore {
-    register: (action: TelegramOutboundButtonAction) => string;
-    resolve: (callbackData: string | undefined) => TelegramOutboundButtonAction | undefined;
+export interface BaleButtonActionStore {
+    register: (action: BaleOutboundButtonAction) => string;
+    resolve: (callbackData: string | undefined) => BaleOutboundButtonAction | undefined;
 }
-export interface TelegramButtonCallbackQuery {
+export interface BaleButtonCallbackQuery {
     id: string;
     data?: string;
     message?: {
@@ -38,32 +38,32 @@ export interface TelegramButtonCallbackQuery {
         chat?: {
             id?: number;
         };
-        reply_markup?: TelegramOutboundButtonMarkup;
+        reply_markup?: BaleOutboundButtonMarkup;
     };
 }
-export interface TelegramButtonCallbackHandlerDeps<TContext = unknown> {
-    resolveAction: (callbackData: string | undefined) => TelegramOutboundButtonAction | undefined;
+export interface BaleButtonCallbackHandlerDeps<TContext = unknown> {
+    resolveAction: (callbackData: string | undefined) => BaleOutboundButtonAction | undefined;
     answerCallbackQuery: (callbackQueryId: string, text?: string) => Promise<void>;
-    enqueueButtonPrompt: (query: TelegramButtonCallbackQuery, action: TelegramOutboundButtonAction, ctx: TContext) => boolean | void;
-    invokeBoundAction?: (query: TelegramButtonCallbackQuery, action: TelegramOutboundButtonAction, ctx: TContext) => Promise<false | "new" | "edit">;
-    editMessageReplyMarkup?: (chatId: number, messageId: number, replyMarkup: TelegramOutboundButtonMarkup) => Promise<void>;
+    enqueueButtonPrompt: (query: BaleButtonCallbackQuery, action: BaleOutboundButtonAction, ctx: TContext) => boolean | void;
+    invokeBoundAction?: (query: BaleButtonCallbackQuery, action: BaleOutboundButtonAction, ctx: TContext) => Promise<false | "new" | "edit">;
+    editMessageReplyMarkup?: (chatId: number, messageId: number, replyMarkup: BaleOutboundButtonMarkup) => Promise<void>;
 }
-export declare function createTelegramButtonActionStore(options?: {
+export declare function createBaleButtonActionStore(options?: {
     ttlMs?: number;
-}): TelegramButtonActionStore;
-export declare function planTelegramButtonReply(markdown: string, deps: {
-    registerAction: (action: TelegramOutboundButtonAction) => string;
-    binding?: TelegramOutboundButtonBinding;
+}): BaleButtonActionStore;
+export declare function planBaleButtonReply(markdown: string, deps: {
+    registerAction: (action: BaleOutboundButtonAction) => string;
+    binding?: BaleOutboundButtonBinding;
     rendering?: "rich" | "html";
-}): TelegramButtonReplyPlan;
-export declare function createTelegramButtonReplyPlanner(store: Pick<TelegramButtonActionStore, "register">): (markdown: string) => TelegramButtonReplyPlan;
-export declare function createTelegramButtonPromptTurn(options: {
+}): BaleButtonReplyPlan;
+export declare function createBaleButtonReplyPlanner(store: Pick<BaleButtonActionStore, "register">): (markdown: string) => BaleButtonReplyPlan;
+export declare function createBaleButtonPromptTurn(options: {
     chatId: number;
     replyToMessageId: number;
     queueOrder: number;
-    action: TelegramOutboundButtonAction;
-    target?: TelegramQueueTarget;
-    telegramPrefix?: string;
-}): PendingTelegramTurn;
-export declare function markTelegramButtonSelected(replyMarkup: TelegramOutboundButtonMarkup, callbackData: string, selectedStyle?: TelegramInlineKeyboardButtonStyle): TelegramOutboundButtonMarkup | undefined;
-export declare function handleTelegramButtonCallbackQuery<TContext = unknown>(query: TelegramButtonCallbackQuery, ctx: TContext, deps: TelegramButtonCallbackHandlerDeps<TContext>): Promise<boolean>;
+    action: BaleOutboundButtonAction;
+    target?: BaleQueueTarget;
+    balePrefix?: string;
+}): PendingBaleTurn;
+export declare function markBaleButtonSelected(replyMarkup: BaleOutboundButtonMarkup, callbackData: string, selectedStyle?: BaleInlineKeyboardButtonStyle): BaleOutboundButtonMarkup | undefined;
+export declare function handleBaleButtonCallbackQuery<TContext = unknown>(query: BaleButtonCallbackQuery, ctx: TContext, deps: BaleButtonCallbackHandlerDeps<TContext>): Promise<boolean>;

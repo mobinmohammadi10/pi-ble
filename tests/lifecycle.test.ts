@@ -1,43 +1,43 @@
 /**
- * Regression tests for Telegram lifecycle hook helpers
+ * Regression tests for Bale lifecycle hook helpers
  * Covers context generations, bounded resume intent, and lifecycle hook composition ordering
- * Zones: pi agent lifecycle, telegram session
+ * Zones: pi agent lifecycle, bale session
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as Queue from "../lib/queue.ts";
-import { createTelegramQueueBindingRuntime } from "../lib/bindings.ts";
+import { createBaleQueueBindingRuntime } from "../lib/bindings.ts";
 
 import {
-  appendTelegramLifecycleHooks,
-  createTelegramBridgeSessionLifecycleAssembly,
-  createTelegramCompactionObserverRuntime,
-  createTelegramCompactionObserverState,
-  transitionTelegramCompactionObserver,
-  type TelegramCompactionObserverEvent,
-  createTelegramConnectionIntentRuntime,
-  createTelegramConnectionLifecycle,
-  type TelegramConnectionHandoffStore,
-  createTelegramSessionContextStore,
-  createTelegramSessionDrainObserver,
-  createTelegramSessionGenerationFence,
-  createTelegramMessageActivityTypingHooks,
-  registerTelegramLifecycleHooks,
+  appendBaleLifecycleHooks,
+  createBaleBridgeSessionLifecycleAssembly,
+  createBaleCompactionObserverRuntime,
+  createBaleCompactionObserverState,
+  transitionBaleCompactionObserver,
+  type BaleCompactionObserverEvent,
+  createBaleConnectionIntentRuntime,
+  createBaleConnectionLifecycle,
+  type BaleConnectionHandoffStore,
+  createBaleSessionContextStore,
+  createBaleSessionDrainObserver,
+  createBaleSessionGenerationFence,
+  createBaleMessageActivityTypingHooks,
+  registerBaleLifecycleHooks,
 } from "../lib/lifecycle.ts";
 import type { ExtensionAPI, ExtensionContext, SessionStartEvent, SessionShutdownEvent } from "../lib/pi.ts";
 import {
-  createTelegramBridgeRuntime,
-  createTelegramTypingLoopStarter,
+  createBaleBridgeRuntime,
+  createBaleTypingLoopStarter,
 } from "../lib/runtime.ts";
 import { createPassthroughFailureLog } from "./fixtures/failure-log.ts";
 
 for (const change of ["none", "clear", "reused-context", "authority", "queued-clear", "sink-fails"] as const)
 test(`Session drain observer cannot borrow replacement authority (${change})`, async () => {
-  const context = createTelegramSessionContextStore<object>(), ctx = {};
+  const context = createBaleSessionContextStore<object>(), ctx = {};
   let authority = 1, notifications = 0;
   context.set(ctx);
-  const capture = createTelegramSessionDrainObserver({
+  const capture = createBaleSessionDrainObserver({
     context, captureAuthority: () => authority, isAuthorityActive: value => value === authority,
     onDrained(value) { assert.equal(value, ctx); if (change === "sink-fails") throw new Error("observer"); notifications++; },
   });
@@ -54,15 +54,15 @@ test(`Session drain observer cannot borrow replacement authority (${change})`, a
 for (const change of ["distinct-context", "reused-context", "clear"] as const) {
   test(`Message activity typing preserves exact session lifetime with unchanged transport (${change})`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const context = createTelegramSessionContextStore<ExtensionContext>(), old = createLifecycleContext(), next = change === "reused-context" ? old : createLifecycleContext();
-    const runtime = createTelegramBridgeRuntime(), calls: number[] = [];
+    const context = createBaleSessionContextStore<ExtensionContext>(), old = createLifecycleContext(), next = change === "reused-context" ? old : createLifecycleContext();
+    const runtime = createBaleBridgeRuntime(), calls: number[] = [];
     context.set(old);
-    const start = createTelegramTypingLoopStarter({
+    const start = createBaleTypingLoopStarter({
    failureLog: createPassthroughFailureLog(),
    typing: runtime.typing, getDefaultChatId: () => 7,
       isContextActive: context.isCurrent, getSessionGeneration: context.getGeneration, getTransportAuthority: () => "same-epoch", isThreadedMode: () => true,
       sendTypingAction: async (_chat, options) => { calls.push(options?.message_thread_id ?? 0); }, updateStatus() {} });
-    const hooks = createTelegramMessageActivityTypingHooks({ hasActiveTurn: () => true,
+    const hooks = createBaleMessageActivityTypingHooks({ hasActiveTurn: () => true,
       startTypingLoop: value => { start(value, 7, { target: { chatId: 7, threadId: 42 } }); },
       async onMessageStart() {}, async onMessageUpdate() {} });
     try {
@@ -81,16 +81,16 @@ for (const change of ["distinct-context", "reused-context", "clear"] as const) {
 }
 
 test("Held message activity cannot re-arm typing after the same context object enters a new generation", async () => {
-  const context = createTelegramSessionContextStore<ExtensionContext>(), ctx = createLifecycleContext(), runtime = createTelegramBridgeRuntime();
+  const context = createBaleSessionContextStore<ExtensionContext>(), ctx = createLifecycleContext(), runtime = createBaleBridgeRuntime();
   context.set(ctx); const calls: number[] = [];
   let finish!: () => void;
   const held = new Promise<void>(resolve => { finish = resolve; });
-  const start = createTelegramTypingLoopStarter({
+  const start = createBaleTypingLoopStarter({
    failureLog: createPassthroughFailureLog(),
    typing: runtime.typing, getDefaultChatId: () => 7,
     isContextActive: context.isCurrent, getSessionGeneration: context.getGeneration, getTransportAuthority: () => "same-epoch",
     sendTypingAction: async (_chat, options) => { calls.push(options?.message_thread_id ?? 0); }, updateStatus() {} });
-  const hooks = createTelegramMessageActivityTypingHooks({ hasActiveTurn: () => true,
+  const hooks = createBaleMessageActivityTypingHooks({ hasActiveTurn: () => true,
     isContextActive: context.isCurrent, getSessionGeneration: context.getGeneration,
     startTypingLoop: value => { start(value, 7, { target: { chatId: 7, threadId: 41 } }); },
     async onMessageStart() { await held; }, async onMessageUpdate() {} });
@@ -107,12 +107,12 @@ const resume = { reason: "resume", cwd: "/repo", sessionFile: "/sessions/destina
 const shutdown = { reason: "resume", cwd: "/repo", targetSessionFile: resume.sessionFile, connected: false };
 
 test("Connection handoff carries plain selected-profile intent once, never old completion", () => {
-  const store: TelegramConnectionHandoffStore = {};
-  const source = createTelegramConnectionIntentRuntime({ store, pid: 42, now: () => 1000 });
+  const store: BaleConnectionHandoffStore = {};
+  const source = createBaleConnectionIntentRuntime({ store, pid: 42, now: () => 1000 });
   const token = source.begin("/repo", "work");
   source.suspend(shutdown);
   source.finish(token);
-  const successor = createTelegramConnectionIntentRuntime({ store, pid: 42, now: () => 2000 });
+  const successor = createBaleConnectionIntentRuntime({ store, pid: 42, now: () => 2000 });
   const intent = successor.resume(resume)!;
   assert.equal(intent.profileName, "work");
   assert.equal(intent.cwd, "/repo");
@@ -120,19 +120,19 @@ test("Connection handoff carries plain selected-profile intent once, never old c
   assert.equal(store.pending, undefined);
   source.finish(token);
   successor.suspend({ ...shutdown, targetSessionFile: "/sessions/third.jsonl" });
-  const third = createTelegramConnectionIntentRuntime({ store, pid: 42, now: () => 3000 });
+  const third = createBaleConnectionIntentRuntime({ store, pid: 42, now: () => 3000 });
   assert.equal(third.resume({ ...resume, sessionFile: "/sessions/third.jsonl" })?.profileName, "work");
   assert.equal(third.resume(resume), undefined);
 });
 
 test("Connection handoff refuses unrelated startup, process, directory, file, expiry and explicit cancellation", () => {
   for (const scenario of ["startup", "reload", "new", "fork", "pid", "cwd", "file", "expired", "cancel"] as const) {
-    const store: TelegramConnectionHandoffStore = {};
-    const source = createTelegramConnectionIntentRuntime({ store, pid: 42, now: () => 1000 });
+    const store: BaleConnectionHandoffStore = {};
+    const source = createBaleConnectionIntentRuntime({ store, pid: 42, now: () => 1000 });
     source.begin("/repo", "work");
     source.suspend(shutdown);
     if (scenario === "cancel") source.cancel();
-    const successor = createTelegramConnectionIntentRuntime({ store,
+    const successor = createBaleConnectionIntentRuntime({ store,
       pid: scenario === "pid" ? 43 : 42, now: () => scenario === "expired" ? 31_000 : 2000 });
     assert.equal(successor.resume({ ...resume,
       reason: ["startup", "reload", "new", "fork"].includes(scenario) ? scenario : "resume",
@@ -140,8 +140,8 @@ test("Connection handoff refuses unrelated startup, process, directory, file, ex
       sessionFile: scenario === "file" ? "/other.jsonl" : resume.sessionFile }), undefined, scenario);
   }
   for (const reason of ["quit", "reload", "new", "fork"]) {
-    const store: TelegramConnectionHandoffStore = {};
-    const source = createTelegramConnectionIntentRuntime({ store });
+    const store: BaleConnectionHandoffStore = {};
+    const source = createBaleConnectionIntentRuntime({ store });
     source.begin("/repo");
     source.suspend({ ...shutdown, reason });
     assert.equal(store.pending, undefined);
@@ -150,24 +150,24 @@ test("Connection handoff refuses unrelated startup, process, directory, file, ex
 
 test("Connected transport carries intent on resume; disconnected startup never grants it", () => {
   for (const connected of [false, true]) {
-    const store: TelegramConnectionHandoffStore = {};
-    const source = createTelegramConnectionIntentRuntime({ store });
+    const store: BaleConnectionHandoffStore = {};
+    const source = createBaleConnectionIntentRuntime({ store });
     source.suspend({ ...shutdown, connected, profileName: "work" });
-    const successor = createTelegramConnectionIntentRuntime({ store });
+    const successor = createBaleConnectionIntentRuntime({ store });
     assert.equal(successor.resume(resume)?.profileName, connected ? "work" : undefined);
   }
 });
 
 test("Disconnect and newer connect supersede a delayed resumed startup", async () => {
   for (const supersede of [false, true]) {
-    const store: TelegramConnectionHandoffStore = {};
-    const intent = createTelegramConnectionIntentRuntime({ store });
+    const store: BaleConnectionHandoffStore = {};
+    const intent = createBaleConnectionIntentRuntime({ store });
     intent.begin("/repo", "selected");
     intent.suspend(shutdown);
     let starts = 0;
     let release!: () => void;
     const pending = new Promise<void>((resolve) => { release = resolve; });
-    const lifecycle = createTelegramConnectionLifecycle({ intent, getGeneration: () => 1,
+    const lifecycle = createBaleConnectionLifecycle({ intent, getGeneration: () => 1,
       isCurrent: () => true, isConnected: () => false, getProfileName: () => undefined,
       activateProfile: async (profile) => { assert.equal(profile, "selected"); await pending; return true; },
       start: async () => { starts += 1; return { ok: true }; }, recordError() {},
@@ -185,13 +185,13 @@ test("Disconnect and newer connect supersede a delayed resumed startup", async (
 
 test("Resume connection failures retain detailed diagnostics without leaking them into notices", async () => {
   for (const rejection of [false, true]) {
-    const intent = createTelegramConnectionIntentRuntime({ store: {} });
+    const intent = createBaleConnectionIntentRuntime({ store: {} });
     intent.begin("/repo");
     intent.suspend(shutdown);
     const notices: string[] = [];
     const errors: unknown[] = [];
     const detail = "Owner epoch changed during destination claim";
-    const lifecycle = createTelegramConnectionLifecycle({ intent, getGeneration: () => 1,
+    const lifecycle = createBaleConnectionLifecycle({ intent, getGeneration: () => 1,
       isCurrent: () => true, isConnected: () => false, getProfileName: () => undefined,
       activateProfile: async () => true,
       async start() {
@@ -207,15 +207,15 @@ test("Resume connection failures retain detailed diagnostics without leaking the
     assert.match(String(errors[0]), new RegExp(detail));
     assert.equal(notices.length, 1);
     assert.ok(!notices[0]!.includes(detail));
-    assert.match(notices[0]!, /telegram-status --debug/);
+    assert.match(notices[0]!, /bale-status --debug/);
     intent.suspend(shutdown);
     assert.equal(intent.resume(resume), undefined, "Failed startup never leaves reconnect authority");
   }
 });
 
 test("Resumed startup drops late work before reading invalid Pi getters", async () => {
-  const store: TelegramConnectionHandoffStore = {};
-  const intent = createTelegramConnectionIntentRuntime({ store });
+  const store: BaleConnectionHandoffStore = {};
+  const intent = createBaleConnectionIntentRuntime({ store });
   intent.begin("/repo");
   intent.suspend(shutdown);
   let generation = 1;
@@ -223,7 +223,7 @@ test("Resumed startup drops late work before reading invalid Pi getters", async 
   let release!: () => void;
   const pending = new Promise<void>((resolve) => { release = resolve; });
   const ctx = { cwd: "/repo", sessionManager: { getSessionFile: () => resume.sessionFile } } as ExtensionContext;
-  const lifecycle = createTelegramConnectionLifecycle({ intent, getGeneration: () => generation,
+  const lifecycle = createBaleConnectionLifecycle({ intent, getGeneration: () => generation,
     isCurrent: () => { assert.equal(generation, 1); return true; },
     isConnected: () => false, getProfileName: () => undefined,
     activateProfile: async () => { await pending; return true; },
@@ -267,9 +267,9 @@ function createLifecycleContext(): ExtensionContext {
 }
 
 test("Session generation fence ignores delayed shutdown from a replaced context", async () => {
-  const store = createTelegramSessionContextStore<ExtensionContext>();
+  const store = createBaleSessionContextStore<ExtensionContext>();
   const shutdowns: ExtensionContext[] = [];
-  const runtime = createTelegramSessionGenerationFence(store, {
+  const runtime = createBaleSessionGenerationFence(store, {
     onSessionStart: async () => undefined,
     onSessionShutdown: async (_event, ctx) => {
       shutdowns.push(ctx);
@@ -291,9 +291,9 @@ test("Session generation fence ignores delayed shutdown from a replaced context"
 
 test("Resume connection claims before queue startup and replaces ordinary auto-restore", async () => {
   for (const resumeIntent of [false, true]) {
-    const contexts = createTelegramSessionContextStore<ExtensionContext>();
+    const contexts = createBaleSessionContextStore<ExtensionContext>();
     const events: string[] = [];
-    const runtime = createTelegramBridgeSessionLifecycleAssembly({
+    const runtime = createBaleBridgeSessionLifecycleAssembly({
       contextStore: contexts,
       queue: {
         getCurrentModel: () => undefined, loadConfig: async () => { events.push("config"); },
@@ -318,7 +318,7 @@ test("Resume connection claims before queue startup and replaces ordinary auto-r
         inboundWorker: { onSessionShutdown: async () => {} },
         capabilityMonitor: { start() {}, stop() {} }, queueWatchdog: { start() {}, stop() {} },
       },
-    } as unknown as Parameters<typeof createTelegramBridgeSessionLifecycleAssembly>[0]);
+    } as unknown as Parameters<typeof createBaleBridgeSessionLifecycleAssembly>[0]);
     await runtime.onSessionStart({ type: "session_start", reason: "resume" }, createLifecycleContext());
     assert.deepEqual(events, ["claim-intent", "config", "delivery", resumeIntent ? "resume-connect" : "auto-restore"]);
   }
@@ -326,14 +326,14 @@ test("Resume connection claims before queue startup and replaces ordinary auto-r
 
 test("Bridge Queue startup and services fence reused-context replacement at every awaited boundary", async () => {
   for (const phase of ["config", "temp", "delivery", "polling", "refresh"] as const) {
-    const contexts = createTelegramSessionContextStore<ExtensionContext>(), ctx = createLifecycleContext();
+    const contexts = createBaleSessionContextStore<ExtensionContext>(), ctx = createLifecycleContext();
     const events: string[] = [], successor = ["successor"];
     let items = ["predecessor"];
     const replaceAt = async (point: typeof phase) => {
       events.push(point); await Promise.resolve();
       if (point === phase) { contexts.set(ctx); items = successor; }
     };
-    const runtime = createTelegramBridgeSessionLifecycleAssembly<string>({ contextStore: contexts,
+    const runtime = createBaleBridgeSessionLifecycleAssembly<string>({ contextStore: contexts,
       queue: { getCurrentModel: () => undefined, loadConfig: () => replaceAt("config"),
         setQueuedItems(value) { events.push("state"); items = value; }, setCurrentModel() {}, setPendingModelSwitch() {},
         syncCounters() {}, syncFlags() {}, bindDeferredDispatchContext() { events.push("bind"); },
@@ -363,22 +363,22 @@ test("Bridge Queue startup and services fence reused-context replacement at ever
 
 test("Bridge Queue teardown fences receipt-bearing Steer across reused-context replacement", async () => {
   for (const shape of ["waiting", "frozen", "pending"] as const) for (const outcome of ["settled", "refused", "replaced"] as const) {
-    const contexts = createTelegramSessionContextStore<ExtensionContext>(), ctx = createLifecycleContext();
+    const contexts = createBaleSessionContextStore<ExtensionContext>(), ctx = createLifecycleContext();
     contexts.set(ctx);
     const events: string[] = [];
-    const store = Queue.createTelegramQueueStore<ExtensionContext>();
-    const deferred = Queue.createTelegramDeferredQueueDispatchRuntime<ExtensionContext>(); deferred.bind(ctx);
-    const originals: Queue.PendingTelegramTurn[] = [1, 2].map(id => ({ kind: "prompt", chatId: 7,
+    const store = Queue.createBaleQueueStore<ExtensionContext>();
+    const deferred = Queue.createBaleDeferredQueueDispatchRuntime<ExtensionContext>(); deferred.bind(ctx);
+    const originals: Queue.PendingBaleTurn[] = [1, 2].map(id => ({ kind: "prompt", chatId: 7,
       target: { chatId: 7, threadId: 42 }, replyToMessageId: id, queueOrder: id, queueLane: "steer", laneOrder: id,
       statusSummary: "steer", content: [{ type: "text", text: `input-${id}` }], sourceMessageIds: [id],
-      queuedAttachments: [], historyText: "steer", admissionReceipts: [Queue.createTelegramQueueAdmissionReceipt({
+      queuedAttachments: [], historyText: "steer", admissionReceipts: [Queue.createBaleQueueAdmissionReceipt({
         queueKind: "prompt", scope: `shutdown-${id}`, sourceUpdateIds: id === 1 ? [1, 3] : [2] })!],
       ...(shape === "waiting" ? {} : { steerAttempted: true }) }));
     if (shape === "pending") originals[0]!.steerPacketTail = [originals[1]!];
     store.setQueuedItems(originals);
     const replacement = [{ ...originals[0]!, queueOrder: 99 }];
-    let discarded: readonly Queue.TelegramQueueItem<ExtensionContext>[] | undefined;
-    const binding = createTelegramQueueBindingRuntime({ store, deferredDispatch: deferred,
+    let discarded: readonly Queue.BaleQueueItem<ExtensionContext>[] | undefined;
+    const binding = createBaleQueueBindingRuntime({ store, deferredDispatch: deferred,
       queue: { allocateItemOrder: () => 3 }, lifecycle: { isCompactionInProgress: () => false, hasDispatchPending: () => shape === "pending" },
       activeTurn: { has: () => false }, transportStamp: { isActive: () => true },
       admission: { getSettlement: () => ({ isItemReady: () => true, onControlSettled() {}, onItemsDiscarded(items) {
@@ -387,7 +387,7 @@ test("Bridge Queue teardown fences receipt-bearing Steer across reused-context r
       isIdle: () => true, hasPendingMessages: () => false, isContextCurrent: contexts.isCurrent, isContextAborted: () => false,
       promptDispatch: { startTypingLoop() {}, onPromptDispatchStart() {}, onPromptDispatchFailure() {} },
       updateStatus() {}, sendTextReply: async () => undefined, sendUserMessage: () => assert.fail("Teardown cannot replay a packet") });
-    const runtime = createTelegramBridgeSessionLifecycleAssembly<Queue.TelegramQueueItem<ExtensionContext>>({
+    const runtime = createBaleBridgeSessionLifecycleAssembly<Queue.BaleQueueItem<ExtensionContext>>({
       contextStore: contexts,
       queue: { getCurrentModel: () => undefined, loadConfig: async () => {},
         setQueuedItems(items) { events.push("state"); store.setQueuedItems(items); }, setCurrentModel() {}, setPendingModelSwitch() {},
@@ -431,12 +431,12 @@ test("Bridge Queue teardown fences receipt-bearing Steer across reused-context r
 
 test("Quit preservation runs only after quiescence and before the exact session context closes", async () => {
   for (const scenario of ["quit", "reload", "new", "resume", "fork", "late-delivery", "late-queue", "late-session", "worker-error", "prepare-error", "preservation-error"] as const) {
-    const contexts = createTelegramSessionContextStore<ExtensionContext>();
+    const contexts = createBaleSessionContextStore<ExtensionContext>();
     const ctx = createLifecycleContext();
     contexts.set(ctx);
     const events: string[] = [];
     let current: (() => boolean) | undefined;
-    const runtime = createTelegramBridgeSessionLifecycleAssembly({
+    const runtime = createBaleBridgeSessionLifecycleAssembly({
       contextStore: contexts,
       queue: {
         getCurrentModel: () => undefined, loadConfig: async () => {}, setQueuedItems() {},
@@ -481,7 +481,7 @@ test("Quit preservation runs only after quiescence and before the exact session 
           };
         },
       },
-    } as unknown as Parameters<typeof createTelegramBridgeSessionLifecycleAssembly>[0]);
+    } as unknown as Parameters<typeof createBaleBridgeSessionLifecycleAssembly>[0]);
     const reason = ["reload", "new", "resume", "fork"].includes(scenario) ? scenario : "quit";
     const shutdown = runtime.onSessionShutdown({ type: "session_shutdown", reason } as never, ctx);
     if (scenario === "worker-error") await assert.rejects(shutdown, /worker stop failed/);
@@ -501,7 +501,7 @@ test("Quit preservation runs only after quiescence and before the exact session 
 
 test("Session context store accepts only the current explicit session identity", () => {
   type Context = { session: object };
-  const store = createTelegramSessionContextStore<Context>({
+  const store = createBaleSessionContextStore<Context>({
     getIdentity: (ctx) => ctx.session,
   });
   const currentSession = {};
@@ -524,7 +524,7 @@ test("Lifecycle composition skips old shutdown extras after replacement during a
   });
   const events: string[] = [];
   const ctx = createLifecycleContext();
-  const hooks = appendTelegramLifecycleHooks(
+  const hooks = appendBaleLifecycleHooks(
     {
       onSessionStart: async () => {},
       onSessionShutdown: async () => {
@@ -552,7 +552,7 @@ test("Lifecycle composition skips old shutdown extras after replacement during a
 
 test("Lifecycle helpers compose session hooks in order", async () => {
   const events: string[] = [];
-  const hooks = appendTelegramLifecycleHooks(
+  const hooks = appendBaleLifecycleHooks(
     {
       onSessionStart: async () => {
         events.push("base-start");
@@ -584,7 +584,7 @@ test("Compaction observer mirrors active work with native typing", () => {
   const events: string[] = [];
   const timers = new Map<number, () => void>();
   let nextTimer = 0;
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     setCompactionInProgress(inProgress) {
       events.push(`compact:${String(inProgress)}`);
     },
@@ -597,11 +597,11 @@ test("Compaction observer mirrors active work with native typing", () => {
     stopTypingLoop() {
       events.push("typing:stop");
     },
-    requestDeferredDispatchNextQueuedTelegramTurn(dispatch) {
+    requestDeferredDispatchNextQueuedBaleTurn(dispatch) {
       events.push("dispatch:request");
       dispatch(createLifecycleContext());
     },
-    dispatchNextQueuedTelegramTurn() {
+    dispatchNextQueuedBaleTurn() {
       events.push("dispatch");
     },
     recordRuntimeEvent(category, error) {
@@ -634,7 +634,7 @@ test("Compaction observer mirrors active work with native typing", () => {
 test("Compaction observer keeps native typing for non-turn compaction", () => {
   const events: string[] = [];
   let timerCallback: (() => void) | undefined;
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     setCompactionInProgress(inProgress) {
       events.push(`compact:${String(inProgress)}`);
     },
@@ -647,11 +647,11 @@ test("Compaction observer keeps native typing for non-turn compaction", () => {
     stopTypingLoop() {
       events.push("typing:stop");
     },
-    requestDeferredDispatchNextQueuedTelegramTurn(dispatch) {
+    requestDeferredDispatchNextQueuedBaleTurn(dispatch) {
       events.push("dispatch:request");
       dispatch(createLifecycleContext());
     },
-    dispatchNextQueuedTelegramTurn() {
+    dispatchNextQueuedBaleTurn() {
       events.push("dispatch");
     },
     setTimer(callback) {
@@ -689,7 +689,7 @@ test("Compaction observer keeps native typing for non-turn compaction", () => {
 
 test("Compaction observer settles immediately on the native failure event", () => {
   const events: string[] = [];
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     setCompactionInProgress(inProgress) {
       events.push(`compact:${String(inProgress)}`);
     },
@@ -702,11 +702,11 @@ test("Compaction observer settles immediately on the native failure event", () =
     stopTypingLoop() {
       events.push("typing:stop");
     },
-    requestDeferredDispatchNextQueuedTelegramTurn(dispatch) {
+    requestDeferredDispatchNextQueuedBaleTurn(dispatch) {
       events.push("dispatch:request");
       dispatch(createLifecycleContext());
     },
-    dispatchNextQueuedTelegramTurn() {
+    dispatchNextQueuedBaleTurn() {
       events.push("dispatch");
     },
     onCompactionAbandoned() {
@@ -741,9 +741,9 @@ test("Compaction observer settles immediately on the native failure event", () =
 });
 
 test("Compaction observer sends native typing only to the resolved thread", async () => {
-  const runtime = createTelegramBridgeRuntime();
+  const runtime = createBaleBridgeRuntime();
   const actions: Array<string> = [];
-  const startTyping = createTelegramTypingLoopStarter({
+  const startTyping = createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 77,
@@ -753,14 +753,14 @@ test("Compaction observer sends native typing only to the resolved thread", asyn
     updateStatus: () => {},
     intervalMs: 60_000,
   });
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     setCompactionInProgress: runtime.lifecycle.setCompactionInProgress,
     updateStatus: () => {},
     startTypingLoop: (ctx) =>
       startTyping(ctx, 77, { target: { chatId: 77, threadId: 12 } }),
     stopTypingLoop: runtime.typing.stop,
-    requestDeferredDispatchNextQueuedTelegramTurn: () => {},
-    dispatchNextQueuedTelegramTurn: () => {},
+    requestDeferredDispatchNextQueuedBaleTurn: () => {},
+    dispatchNextQueuedBaleTurn: () => {},
   });
 
   observer.onSessionBeforeCompact({} as never, createLifecycleContext());
@@ -773,8 +773,8 @@ test("Compaction observer sends native typing only to the resolved thread", asyn
 });
 
 test("Compaction observer preserves an existing agent typing loop", async () => {
-  const runtime = createTelegramBridgeRuntime();
-  const startTyping = createTelegramTypingLoopStarter({
+  const runtime = createBaleBridgeRuntime();
+  const startTyping = createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 77,
@@ -784,13 +784,13 @@ test("Compaction observer preserves an existing agent typing loop", async () => 
   });
   const target = { chatId: 77, threadId: 12 };
   assert.equal(startTyping(createLifecycleContext(), 77, { target }), true);
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     setCompactionInProgress: runtime.lifecycle.setCompactionInProgress,
     updateStatus: () => {},
     startTypingLoop: (ctx) => startTyping(ctx, 77, { target }),
     stopTypingLoop: runtime.typing.stop,
-    requestDeferredDispatchNextQueuedTelegramTurn: () => {},
-    dispatchNextQueuedTelegramTurn: () => {},
+    requestDeferredDispatchNextQueuedBaleTurn: () => {},
+    dispatchNextQueuedBaleTurn: () => {},
   });
 
   observer.onSessionBeforeCompact({} as never, createLifecycleContext());
@@ -802,8 +802,8 @@ test("Compaction observer preserves an existing agent typing loop", async () => 
 });
 
 test("Compaction observer keeps ownership of its own typing loop across a repeated start", async () => {
-  const runtime = createTelegramBridgeRuntime();
-  const startTyping = createTelegramTypingLoopStarter({
+  const runtime = createBaleBridgeRuntime();
+  const startTyping = createBaleTypingLoopStarter({
     failureLog: createPassthroughFailureLog(),
     typing: runtime.typing,
     getDefaultChatId: () => 77,
@@ -812,13 +812,13 @@ test("Compaction observer keeps ownership of its own typing loop across a repeat
     intervalMs: 60_000,
   });
   const target = { chatId: 77, threadId: 12 };
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     setCompactionInProgress: runtime.lifecycle.setCompactionInProgress,
     updateStatus: () => {},
     startTypingLoop: (ctx) => startTyping(ctx, 77, { target }),
     stopTypingLoop: runtime.typing.stop,
-    requestDeferredDispatchNextQueuedTelegramTurn: () => {},
-    dispatchNextQueuedTelegramTurn: () => {},
+    requestDeferredDispatchNextQueuedBaleTurn: () => {},
+    dispatchNextQueuedBaleTurn: () => {},
     setTimer: () => 1,
     clearTimer: () => {},
   });
@@ -832,11 +832,11 @@ test("Compaction observer keeps ownership of its own typing loop across a repeat
   await runtime.typing.waitForIdle();
 });
 
-function runCompactionObserver(events: TelegramCompactionObserverEvent[]) {
-  let state = createTelegramCompactionObserverState();
+function runCompactionObserver(events: BaleCompactionObserverEvent[]) {
+  let state = createBaleCompactionObserverState();
   const effects: string[] = [];
   for (const event of events) {
-    const next = transitionTelegramCompactionObserver(state, event);
+    const next = transitionBaleCompactionObserver(state, event);
     state = next.state;
     effects.push(...next.effects.map((effect) => effect.type === "setInProgress" ? `inProgress:${effect.inProgress}` : effect.type));
   }
@@ -874,11 +874,11 @@ test("Compaction observer machine fences timers by observation and by context", 
 
 test("Compaction observer unrefs fallback timers when supported", () => {
   const events: string[] = [];
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     setCompactionInProgress: () => {},
     updateStatus: () => {},
-    requestDeferredDispatchNextQueuedTelegramTurn: () => {},
-    dispatchNextQueuedTelegramTurn: () => {},
+    requestDeferredDispatchNextQueuedBaleTurn: () => {},
+    dispatchNextQueuedBaleTurn: () => {},
     setTimer(callback) {
       assert.equal(typeof callback, "function");
       return {
@@ -896,7 +896,7 @@ test("Compaction observer unrefs fallback timers when supported", () => {
 test("Compaction observer stops typing on timeout and shutdown", () => {
   const events: string[] = [];
   let timerCallback: (() => void) | undefined;
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     setCompactionInProgress(inProgress) {
       events.push(`compact:${String(inProgress)}`);
     },
@@ -909,10 +909,10 @@ test("Compaction observer stops typing on timeout and shutdown", () => {
     stopTypingLoop() {
       events.push("typing:stop");
     },
-    requestDeferredDispatchNextQueuedTelegramTurn() {
+    requestDeferredDispatchNextQueuedBaleTurn() {
       events.push("dispatch:request");
     },
-    dispatchNextQueuedTelegramTurn() {
+    dispatchNextQueuedBaleTurn() {
       events.push("dispatch");
     },
     recordRuntimeEvent(category, error) {
@@ -952,11 +952,11 @@ test("Compaction observer stops typing on timeout and shutdown", () => {
 test("Superseded compaction timeout cannot release the current observation", () => {
   const timers: Array<() => void> = [];
   const effects: string[] = [];
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     setCompactionInProgress: (value) => { effects.push(`active:${value}`); },
     updateStatus: () => {},
-    requestDeferredDispatchNextQueuedTelegramTurn: () => { effects.push("dispatch"); },
-    dispatchNextQueuedTelegramTurn: () => {},
+    requestDeferredDispatchNextQueuedBaleTurn: () => { effects.push("dispatch"); },
+    dispatchNextQueuedBaleTurn: () => {},
     onCompactionAbandoned: () => { effects.push("abandoned"); },
     setTimer: (callback) => { timers.push(callback); return timers.length; },
     clearTimer: () => {},
@@ -980,12 +980,12 @@ test("Stale compaction completion cannot cancel the replacement context timeout"
   let current = oldContext;
   let timer: (() => void) | undefined;
   let abandoned = 0;
-  const observer = createTelegramCompactionObserverRuntime({
+  const observer = createBaleCompactionObserverRuntime({
     isContextActive: (ctx) => ctx === current,
     setCompactionInProgress: () => {},
     updateStatus: () => {},
-    requestDeferredDispatchNextQueuedTelegramTurn: () => {},
-    dispatchNextQueuedTelegramTurn: () => {},
+    requestDeferredDispatchNextQueuedBaleTurn: () => {},
+    dispatchNextQueuedBaleTurn: () => {},
     onCompactionAbandoned: () => { abandoned += 1; },
     setTimer: (callback) => { timer = callback; return 1; },
     clearTimer: () => { timer = undefined; },
@@ -1003,10 +1003,10 @@ test("Stale compaction completion cannot cancel the replacement context timeout"
   assert.equal(abandoned, 1);
 });
 
-test("Message activity hooks re-arm typing for active Telegram turns", async () => {
+test("Message activity hooks re-arm typing for active Bale turns", async () => {
   const events: string[] = [];
   let active = true;
-  const hooks = createTelegramMessageActivityTypingHooks({
+  const hooks = createBaleMessageActivityTypingHooks({
     hasActiveTurn() {
       return active;
     },
@@ -1039,7 +1039,7 @@ test("Message activity hooks re-arm typing for active Telegram turns", async () 
 
 test("Message activity hooks preserve typing after transient preview errors", async () => {
   const events: string[] = [];
-  const hooks = createTelegramMessageActivityTypingHooks({
+  const hooks = createBaleMessageActivityTypingHooks({
     hasActiveTurn: () => true,
     startTypingLoop: () => {
       events.push("typing:start");
@@ -1073,9 +1073,9 @@ test("Message activity hooks preserve typing after transient preview errors", as
 test("Lifecycle helpers register pi hooks and delegate to handlers", async () => {
   const harness = createLifecycleApiHarness();
   const events: string[] = [];
-  const turnMessage = { customType: "telegram-turn", content: "Fixture turn instructions", display: false };
+  const turnMessage = { customType: "bale-turn", content: "Fixture turn instructions", display: false };
   let active = true;
-  registerTelegramLifecycleHooks(harness.api, {
+  registerBaleLifecycleHooks(harness.api, {
     isSessionActive: () => active,
     onTurnEnd: () => {
       events.push("turn-end");
@@ -1098,7 +1098,7 @@ test("Lifecycle helpers register pi hooks and delegate to handlers", async () =>
     },
     onBeforeAgentStart: (event) => {
       events.push("before-agent-start");
-      return "prompt" in event && event.prompt === "[telegram] fixture" ? { message: turnMessage } : { systemPrompt: event.systemPrompt };
+      return "prompt" in event && event.prompt === "[bale] fixture" ? { message: turnMessage } : { systemPrompt: event.systemPrompt };
     },
     onModelSelect: () => {
       events.push("model-select");
@@ -1238,7 +1238,7 @@ test("Lifecycle helpers register pi hooks and delegate to handlers", async () =>
     "agent-end",
   ]);
   const messageOnlyResult = await getRequiredLifecycleHandler(harness.handlers, "before_agent_start")(
-    { prompt: "[telegram] fixture", systemPrompt: "base" }, ctx,
+    { prompt: "[bale] fixture", systemPrompt: "base" }, ctx,
   );
   assert.deepEqual(messageOnlyResult, { message: turnMessage });
 });

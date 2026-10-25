@@ -1,6 +1,6 @@
 /**
- * Agent-owned Telegram channel post journal regressions
- * Zones: telegram outbound, filesystem authority
+ * Agent-owned Bale channel post journal regressions
+ * Zones: bale outbound, filesystem authority
  */
 
 import { execFile } from "node:child_process";
@@ -12,20 +12,20 @@ import assert from "node:assert/strict";
 import nodeTest from "node:test";
 
 import {
-  assertTelegramChannelPostCaptionWithinLimit,
-  assertTelegramChannelPostMediaSize,
-  createTelegramChannelPostJournalStore,
-  getTelegramChannelPostCaptionLength,
-  inspectTelegramChannelPostMedia,
-  publishTelegramChannelPost,
-  registerTelegramChannelPostListTool,
-  registerTelegramChannelPostMutationTool,
-  resolveTelegramChannelPostMediaKind,
-  TelegramChannelPostJournalError,
-  TelegramChannelPostValidationError,
+  assertBaleChannelPostCaptionWithinLimit,
+  assertBaleChannelPostMediaSize,
+  createBaleChannelPostJournalStore,
+  getBaleChannelPostCaptionLength,
+  inspectBaleChannelPostMedia,
+  publishBaleChannelPost,
+  registerBaleChannelPostListTool,
+  registerBaleChannelPostMutationTool,
+  resolveBaleChannelPostMediaKind,
+  BaleChannelPostJournalError,
+  BaleChannelPostValidationError,
 } from "../lib/channel-posts.ts";
 import type { ExtensionAPI } from "../lib/pi.ts";
-import { resolveTelegramServiceJournalStorage, resolveTelegramTempDir } from "../lib/paths.ts";
+import { resolveBaleServiceJournalStorage, resolveBaleTempDir } from "../lib/paths.ts";
 
 const tokenSha256 = "a".repeat(64);
 const execFileAsync = promisify(execFile);
@@ -34,38 +34,38 @@ const test = nodeTest;
 const posix = process.platform !== "win32";
 
 async function withStore(run: (input: { path: string; now: (value: number) => void;
-  store: ReturnType<typeof createTelegramChannelPostJournalStore> }) => Promise<void>) {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-channel-posts-"));
+  store: ReturnType<typeof createBaleChannelPostJournalStore> }) => Promise<void>) {
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-channel-posts-"));
   const path = join(dir, "channel-posts.work.json");
   let current = 100;
   try {
-    const store = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256,
+    const store = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256,
       getNowMs: () => current });
     await run({ path, store, now: value => { current = value; } });
   } finally { await rm(dir, { recursive: true, force: true }); }
 }
 
-function isCode(error: unknown, code: TelegramChannelPostJournalError["code"]): boolean {
-  return error instanceof TelegramChannelPostJournalError && error.code === code;
+function isCode(error: unknown, code: BaleChannelPostJournalError["code"]): boolean {
+  return error instanceof BaleChannelPostJournalError && error.code === code;
 }
 
 test("Consolidated channel-post storage retains unknown publication and confirmation across reopening without root sidecars", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-channel-post-layout-"));
   try {
     for (const profileName of ["work", "other"]) {
-      const storage = resolveTelegramServiceJournalStorage("channel-posts", dir, profileName);
+      const storage = resolveBaleServiceJournalStorage("channel-posts", dir, profileName);
       const options = { ...storage, profileName, tokenSha256, getNowMs: () => 100 };
-      const store = createTelegramChannelPostJournalStore(options);
+      const store = createBaleChannelPostJournalStore(options);
       store.prepare({ operationId: "same-operation", channel: "@public_channel", markdown: profileName });
       assert.equal(store.beginPublication("same-operation").began, true);
-      const reopened = createTelegramChannelPostJournalStore({ ...storage, profileName, tokenSha256 });
+      const reopened = createBaleChannelPostJournalStore({ ...storage, profileName, tokenSha256 });
       assert.equal(reopened.get("same-operation")?.state, "outcome-unknown");
       assert.equal(reopened.beginPublication("same-operation").began, false);
       reopened.confirmPublished({ operationId: "same-operation", channelId: -100123, messageId: 42 });
       assert.equal(reopened.get("same-operation")?.markdown, profileName);
       assert.equal((await readdir(storage.runtimeDir)).some(name => name.endsWith(".tmp")), false);
     }
-    const root = resolveTelegramTempDir(dir);
+    const root = resolveBaleTempDir(dir);
     assert.deepEqual((await readdir(root)).sort(), ["journals", "runtime"]);
     assert.equal((await readdir(join(root, "journals"))).length, 2);
   } finally { await rm(dir, { recursive: true, force: true }); }
@@ -74,8 +74,8 @@ test("Consolidated channel-post storage retains unknown publication and confirma
 test("Consolidated channel-post runtime guard grants one issuance across actual processes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-channel-post-race-"));
   try {
-    const storage = resolveTelegramServiceJournalStorage("channel-posts", dir, "work");
-    const store = createTelegramChannelPostJournalStore({ ...storage, profileName: "work", tokenSha256 });
+    const storage = resolveBaleServiceJournalStorage("channel-posts", dir, "work");
+    const store = createBaleChannelPostJournalStore({ ...storage, profileName: "work", tokenSha256 });
     store.prepare({ operationId: "shared", channel: "@public_channel", markdown: "Post" });
     const args = ["--experimental-strip-types", "tests/fixtures/channel-post-worker.ts", storage.path, "work", tokenSha256,
       "begin", "shared", "", "", storage.runtimeDir];
@@ -89,16 +89,16 @@ test("Consolidated channel-post runtime guard grants one issuance across actual 
 test("Consolidated channel-post constructor retains physical identity and refuses a foreign service namespace", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-channel-post-identity-"));
   try {
-    const original = resolveTelegramServiceJournalStorage("channel-posts", dir, "work");
-    const replacement = resolveTelegramServiceJournalStorage("channel-posts", dir, "other");
+    const original = resolveBaleServiceJournalStorage("channel-posts", dir, "work");
+    const replacement = resolveBaleServiceJournalStorage("channel-posts", dir, "other");
     const options = { ...original, profileName: "work", tokenSha256 };
-    const store = createTelegramChannelPostJournalStore(options);
+    const store = createBaleChannelPostJournalStore(options);
     Object.assign(options, replacement, { profileName: "other" });
     store.prepare({ operationId: "retained", channel: "@public_channel", markdown: "retained" });
-    const reopened = createTelegramChannelPostJournalStore({ ...original, profileName: "work", tokenSha256 });
+    const reopened = createBaleChannelPostJournalStore({ ...original, profileName: "work", tokenSha256 });
     assert.equal(reopened.get("retained")?.state, "prepared");
-    assert.equal(createTelegramChannelPostJournalStore({ ...replacement, profileName: "other", tokenSha256 }).list().length, 0);
-    assert.throws(() => createTelegramChannelPostJournalStore({ ...original, profileName: "work", tokenSha256,
+    assert.equal(createBaleChannelPostJournalStore({ ...replacement, profileName: "other", tokenSha256 }).list().length, 0);
+    assert.throws(() => createBaleChannelPostJournalStore({ ...original, profileName: "work", tokenSha256,
       runtimeDir: join(dir, "foreign-runtime") }), /approved absolute path/u);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
@@ -128,7 +128,7 @@ test("Channel post journal fences publication before issuance and confirms one e
       messageId: 43, channelUsername: "@public_channel", channelTitle: "Public Channel" }),
       error => isCode(error, "conflict"));
     assert.deepEqual(store.list(), [confirmed.record]);
-    const restarted = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
+    const restarted = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
     assert.deepEqual(restarted.list({ channel: "@public_channel", limit: 1 }), [confirmed.record]);
     assert.equal((await readFile(path, "utf8")).endsWith("\n"), true);
   });
@@ -142,9 +142,9 @@ test("Replacement publication helper does not resend after lost success or outco
       async observeChannel() { return { id: -1001, type: "channel", title: "Channel" }; },
       async send() { successfulSends += 1; return { messageId: 7, chat: { id: -1001, type: "channel" } }; },
     };
-    await publishTelegramChannelPost(successInput); // Caller loses this successful acknowledgement.
-    const replacement = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
-    const replay = await publishTelegramChannelPost({ ...successInput, store: replacement });
+    await publishBaleChannelPost(successInput); // Caller loses this successful acknowledgement.
+    const replacement = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
+    const replay = await publishBaleChannelPost({ ...successInput, store: replacement });
     assert.equal(replay.state, "published");
     assert.equal(successfulSends, 1);
 
@@ -154,9 +154,9 @@ test("Replacement publication helper does not resend after lost success or outco
       async observeChannel() { return { id: -1002, type: "channel" }; },
       async send(): Promise<never> { ambiguousSends += 1; throw new Error("lost Bot API acknowledgement"); },
     };
-    await assert.rejects(publishTelegramChannelPost(ambiguousInput));
-    const nextReplacement = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
-    await assert.rejects(publishTelegramChannelPost({ ...ambiguousInput, store: nextReplacement }),
+    await assert.rejects(publishBaleChannelPost(ambiguousInput));
+    const nextReplacement = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
+    await assert.rejects(publishBaleChannelPost({ ...ambiguousInput, store: nextReplacement }),
       /outcome is unknown/u);
     assert.equal(ambiguousSends, 1);
     assert.equal(store.list({ channel: -1002 })[0]?.state, "outcome-unknown");
@@ -174,7 +174,7 @@ test("Channel post journal grants one cross-process publication, edit, and delet
     ]);
     const began = results.map(result => (JSON.parse(result.stdout) as { began: boolean }).began).sort();
     assert.deepEqual(began, [false, true]);
-    const restarted = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
+    const restarted = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
     assert.equal(restarted.list()[0]?.state, "outcome-unknown");
     assert.equal(restarted.beginPublication("shared").began, false);
     restarted.confirmPublished({ operationId: "shared", channelId: -1001, messageId: 7 });
@@ -196,7 +196,7 @@ test("Channel post journal grants one cross-process publication, edit, and delet
     ]);
     assert.deepEqual(deletions.map(result =>
       (JSON.parse(result.stdout) as { began: boolean }).began).sort(), [false, true]);
-    const afterDeleteRace = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
+    const afterDeleteRace = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
     assert.equal(afterDeleteRace.list()[0]?.state, "delete-outcome-unknown");
     assert.equal(afterDeleteRace.beginDelete({ operationId: "shared",
       mutationId: "delete-shared" }).began, false);
@@ -232,7 +232,7 @@ test("Channel post mutation tool binds the tool call to one exact mutation", asy
   let tool: { execute: (id: string, params: { action: "edit"; operation_id: string;
     markdown: string }) => Promise<unknown> } | undefined;
   let observed: unknown;
-  registerTelegramChannelPostMutationTool({ registerTool(definition: unknown) {
+  registerBaleChannelPostMutationTool({ registerTool(definition: unknown) {
     tool = definition as typeof tool;
   } } as unknown as ExtensionAPI, { async mutate(input) {
     if (input.markdown === "SECRET") throw new Error("transport leaked SECRET token");
@@ -257,7 +257,7 @@ test("Channel post list tool returns only bounded local journal records", async 
   await withStore(async ({ store }) => {
     store.prepare({ operationId: "post", channel: "@public_channel", markdown: "Post" });
     let tool: { execute: (id: string, params: { chat_id?: string; limit?: number }) => Promise<unknown> } | undefined;
-    registerTelegramChannelPostListTool({ registerTool(definition: unknown) {
+    registerBaleChannelPostListTool({ registerTool(definition: unknown) {
       tool = definition as typeof tool;
     } } as unknown as ExtensionAPI, { list: store.list });
     assert.ok(tool);
@@ -279,11 +279,11 @@ test("Channel post journal retains unknown outcomes and refuses invalid identity
       messageId: 1, channelTitle: "x".repeat(256) }), error => isCode(error, "conflict"));
     assert.throws(() => store.prepare({ operationId: "bad", channel: "channel" as never,
       markdown: "Post" }), error => isCode(error, "invalid"));
-    const full = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256,
+    const full = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256,
       maxRecords: 1 });
     assert.throws(() => full.prepare({ operationId: "second", channel: -1008, markdown: "Post" }),
       error => isCode(error, "capacity"));
-    const tiny = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256,
+    const tiny = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256,
       maxBytes: 32 });
     assert.throws(() => tiny.list(), error => isCode(error, "capacity"));
     await writeFile(path, JSON.stringify({ version: 2, profile: "work", tokenSha256, records: [] }));
@@ -332,65 +332,65 @@ test("Channel post journal binds one exact media intent to publication and retai
     assert.equal(store.beginPublication("media-1").began, true);
     now(120);
     store.confirmPublished({ operationId: "media-1", channelId: -1001, messageId: 7 });
-    const restarted = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
+    const restarted = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
     assert.deepEqual(restarted.get("media-1")?.media, media);
   });
 });
 
 test("Channel media inspection resolves supported kinds and binds content identity", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-channel-media-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-channel-media-"));
   try {
     const photoPath = join(dir, "Cover.JPG");
     await writeFile(photoPath, Buffer.from("image-bytes"));
-    const photo = await inspectTelegramChannelPostMedia(photoPath);
+    const photo = await inspectBaleChannelPostMedia(photoPath);
     assert.equal(photo.kind, "photo");
     assert.equal(photo.fileName, "Cover.JPG");
     assert.equal(photo.sizeBytes, 11);
     assert.match(photo.sha256, /^[a-f0-9]{64}$/u);
     const videoPath = join(dir, "clip.mp4");
     await writeFile(videoPath, Buffer.from("video-bytes"));
-    assert.equal((await inspectTelegramChannelPostMedia(videoPath)).kind, "video");
-    assert.equal(resolveTelegramChannelPostMediaKind("no-extension"), undefined);
-    assert.equal(resolveTelegramChannelPostMediaKind("cover.gif"), undefined);
-    await assert.rejects(inspectTelegramChannelPostMedia(join(dir, "clip.gif")),
-      error => error instanceof TelegramChannelPostValidationError &&
+    assert.equal((await inspectBaleChannelPostMedia(videoPath)).kind, "video");
+    assert.equal(resolveBaleChannelPostMediaKind("no-extension"), undefined);
+    assert.equal(resolveBaleChannelPostMediaKind("cover.gif"), undefined);
+    await assert.rejects(inspectBaleChannelPostMedia(join(dir, "clip.gif")),
+      error => error instanceof BaleChannelPostValidationError &&
         /Unsupported channel media type/u.test(error.message));
     if (posix) {
       const linkPath = join(dir, "linked.png");
       await symlink(photoPath, linkPath);
-      await assert.rejects(inspectTelegramChannelPostMedia(linkPath),
-        error => error instanceof TelegramChannelPostValidationError &&
+      await assert.rejects(inspectBaleChannelPostMedia(linkPath),
+        error => error instanceof BaleChannelPostValidationError &&
           /without symbolic links/u.test(error.message));
     }
-    await assert.rejects(inspectTelegramChannelPostMedia(join(dir, "missing.png")),
-      error => error instanceof TelegramChannelPostValidationError &&
+    await assert.rejects(inspectBaleChannelPostMedia(join(dir, "missing.png")),
+      error => error instanceof BaleChannelPostValidationError &&
         /readable regular local file/u.test(error.message));
     const emptyPath = join(dir, "empty.png");
     await writeFile(emptyPath, Buffer.alloc(0));
-    await assert.rejects(inspectTelegramChannelPostMedia(emptyPath),
-      error => error instanceof TelegramChannelPostValidationError && /empty/u.test(error.message));
-    assertTelegramChannelPostMediaSize("photo", 10 * 1024 * 1024);
-    assertTelegramChannelPostMediaSize("video", 50 * 1024 * 1024);
-    assert.throws(() => assertTelegramChannelPostMediaSize("photo", 10 * 1024 * 1024 + 1),
-      error => error instanceof TelegramChannelPostValidationError && /upload limit/u.test(error.message));
-    assert.throws(() => assertTelegramChannelPostMediaSize("video", 50 * 1024 * 1024 + 1),
-      error => error instanceof TelegramChannelPostValidationError && /upload limit/u.test(error.message));
-    assert.throws(() => assertTelegramChannelPostMediaSize("photo", 0),
-      error => error instanceof TelegramChannelPostValidationError && /empty/u.test(error.message));
+    await assert.rejects(inspectBaleChannelPostMedia(emptyPath),
+      error => error instanceof BaleChannelPostValidationError && /empty/u.test(error.message));
+    assertBaleChannelPostMediaSize("photo", 10 * 1024 * 1024);
+    assertBaleChannelPostMediaSize("video", 50 * 1024 * 1024);
+    assert.throws(() => assertBaleChannelPostMediaSize("photo", 10 * 1024 * 1024 + 1),
+      error => error instanceof BaleChannelPostValidationError && /upload limit/u.test(error.message));
+    assert.throws(() => assertBaleChannelPostMediaSize("video", 50 * 1024 * 1024 + 1),
+      error => error instanceof BaleChannelPostValidationError && /upload limit/u.test(error.message));
+    assert.throws(() => assertBaleChannelPostMediaSize("photo", 0),
+      error => error instanceof BaleChannelPostValidationError && /empty/u.test(error.message));
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("Channel media caption validation counts visible characters only", () => {
   assert.equal(
-    getTelegramChannelPostCaptionLength(
+    getBaleChannelPostCaptionLength(
       "<b>Bold</b> &amp; <tg-spoiler>hidden</tg-spoiler><br>tail"),
     "Bold & hidden\ntail".length,
   );
-  assertTelegramChannelPostCaptionWithinLimit("x".repeat(1024));
-  assert.throws(() => assertTelegramChannelPostCaptionWithinLimit("x".repeat(1025)),
-    error => error instanceof TelegramChannelPostValidationError &&
+  assertBaleChannelPostCaptionWithinLimit("x".repeat(1024));
+  assert.throws(() => assertBaleChannelPostCaptionWithinLimit("x".repeat(1025)),
+    error => error instanceof BaleChannelPostValidationError &&
       /limit of 1024/u.test(error.message));
-  assertTelegramChannelPostCaptionWithinLimit(`<b>${"x".repeat(1024)}</b>`);
+  assertBaleChannelPostCaptionWithinLimit(`<b>${"x".repeat(1024)}</b>`);
 });
 
 test("Channel media publication does not resend after lost success or ambiguous acknowledgement", async () => {
@@ -403,9 +403,9 @@ test("Channel media publication does not resend after lost success or ambiguous 
       async observeChannel() { return { id: -1001, type: "channel" }; },
       async send() { sends += 1; return { messageId: 8, chat: { id: -1001, type: "channel" } }; },
     };
-    await publishTelegramChannelPost(successInput);
-    const replacement = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
-    const replay = await publishTelegramChannelPost({ ...successInput, store: replacement });
+    await publishBaleChannelPost(successInput);
+    const replacement = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
+    const replay = await publishBaleChannelPost({ ...successInput, store: replacement });
     assert.equal(replay.state, "published");
     assert.equal(sends, 1);
     assert.deepEqual(replay.media, media);
@@ -416,9 +416,9 @@ test("Channel media publication does not resend after lost success or ambiguous 
       async observeChannel() { return { id: -1002, type: "channel" }; },
       async send(): Promise<never> { ambiguous += 1; throw new Error("lost Bot API acknowledgement"); },
     };
-    await assert.rejects(publishTelegramChannelPost(ambiguousInput));
-    const next = createTelegramChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
-    await assert.rejects(publishTelegramChannelPost({ ...ambiguousInput, store: next }),
+    await assert.rejects(publishBaleChannelPost(ambiguousInput));
+    const next = createBaleChannelPostJournalStore({ path, profileName: "work", tokenSha256 });
+    await assert.rejects(publishBaleChannelPost({ ...ambiguousInput, store: next }),
       /outcome is unknown/u);
     assert.equal(ambiguous, 1);
     assert.equal(store.list({ channel: -1002 })[0]?.media?.sha256, media.sha256);

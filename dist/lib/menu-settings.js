@@ -1,10 +1,10 @@
 /**
- * Telegram settings menu UI helpers
- * Zones: telegram ui, settings controls, menu composition
+ * Bale settings menu UI helpers
+ * Zones: bale ui, settings controls, menu composition
  * Owns hidden settings-menu rendering, settings callbacks, and persisted toggle wiring
  */
-import { createTelegramMenuDelivery, } from "./menu-model.js";
-import { getTelegramExtensionSettingsRows, } from "./sections.js";
+import { createBaleMenuDelivery, } from "./menu-model.js";
+import { getBaleExtensionSettingsRows, } from "./sections.js";
 const SETTINGS_MENU_TITLE = "<b>⚙️ Settings:</b>";
 const AUTOMATIC_THREAD_CLEANUP_SETTINGS_TITLE = "<b>🧹 Thread cleanup:</b>";
 const INACTIVE_THREAD_REVIEW_TITLE = "<b>🔎 Inactive tabs review:</b>";
@@ -17,20 +17,20 @@ const THREAD_DISPLAY_SETTINGS_TITLE = "<b>🧵 Thread display:</b>";
 function getVoiceReplyModeLabel(mode) {
     return mode;
 }
-function getTelegramSettingsStateValueLabel(value) {
+function getBaleSettingsStateValueLabel(value) {
     return value.toLowerCase();
 }
 function getVoiceReplyModeSetting(mode, configured) {
     return configured ? mode : "manual";
 }
-export function buildTelegramSettingsMenuText() {
+export function buildBaleSettingsMenuText() {
     return SETTINGS_MENU_TITLE;
 }
 export function buildThreadDisplaySettingsText(mode, custom = false) {
     return [
         `${THREAD_DISPLAY_SETTINGS_TITLE} <code>${custom ? "custom" : threadDisplayModeLabel(mode)}</code>`,
         "",
-        "Choose how this bot profile labels Telegram tabs and Pi terminal status. Each slot is unique across this bot profile.",
+        "Choose how this bot profile labels Bale tabs and Pi terminal status. Each slot is unique across this bot profile.",
         "",
         "Set a manual name for the current Thread with /name <code>Name</code>.",
         "",
@@ -44,10 +44,10 @@ export function buildAutomaticThreadCleanupSettingsText(enabled) {
     return [
         `${AUTOMATIC_THREAD_CLEANUP_SETTINGS_TITLE} <code>${enabled ? "on" : "off"}</code>`,
         "",
-        "Delete this Pi instance's Telegram tab when Pi quits normally.",
+        "Delete this Pi instance's Bale tab when Pi quits normally.",
         "",
-        "<code>-</code> <code>on</code> (default): delete the bound thread and release Telegram authority on graceful quit.",
-        "<code>-</code> <code>off</code>: preserve the tab as a restart hint; manual <code>/telegram-disconnect</code> still confirms and deletes it.",
+        "<code>-</code> <code>on</code> (default): delete the bound thread and release Bale authority on graceful quit.",
+        "<code>-</code> <code>off</code>: preserve the tab as a restart hint; manual <code>/bale-disconnect</code> still confirms and deletes it.",
         "",
         "On the leader instance, Review inactive tabs checks current owner and work evidence, including tabs without a letter. Review never deletes tabs.",
     ].join("\n");
@@ -58,7 +58,7 @@ function buildInactiveThreadReviewText(count) {
         "",
         `${count} proven inactive tab${count === 1 ? "" : "s"}.`,
         "No tabs were deleted.",
-        "Clean inactive tabs deletes these Telegram tabs and all their messages. Pi session history and project files are not removed.",
+        "Clean inactive tabs deletes these Bale tabs and all their messages. Pi session history and project files are not removed.",
         "Clean rechecks owner and work protection; a changed or protected tab is skipped. Choose Back to leave without deleting anything.",
     ].join("\n");
 }
@@ -92,7 +92,7 @@ export function buildDraftPreviewsSettingsText(enabled) {
         "",
         "Show live answer drafts while the model is answering.",
         "",
-        "<code>-</code> <code>on</code> (default): stream safe Telegram Rich Draft frames before the final answer.",
+        "<code>-</code> <code>on</code> (default): stream safe Bale Rich Draft frames before the final answer.",
         "<code>-</code> <code>off</code>: show native active status, then send one final answer.",
     ].join("\n");
 }
@@ -102,7 +102,7 @@ export function buildAssistantRenderingSettingsText(mode) {
         "",
         "Choose how final assistant Markdown answers are delivered.",
         "",
-        "<code>-</code> <code>rich</code> (default): use Telegram Native Rich Markdown.",
+        "<code>-</code> <code>rich</code> (default): use Bale Native Rich Markdown.",
         "<code>-</code> <code>html</code>: use the legacy Markdown-to-HTML renderer.",
     ].join("\n");
 }
@@ -110,7 +110,7 @@ export function buildActivityVerbositySettingsText(verbosity) {
     return [
         `${ACTIVITY_VERBOSITY_SETTINGS_TITLE} <code>${verbosity}</code>`,
         "",
-        "Choose how much technical model activity Telegram shows.",
+        "Choose how much technical model activity Bale shows.",
         "",
         "<code>-</code> <code>quiet</code>: show no thinking or tool traffic.",
         "<code>-</code> <code>thinking</code>: show persistent collapsed thinking.",
@@ -122,9 +122,9 @@ export function buildVoiceReplyModeSettingsText(mode, configured = true) {
     return [
         `${VOICE_REPLY_MODE_SETTINGS_TITLE} <code>${getVoiceReplyModeLabel(getVoiceReplyModeSetting(mode, configured))}</code>`,
         "",
-        "Controls when pi-telegram converts assistant text replies into Telegram voice messages.",
+        "Controls when pi-bale converts assistant text replies into Bale voice messages.",
         "",
-        "<code>-</code> <code>manual</code> (default): add no automatic voice context; explicit 'telegram_voice' actions still work.",
+        "<code>-</code> <code>manual</code> (default): add no automatic voice context; explicit 'bale_voice' actions still work.",
         "<code>-</code> <code>mirror</code>: voice input activates automatic voice delivery; text input follows 'manual' behavior.",
         "<code>-</code> <code>always</code>: activate automatic voice delivery for every reply.",
     ].join("\n");
@@ -133,14 +133,14 @@ export function buildTimeInjectionModeSettingsText(mode) {
     return [
         `${TIME_INJECTION_MODE_SETTINGS_TITLE} <code>${mode}</code>`,
         "",
-        "Controls whether Telegram-originated prompts include a compact wall-clock [time] line.",
+        "Controls whether Bale-originated prompts include a compact wall-clock [time] line.",
         "",
         "<code>-</code> <code>hidden</code>: no time line is added to prompt context.",
-        "<code>-</code> <code>always</code>: add time to every Telegram turn.",
+        "<code>-</code> <code>always</code>: add time to every Bale turn.",
         "<code>-</code> <code>interval</code> (default): add time at most once per chat interval (1 hour unless configured).",
     ].join("\n");
 }
-export function buildTelegramSettingsMenuReplyMarkup(draftPreviewsEnabled, assistantRenderingModeOrVoiceReplyMode, voiceReplyModeOrTimeInjectionMode, timeInjectionModeOrSectionRegistry, sectionRegistryOrVoiceReplyModeConfigured, voiceReplyModeConfigured = true, automaticThreadCleanupEnabled = true, activityVerbosity = "quiet", threadDisplayMode, threadDisplayCustom = false) {
+export function buildBaleSettingsMenuReplyMarkup(draftPreviewsEnabled, assistantRenderingModeOrVoiceReplyMode, voiceReplyModeOrTimeInjectionMode, timeInjectionModeOrSectionRegistry, sectionRegistryOrVoiceReplyModeConfigured, voiceReplyModeConfigured = true, automaticThreadCleanupEnabled = true, activityVerbosity = "quiet", threadDisplayMode, threadDisplayCustom = false) {
     const hasRenderingMode = assistantRenderingModeOrVoiceReplyMode === "rich" ||
         assistantRenderingModeOrVoiceReplyMode === "html";
     const assistantRenderingMode = hasRenderingMode ? assistantRenderingModeOrVoiceReplyMode : "rich";
@@ -171,7 +171,7 @@ export function buildTelegramSettingsMenuReplyMarkup(draftPreviewsEnabled, assis
             callback_data: "settings:open:assistant-rendering",
         },
         {
-            text: `👄 Voice reply: ${getTelegramSettingsStateValueLabel(getVoiceReplyModeLabel(getVoiceReplyModeSetting(voiceReplyMode, effectiveVoiceReplyModeConfigured)))}`,
+            text: `👄 Voice reply: ${getBaleSettingsStateValueLabel(getVoiceReplyModeLabel(getVoiceReplyModeSetting(voiceReplyMode, effectiveVoiceReplyModeConfigured)))}`,
             callback_data: "settings:open:voice-reply",
         },
         {
@@ -179,7 +179,7 @@ export function buildTelegramSettingsMenuReplyMarkup(draftPreviewsEnabled, assis
             callback_data: "settings:open:activity-verbosity",
         },
         {
-            text: `🕒 Time injection: ${getTelegramSettingsStateValueLabel(timeInjectionMode)}`,
+            text: `🕒 Time injection: ${getBaleSettingsStateValueLabel(timeInjectionMode)}`,
             callback_data: "settings:open:time-injection",
         },
     ];
@@ -192,7 +192,7 @@ export function buildTelegramSettingsMenuReplyMarkup(draftPreviewsEnabled, assis
             callback_data: "settings:open:thread-display",
         });
     if (sectionRegistry) {
-        const extensionRows = getTelegramExtensionSettingsRows(sectionRegistry);
+        const extensionRows = getBaleExtensionSettingsRows(sectionRegistry);
         settingsButtons.push(...extensionRows.map((row) => ({
             text: row.label,
             callback_data: row.callback_data,
@@ -201,9 +201,9 @@ export function buildTelegramSettingsMenuReplyMarkup(draftPreviewsEnabled, assis
     rows.push(...settingsButtons.map((button) => [button]));
     return { inline_keyboard: rows };
 }
-async function openTelegramSettingsMenu(deps, sectionRegistry) {
+async function openBaleSettingsMenu(deps, sectionRegistry) {
     const state = await deps.getModelMenuState();
-    const messageId = await deps.sendSettingsMenu(state, buildTelegramSettingsMenuText(), buildCurrentTelegramSettingsMenuReplyMarkup(deps, sectionRegistry));
+    const messageId = await deps.sendSettingsMenu(state, buildBaleSettingsMenuText(), buildCurrentBaleSettingsMenuReplyMarkup(deps, sectionRegistry));
     if (messageId === undefined)
         return;
     state.messageId = messageId;
@@ -339,11 +339,11 @@ export function buildVoiceReplyModeSettingsReplyMarkup(mode, configured = true) 
     };
 }
 /** Settings markup from the current setting values; rendering only, no state mutation. */
-function buildCurrentTelegramSettingsMenuReplyMarkup(deps, sectionRegistry) {
-    return buildTelegramSettingsMenuReplyMarkup(deps.areDraftPreviewsEnabled(), deps.getAssistantRenderingMode(), deps.getVoiceReplyMode(), deps.getTimeInjectionMode(), sectionRegistry, deps.isVoiceReplyModeConfigured(), deps.isAutomaticThreadCleanupEnabled(), deps.getActivityVerbosity(), deps.getThreadDisplayMode?.(), deps.isThreadDisplayCustom?.() ?? false);
+function buildCurrentBaleSettingsMenuReplyMarkup(deps, sectionRegistry) {
+    return buildBaleSettingsMenuReplyMarkup(deps.areDraftPreviewsEnabled(), deps.getAssistantRenderingMode(), deps.getVoiceReplyMode(), deps.getTimeInjectionMode(), sectionRegistry, deps.isVoiceReplyModeConfigured(), deps.isAutomaticThreadCleanupEnabled(), deps.getActivityVerbosity(), deps.getThreadDisplayMode?.(), deps.isThreadDisplayCustom?.() ?? false);
 }
-async function updateTelegramSettingsMenuMessage(deps, sectionRegistry) {
-    await deps.updateSettingsMessage(buildTelegramSettingsMenuText(), buildCurrentTelegramSettingsMenuReplyMarkup(deps, sectionRegistry));
+async function updateBaleSettingsMenuMessage(deps, sectionRegistry) {
+    await deps.updateSettingsMessage(buildBaleSettingsMenuText(), buildCurrentBaleSettingsMenuReplyMarkup(deps, sectionRegistry));
 }
 async function updateAutomaticThreadCleanupSettingsMessage(deps) {
     const enabled = deps.isAutomaticThreadCleanupEnabled();
@@ -370,7 +370,7 @@ async function updateVoiceReplyModeSettingsMessage(deps) {
     const configured = deps.isVoiceReplyModeConfigured();
     await deps.updateSettingsMessage(buildVoiceReplyModeSettingsText(mode, configured), buildVoiceReplyModeSettingsReplyMarkup(mode, configured));
 }
-export async function handleTelegramSettingsMenuCallbackAction(callbackQueryId, data, deps) {
+export async function handleBaleSettingsMenuCallbackAction(callbackQueryId, data, deps) {
     if (!data?.startsWith("settings:"))
         return false;
     if (data === "settings:open:thread-display" ||
@@ -406,7 +406,7 @@ export async function handleTelegramSettingsMenuCallbackAction(callbackQueryId, 
         return true;
     }
     if (data === "settings:list") {
-        await updateTelegramSettingsMenuMessage(deps, deps.sectionRegistry);
+        await updateBaleSettingsMenuMessage(deps, deps.sectionRegistry);
         await deps.answerCallbackQuery(callbackQueryId);
         return true;
     }
@@ -418,8 +418,8 @@ export async function handleTelegramSettingsMenuCallbackAction(callbackQueryId, 
     if (data === "settings:open:proactive" ||
         data === "settings:set:proactive:on" ||
         data === "settings:set:proactive:off") {
-        await updateTelegramSettingsMenuMessage(deps, deps.sectionRegistry);
-        await deps.answerCallbackQuery(callbackQueryId, "Public assistant output is always delivered while Telegram is connected");
+        await updateBaleSettingsMenuMessage(deps, deps.sectionRegistry);
+        await deps.answerCallbackQuery(callbackQueryId, "Public assistant output is always delivered while Bale is connected");
         return true;
     }
     if (data === "settings:open:draft-previews" ||
@@ -563,7 +563,7 @@ export async function handleTelegramSettingsMenuCallbackAction(callbackQueryId, 
     await deps.answerCallbackQuery(callbackQueryId);
     return true;
 }
-export function createTelegramSettingsMenuRuntime(deps, sectionRegistry) {
+export function createBaleSettingsMenuRuntime(deps, sectionRegistry) {
     // Read per call so later port replacement on deps stays visible.
     const readSettingsState = () => ({
         areDraftPreviewsEnabled: deps.areDraftPreviewsEnabled,
@@ -578,10 +578,10 @@ export function createTelegramSettingsMenuRuntime(deps, sectionRegistry) {
     });
     return {
         openSettingsMenu: async (chatId, _replyToMessageId, ctx, threadId, options) => {
-            const delivery = createTelegramMenuDelivery({ chatId, threadId }, options, deps);
+            const delivery = createBaleMenuDelivery({ chatId, threadId }, options, deps);
             await deps.reloadConfig?.();
             delivery.assertCurrent();
-            return openTelegramSettingsMenu({
+            return openBaleSettingsMenu({
                 getModelMenuState: () => deps.getModelMenuState(chatId, ctx, threadId),
                 ...readSettingsState(),
                 sendSettingsMenu: (state, text, replyMarkup) => delivery.sendInteractiveMessage(state.chatId, text, "html", replyMarkup),
@@ -590,7 +590,7 @@ export function createTelegramSettingsMenuRuntime(deps, sectionRegistry) {
         },
         updateSettingsMenuMessage: async (state) => {
             await deps.reloadConfig?.();
-            return updateTelegramSettingsMenuMessage({
+            return updateBaleSettingsMenuMessage({
                 ...readSettingsState(),
                 updateSettingsMessage: (text, replyMarkup) => deps.editInteractiveMessage(state.chatId, state.messageId, text, "html", replyMarkup),
             }, sectionRegistry);
@@ -612,7 +612,7 @@ export function createTelegramSettingsMenuRuntime(deps, sectionRegistry) {
                 state.mode = "settings";
                 deps.storeModelMenuState(state);
             }
-            return handleTelegramSettingsMenuCallbackAction(query.id, query.data, {
+            return handleBaleSettingsMenuCallbackAction(query.id, query.data, {
                 ...readSettingsState(),
                 setThreadDisplayMode: deps.setThreadDisplayMode,
                 setDraftPreviewsEnabled: deps.setDraftPreviewsEnabled,

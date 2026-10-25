@@ -1,6 +1,6 @@
 /**
- * Telegram status rendering helpers
- * Zones: telegram ui, pi agent diagnostics, tui
+ * Bale status rendering helpers
+ * Zones: bale ui, pi agent diagnostics, tui
  * Owns status summaries, redacted diagnostics, projection lifecycle and compact connection-failure copy
  * Excludes canonical state, transport admission and filesystem policy
  */
@@ -8,7 +8,7 @@
 import { isDeepStrictEqual } from "node:util";
 
 /** UI copy is allowlisted; raw exception text belongs only in redacted diagnostics. */
-export function formatTelegramConnectionFailure(error: unknown): string {
+export function formatBaleConnectionFailure(error: unknown): string {
   const message =
     error instanceof Error
       ? error.message
@@ -23,9 +23,9 @@ export function formatTelegramConnectionFailure(error: unknown): string {
     error && typeof error === "object" && "code" in error
       ? error.code
       : undefined;
-  if (status === 401) return "Telegram token rejected. Run /telegram-setup.";
+  if (status === 401) return "Bale token rejected. Run /bale-setup.";
   if (status === 403)
-    return "Telegram access denied. Check /telegram-status --debug.";
+    return "Bale access denied. Check /bale-status --debug.";
   if (
     (typeof code === "string" &&
       ["ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "ECONNRESET"].includes(
@@ -33,42 +33,42 @@ export function formatTelegramConnectionFailure(error: unknown): string {
       )) ||
     /network unavailable|fetch failed/i.test(message)
   ) {
-    return "Telegram network unavailable. Retry /telegram-connect.";
+    return "Bale network unavailable. Retry /bale-connect.";
   }
   if (
     /Workspace slots?.*(?:unavailable|exhausted)|no free.*slot/i.test(message)
   ) {
-    return "No Telegram slot available. Check /telegram-status --debug.";
+    return "No Bale slot available. Check /bale-status --debug.";
   }
   if (
     code === "incompatible-protocol" ||
     /protocol.*(?:incompatible|mismatch)|incompatible.*protocol/i.test(message)
   ) {
-    return "Telegram instances are incompatible. Update them together.";
+    return "Bale instances are incompatible. Update them together.";
   }
   if (
     /unsupported.*(?:journal|version)|(?:journal|version).*unsupported/i.test(
       message,
     )
   ) {
-    return "Telegram state version unsupported. Use a compatible runtime.";
+    return "Bale state version unsupported. Use a compatible runtime.";
   }
   if (
     /follower registration failed|active in another Pi instance/i.test(message)
   ) {
-    return "Telegram leader is active but unavailable. Check /telegram-status --debug.";
+    return "Bale leader is active but unavailable. Check /bale-status --debug.";
   }
   if (/unfinished Thread creation does not match/i.test(message)) {
-    return "Telegram Thread creation is unresolved. Check /telegram-status --debug.";
+    return "Bale Thread creation is unresolved. Check /bale-status --debug.";
   }
-  return "Telegram connection failed. Check /telegram-status --debug.";
+  return "Bale connection failed. Check /bale-status --debug.";
 }
 
-const TELEGRAM_STATUS_DEFAULT_PROFILE_NAME = "default";
+const BALE_STATUS_DEFAULT_PROFILE_NAME = "default";
 
-export type TelegramStatusQueueLane = "control" | "steer" | "priority" | "default";
+export type BaleStatusQueueLane = "control" | "steer" | "priority" | "default";
 
-export interface TelegramUsageStats {
+export interface BaleUsageStats {
   totalInput: number;
   totalOutput: number;
   totalCacheRead: number;
@@ -77,7 +77,7 @@ export interface TelegramUsageStats {
   latestCacheHitRate?: number;
 }
 
-interface TelegramUsageMessage {
+interface BaleUsageMessage {
   role: string;
   usage?: {
     input: number;
@@ -88,85 +88,85 @@ interface TelegramUsageMessage {
   };
 }
 
-interface TelegramStatusSessionEntry {
+interface BaleStatusSessionEntry {
   type: string;
-  message?: TelegramUsageMessage;
+  message?: BaleUsageMessage;
 }
 
-interface TelegramContextUsage {
+interface BaleContextUsage {
   contextWindow?: number;
   percent: number | null;
 }
 
-export interface TelegramStatusActiveModel {
+export interface BaleStatusActiveModel {
   provider?: string;
   id?: string;
   contextWindow?: number;
 }
 
-export interface TelegramStatusLineProviderContext {
-  activeModel: TelegramStatusActiveModel | undefined;
+export interface BaleStatusLineProviderContext {
+  activeModel: BaleStatusActiveModel | undefined;
 }
 
-export interface TelegramStatusLineProviderResult {
+export interface BaleStatusLineProviderResult {
   label: string;
   value: string;
 }
 
-export type TelegramStatusLineProvider = (
-  ctx: TelegramStatusLineProviderContext,
-) => TelegramStatusLineProviderResult | undefined;
+export type BaleStatusLineProvider = (
+  ctx: BaleStatusLineProviderContext,
+) => BaleStatusLineProviderResult | undefined;
 
-export interface TelegramStatusContext {
-  sessionManager: { getEntries(): TelegramStatusSessionEntry[] };
-  getContextUsage(): TelegramContextUsage | undefined;
+export interface BaleStatusContext {
+  sessionManager: { getEntries(): BaleStatusSessionEntry[] };
+  getContextUsage(): BaleContextUsage | undefined;
   isIdle?: () => boolean;
   hasPendingMessages?: () => boolean;
   isCompactionInProgress?: () => boolean;
   modelRegistry: {
-    isUsingOAuth(model: TelegramStatusActiveModel): boolean;
+    isUsingOAuth(model: BaleStatusActiveModel): boolean;
   };
 }
 
-export type TelegramRuntimeEventDetailValue = string | number | boolean | null;
+export type BaleRuntimeEventDetailValue = string | number | boolean | null;
 
-const TELEGRAM_STATUS_LINE_PROVIDER_REGISTRY_KEY =
-  "__piTelegramStatusLineProviders__";
-const MAX_RECENT_TELEGRAM_RUNTIME_EVENTS = 10;
-const MAX_TELEGRAM_RUNTIME_EVENT_MESSAGE_LENGTH = 1000;
-const MAX_TELEGRAM_RUNTIME_EVENT_DETAIL_LENGTH = 1000;
+const BALE_STATUS_LINE_PROVIDER_REGISTRY_KEY =
+  "__piBaleStatusLineProviders__";
+const MAX_RECENT_BALE_RUNTIME_EVENTS = 10;
+const MAX_BALE_RUNTIME_EVENT_MESSAGE_LENGTH = 1000;
+const MAX_BALE_RUNTIME_EVENT_DETAIL_LENGTH = 1000;
 
-export interface TelegramRuntimeEvent {
+export interface BaleRuntimeEvent {
   at: number;
   category: string;
   message: string;
-  details?: Record<string, TelegramRuntimeEventDetailValue>;
+  details?: Record<string, BaleRuntimeEventDetailValue>;
 }
 
-export interface TelegramRuntimeEventInput {
+export interface BaleRuntimeEventInput {
   category: string;
   error?: unknown;
   message?: string;
   details?: Record<string, unknown>;
 }
 
-export interface TelegramRuntimeEventRecorder {
+export interface BaleRuntimeEventRecorder {
   record: (
     category: string,
     error: unknown,
     details?: Record<string, unknown>,
   ) => void;
-  getEvents: () => TelegramRuntimeEvent[];
+  getEvents: () => BaleRuntimeEvent[];
   clear: () => void;
 }
 
-export interface TelegramRuntimeEventRecorderOptions {
+export interface BaleRuntimeEventRecorderOptions {
   getBotToken: () => string | undefined;
   maxEvents?: number;
   now?: () => number;
 }
 
-export interface TelegramBridgeStatusBusFollower {
+export interface BaleBridgeStatusBusFollower {
   instanceId: string;
   cwd?: string;
   lastHeartbeatMs: number;
@@ -181,7 +181,7 @@ export interface TelegramBridgeStatusBusFollower {
   status?: string;
 }
 
-export interface TelegramBridgeStatusLocalBus {
+export interface BaleBridgeStatusLocalBus {
   leaderSocketPath?: string;
   leaderTransport?: "pipe" | "socket";
   followerSocketPath?: string;
@@ -197,7 +197,7 @@ export interface TelegramBridgeStatusLocalBus {
   };
 }
 
-export interface TelegramBridgeStatusTopicTarget {
+export interface BaleBridgeStatusTopicTarget {
   instanceId?: string;
   status?: string;
   target?: { chatId: number; threadId?: number };
@@ -210,7 +210,7 @@ export interface TelegramBridgeStatusTopicTarget {
   lastReconcileAction?: string;
 }
 
-export interface TelegramBridgeStatusThreadReservation {
+export interface BaleBridgeStatusThreadReservation {
   target?: { chatId: number; threadId?: number };
   slot?: string;
   reason?: string;
@@ -219,7 +219,7 @@ export interface TelegramBridgeStatusThreadReservation {
   lastReconcileAction?: string;
 }
 
-export interface TelegramBridgeStatusSyncObservation {
+export interface BaleBridgeStatusSyncObservation {
   target?: { chatId: number; threadId?: number };
   syncStatus: string;
   observedAtMs: number;
@@ -229,7 +229,7 @@ export interface TelegramBridgeStatusSyncObservation {
   lastReconcileAction?: string;
 }
 
-export interface TelegramBridgeStatusSyncSlice {
+export interface BaleBridgeStatusSyncSlice {
   status: string;
   updatedAtMs?: number;
   suspectAtMs?: number;
@@ -237,7 +237,7 @@ export interface TelegramBridgeStatusSyncSlice {
   lastReconcileAction?: string;
 }
 
-export interface TelegramBridgeThreadReconciliationState {
+export interface BaleBridgeThreadReconciliationState {
   phase: string;
   event: string;
   atMs: number;
@@ -247,10 +247,10 @@ export interface TelegramBridgeThreadReconciliationState {
   cleanupActionCount: number;
 }
 
-export type TelegramBridgeBusRole = "leader" | "follower";
-export type TelegramBridgeBusLifecyclePhase = "electing";
+export type BaleBridgeBusRole = "leader" | "follower";
+export type BaleBridgeBusLifecyclePhase = "electing";
 
-export interface TelegramBridgePollingState {
+export interface BaleBridgePollingState {
   phase: string;
   phaseStartedAtMs?: number;
   currentUpdateId?: number;
@@ -261,7 +261,7 @@ export interface TelegramBridgePollingState {
   stopReason?: string;
 }
 
-export interface TelegramBridgeInboundWorkerState {
+export interface BaleBridgeInboundWorkerState {
   phase: string;
   generation: number;
   phaseStartedAtMs?: number;
@@ -302,7 +302,7 @@ export interface TelegramBridgeInboundWorkerState {
   lastFailurePhase?: string;
 }
 
-export interface TelegramBridgeStatusLineState {
+export interface BaleBridgeStatusLineState {
   hasBotToken?: boolean;
   botUsername?: string;
   /** Redacted named-variable diagnostic when the stored token reference cannot resolve. */
@@ -313,52 +313,52 @@ export interface TelegramBridgeStatusLineState {
   botThreadMode?: "unknown" | "enabled" | "disabled";
   botThreadModeUpdatedAtMs?: number;
   botThreadModeAction?: string;
-  busRole?: TelegramBridgeBusRole;
+  busRole?: BaleBridgeBusRole;
   busProtocol?: {
     protocolVersion: number;
     runtimeBuild: string;
     capabilities: string[];
   };
-  busLifecyclePhase?: TelegramBridgeBusLifecyclePhase;
+  busLifecyclePhase?: BaleBridgeBusLifecyclePhase;
   instanceSlot?: string;
   instanceThreadName?: string;
   lockState?: string;
   pollingActive: boolean;
-  polling?: TelegramBridgePollingState;
-  inboundWorker?: TelegramBridgeInboundWorkerState;
+  polling?: BaleBridgePollingState;
+  inboundWorker?: BaleBridgeInboundWorkerState;
   lastUpdateId?: number;
   activeSourceMessageIds?: number[];
   pendingDispatch: boolean;
   compactionInProgress: boolean;
   activeToolExecutions: number;
   pendingModelSwitch: boolean;
-  queuedItems: Array<{ queueLane: TelegramStatusQueueLane }>;
-  busFollowers?: TelegramBridgeStatusBusFollower[];
-  localBus?: TelegramBridgeStatusLocalBus;
-  topicTargets?: TelegramBridgeStatusTopicTarget[];
-  threadReservations?: TelegramBridgeStatusThreadReservation[];
-  topicSyncObservations?: TelegramBridgeStatusSyncObservation[];
-  syncState?: Record<string, TelegramBridgeStatusSyncSlice | undefined>;
-  threadReconciliation?: TelegramBridgeThreadReconciliationState;
+  queuedItems: Array<{ queueLane: BaleStatusQueueLane }>;
+  busFollowers?: BaleBridgeStatusBusFollower[];
+  localBus?: BaleBridgeStatusLocalBus;
+  topicTargets?: BaleBridgeStatusTopicTarget[];
+  threadReservations?: BaleBridgeStatusThreadReservation[];
+  topicSyncObservations?: BaleBridgeStatusSyncObservation[];
+  syncState?: Record<string, BaleBridgeStatusSyncSlice | undefined>;
+  threadReconciliation?: BaleBridgeThreadReconciliationState;
   busNowMs?: number;
-  recentRuntimeEvents: TelegramRuntimeEvent[];
+  recentRuntimeEvents: BaleRuntimeEvent[];
 }
 
-export interface TelegramStatusBarTheme {
+export interface BaleStatusBarTheme {
   fg: (
     token: "accent" | "dim" | "error" | "muted" | "warning" | "success",
     text: string,
   ) => string;
 }
 
-export interface TelegramStatusBarState {
+export interface BaleStatusBarState {
   hasBotToken: boolean;
   pollingActive: boolean;
   pollingStopReason?: string;
   paired: boolean;
-  busRole?: TelegramBridgeBusRole;
+  busRole?: BaleBridgeBusRole;
   followerRegistered?: boolean;
-  busLifecyclePhase?: TelegramBridgeBusLifecyclePhase;
+  busLifecyclePhase?: BaleBridgeBusLifecyclePhase;
   instanceSlot?: string;
   instanceThreadName?: string;
   compactionInProgress: boolean;
@@ -368,22 +368,22 @@ export interface TelegramStatusBarState {
   error?: string;
 }
 
-export interface TelegramStatusRuntimeContext {
+export interface BaleStatusRuntimeContext {
   ui: {
-    theme: TelegramStatusBarTheme;
+    theme: BaleStatusBarTheme;
     setStatus: (key: string, text: string) => void;
   };
 }
 
-export interface TelegramStatusRuntimeDeps<
-  TContext extends TelegramStatusRuntimeContext,
+export interface BaleStatusRuntimeDeps<
+  TContext extends BaleStatusRuntimeContext,
 > {
   statusKey?: string;
-  getStatusBarState: (ctx: TContext, error?: string) => TelegramStatusBarState;
-  getBridgeStatusLineState: () => TelegramBridgeStatusLineState;
+  getStatusBarState: (ctx: TContext, error?: string) => BaleStatusBarState;
+  getBridgeStatusLineState: () => BaleBridgeStatusLineState;
 }
 
-export interface TelegramBridgeStatusConfig {
+export interface BaleBridgeStatusConfig {
   botToken?: string;
   /** Caller-resolved token availability; falls back to raw presence. */
   botHasToken?: boolean;
@@ -394,8 +394,8 @@ export interface TelegramBridgeStatusConfig {
 }
 
 /** Narrow config-store view used to project resolved bot-token availability. */
-export interface TelegramBridgeStatusConfigSource {
-  get: () => TelegramBridgeStatusConfig;
+export interface BaleBridgeStatusConfigSource {
+  get: () => BaleBridgeStatusConfig;
   hasBotToken?: () => boolean;
   getBotTokenDiagnostic?: () => string | undefined;
 }
@@ -404,9 +404,9 @@ export interface TelegramBridgeStatusConfigSource {
  * Project a config store into the status view without moving token-reference
  * resolution into this structural leaf domain.
  */
-export function createTelegramBridgeStatusConfigGetter(
-  source: TelegramBridgeStatusConfigSource,
-): () => TelegramBridgeStatusConfig {
+export function createBaleBridgeStatusConfigGetter(
+  source: BaleBridgeStatusConfigSource,
+): () => BaleBridgeStatusConfig {
   return () => {
     const config = source.get();
     return {
@@ -419,19 +419,19 @@ export function createTelegramBridgeStatusConfigGetter(
   };
 }
 
-export interface TelegramBridgeStatusRuntimeDeps<
-  TQueueItem extends { queueLane: TelegramStatusQueueLane },
+export interface BaleBridgeStatusRuntimeDeps<
+  TQueueItem extends { queueLane: BaleStatusQueueLane },
 > {
   statusKey?: string;
-  getConfig: () => TelegramBridgeStatusConfig;
+  getConfig: () => BaleBridgeStatusConfig;
   getActiveProfileName?: () => string | undefined;
   getDiagnosticPaths?: (profileName?: string) => {
     state: string;
     logs: string;
   };
   isPollingActive: () => boolean;
-  getPollingState?: () => TelegramBridgePollingState;
-  getInboundWorkerState?: () => TelegramBridgeInboundWorkerState | undefined;
+  getPollingState?: () => BaleBridgePollingState;
+  getInboundWorkerState?: () => BaleBridgeInboundWorkerState | undefined;
   getAcceptedThroughUpdateId?: () => number | undefined;
   getActiveSourceMessageIds: () => number[] | undefined;
   hasActiveTurn: () => boolean;
@@ -441,15 +441,15 @@ export interface TelegramBridgeStatusRuntimeDeps<
   hasPendingModelSwitch: () => boolean;
   getQueuedItems: () => TQueueItem[];
   getQueuedItemCount?: (items: TQueueItem[]) => number;
-  getRecentRuntimeEvents: () => TelegramRuntimeEvent[];
+  getRecentRuntimeEvents: () => BaleRuntimeEvent[];
   getRuntimeLockState?: () => string;
-  getBusRole?: () => TelegramBridgeBusRole | undefined;
+  getBusRole?: () => BaleBridgeBusRole | undefined;
   getBusProtocol?: () => {
     protocolVersion: number;
     runtimeBuild: string;
     capabilities: string[];
   };
-  getBusLifecyclePhase?: () => TelegramBridgeBusLifecyclePhase | undefined;
+  getBusLifecyclePhase?: () => BaleBridgeBusLifecyclePhase | undefined;
   getBotThreadMode?: () =>
     | {
         threadMode: "unknown" | "enabled" | "disabled";
@@ -457,35 +457,35 @@ export interface TelegramBridgeStatusRuntimeDeps<
         lastReconcileAction?: string;
       }
     | undefined;
-  getBusFollowers?: () => TelegramBridgeStatusBusFollower[];
-  getLocalBus?: () => TelegramBridgeStatusLocalBus | undefined;
-  getTopicTargets?: () => TelegramBridgeStatusTopicTarget[];
-  getThreadReservations?: () => TelegramBridgeStatusThreadReservation[];
-  getTopicSyncObservations?: () => TelegramBridgeStatusSyncObservation[];
+  getBusFollowers?: () => BaleBridgeStatusBusFollower[];
+  getLocalBus?: () => BaleBridgeStatusLocalBus | undefined;
+  getTopicTargets?: () => BaleBridgeStatusTopicTarget[];
+  getThreadReservations?: () => BaleBridgeStatusThreadReservation[];
+  getTopicSyncObservations?: () => BaleBridgeStatusSyncObservation[];
   getSyncState?: () => Record<
     string,
-    TelegramBridgeStatusSyncSlice | undefined
+    BaleBridgeStatusSyncSlice | undefined
   >;
   getThreadReconciliationState?: () =>
-    TelegramBridgeThreadReconciliationState | undefined;
+    BaleBridgeThreadReconciliationState | undefined;
   getInstanceSlot?: () => string | undefined;
   getInstanceThreadName?: () => string | undefined;
   getNowMs?: () => number;
 }
 
-export interface TelegramBridgeStatusLineOptions {
+export interface BaleBridgeStatusLineOptions {
   verbose?: boolean;
 }
 
-export interface TelegramStatusRuntime<
-  TContext extends TelegramStatusRuntimeContext,
+export interface BaleStatusRuntime<
+  TContext extends BaleStatusRuntimeContext,
 > {
   updateStatus: (ctx: TContext, error?: string) => void;
-  getStatusLines: (options?: TelegramBridgeStatusLineOptions) => string[];
-  getStatusState: () => TelegramBridgeStatusLineState;
+  getStatusLines: (options?: BaleBridgeStatusLineOptions) => string[];
+  getStatusState: () => BaleBridgeStatusLineState;
 }
 
-function truncateTelegramRuntimeEventText(
+function truncateBaleRuntimeEventText(
   text: string,
   maxLength: number,
 ): string {
@@ -493,7 +493,7 @@ function truncateTelegramRuntimeEventText(
   return `${text.slice(0, maxLength).trimEnd()}… [truncated ${text.length - maxLength} chars]`;
 }
 
-function redactTelegramRuntimeText(
+function redactBaleRuntimeText(
   text: string,
   botToken: string | undefined,
   maxLength: number,
@@ -501,22 +501,22 @@ function redactTelegramRuntimeText(
   const redacted = botToken
     ? text.split(botToken).join("<redacted-token>")
     : text;
-  return truncateTelegramRuntimeEventText(redacted, maxLength);
+  return truncateBaleRuntimeEventText(redacted, maxLength);
 }
 
-function normalizeTelegramRuntimeEventDetails(
+function normalizeBaleRuntimeEventDetails(
   details: Record<string, unknown> | undefined,
   botToken: string | undefined,
-): Record<string, TelegramRuntimeEventDetailValue> | undefined {
+): Record<string, BaleRuntimeEventDetailValue> | undefined {
   if (!details) return undefined;
-  const normalized: Record<string, TelegramRuntimeEventDetailValue> = {};
+  const normalized: Record<string, BaleRuntimeEventDetailValue> = {};
   for (const [key, value] of Object.entries(details)) {
     if (value === undefined) continue;
     if (typeof value === "string") {
-      normalized[key] = redactTelegramRuntimeText(
+      normalized[key] = redactBaleRuntimeText(
         value,
         botToken,
-        MAX_TELEGRAM_RUNTIME_EVENT_DETAIL_LENGTH,
+        MAX_BALE_RUNTIME_EVENT_DETAIL_LENGTH,
       );
       continue;
     }
@@ -528,39 +528,39 @@ function normalizeTelegramRuntimeEventDetails(
       normalized[key] = null;
       continue;
     }
-    normalized[key] = redactTelegramRuntimeText(
+    normalized[key] = redactBaleRuntimeText(
       String(value),
       botToken,
-      MAX_TELEGRAM_RUNTIME_EVENT_DETAIL_LENGTH,
+      MAX_BALE_RUNTIME_EVENT_DETAIL_LENGTH,
     );
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
-function getTelegramRuntimeEventMessage(
-  input: TelegramRuntimeEventInput,
+function getBaleRuntimeEventMessage(
+  input: BaleRuntimeEventInput,
 ): string {
   if (input.message !== undefined) return input.message;
   if (input.error instanceof Error) return input.error.message;
   return String(input.error);
 }
 
-export function recordStructuredTelegramRuntimeEvent(
-  events: TelegramRuntimeEvent[],
-  input: TelegramRuntimeEventInput,
+export function recordStructuredBaleRuntimeEvent(
+  events: BaleRuntimeEvent[],
+  input: BaleRuntimeEventInput,
   options: { botToken?: string; maxEvents: number; now?: number },
 ): void {
-  const details = normalizeTelegramRuntimeEventDetails(
+  const details = normalizeBaleRuntimeEventDetails(
     input.details,
     options.botToken,
   );
   events.push({
     at: options.now ?? Date.now(),
     category: input.category,
-    message: redactTelegramRuntimeText(
-      getTelegramRuntimeEventMessage(input),
+    message: redactBaleRuntimeText(
+      getBaleRuntimeEventMessage(input),
       options.botToken,
-      MAX_TELEGRAM_RUNTIME_EVENT_MESSAGE_LENGTH,
+      MAX_BALE_RUNTIME_EVENT_MESSAGE_LENGTH,
     ),
     ...(details ? { details } : {}),
   });
@@ -569,45 +569,45 @@ export function recordStructuredTelegramRuntimeEvent(
   }
 }
 
-function getOrCreateTelegramStatusLineProviderRegistry(): Map<
+function getOrCreateBaleStatusLineProviderRegistry(): Map<
   string,
-  TelegramStatusLineProvider
+  BaleStatusLineProvider
 > {
   const existing = (globalThis as Record<string, unknown>)[
-    TELEGRAM_STATUS_LINE_PROVIDER_REGISTRY_KEY
+    BALE_STATUS_LINE_PROVIDER_REGISTRY_KEY
   ];
   if (existing instanceof Map)
-    return existing as Map<string, TelegramStatusLineProvider>;
-  const registry = new Map<string, TelegramStatusLineProvider>();
+    return existing as Map<string, BaleStatusLineProvider>;
+  const registry = new Map<string, BaleStatusLineProvider>();
   (globalThis as Record<string, unknown>)[
-    TELEGRAM_STATUS_LINE_PROVIDER_REGISTRY_KEY
+    BALE_STATUS_LINE_PROVIDER_REGISTRY_KEY
   ] = registry;
   return registry;
 }
 
 /**
- * Register a compact extension-provided line for the Telegram status menu.
+ * Register a compact extension-provided line for the Bale status menu.
  *
  * Providers are synchronous and should return undefined when their line is not
  * relevant for the active model. Errors are isolated so optional extension
- * status cannot break the core Telegram menu.
+ * status cannot break the core Bale menu.
  */
-export function registerTelegramStatusLineProvider(
-  provider: TelegramStatusLineProvider,
+export function registerBaleStatusLineProvider(
+  provider: BaleStatusLineProvider,
   options: { id: string },
 ): () => void {
-  const registry = getOrCreateTelegramStatusLineProviderRegistry();
+  const registry = getOrCreateBaleStatusLineProviderRegistry();
   registry.set(options.id, provider);
   return () => {
     if (registry.get(options.id) === provider) registry.delete(options.id);
   };
 }
 
-function getTelegramStatusLineProviderResults(
-  ctx: TelegramStatusLineProviderContext,
-): TelegramStatusLineProviderResult[] {
-  const results: TelegramStatusLineProviderResult[] = [];
-  const registry = getOrCreateTelegramStatusLineProviderRegistry();
+function getBaleStatusLineProviderResults(
+  ctx: BaleStatusLineProviderContext,
+): BaleStatusLineProviderResult[] {
+  const results: BaleStatusLineProviderResult[] = [];
+  const registry = getOrCreateBaleStatusLineProviderRegistry();
   for (const provider of registry.values()) {
     try {
       const result = provider(ctx);
@@ -620,22 +620,22 @@ function getTelegramStatusLineProviderResults(
   return results;
 }
 
-export function clearTelegramStatusLineProviders(): void {
-  getOrCreateTelegramStatusLineProviderRegistry().clear();
+export function clearBaleStatusLineProviders(): void {
+  getOrCreateBaleStatusLineProviderRegistry().clear();
 }
 
-export function createTelegramRuntimeEventRecorder(
-  options: TelegramRuntimeEventRecorderOptions,
-): TelegramRuntimeEventRecorder {
-  const events: TelegramRuntimeEvent[] = [];
+export function createBaleRuntimeEventRecorder(
+  options: BaleRuntimeEventRecorderOptions,
+): BaleRuntimeEventRecorder {
+  const events: BaleRuntimeEvent[] = [];
   return {
     record: (category, error, details) => {
-      recordStructuredTelegramRuntimeEvent(
+      recordStructuredBaleRuntimeEvent(
         events,
         { category, error, details },
         {
           botToken: options.getBotToken(),
-          maxEvents: options.maxEvents ?? MAX_RECENT_TELEGRAM_RUNTIME_EVENTS,
+          maxEvents: options.maxEvents ?? MAX_RECENT_BALE_RUNTIME_EVENTS,
           now: options.now?.(),
         },
       );
@@ -647,8 +647,8 @@ export function createTelegramRuntimeEventRecorder(
   };
 }
 
-function formatTelegramRuntimeEventCategory(
-  event: TelegramRuntimeEvent,
+function formatBaleRuntimeEventCategory(
+  event: BaleRuntimeEvent,
 ): string {
   const method = event.details?.method;
   return typeof method === "string"
@@ -656,8 +656,8 @@ function formatTelegramRuntimeEventCategory(
     : event.category;
 }
 
-function formatTelegramRuntimeEventDetails(
-  event: TelegramRuntimeEvent,
+function formatBaleRuntimeEventDetails(
+  event: BaleRuntimeEvent,
 ): string {
   if (!event.details) return "";
   const details = Object.entries(event.details)
@@ -666,22 +666,22 @@ function formatTelegramRuntimeEventDetails(
   return details.length > 0 ? ` (${details.join(", ")})` : "";
 }
 
-function formatTelegramRuntimeEventSummary(
-  event: TelegramRuntimeEvent,
+function formatBaleRuntimeEventSummary(
+  event: BaleRuntimeEvent,
 ): string {
-  return `${formatTelegramRuntimeEventCategory(event)}: ${event.message}${formatTelegramRuntimeEventDetails(event)}`;
+  return `${formatBaleRuntimeEventCategory(event)}: ${event.message}${formatBaleRuntimeEventDetails(event)}`;
 }
 
-function formatTelegramRuntimeEvent(event: TelegramRuntimeEvent): string {
-  return `${new Date(event.at).toISOString()} ${formatTelegramRuntimeEventSummary(event)}`;
+function formatBaleRuntimeEvent(event: BaleRuntimeEvent): string {
+  return `${new Date(event.at).toISOString()} ${formatBaleRuntimeEventSummary(event)}`;
 }
 
-function buildTelegramRuntimeEventSummary(
-  events: TelegramRuntimeEvent[],
+function buildBaleRuntimeEventSummary(
+  events: BaleRuntimeEvent[],
 ): string {
   const counts = new Map<string, number>();
   for (const event of events) {
-    const category = formatTelegramRuntimeEventCategory(event);
+    const category = formatBaleRuntimeEventCategory(event);
     counts.set(category, (counts.get(category) ?? 0) + 1);
   }
   return Array.from(counts.entries())
@@ -690,25 +690,25 @@ function buildTelegramRuntimeEventSummary(
     .join(", ");
 }
 
-export function buildTelegramRuntimeEventLines(
-  events: TelegramRuntimeEvent[],
+export function buildBaleRuntimeEventLines(
+  events: BaleRuntimeEvent[],
 ): string[] {
   if (events.length === 0) return ["recent runtime events: none"];
   return [
     "recent runtime events:",
-    `- summary: ${buildTelegramRuntimeEventSummary(events)}`,
+    `- summary: ${buildBaleRuntimeEventSummary(events)}`,
     ...events
       .slice()
       .reverse()
-      .map((event) => `- ${formatTelegramRuntimeEvent(event)}`),
+      .map((event) => `- ${formatBaleRuntimeEvent(event)}`),
   ];
 }
 
-export function createTelegramStatusHtmlBuilder<TContext>(deps: {
-  getActiveModel: (ctx: TContext) => TelegramStatusActiveModel | undefined;
+export function createBaleStatusHtmlBuilder<TContext>(deps: {
+  getActiveModel: (ctx: TContext) => BaleStatusActiveModel | undefined;
   isCompactionInProgress?: () => boolean;
-  getBridgeStatusLineState?: () => TelegramBridgeStatusLineState;
-}): (ctx: TContext & TelegramStatusContext) => string {
+  getBridgeStatusLineState?: () => BaleBridgeStatusLineState;
+}): (ctx: TContext & BaleStatusContext) => string {
   return (ctx) =>
     buildStatusHtml(
       { ...ctx, isCompactionInProgress: deps.isCompactionInProgress },
@@ -718,8 +718,8 @@ export function createTelegramStatusHtmlBuilder<TContext>(deps: {
 }
 
 function resolveStatusBarTheme(
-  ctx: TelegramStatusRuntimeContext,
-): TelegramStatusBarTheme | undefined {
+  ctx: BaleStatusRuntimeContext,
+): BaleStatusBarTheme | undefined {
   try {
     const theme = ctx.ui?.theme;
     return typeof theme?.fg === "function" ? theme : undefined;
@@ -728,32 +728,32 @@ function resolveStatusBarTheme(
   }
 }
 
-export function createTelegramStatusRuntime<
-  TContext extends TelegramStatusRuntimeContext,
->(deps: TelegramStatusRuntimeDeps<TContext>): TelegramStatusRuntime<TContext> {
-  const statusKey = deps.statusKey ?? "telegram";
+export function createBaleStatusRuntime<
+  TContext extends BaleStatusRuntimeContext,
+>(deps: BaleStatusRuntimeDeps<TContext>): BaleStatusRuntime<TContext> {
+  const statusKey = deps.statusKey ?? "bale";
   return {
     updateStatus: (ctx, error) => {
       const theme = resolveStatusBarTheme(ctx);
       if (!theme) return;
       ctx.ui.setStatus(
         statusKey,
-        buildTelegramStatusBarText(theme, deps.getStatusBarState(ctx, error)),
+        buildBaleStatusBarText(theme, deps.getStatusBarState(ctx, error)),
       );
     },
     getStatusLines: (options) =>
-      buildTelegramBridgeStatusLines(deps.getBridgeStatusLineState(), options),
+      buildBaleBridgeStatusLines(deps.getBridgeStatusLineState(), options),
     getStatusState: deps.getBridgeStatusLineState,
   };
 }
 
-export function createTelegramBridgeStatusRuntime<
-  TContext extends TelegramStatusRuntimeContext,
-  TQueueItem extends { queueLane: TelegramStatusQueueLane },
+export function createBaleBridgeStatusRuntime<
+  TContext extends BaleStatusRuntimeContext,
+  TQueueItem extends { queueLane: BaleStatusQueueLane },
 >(
-  deps: TelegramBridgeStatusRuntimeDeps<TQueueItem>,
-): TelegramStatusRuntime<TContext> {
-  return createTelegramStatusRuntime({
+  deps: BaleBridgeStatusRuntimeDeps<TQueueItem>,
+): BaleStatusRuntime<TContext> {
+  return createBaleStatusRuntime({
     statusKey: deps.statusKey,
     getStatusBarState: (_ctx, error) => {
       const config = deps.getConfig();
@@ -785,7 +785,7 @@ export function createTelegramBridgeStatusRuntime<
           hasPendingModelSwitch ||
           activeToolExecutions > 0 ||
           queuedItemCount > 0,
-        processingStatus: getTelegramStatusBarProcessingStatus({
+        processingStatus: getBaleStatusBarProcessingStatus({
           hasActiveTurn,
           hasPendingDispatch,
           hasPendingModelSwitch,
@@ -801,7 +801,7 @@ export function createTelegramBridgeStatusRuntime<
       const config = deps.getConfig();
       const botThreadMode = deps.getBotThreadMode?.();
       const activeProfileName = deps.getActiveProfileName
-        ? (deps.getActiveProfileName() ?? TELEGRAM_STATUS_DEFAULT_PROFILE_NAME)
+        ? (deps.getActiveProfileName() ?? BALE_STATUS_DEFAULT_PROFILE_NAME)
         : undefined;
       return {
         hasBotToken: config.botHasToken ?? Boolean(config.botToken),
@@ -845,7 +845,7 @@ export function createTelegramBridgeStatusRuntime<
   });
 }
 
-export interface TelegramRuntimeLogScope extends Record<string, unknown> {
+export interface BaleRuntimeLogScope extends Record<string, unknown> {
   instanceId: string;
   role: string;
   slot?: string;
@@ -853,10 +853,10 @@ export interface TelegramRuntimeLogScope extends Record<string, unknown> {
   lockState?: string;
 }
 
-export function createTelegramRuntimeLogScope(input: {
-  state: TelegramBridgeStatusLineState;
+export function createBaleRuntimeLogScope(input: {
+  state: BaleBridgeStatusLineState;
   instanceId: string;
-}): TelegramRuntimeLogScope {
+}): BaleRuntimeLogScope {
   return {
     instanceId: input.instanceId,
     role: input.state.busRole ?? "classic-or-disconnected",
@@ -866,19 +866,19 @@ export function createTelegramRuntimeLogScope(input: {
   };
 }
 
-export interface TelegramStatusSnapshot {
+export interface BaleStatusSnapshot {
   runtime: Record<string, unknown>;
   liveRoster: Record<string, unknown>;
   diagnostics: Record<string, unknown>;
 }
-export interface TelegramStoredRuntimeProjection extends TelegramStatusSnapshot {
+export interface BaleStoredRuntimeProjection extends BaleStatusSnapshot {
   version: 1;
   source: "snapshot";
   writtenAtMs: number;
 }
-export function createTelegramStatusSnapshot(
-  state: TelegramBridgeStatusLineState,
-): TelegramStatusSnapshot {
+export function createBaleStatusSnapshot(
+  state: BaleBridgeStatusLineState,
+): BaleStatusSnapshot {
   return {
     runtime: {
       busRole: state.busRole,
@@ -914,7 +914,7 @@ export function createTelegramStatusSnapshot(
 
 function isRuntimeProjection(
   value: unknown,
-): value is TelegramStoredRuntimeProjection {
+): value is BaleStoredRuntimeProjection {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -940,40 +940,40 @@ function isRuntimeProjection(
     )
   );
 }
-export interface TelegramRuntimeProjectionScope {
+export interface BaleRuntimeProjectionScope {
   path: string;
   profile: string;
 }
-export interface TelegramRuntimeProjectionStorage {
-  read: (scope: TelegramRuntimeProjectionScope) => unknown;
+export interface BaleRuntimeProjectionStorage {
+  read: (scope: BaleRuntimeProjectionScope) => unknown;
   /** The adapter must enforce exact owner plus the supplied physical/logical scope in one transaction. */
   publish: (
-    scope: TelegramRuntimeProjectionScope,
+    scope: BaleRuntimeProjectionScope,
     mutate: (current: unknown) => { value: unknown; changed: boolean },
     isCurrent: () => boolean,
   ) => boolean;
 }
-export interface TelegramRuntimeProjectionStoreOptions {
+export interface BaleRuntimeProjectionStoreOptions {
   getPath: () => string;
   getProfile: () => string | undefined;
   /** Capture exact owner/context/session authority at submission, never renew it after the queued await. */
   captureAuthority: () => (() => boolean) | undefined;
-  storage: TelegramRuntimeProjectionStorage;
+  storage: BaleRuntimeProjectionStorage;
   getNowMs?: () => number;
 }
 /** Observational runtime storage only; Workspace, admission, transport, logs and recovery remain with their owners. */
-export function createTelegramRuntimeProjectionStore(
-  options: TelegramRuntimeProjectionStoreOptions,
+export function createBaleRuntimeProjectionStore(
+  options: BaleRuntimeProjectionStoreOptions,
 ): {
-  read: () => TelegramStoredRuntimeProjection | undefined;
-  persist: (snapshot: TelegramStatusSnapshot) => Promise<boolean>;
+  read: () => BaleStoredRuntimeProjection | undefined;
+  persist: (snapshot: BaleStatusSnapshot) => Promise<boolean>;
 } {
   let publicationQueue = Promise.resolve();
   const { getPath, getProfile: readProfile, captureAuthority } = options;
   const { read, publish } = options.storage;
   const getNowMs = options.getNowMs ?? Date.now;
   const getProfile = (): string =>
-    readProfile() || TELEGRAM_STATUS_DEFAULT_PROFILE_NAME;
+    readProfile() || BALE_STATUS_DEFAULT_PROFILE_NAME;
   return {
     read() {
       try {
@@ -1003,9 +1003,9 @@ export function createTelegramRuntimeProjectionStore(
           liveRoster: snapshot.liveRoster,
           diagnostics: snapshot.diagnostics,
         }),
-      ) as Omit<TelegramStoredRuntimeProjection, "writtenAtMs">;
+      ) as Omit<BaleStoredRuntimeProjection, "writtenAtMs">;
       if (!isRuntimeProjection({ ...semantic, writtenAtMs: 0 }))
-        throw new Error("Telegram runtime projection is malformed.");
+        throw new Error("Bale runtime projection is malformed.");
       delete semantic.diagnostics.recentRuntimeEvents;
       // Poll-cycle timestamps change on every response; live status renders them from memory,
       // so persisting them would rewrite state.json each poll for no reader.
@@ -1020,7 +1020,7 @@ export function createTelegramRuntimeProjectionStore(
         getPath() === path && getProfile() === profile && authority() === true;
       const isUnchanged = (
         current: unknown,
-      ): current is TelegramStoredRuntimeProjection => {
+      ): current is BaleStoredRuntimeProjection => {
         if (!isRuntimeProjection(current)) return false;
         const { writtenAtMs: _writtenAtMs, ...existing } = current;
         return isDeepStrictEqual(existing, semantic);
@@ -1042,7 +1042,7 @@ export function createTelegramRuntimeProjectionStore(
               const writtenAtMs = getNowMs();
               if (!Number.isSafeInteger(writtenAtMs) || writtenAtMs < 0)
                 throw new Error(
-                  "Telegram runtime projection timestamp is invalid.",
+                  "Bale runtime projection timestamp is invalid.",
                 );
               return { value: { ...semantic, writtenAtMs }, changed: true };
             },
@@ -1059,9 +1059,9 @@ export function createTelegramRuntimeProjectionStore(
   };
 }
 
-const TELEGRAM_DIAGNOSTICS_SNAPSHOT_COALESCE_MS = 100;
+const BALE_DIAGNOSTICS_SNAPSHOT_COALESCE_MS = 100;
 
-export function createTelegramRuntimeDiagnosticsSnapshotScheduler(deps: {
+export function createBaleRuntimeDiagnosticsSnapshotScheduler(deps: {
   persistSnapshot: (isCurrent: () => boolean) => Promise<void>;
   recordError: (error: unknown) => void;
   captureScope?: () => (() => boolean) | undefined;
@@ -1149,7 +1149,7 @@ export function createTelegramRuntimeDiagnosticsSnapshotScheduler(deps: {
           arm();
         });
       persistPromise = tracked;
-    }, TELEGRAM_DIAGNOSTICS_SNAPSHOT_COALESCE_MS);
+    }, BALE_DIAGNOSTICS_SNAPSHOT_COALESCE_MS);
     timer = { token, handle };
     if (typeof handle !== "number") handle.unref?.();
   };
@@ -1176,7 +1176,7 @@ export function createTelegramRuntimeDiagnosticsSnapshotScheduler(deps: {
   });
 }
 
-export function getTelegramStatusBarProcessingStatus(state: {
+export function getBaleStatusBarProcessingStatus(state: {
   hasActiveTurn: boolean;
   hasPendingDispatch: boolean;
   hasPendingModelSwitch: boolean;
@@ -1190,15 +1190,15 @@ export function getTelegramStatusBarProcessingStatus(state: {
   return undefined;
 }
 
-function getTelegramStatusBarLabel(state: TelegramStatusBarState): string {
-  return state.instanceThreadName?.trim() || "telegram";
+function getBaleStatusBarLabel(state: BaleStatusBarState): string {
+  return state.instanceThreadName?.trim() || "bale";
 }
 
-export function buildTelegramStatusBarText(
-  theme: TelegramStatusBarTheme,
-  state: TelegramStatusBarState,
+export function buildBaleStatusBarText(
+  theme: BaleStatusBarTheme,
+  state: BaleStatusBarState,
 ): string {
-  const label = theme.fg("accent", getTelegramStatusBarLabel(state));
+  const label = theme.fg("accent", getBaleStatusBarLabel(state));
   const queued = state.queuedStatus ? theme.fg("warning", state.queuedStatus) : "";
   if (!state.hasBotToken)
     return `${label} ${theme.fg("muted", "not configured")}${queued}`;
@@ -1226,9 +1226,9 @@ export function buildTelegramStatusBarText(
   return `${label} ${theme.fg("success", "connected")}${queued}`;
 }
 
-function formatTelegramBridgeBotStatus(
+function formatBaleBridgeBotStatus(
   state: Pick<
-    TelegramBridgeStatusLineState,
+    BaleBridgeStatusLineState,
     "hasBotToken" | "botUsername" | "botTokenDiagnostic"
   >,
 ): string {
@@ -1237,7 +1237,7 @@ function formatTelegramBridgeBotStatus(
   return state.botTokenDiagnostic ?? "not configured";
 }
 
-function formatTelegramStatusTarget(
+function formatBaleStatusTarget(
   target: { chatId: number; threadId?: number } | undefined,
 ): string {
   if (!target) return "";
@@ -1246,7 +1246,7 @@ function formatTelegramStatusTarget(
     : ` target ${target.chatId}:${target.threadId}`;
 }
 
-function formatTelegramThreadStatusLabel(input: {
+function formatBaleThreadStatusLabel(input: {
   threadName?: string;
   slot?: string;
 }): string {
@@ -1255,7 +1255,7 @@ function formatTelegramThreadStatusLabel(input: {
   return input.slot ? `[${input.slot}]` : "";
 }
 
-function formatTelegramBusProtocolIdentity(
+function formatBaleBusProtocolIdentity(
   protocol:
     | {
         protocolVersion: number;
@@ -1272,8 +1272,8 @@ function formatTelegramBusProtocolIdentity(
   return ` protocol=v${protocol.protocolVersion} build=${protocol.runtimeBuild}${capabilities}`;
 }
 
-function buildTelegramBusFollowerLines(
-  state: Pick<TelegramBridgeStatusLineState, "busFollowers" | "busNowMs">,
+function buildBaleBusFollowerLines(
+  state: Pick<BaleBridgeStatusLineState, "busFollowers" | "busNowMs">,
 ): string[] {
   const followers = state.busFollowers ?? [];
   if (followers.length === 0) return [];
@@ -1287,29 +1287,29 @@ function buildTelegramBusFollowerLines(
         0,
         Math.round((nowMs - follower.lastHeartbeatMs) / 1000),
       );
-      const label = formatTelegramThreadStatusLabel(follower);
+      const label = formatBaleThreadStatusLabel(follower);
       const labelSuffix = label ? ` ${label}` : "";
       const statusLabel = follower.status ? ` (${follower.status})` : "";
       const cwd = follower.cwd ? ` ${follower.cwd}` : "";
-      const target = formatTelegramStatusTarget(follower.target);
-      const protocol = formatTelegramBusProtocolIdentity(follower.protocol);
+      const target = formatBaleStatusTarget(follower.target);
+      const protocol = formatBaleBusProtocolIdentity(follower.protocol);
       return `- ${follower.instanceId}:${labelSuffix} heartbeat ${ageSeconds}s ago${statusLabel}${target}${cwd}${protocol}`;
     }),
   ];
 }
 
-function buildTelegramLocalBusLines(
-  state: Pick<TelegramBridgeStatusLineState, "localBus">,
+function buildBaleLocalBusLines(
+  state: Pick<BaleBridgeStatusLineState, "localBus">,
   options: { verbose?: boolean } = {},
 ): string[] {
   const localBus = state.localBus;
   if (!localBus) return [];
-  const target = formatTelegramStatusTarget(localBus.followerTarget);
-  const label = formatTelegramThreadStatusLabel({
+  const target = formatBaleStatusTarget(localBus.followerTarget);
+  const label = formatBaleThreadStatusLabel({
     slot: localBus.followerSlot,
     threadName: localBus.followerThreadName,
   });
-  const protocol = formatTelegramBusProtocolIdentity(localBus.leaderProtocol);
+  const protocol = formatBaleBusProtocolIdentity(localBus.leaderProtocol);
   const followerLine = `- follower registered: ${localBus.followerRegistered ? "yes" : "no"}${label ? ` ${label}` : ""}${target}${protocol}`;
   const lines = ["", "local bus:", followerLine];
   if (options.verbose) {
@@ -1331,8 +1331,8 @@ function buildTelegramLocalBusLines(
   return lines;
 }
 
-function buildTelegramSyncSliceLines(
-  state: Pick<TelegramBridgeStatusLineState, "syncState">,
+function buildBaleSyncSliceLines(
+  state: Pick<BaleBridgeStatusLineState, "syncState">,
 ): string[] {
   const syncState = state.syncState;
   if (!syncState || Object.keys(syncState).length === 0) return [];
@@ -1349,8 +1349,8 @@ function buildTelegramSyncSliceLines(
   ];
 }
 
-function buildTelegramThreadReconciliationLines(
-  state: Pick<TelegramBridgeStatusLineState, "threadReconciliation">,
+function buildBaleThreadReconciliationLines(
+  state: Pick<BaleBridgeStatusLineState, "threadReconciliation">,
 ): string[] {
   const reconciliation = state.threadReconciliation;
   if (!reconciliation) return [];
@@ -1365,9 +1365,9 @@ function buildTelegramThreadReconciliationLines(
   ];
 }
 
-function buildTelegramTopicTargetDiagnosticLines(
+function buildBaleTopicTargetDiagnosticLines(
   state: Pick<
-    TelegramBridgeStatusLineState,
+    BaleBridgeStatusLineState,
     "topicTargets" | "threadReservations" | "topicSyncObservations"
   >,
 ): string[] {
@@ -1384,7 +1384,7 @@ function buildTelegramTopicTargetDiagnosticLines(
     observations.length === 0
   )
     return [];
-  const byInstance = new Map<string, TelegramBridgeStatusTopicTarget[]>();
+  const byInstance = new Map<string, BaleBridgeStatusTopicTarget[]>();
   for (const record of activeTargets) {
     const key = record.instanceId;
     if (!key) continue;
@@ -1397,15 +1397,15 @@ function buildTelegramTopicTargetDiagnosticLines(
     .map(([instanceId, records]) => {
       const targets = records
         .map((record) => {
-          const label = formatTelegramThreadStatusLabel(record);
-          return `${label}${formatTelegramStatusTarget(record.target) || " unknown"}`.trim();
+          const label = formatBaleThreadStatusLabel(record);
+          return `${label}${formatBaleStatusTarget(record.target) || " unknown"}`.trim();
         })
         .join(", ");
       return `- duplicate ${instanceId}: ${records.length} active threads ${targets}`;
     });
   const twinLines = activeTargets.map((record) => {
-    const label = formatTelegramThreadStatusLabel(record);
-    const target = formatTelegramStatusTarget(record.target) || " unknown";
+    const label = formatBaleThreadStatusLabel(record);
+    const target = formatBaleStatusTarget(record.target) || " unknown";
     const sync = record.syncStatus ? ` sync=${record.syncStatus}` : "";
     const observed = record.lastSyncObservedAtMs
       ? ` observed=${new Date(record.lastSyncObservedAtMs).toISOString()}`
@@ -1423,7 +1423,7 @@ function buildTelegramTopicTargetDiagnosticLines(
   });
   const reservationLines = reservations.map((reservation) => {
     const slot = reservation.slot ? `[${reservation.slot}]` : "";
-    const target = formatTelegramStatusTarget(reservation.target) || " unknown";
+    const target = formatBaleStatusTarget(reservation.target) || " unknown";
     const reason = reservation.reason ? ` reason=${reservation.reason}` : "";
     const instance = reservation.instanceId
       ? ` instance=${reservation.instanceId}`
@@ -1435,7 +1435,7 @@ function buildTelegramTopicTargetDiagnosticLines(
   });
   const observationLines = observations.map((observation) => {
     const slot = observation.slot ? `[${observation.slot}]` : "";
-    const target = formatTelegramStatusTarget(observation.target) || " unknown";
+    const target = formatBaleStatusTarget(observation.target) || " unknown";
     const observed = ` observed=${new Date(observation.observedAtMs).toISOString()}`;
     const instance = observation.instanceId
       ? ` instance=${observation.instanceId}`
@@ -1458,9 +1458,9 @@ function buildTelegramTopicTargetDiagnosticLines(
   ];
 }
 
-function buildTelegramBridgeCompactThreadLines(
+function buildBaleBridgeCompactThreadLines(
   state: Pick<
-    TelegramBridgeStatusLineState,
+    BaleBridgeStatusLineState,
     | "busFollowers"
     | "topicTargets"
     | "threadReservations"
@@ -1473,7 +1473,7 @@ function buildTelegramBridgeCompactThreadLines(
       (record.status === "active" || record.status === "starting"),
   );
   const activeLabels = activeTargets
-    .map(formatTelegramThreadStatusLabel)
+    .map(formatBaleThreadStatusLabel)
     .filter((label) => label.length > 0);
   const followers = state.busFollowers ?? [];
   const reservations = state.threadReservations ?? [];
@@ -1498,8 +1498,8 @@ function buildTelegramBridgeCompactThreadLines(
   return lines;
 }
 
-function formatTelegramPollingLifecycle(
-  state: Pick<TelegramBridgeStatusLineState, "pollingActive" | "polling">,
+function formatBalePollingLifecycle(
+  state: Pick<BaleBridgeStatusLineState, "pollingActive" | "polling">,
 ): string {
   const lifecycle = state.pollingActive ? "running" : "stopped";
   if (!state.polling) return lifecycle;
@@ -1509,8 +1509,8 @@ function formatTelegramPollingLifecycle(
     : lifecycle;
 }
 
-function buildTelegramPollingDiagnosticLines(
-  polling: TelegramBridgePollingState | undefined,
+function buildBalePollingDiagnosticLines(
+  polling: BaleBridgePollingState | undefined,
 ): string[] {
   if (!polling) return [];
   return [
@@ -1536,16 +1536,16 @@ function buildTelegramPollingDiagnosticLines(
   ];
 }
 
-function formatTelegramInboundWorkerState(
-  worker: TelegramBridgeInboundWorkerState | undefined,
+function formatBaleInboundWorkerState(
+  worker: BaleBridgeInboundWorkerState | undefined,
 ): string {
   if (!worker) return "not started";
   const depth = worker.journalEntryCount;
   return `${worker.phase} (depth=${depth}, queued=${worker.queuedClaimCount}, foreign=${worker.foreignQueuedCount}, deferred=${worker.deferredClaimCount}, retry=${worker.retryWaitCount}, failed=${worker.failedCount})`;
 }
 
-function buildTelegramInboundWorkerDiagnosticLines(
-  worker: TelegramBridgeInboundWorkerState | undefined,
+function buildBaleInboundWorkerDiagnosticLines(
+  worker: BaleBridgeInboundWorkerState | undefined,
 ): string[] {
   if (!worker) return ["- state: not started"];
   return [
@@ -1604,10 +1604,10 @@ function buildTelegramInboundWorkerDiagnosticLines(
   ];
 }
 
-function countTelegramQueueLanes(
-  items: TelegramBridgeStatusLineState["queuedItems"],
-): Record<TelegramStatusQueueLane, number> {
-  const counts: Record<TelegramStatusQueueLane, number> = {
+function countBaleQueueLanes(
+  items: BaleBridgeStatusLineState["queuedItems"],
+): Record<BaleStatusQueueLane, number> {
+  const counts: Record<BaleStatusQueueLane, number> = {
     control: 0,
     steer: 0,
     priority: 0,
@@ -1617,15 +1617,15 @@ function countTelegramQueueLanes(
   return counts;
 }
 
-function buildTelegramBridgeCompactStatusLines(
-  state: TelegramBridgeStatusLineState,
+function buildBaleBridgeCompactStatusLines(
+  state: BaleBridgeStatusLineState,
 ): string[] {
   const {
     control: controlQueueCount,
     priority: priorityQueueCount,
     default: defaultQueueCount,
     steer: steerQueueCount,
-  } = countTelegramQueueLanes(state.queuedItems);
+  } = countBaleQueueLanes(state.queuedItems);
   const queueLine = `- queued turns: ${state.queuedItems.length}${
     state.queuedItems.length > 0
       ? ` (control=${controlQueueCount}${steerQueueCount > 0 ? `, steer=${steerQueueCount}` : ""}, priority=${priorityQueueCount}, default=${defaultQueueCount})`
@@ -1637,12 +1637,12 @@ function buildTelegramBridgeCompactStatusLines(
       ? "active"
       : "idle";
   const diagnosticsPaths = state.diagnosticPaths ?? {
-    state: "~/.pi/agent/tmp/pi-telegram/state.json",
-    logs: "~/.pi/agent/tmp/pi-telegram/logs.jsonl",
+    state: "~/.pi/agent/tmp/pi-bale/state.json",
+    logs: "~/.pi/agent/tmp/pi-bale/logs.jsonl",
   };
   return [
     "connection:",
-    `- bot: ${formatTelegramBridgeBotStatus(state)}`,
+    `- bot: ${formatBaleBridgeBotStatus(state)}`,
     ...(state.activeProfileName
       ? [`- profile: ${state.activeProfileName}`]
       : []),
@@ -1658,10 +1658,10 @@ function buildTelegramBridgeCompactStatusLines(
     ...(state.lockState ? [`- owner: ${state.lockState}`] : []),
     "",
     "health:",
-    `- polling: ${formatTelegramPollingLifecycle(state)}`,
+    `- polling: ${formatBalePollingLifecycle(state)}`,
     ...(state.inboundWorker
       ? [
-          `- inbound worker: ${formatTelegramInboundWorkerState(state.inboundWorker)}`,
+          `- inbound worker: ${formatBaleInboundWorkerState(state.inboundWorker)}`,
         ]
       : []),
     `- state: ${executionState}`,
@@ -1670,38 +1670,38 @@ function buildTelegramBridgeCompactStatusLines(
       ? [`- active tools: ${state.activeToolExecutions}`]
       : []),
     ...(state.pendingModelSwitch ? ["- pending model switch: yes"] : []),
-    ...buildTelegramBridgeCompactThreadLines(state),
-    ...buildTelegramBusFollowerLines(state),
-    ...buildTelegramLocalBusLines(state),
-    ...buildTelegramThreadReconciliationLines(state),
+    ...buildBaleBridgeCompactThreadLines(state),
+    ...buildBaleBusFollowerLines(state),
+    ...buildBaleLocalBusLines(state),
+    ...buildBaleThreadReconciliationLines(state),
     "",
     "diagnostics:",
     `- state: ${diagnosticsPaths.state}`,
     `- logs: ${diagnosticsPaths.logs}`,
-    "- full dump: /telegram-status --debug",
+    "- full dump: /bale-status --debug",
   ];
 }
 
-export function buildTelegramBridgeStatusLines(
-  state: TelegramBridgeStatusLineState,
-  options: TelegramBridgeStatusLineOptions = {},
+export function buildBaleBridgeStatusLines(
+  state: BaleBridgeStatusLineState,
+  options: BaleBridgeStatusLineOptions = {},
 ): string[] {
-  if (options.verbose) return buildTelegramBridgeDiagnosticStatusLines(state);
-  return buildTelegramBridgeCompactStatusLines(state);
+  if (options.verbose) return buildBaleBridgeDiagnosticStatusLines(state);
+  return buildBaleBridgeCompactStatusLines(state);
 }
 
-function buildTelegramBridgeDiagnosticStatusLines(
-  state: TelegramBridgeStatusLineState,
+function buildBaleBridgeDiagnosticStatusLines(
+  state: BaleBridgeStatusLineState,
 ): string[] {
   const {
     control: controlQueueCount,
     priority: priorityQueueCount,
     default: defaultQueueCount,
     steer: steerQueueCount,
-  } = countTelegramQueueLanes(state.queuedItems);
+  } = countBaleQueueLanes(state.queuedItems);
   return [
     "connection:",
-    `- bot: ${formatTelegramBridgeBotStatus(state)}`,
+    `- bot: ${formatBaleBridgeBotStatus(state)}`,
     ...(state.activeProfileName
       ? [`- profile: ${state.activeProfileName}`]
       : []),
@@ -1713,7 +1713,7 @@ function buildTelegramBridgeDiagnosticStatusLines(
       : []),
     ...(state.busRole ? [`- bus role: ${state.busRole}`] : []),
     ...(state.busProtocol
-      ? [`- bus${formatTelegramBusProtocolIdentity(state.busProtocol)}`]
+      ? [`- bus${formatBaleBusProtocolIdentity(state.busProtocol)}`]
       : []),
     ...(state.busLifecyclePhase
       ? [`- bus lifecycle: ${state.busLifecyclePhase}`]
@@ -1724,14 +1724,14 @@ function buildTelegramBridgeDiagnosticStatusLines(
     ...(state.lockState ? [`- owner: ${state.lockState}`] : []),
     "",
     "polling:",
-    `- state: ${formatTelegramPollingLifecycle(state)}`,
-    ...buildTelegramPollingDiagnosticLines(state.polling),
+    `- state: ${formatBalePollingLifecycle(state)}`,
+    ...buildBalePollingDiagnosticLines(state.polling),
     `- last update id: ${state.lastUpdateId ?? "none"}`,
     "",
     ...(state.inboundWorker
       ? [
           "inbound worker:",
-          ...buildTelegramInboundWorkerDiagnosticLines(state.inboundWorker),
+          ...buildBaleInboundWorkerDiagnosticLines(state.inboundWorker),
           "",
         ]
       : []),
@@ -1745,13 +1745,13 @@ function buildTelegramBridgeDiagnosticStatusLines(
     "queue:",
     `- queued turns: ${state.queuedItems.length}`,
     `- lanes: control=${controlQueueCount}${steerQueueCount > 0 ? `, steer=${steerQueueCount}` : ""}, priority=${priorityQueueCount}, default=${defaultQueueCount}`,
-    ...buildTelegramBusFollowerLines(state),
-    ...buildTelegramLocalBusLines(state, { verbose: true }),
-    ...buildTelegramTopicTargetDiagnosticLines(state),
-    ...buildTelegramThreadReconciliationLines(state),
-    ...buildTelegramSyncSliceLines(state),
+    ...buildBaleBusFollowerLines(state),
+    ...buildBaleLocalBusLines(state, { verbose: true }),
+    ...buildBaleTopicTargetDiagnosticLines(state),
+    ...buildBaleThreadReconciliationLines(state),
+    ...buildBaleSyncSliceLines(state),
     "",
-    ...buildTelegramRuntimeEventLines(state.recentRuntimeEvents),
+    ...buildBaleRuntimeEventLines(state.recentRuntimeEvents),
   ];
 }
 
@@ -1763,8 +1763,8 @@ function formatTokens(count: number): string {
   return `${Math.round(count / 1000000)}M`;
 }
 
-function collectUsageStats(ctx: TelegramStatusContext): TelegramUsageStats {
-  const stats: TelegramUsageStats = {
+function collectUsageStats(ctx: BaleStatusContext): BaleUsageStats {
+  const stats: BaleUsageStats = {
     totalInput: 0,
     totalOutput: 0,
     totalCacheRead: 0,
@@ -1801,14 +1801,14 @@ function buildStatusRow(label: string, value: string): string {
   return `<b>${escapeHtml(formatStatusRowLabel(label))}:</b> <code>${escapeHtml(value)}</code>`;
 }
 
-function buildUsageSummary(stats: TelegramUsageStats): string | undefined {
+function buildUsageSummary(stats: BaleUsageStats): string | undefined {
   const tokenParts: string[] = [];
   if (stats.totalInput) tokenParts.push(`↑${formatTokens(stats.totalInput)}`);
   if (stats.totalOutput) tokenParts.push(`↓${formatTokens(stats.totalOutput)}`);
   return tokenParts.length > 0 ? tokenParts.join(" ") : undefined;
 }
 
-function buildCacheSummary(stats: TelegramUsageStats): string | undefined {
+function buildCacheSummary(stats: BaleUsageStats): string | undefined {
   const cacheParts: string[] = [];
   if (stats.totalCacheRead)
     cacheParts.push(`R${formatTokens(stats.totalCacheRead)}`);
@@ -1824,7 +1824,7 @@ function buildCacheSummary(stats: TelegramUsageStats): string | undefined {
 }
 
 function buildCostSummary(
-  stats: TelegramUsageStats,
+  stats: BaleUsageStats,
   usesSubscription: boolean,
 ): string | undefined {
   if (!stats.totalCost && !usesSubscription) return undefined;
@@ -1832,8 +1832,8 @@ function buildCostSummary(
 }
 
 function buildContextSummary(
-  ctx: TelegramStatusContext,
-  activeModel: TelegramStatusActiveModel | undefined,
+  ctx: BaleStatusContext,
+  activeModel: BaleStatusActiveModel | undefined,
 ): string {
   const usage = ctx.getContextUsage();
   if (!usage) return "unknown";
@@ -1842,7 +1842,7 @@ function buildContextSummary(
   return `${percent}/${formatTokens(contextWindow)}`;
 }
 
-function buildStatusSummary(ctx: TelegramStatusContext): string {
+function buildStatusSummary(ctx: BaleStatusContext): string {
   if (ctx.isCompactionInProgress?.()) return "compacting";
   if (ctx.hasPendingMessages?.()) return "pending";
   if (ctx.isIdle?.() === false) return "active";
@@ -1850,17 +1850,17 @@ function buildStatusSummary(ctx: TelegramStatusContext): string {
   return "unknown";
 }
 
-function buildTelegramStatusRoleSuffix(
-  state: TelegramBridgeStatusLineState | undefined,
+function buildBaleStatusRoleSuffix(
+  state: BaleBridgeStatusLineState | undefined,
 ): string {
   if (state?.botThreadMode !== "enabled" || !state.busRole) return "";
   return ` @${state.busRole}`;
 }
 
 function buildStatusHtml(
-  ctx: TelegramStatusContext,
-  activeModel: TelegramStatusActiveModel | undefined,
-  bridgeStatus?: TelegramBridgeStatusLineState,
+  ctx: BaleStatusContext,
+  activeModel: BaleStatusActiveModel | undefined,
+  bridgeStatus?: BaleBridgeStatusLineState,
 ): string {
   const stats = collectUsageStats(ctx);
   const usesSubscription = activeModel
@@ -1869,7 +1869,7 @@ function buildStatusHtml(
   const lines: string[] = [
     buildStatusRow(
       "Status",
-      `${buildStatusSummary(ctx)}${buildTelegramStatusRoleSuffix(bridgeStatus)}`,
+      `${buildStatusSummary(ctx)}${buildBaleStatusRoleSuffix(bridgeStatus)}`,
     ),
   ];
   const usageSummary = buildUsageSummary(stats);
@@ -1885,7 +1885,7 @@ function buildStatusHtml(
     lines.push(buildStatusRow("Cost", costSummary));
   }
   lines.push(buildStatusRow("Context", buildContextSummary(ctx, activeModel)));
-  for (const row of getTelegramStatusLineProviderResults({ activeModel })) {
+  for (const row of getBaleStatusLineProviderResults({ activeModel })) {
     lines.push(buildStatusRow(row.label, row.value));
   }
   return lines.join("\n");

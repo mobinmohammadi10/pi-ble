@@ -1,14 +1,14 @@
 /**
- * Telegram bridge binding composition
- * Zones: telegram, pi agent, orchestration
+ * Bale bridge binding composition
+ * Zones: bale, pi agent, orchestration
  * Owns pi-facing tool, command, and lifecycle hook registration for the entrypoint
  */
 
 import * as ActivityVerbosity from "./activity-verbosity.ts";
 import * as Activity from "./activity.ts";
 import * as BusApi from "./bus-api.ts";
-import type { TelegramBusFollowerCommandOwner } from "./bus-follower.ts";
-import type { TelegramBusLiveRebindWorkState } from "./bus.ts";
+import type { BaleBusFollowerCommandOwner } from "./bus-follower.ts";
+import type { BaleBusLiveRebindWorkState } from "./bus.ts";
 import * as ChannelPosts from "./channel-posts.ts";
 import * as CommandTemplates from "./command-templates.ts";
 import * as Commands from "./commands.ts";
@@ -31,11 +31,11 @@ import * as Routing from "./routing.ts";
 import * as Runtime from "./runtime.ts";
 import * as Setup from "./setup.ts";
 import * as Status from "./status.ts";
-import type { TelegramTarget } from "./target.ts";
-import * as TelegramApi from "./telegram-api.ts";
+import type { BaleTarget } from "./target.ts";
+import * as BaleApi from "./bale-api.ts";
 
 /** Compose any registered held command over captured recipient effects; no ordinary follower API fallback. */
-export function createTelegramFollowerSelectedCommandBinding<
+export function createBaleFollowerSelectedCommandBinding<
   TContext,
   TModel extends Model.MenuModel = Model.MenuModel,
 >(deps: {
@@ -43,31 +43,31 @@ export function createTelegramFollowerSelectedCommandBinding<
   operationId: string;
   registrationGeneration: string;
   name: string;
-  target: TelegramTarget & { threadId: number };
+  target: BaleTarget & { threadId: number };
   recipient: Pick<
-    TelegramBusFollowerCommandOwner<TContext>,
+    BaleBusFollowerCommandOwner<TContext>,
     "isCurrent" | "assertRecipientCurrent"
   >;
   command: Pick<
     ReturnType<
-      typeof Commands.createTelegramCommandHandlerTargetRuntime<
-        Commands.TelegramCommandRuntimeMessage,
+      typeof Commands.createBaleCommandHandlerTargetRuntime<
+        Commands.BaleCommandRuntimeMessage,
         TContext
       >
     >,
     "prepareHeldCommand" | "canPrepareHeldCommand"
   >;
   menu?: Omit<
-    Menu.TelegramMenuActionRuntimeDeps<TContext, TModel>,
+    Menu.BaleMenuActionRuntimeDeps<TContext, TModel>,
     "sendTextReply" | "sendInteractiveMessage" | "editInteractiveMessage"
   >;
   deliver: Parameters<
-    typeof BusApi.createTelegramSelectedMenuTextApi
+    typeof BusApi.createBaleSelectedMenuTextApi
   >[0]["deliver"];
   recordOwnership: NonNullable<
-    Replies.TelegramRenderedMessageDeliveryRuntimeDeps<Menu.TelegramReplyMarkup>["recordOwnership"]
+    Replies.BaleRenderedMessageDeliveryRuntimeDeps<Menu.BaleReplyMarkup>["recordOwnership"]
   >;
-}): TelegramBusFollowerCommandOwner<TContext> | undefined {
+}): BaleBusFollowerCommandOwner<TContext> | undefined {
   const {
       ctx,
       operationId,
@@ -127,7 +127,7 @@ export function createTelegramFollowerSelectedCommandBinding<
   const current = () =>
     portsCurrent() && isCurrent.call(recipient) && portsCurrent();
   if (!current()) return undefined;
-  const api = BusApi.createTelegramSelectedMenuTextApi({
+  const api = BusApi.createBaleSelectedMenuTextApi({
     operationId,
     registrationGeneration,
     target,
@@ -135,7 +135,7 @@ export function createTelegramFollowerSelectedCommandBinding<
     deliver,
   });
   const rendered =
-    Replies.createTelegramRenderedMessageDeliveryRuntime<Menu.TelegramReplyMarkup>(
+    Replies.createBaleRenderedMessageDeliveryRuntime<Menu.BaleReplyMarkup>(
       {
         sendMessage: api.sendMessage,
         editMessage: api.editMessageText,
@@ -149,7 +149,7 @@ export function createTelegramFollowerSelectedCommandBinding<
     );
   const menus =
     menuPorts &&
-    Menu.createTelegramMenuActionRuntime({
+    Menu.createBaleMenuActionRuntime({
       ...menuPorts,
       sendTextReply: rendered.sendTextReply,
       sendInteractiveMessage: rendered.sendInteractiveMessage,
@@ -187,84 +187,84 @@ export function createTelegramFollowerSelectedCommandBinding<
 
 type ActivePiModel = NonNullable<Pi.ExtensionContext["model"]>;
 
-type TelegramRuntimeEventRecorder = (
+type BaleRuntimeEventRecorder = (
   category: string,
   error: unknown,
   details?: Record<string, unknown>,
 ) => void;
 
-type TelegramBridgeStatusUpdater =
-  Status.TelegramStatusRuntime<Pi.ExtensionContext>["updateStatus"];
+type BaleBridgeStatusUpdater =
+  Status.BaleStatusRuntime<Pi.ExtensionContext>["updateStatus"];
 
-type TelegramAgentTargetResolver = NonNullable<
-  OutboundAttachments.TelegramOutboundMessageToolRegistrationDeps["resolveAgentTarget"]
+type BaleAgentTargetResolver = NonNullable<
+  OutboundAttachments.BaleOutboundMessageToolRegistrationDeps["resolveAgentTarget"]
 >;
-type TelegramAgentMessageRouter = NonNullable<
-  OutboundAttachments.TelegramOutboundMessageToolRegistrationDeps["routeAgentMessage"]
+type BaleAgentMessageRouter = NonNullable<
+  OutboundAttachments.BaleOutboundMessageToolRegistrationDeps["routeAgentMessage"]
 >;
 
-export interface TelegramQueueBindingRuntime<TContext> {
-  mutation: Queue.TelegramQueueMutationController<TContext>;
+export interface BaleQueueBindingRuntime<TContext> {
+  mutation: Queue.BaleQueueMutationController<TContext>;
   dispatchNext: (ctx: TContext) => void;
   requestNextDispatchAnnouncement: () => void;
   cancelNextDispatchAnnouncement: () => void;
-  watchdog: Queue.TelegramQueueDispatchWatchdogRuntime<TContext>;
+  watchdog: Queue.BaleQueueDispatchWatchdogRuntime<TContext>;
   onTurnEnd: (
     event: Pick<Pi.TurnEndEvent, "turnIndex" | "outcome">,
     ctx: TContext,
   ) => Pi.TurnEndEventResult | undefined;
 }
 
-export function createTelegramQueueBindingRuntime<TContext>(deps: {
-  store: Queue.TelegramQueueStateStore<TContext>;
-  queue: Pick<Runtime.TelegramBridgeRuntime["queue"], "allocateItemOrder">;
+export function createBaleQueueBindingRuntime<TContext>(deps: {
+  store: Queue.BaleQueueStateStore<TContext>;
+  queue: Pick<Runtime.BaleBridgeRuntime["queue"], "allocateItemOrder">;
   lifecycle: Pick<
-    Runtime.TelegramBridgeRuntime["lifecycle"],
+    Runtime.BaleBridgeRuntime["lifecycle"],
     "isCompactionInProgress" | "hasDispatchPending"
-  > & Partial<Pick<Runtime.TelegramBridgeRuntime["lifecycle"], "getActiveToolExecutions">>;
-  activeTurn: Pick<Queue.TelegramActiveTurnStore, "has"> & Partial<Pick<Queue.TelegramActiveTurnStore, "get">>;
+  > & Partial<Pick<Runtime.BaleBridgeRuntime["lifecycle"], "getActiveToolExecutions">>;
+  activeTurn: Pick<Queue.BaleActiveTurnStore, "has"> & Partial<Pick<Queue.BaleActiveTurnStore, "get">>;
   admission: {
     getSettlement: () =>
       | {
           onItemsDiscarded: (
-            items: readonly Queue.TelegramQueueItem<TContext>[],
+            items: readonly Queue.BaleQueueItem<TContext>[],
             ctx: TContext,
           ) => boolean;
-          isItemReady: (item: Queue.TelegramQueueItem<TContext>) => boolean;
+          isItemReady: (item: Queue.BaleQueueItem<TContext>) => boolean;
           onPromptHandedOff?: (
-            item: Pick<Queue.PendingTelegramTurn, "admissionReceipts">,
+            item: Pick<Queue.PendingBaleTurn, "admissionReceipts">,
             ctx: TContext,
           ) => boolean;
           onControlSettled: (
-            item: Queue.PendingTelegramControlItem<TContext>,
+            item: Queue.PendingBaleControlItem<TContext>,
             ctx: TContext,
           ) => void;
         }
       | undefined;
     hasPendingQueueMutationForItem: (
-      item: Queue.TelegramQueueItem<TContext>,
+      item: Queue.BaleQueueItem<TContext>,
     ) => boolean;
   };
-  transportStamp: Pick<Queue.TelegramTransportStampRuntime, "isActive">;
+  transportStamp: Pick<Queue.BaleTransportStampRuntime, "isActive">;
   deferredDispatch: Pick<
-    Queue.TelegramDeferredQueueDispatchRuntime<TContext>,
+    Queue.BaleDeferredQueueDispatchRuntime<TContext>,
     "isBound" | "getGeneration" | "isGenerationActive"
   >;
-  promptDispatch: Runtime.TelegramPromptDispatchRuntime<TContext>;
+  promptDispatch: Runtime.BalePromptDispatchRuntime<TContext>;
   isIdle: (ctx: TContext) => boolean;
   hasPendingMessages: (ctx: TContext) => boolean;
   isContextCurrent?: (ctx: TContext) => boolean;
   isContextAborted?: (ctx: TContext) => boolean;
   updateStatus: (ctx: TContext, error?: string) => void;
-  sendTextReply: Queue.TelegramQueueDispatchRuntimeDeps<TContext>["sendTextReply"];
-  sendUserMessage: Queue.TelegramQueueDispatchRuntimeDeps<TContext>["sendUserMessage"];
+  sendTextReply: Queue.BaleQueueDispatchRuntimeDeps<TContext>["sendTextReply"];
+  sendUserMessage: Queue.BaleQueueDispatchRuntimeDeps<TContext>["sendUserMessage"];
   reconcileNextDispatchAnnouncementReplyOwnership?: (
-    item: Queue.PendingTelegramTurn,
+    item: Queue.PendingBaleTurn,
   ) => void;
-  recordRuntimeEvent?: TelegramRuntimeEventRecorder;
-}): TelegramQueueBindingRuntime<TContext> {
+  recordRuntimeEvent?: BaleRuntimeEventRecorder;
+}): BaleQueueBindingRuntime<TContext> {
   const settleDiscardedItems = (
-    items: readonly Queue.TelegramQueueItem<TContext>[],
+    items: readonly Queue.BaleQueueItem<TContext>[],
     ctx: TContext,
   ): boolean => {
     const durableItems = items.filter(
@@ -275,23 +275,23 @@ export function createTelegramQueueBindingRuntime<TContext>(deps: {
     if (!settlement) return false;
     return settlement.onItemsDiscarded(durableItems, ctx) === true;
   };
-  const settlePromptPacket = (items: readonly Queue.PendingTelegramTurn[], ctx: TContext): boolean => {
+  const settlePromptPacket = (items: readonly Queue.PendingBaleTurn[], ctx: TContext): boolean => {
     const receipts = items.flatMap(item => item.admissionReceipts ?? []);
     return receipts.length === 0 || deps.admission.getSettlement()?.onPromptHandedOff?.({ admissionReceipts: receipts }, ctx) === true;
   };
-  const mutation = Queue.createTelegramQueueMutationController({
+  const mutation = Queue.createBaleQueueMutationController({
     ...deps.store,
     hasPendingDispatch: deps.lifecycle.hasDispatchPending,
     allocateLaneOrder: deps.queue.allocateItemOrder,
     onItemsDiscarded(items, ctx) {
       if (!settleDiscardedItems(items, ctx)) {
-        throw new Error("Telegram queue items could not be discarded durably.");
+        throw new Error("Bale queue items could not be discarded durably.");
       }
     },
     updateStatus: deps.updateStatus,
     recordRuntimeEvent: deps.recordRuntimeEvent,
   });
-  const dispatch = Queue.createTelegramQueueDispatchRuntime({
+  const dispatch = Queue.createBaleQueueDispatchRuntime({
     ...deps.store,
     isCompactionInProgress: deps.lifecycle.isCompactionInProgress,
     hasActiveTurn: deps.activeTurn.has,
@@ -340,7 +340,7 @@ export function createTelegramQueueBindingRuntime<TContext>(deps: {
     ...deps.promptDispatch,
     sendUserMessage: deps.sendUserMessage,
   });
-  const steer = Queue.createTelegramSteerBoundaryRuntime({
+  const steer = Queue.createBaleSteerBoundaryRuntime({
     ...deps.store,
     getGeneration: deps.deferredDispatch.getGeneration,
     isContextCurrent: (ctx: TContext) => deps.isContextCurrent?.(ctx) === true,
@@ -350,7 +350,7 @@ export function createTelegramQueueBindingRuntime<TContext>(deps: {
       deps.lifecycle.isCompactionInProgress() || deps.lifecycle.hasDispatchPending() ||
       (deps.lifecycle.getActiveToolExecutions?.() ?? 0) > 0 ||
       (deps.activeTurn.has() && !deps.activeTurn.get?.()),
-    isItemReady(item: Queue.TelegramQueueItem<TContext>) {
+    isItemReady(item: Queue.BaleQueueItem<TContext>) {
       return deps.transportStamp.isActive(item.transportStamp) &&
         !deps.admission.hasPendingQueueMutationForItem(item) &&
         (deps.admission.getSettlement()?.isItemReady(item) ?? (item.admissionReceipts?.length ?? 0) === 0);
@@ -369,29 +369,29 @@ export function createTelegramQueueBindingRuntime<TContext>(deps: {
     dispatchNext: dispatch.dispatchNext,
     requestNextDispatchAnnouncement: dispatch.requestNextDispatchAnnouncement,
     cancelNextDispatchAnnouncement: dispatch.cancelNextDispatchAnnouncement,
-    watchdog: Queue.createTelegramQueueDispatchWatchdogRuntime({
+    watchdog: Queue.createBaleQueueDispatchWatchdogRuntime({
       hasQueuedItems: deps.store.hasQueuedItems,
-      dispatchNextQueuedTelegramTurn: dispatch.dispatchNext,
+      dispatchNextQueuedBaleTurn: dispatch.dispatchNext,
       recordRuntimeEvent: deps.recordRuntimeEvent,
     }),
   };
 }
 
-export interface TelegramGenerativeAppLiveSurfaceBinding {
+export interface BaleGenerativeAppLiveSurfaceBinding {
   get: () =>
-    | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.TelegramBindLiveHandle>
+    | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.BaleBindLiveHandle>
     | undefined;
   set: (
     runtime:
-      | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.TelegramBindLiveHandle>
+      | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.BaleBindLiveHandle>
       | undefined,
   ) => void;
   shutdown: () => void;
 }
 
-export function createTelegramGenerativeAppLiveSurfaceBinding(): TelegramGenerativeAppLiveSurfaceBinding {
+export function createBaleGenerativeAppLiveSurfaceBinding(): BaleGenerativeAppLiveSurfaceBinding {
   let current:
-    | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.TelegramBindLiveHandle>
+    | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.BaleBindLiveHandle>
     | undefined;
   return {
     get() {
@@ -408,7 +408,7 @@ export function createTelegramGenerativeAppLiveSurfaceBinding(): TelegramGenerat
   };
 }
 
-export function createTelegramGenerativeAppBoundButtonActionInvoker<
+export function createBaleGenerativeAppBoundButtonActionInvoker<
   TQuery extends {
     message?: {
       chat?: { id?: number };
@@ -424,33 +424,33 @@ export function createTelegramGenerativeAppBoundButtonActionInvoker<
   ) => GenerativeApps.GenerativeAppExecutionFence | undefined;
   getActiveProfileName?: () => string | undefined;
   getLiveSurfaceRuntime?: () =>
-    | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.TelegramBindLiveHandle>
+    | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.BaleBindLiveHandle>
     | undefined;
   planOutput: ReturnType<
-    typeof OutboundHandlers.createTelegramOutboundReplyPlanner
+    typeof OutboundHandlers.createBaleOutboundReplyPlanner
   >;
   sendMarkdownReply: (
     chatId: number,
     replyToMessageId: number,
     markdown: string,
-    options?: { replyMarkup?: OutboundHandlers.TelegramOutboundButtonMarkup },
+    options?: { replyMarkup?: OutboundHandlers.BaleOutboundButtonMarkup },
   ) => Promise<unknown>;
   editInteractiveMessage?: (
     chatId: number,
     messageId: number,
     markdown: string,
     mode: "markdown",
-    replyMarkup: OutboundHandlers.TelegramOutboundButtonMarkup,
+    replyMarkup: OutboundHandlers.BaleOutboundButtonMarkup,
   ) => Promise<void>;
-  recordRuntimeEvent: TelegramRuntimeEventRecorder;
+  recordRuntimeEvent: BaleRuntimeEventRecorder;
 }): (
-  action: OutboundHandlers.TelegramOutboundButtonAction,
+  action: OutboundHandlers.BaleOutboundButtonAction,
   query: TQuery,
 ) => Promise<false | "new" | "edit"> {
   return async (action, query) => {
     let boundAction: GenerativeApps.GenerativeAppBoundAction | undefined;
     let handedOff:
-      | GenerativeApps.GenerativeAppLiveSurface<GenerativeApps.TelegramBindLiveHandle>
+      | GenerativeApps.GenerativeAppLiveSurface<GenerativeApps.BaleBindLiveHandle>
       | undefined;
     try {
       // Only buttons emitted by a Generative App carry a binding. An unbound button is ordinary model text
@@ -486,7 +486,7 @@ export function createTelegramGenerativeAppBoundButtonActionInvoker<
       }
       const liveSurfaces = deps.getLiveSurfaceRuntime?.();
       handedOff = liveSurfaces?.take(
-        GenerativeApps.getTelegramBindLiveSurfaceKey(
+        GenerativeApps.getBaleBindLiveSurfaceKey(
           boundAction.app,
           deps.getActiveProfileName?.() ?? "default",
           {
@@ -575,41 +575,41 @@ export function createTelegramGenerativeAppBoundButtonActionInvoker<
   };
 }
 
-export interface TelegramAgentMessageToolRoutingRuntime {
-  resolveAgentTarget: TelegramAgentTargetResolver;
-  routeAgentMessage: TelegramAgentMessageRouter;
+export interface BaleAgentMessageToolRoutingRuntime {
+  resolveAgentTarget: BaleAgentTargetResolver;
+  routeAgentMessage: BaleAgentMessageRouter;
   canSendDirect: () => boolean;
 }
 
-export function createTelegramAgentMessageToolRoutingRuntime(deps: {
+export function createBaleAgentMessageToolRoutingRuntime(deps: {
   ownsLeader: () => boolean;
   ownsDirectDelivery: () => boolean;
   isFollowerRegistered: () => boolean;
-  getSourceTarget: () => TelegramTarget | undefined;
+  getSourceTarget: () => BaleTarget | undefined;
   getSourceThreadName: () => string | undefined;
   local: {
     resolveTarget: (
-      selector: Parameters<TelegramAgentTargetResolver>[0],
-      sourceTarget?: TelegramTarget,
-    ) => Awaited<ReturnType<TelegramAgentTargetResolver>> | undefined;
+      selector: Parameters<BaleAgentTargetResolver>[0],
+      sourceTarget?: BaleTarget,
+    ) => Awaited<ReturnType<BaleAgentTargetResolver>> | undefined;
     route: (input: {
-      sourceTarget?: TelegramTarget;
+      sourceTarget?: BaleTarget;
       sourceThreadName?: string;
-      message: Parameters<TelegramAgentMessageRouter>[0];
+      message: Parameters<BaleAgentMessageRouter>[0];
     }) => Promise<void>;
   };
   follower: {
-    resolveTarget: TelegramAgentTargetResolver;
-    routeMessage: TelegramAgentMessageRouter;
+    resolveTarget: BaleAgentTargetResolver;
+    routeMessage: BaleAgentMessageRouter;
   };
-}): TelegramAgentMessageToolRoutingRuntime {
+}): BaleAgentMessageToolRoutingRuntime {
   return {
     async resolveAgentTarget(selector) {
       if (!deps.ownsLeader()) return deps.follower.resolveTarget(selector);
       const target = deps.local.resolveTarget(selector, deps.getSourceTarget());
       if (!target) {
         throw new Error(
-          "Telegram agent target is unavailable, ambiguous, or not live.",
+          "Bale agent target is unavailable, ambiguous, or not live.",
         );
       }
       return target;
@@ -628,18 +628,18 @@ export function createTelegramAgentMessageToolRoutingRuntime(deps: {
   };
 }
 
-export interface TelegramAssistantOutputBindingRuntime<TTransportStamp> {
-  runtime: Activity.TelegramAssistantOutputRuntime;
-  observeEvent: (event: Activity.TelegramActivityEvent) => void;
-  authority: Routing.TelegramAssistantOutputAuthorityRuntime<TTransportStamp>;
+export interface BaleAssistantOutputBindingRuntime<TTransportStamp> {
+  runtime: Activity.BaleAssistantOutputRuntime;
+  observeEvent: (event: Activity.BaleActivityEvent) => void;
+  authority: Routing.BaleAssistantOutputAuthorityRuntime<TTransportStamp>;
 }
 
-export function createTelegramAssistantOutputBindingRuntime<
+export function createBaleAssistantOutputBindingRuntime<
   TTransportStamp,
 >(deps: {
   authority: {
     getPreferredTarget: () =>
-      | OutboundAttachments.TelegramQueuedOutboundAttachmentTurnView["target"]
+      | OutboundAttachments.BaleQueuedOutboundAttachmentTurnView["target"]
       | undefined;
     getFallbackChatId: () => number | undefined;
     getTransportStamp: () => TTransportStamp;
@@ -650,26 +650,26 @@ export function createTelegramAssistantOutputBindingRuntime<
     getFollowerGeneration: () => string | undefined;
   };
   sender: Parameters<
-    typeof OutboundHandlers.createTelegramAssistantOutputSender<TTransportStamp>
+    typeof OutboundHandlers.createBaleAssistantOutputSender<TTransportStamp>
   >[0];
   waitForActivityIdle?: () => Promise<void>;
-  prepareTelegramPreview?: () =>
-    Activity.TelegramAssistantOutputPreparation | undefined;
-  enqueue?: Activity.TelegramActivityPublicationRuntime["enqueue"];
-  recordRuntimeEvent: TelegramRuntimeEventRecorder;
-}): TelegramAssistantOutputBindingRuntime<TTransportStamp> {
-  const authority = Routing.createTelegramAssistantOutputAuthorityRuntime(
+  prepareBalePreview?: () =>
+    Activity.BaleAssistantOutputPreparation | undefined;
+  enqueue?: Activity.BaleActivityPublicationRuntime["enqueue"];
+  recordRuntimeEvent: BaleRuntimeEventRecorder;
+}): BaleAssistantOutputBindingRuntime<TTransportStamp> {
+  const authority = Routing.createBaleAssistantOutputAuthorityRuntime(
     deps.authority,
   );
   const sendOutput =
-    OutboundHandlers.createTelegramAssistantOutputSender<TTransportStamp>(
+    OutboundHandlers.createBaleAssistantOutputSender<TTransportStamp>(
       deps.sender,
     );
-  const runtime = Activity.createTelegramAssistantOutputRuntime({
+  const runtime = Activity.createBaleAssistantOutputRuntime({
     ...authority,
     enqueue: deps.enqueue,
     prepareSend: (event) =>
-      event.source === "telegram" ? deps.prepareTelegramPreview?.() : undefined,
+      event.source === "bale" ? deps.prepareBalePreview?.() : undefined,
     async send(event, authority, isAuthorityActive) {
       await deps.waitForActivityIdle?.();
       if (!isAuthorityActive()) return;
@@ -692,55 +692,55 @@ export function createTelegramAssistantOutputBindingRuntime<
   };
 }
 
-type TelegramAssistantOutputAuthority<TTransportStamp> = ReturnType<
-  Routing.TelegramAssistantOutputAuthorityRuntime<TTransportStamp>["captureAuthority"]
+type BaleAssistantOutputAuthority<TTransportStamp> = ReturnType<
+  Routing.BaleAssistantOutputAuthorityRuntime<TTransportStamp>["captureAuthority"]
 >;
 
-export interface TelegramBridgePublicationRuntime {
-  enqueue: Activity.TelegramActivityPublicationRuntime["enqueue"];
-  reserve: Activity.TelegramActivityPublicationRuntime["reserve"];
-  hasPending: Activity.TelegramActivityPublicationRuntime["hasPending"];
-  beginWork: Activity.TelegramActivityPublicationRuntime["beginWork"];
-  hasUnconfirmed: Activity.TelegramActivityPublicationRuntime["hasUnconfirmed"];
+export interface BaleBridgePublicationRuntime {
+  enqueue: Activity.BaleActivityPublicationRuntime["enqueue"];
+  reserve: Activity.BaleActivityPublicationRuntime["reserve"];
+  hasPending: Activity.BaleActivityPublicationRuntime["hasPending"];
+  beginWork: Activity.BaleActivityPublicationRuntime["beginWork"];
+  hasUnconfirmed: Activity.BaleActivityPublicationRuntime["hasUnconfirmed"];
   capture: () => {
-    target?: Queue.TelegramQueueTarget;
+    target?: Queue.BaleQueueTarget;
     isCurrent: () => boolean;
   };
 }
 
-export interface TelegramActivityBindingRuntime {
-  publicationRuntime: TelegramBridgePublicationRuntime;
-  activityRuntime: Activity.TelegramActivityRuntime;
-  activityVerbosityRuntime: ActivityVerbosity.TelegramActivityVerbosityRuntime;
-  assistantOutputRuntime: Activity.TelegramAssistantOutputRuntime;
+export interface BaleActivityBindingRuntime {
+  publicationRuntime: BaleBridgePublicationRuntime;
+  activityRuntime: Activity.BaleActivityRuntime;
+  activityVerbosityRuntime: ActivityVerbosity.BaleActivityVerbosityRuntime;
+  assistantOutputRuntime: Activity.BaleAssistantOutputRuntime;
 }
 
 /** Compose public activity fanout, verbosity, and assistant output ordering. */
-export function createTelegramActivityBindingRuntime<TTransportStamp>(deps: {
+export function createBaleActivityBindingRuntime<TTransportStamp>(deps: {
   generation: string;
   captureDrain?: () => (() => void) | undefined;
   assistantOutput: Omit<
     Parameters<
-      typeof createTelegramAssistantOutputBindingRuntime<TTransportStamp>
+      typeof createBaleAssistantOutputBindingRuntime<TTransportStamp>
     >[0],
     "waitForActivityIdle" | "enqueue"
   >;
   activityVerbosity: Omit<
     Parameters<
-      typeof ActivityVerbosity.createTelegramActivityVerbosityRuntime<
-        TelegramAssistantOutputAuthority<TTransportStamp>
+      typeof ActivityVerbosity.createBaleActivityVerbosityRuntime<
+        BaleAssistantOutputAuthority<TTransportStamp>
       >
     >[0],
     "captureAuthority" | "isAuthorityActive" | "recordFailure" | "enqueue"
   >;
-}): TelegramActivityBindingRuntime {
-  const publication = Activity.createTelegramActivityPublicationRuntime({ captureDrain: deps.captureDrain });
-  const assistantOutputBinding = createTelegramAssistantOutputBindingRuntime({
+}): BaleActivityBindingRuntime {
+  const publication = Activity.createBaleActivityPublicationRuntime({ captureDrain: deps.captureDrain });
+  const assistantOutputBinding = createBaleAssistantOutputBindingRuntime({
     ...deps.assistantOutput,
     enqueue: publication.enqueue,
   });
   const activityVerbosityRuntime =
-    ActivityVerbosity.createTelegramActivityVerbosityRuntime({
+    ActivityVerbosity.createBaleActivityVerbosityRuntime({
       ...deps.activityVerbosity,
       enqueue: publication.enqueue,
       captureAuthority: assistantOutputBinding.authority.captureAuthority,
@@ -753,7 +753,7 @@ export function createTelegramActivityBindingRuntime<TTransportStamp>(deps: {
         });
       },
     });
-  const activityRuntime = Activity.createTelegramActivityBridgeRuntime({
+  const activityRuntime = Activity.createBaleActivityBridgeRuntime({
     generation: deps.generation,
     captureDrain: deps.captureDrain,
     observeEvent(event) {
@@ -801,32 +801,32 @@ export function createTelegramActivityBindingRuntime<TTransportStamp>(deps: {
 }
 
 /** Fresh current work projection; a snapshot is not a cleanup grant or target-application ACK. */
-export function createTelegramLiveTargetWorkObserver<TContext>(deps: {
-  queue: Pick<Queue.TelegramQueueStateStore<TContext>, "getQueuedItems">;
-  activeTurn: Pick<Queue.TelegramActiveTurnStore, "get">;
+export function createBaleLiveTargetWorkObserver<TContext>(deps: {
+  queue: Pick<Queue.BaleQueueStateStore<TContext>, "getQueuedItems">;
+  activeTurn: Pick<Queue.BaleActiveTurnStore, "get">;
   lifecycle: Pick<
-    Runtime.TelegramBridgeRuntime["lifecycle"],
+    Runtime.BaleBridgeRuntime["lifecycle"],
     "hasDispatchPending" | "isCompactionInProgress" | "getActiveToolExecutions"
   >;
   isIdle(ctx: TContext): boolean;
   hasPendingMessages(ctx: TContext): boolean;
   hasPendingControl(): boolean;
   publication: Pick<
-    TelegramBridgePublicationRuntime,
+    BaleBridgePublicationRuntime,
     "hasPending" | "hasUnconfirmed"
   >;
-  activity: Pick<Activity.TelegramActivityRuntime, "hasPending">;
+  activity: Pick<Activity.BaleActivityRuntime, "hasPending">;
   delivery: Pick<
-    ReturnType<typeof Delivery.createTelegramDeliveryLifecycleHooks>,
+    ReturnType<typeof Delivery.createBaleDeliveryLifecycleHooks>,
     "hasPendingTarget"
   >;
-  api: Pick<TelegramApi.TelegramApiTargetActivityRuntime, "hasPendingTarget">;
+  api: Pick<BaleApi.BaleApiTargetActivityRuntime, "hasPendingTarget">;
 }): (
-  target: TelegramTarget & { threadId: number },
+  target: BaleTarget & { threadId: number },
   ctx: TContext,
-) => TelegramBusLiveRebindWorkState {
+) => BaleBusLiveRebindWorkState {
   return (target, ctx) => {
-    const work = Queue.observeTelegramTargetQueueWork(
+    const work = Queue.observeBaleTargetQueueWork(
       target,
       deps.activeTurn.get(),
       deps.queue.getQueuedItems(),
@@ -867,23 +867,23 @@ export function createTelegramLiveTargetWorkObserver<TContext>(deps: {
   };
 }
 
-interface TelegramCommandsAndToolsBindingDeps {
+interface BaleCommandsAndToolsBindingDeps {
   pi: Pi.ExtensionAPI;
   handleInternalAction:
-    Commands.TelegramSessionActionRuntime["handleInternalAction"];
+    Commands.BaleSessionActionRuntime["handleInternalAction"];
   agentDir: string;
-  configStore: Config.TelegramConfigStore;
-  persistConfig: (config?: Config.TelegramConfig) => Promise<void>;
-  setup: Setup.TelegramSetupGuard;
-  activeTurnRuntime: Queue.TelegramActiveTurnStore<Queue.PendingTelegramTurn>;
-  lockedPollingRuntime: Locks.TelegramLockedPollingRuntime<Pi.ExtensionContext>;
+  configStore: Config.BaleConfigStore;
+  persistConfig: (config?: Config.BaleConfig) => Promise<void>;
+  setup: Setup.BaleSetupGuard;
+  activeTurnRuntime: Queue.BaleActiveTurnStore<Queue.PendingBaleTurn>;
+  lockedPollingRuntime: Locks.BaleLockedPollingRuntime<Pi.ExtensionContext>;
   stopPolling?: () => Promise<void | string>;
   getDisconnectThreadName?: () => string | undefined;
   onTransportChanged?: () => Promise<void> | void;
   getStatusLines: (
-    options?: Status.TelegramBridgeStatusLineOptions,
+    options?: Status.BaleBridgeStatusLineOptions,
   ) => string[];
-  buttonActionStore: OutboundHandlers.TelegramButtonActionStore;
+  buttonActionStore: OutboundHandlers.BaleButtonActionStore;
   sendMarkdownReply: (
     chatId: number,
     replyToMessageId: number | undefined,
@@ -894,39 +894,39 @@ interface TelegramCommandsAndToolsBindingDeps {
     },
   ) => Promise<number | undefined>;
   sendChannelMarkdownMessage: NonNullable<
-    OutboundAttachments.TelegramOutboundMessageToolRegistrationDeps["sendChannelMarkdownMessage"]
+    OutboundAttachments.BaleOutboundMessageToolRegistrationDeps["sendChannelMarkdownMessage"]
   >;
   sendChannelMediaMessage: NonNullable<
-    OutboundAttachments.TelegramOutboundMessageToolRegistrationDeps["sendChannelMediaMessage"]
+    OutboundAttachments.BaleOutboundMessageToolRegistrationDeps["sendChannelMediaMessage"]
   >;
-  listChannelPosts: ChannelPosts.TelegramChannelPostJournalStore["list"];
+  listChannelPosts: ChannelPosts.BaleChannelPostJournalStore["list"];
   mutateChannelPost(input: {
     action: "edit" | "delete";
     operationId: string;
     mutationId: string;
     markdown?: string;
-  }): Promise<ChannelPosts.TelegramChannelPostRecord>;
-  callMultipart: OutboundHandlers.TelegramVoiceReplySenderDeps["sendMultipart"];
+  }): Promise<ChannelPosts.BaleChannelPostRecord>;
+  callMultipart: OutboundHandlers.BaleVoiceReplySenderDeps["sendMultipart"];
   getDefaultChatId: () => number | undefined;
-  getDefaultTarget?: () => OutboundAttachments.TelegramQueuedOutboundAttachmentTurnView["target"];
-  resolveAgentTarget?: OutboundAttachments.TelegramOutboundMessageToolRegistrationDeps["resolveAgentTarget"];
-  routeAgentMessage?: OutboundAttachments.TelegramOutboundMessageToolRegistrationDeps["routeAgentMessage"];
+  getDefaultTarget?: () => OutboundAttachments.BaleQueuedOutboundAttachmentTurnView["target"];
+  resolveAgentTarget?: OutboundAttachments.BaleOutboundMessageToolRegistrationDeps["resolveAgentTarget"];
+  routeAgentMessage?: OutboundAttachments.BaleOutboundMessageToolRegistrationDeps["routeAgentMessage"];
   canSendDirect: () => boolean;
   setGenerativeAppLiveSurfaceRuntime?: (
     runtime:
-      | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.TelegramBindLiveHandle>
+      | GenerativeApps.GenerativeAppLiveSurfaceRuntime<GenerativeApps.BaleBindLiveHandle>
       | undefined,
   ) => void;
-  updateStatus: TelegramBridgeStatusUpdater;
+  updateStatus: BaleBridgeStatusUpdater;
   isContextCurrent: (ctx: Pi.ExtensionContext) => boolean;
   getSessionGeneration: () => number;
   connectionIntent: NonNullable<
-    Commands.TelegramBridgeCommandRegistrationDeps["connectionIntent"]
+    Commands.BaleBridgeCommandRegistrationDeps["connectionIntent"]
   >;
-  recordRuntimeEvent: TelegramRuntimeEventRecorder;
+  recordRuntimeEvent: BaleRuntimeEventRecorder;
 }
 
-export function registerTelegramCommandsAndTools({
+export function registerBaleCommandsAndTools({
   pi,
   handleInternalAction,
   agentDir,
@@ -957,37 +957,37 @@ export function registerTelegramCommandsAndTools({
   isContextCurrent,
   getSessionGeneration,
   connectionIntent,
-}: TelegramCommandsAndToolsBindingDeps): void {
-  GenerativeApps.registerTelegramBindTool(pi, {
+}: BaleCommandsAndToolsBindingDeps): void {
+  GenerativeApps.registerBaleBindTool(pi, {
     agentDir,
     getActiveProfileName: configStore.getActiveProfileName,
     getActiveTurn: activeTurnRuntime.get,
     ...(setGenerativeAppLiveSurfaceRuntime
       ? { setLiveSurfaceRuntime: setGenerativeAppLiveSurfaceRuntime }
       : {}),
-    isDeliveryHandleCurrent: Delivery.isTelegramDeliveryHandleCurrent,
+    isDeliveryHandleCurrent: Delivery.isBaleDeliveryHandleCurrent,
     editView: (handle, view) =>
-      Delivery.editTelegramView(
-        handle as Delivery.TelegramDeliveryHandle,
-        view as Delivery.TelegramDeliveryView,
+      Delivery.editBaleView(
+        handle as Delivery.BaleDeliveryHandle,
+        view as Delivery.BaleDeliveryView,
       ),
-    planOutput: OutboundHandlers.createTelegramOutboundReplyPlanner(
+    planOutput: OutboundHandlers.createBaleOutboundReplyPlanner(
       buttonActionStore,
-      Config.createTelegramConfigControls(configStore)
+      Config.createBaleConfigControls(configStore)
         .getAssistantRenderingMode,
     ),
     sendMarkdownReply,
     sendView: (view, options) =>
-      Delivery.sendTelegramView(view as Delivery.TelegramDeliveryView, options),
+      Delivery.sendBaleView(view as Delivery.BaleDeliveryView, options),
     recordRuntimeEvent,
   });
-  ChannelPosts.registerTelegramChannelPostMutationTool(pi, {
+  ChannelPosts.registerBaleChannelPostMutationTool(pi, {
     mutate: mutateChannelPost,
   });
-  ChannelPosts.registerTelegramChannelPostListTool(pi, {
+  ChannelPosts.registerBaleChannelPostListTool(pi, {
     list: listChannelPosts,
   });
-  OutboundAttachments.registerTelegramOutboundAttachmentTool(pi, {
+  OutboundAttachments.registerBaleOutboundAttachmentTool(pi, {
     getActiveTurn: activeTurnRuntime.get,
     getDefaultChatId,
     getDefaultTarget,
@@ -995,16 +995,16 @@ export function registerTelegramCommandsAndTools({
     sendMultipart: callMultipart,
     recordRuntimeEvent,
   });
-  OutboundAttachments.registerTelegramOutboundMessageTool(pi, {
+  OutboundAttachments.registerBaleOutboundMessageTool(pi, {
     getDefaultChatId,
     getDefaultTarget,
     getActiveTurn: activeTurnRuntime.get,
     resolveAgentTarget,
     routeAgentMessage,
     canSendDirect,
-    planMessage: OutboundHandlers.createTelegramOutboundReplyPlanner(
+    planMessage: OutboundHandlers.createBaleOutboundReplyPlanner(
       buttonActionStore,
-      Config.createTelegramConfigControls(configStore)
+      Config.createBaleConfigControls(configStore)
         .getAssistantRenderingMode,
     ),
     sendMarkdownMessage: (chatId, markdown, options) =>
@@ -1016,21 +1016,21 @@ export function registerTelegramCommandsAndTools({
   const queueAgentConnectionContext = (connected: boolean): void => {
     pi.sendMessage(
       {
-        customType: "telegram-connection-state",
+        customType: "bale-connection-state",
         content: connected
-          ? Prompts.TELEGRAM_CONNECTED_CONTEXT_MESSAGE
-          : Prompts.TELEGRAM_DISCONNECTED_CONTEXT_MESSAGE,
+          ? Prompts.BALE_CONNECTED_CONTEXT_MESSAGE
+          : Prompts.BALE_DISCONNECTED_CONTEXT_MESSAGE,
         display: false,
       },
       { deliverAs: "nextTurn" },
     );
   };
-  Commands.registerTelegramBridgeCommands(pi, {
+  Commands.registerBaleBridgeCommands(pi, {
     handleInternalAction,
     promptForConfig: async (ctx, profileName) => {
       const nextProfileName = profileName ?? undefined;
-      if (profileName && !Config.isValidTelegramProfileName(profileName)) {
-        ctx.ui.notify(`Invalid Telegram profile name: ${profileName}`, "error");
+      if (profileName && !Config.isValidBaleProfileName(profileName)) {
+        ctx.ui.notify(`Invalid Bale profile name: ${profileName}`, "error");
         return;
       }
       const previousProfileName = configStore.getActiveProfileName();
@@ -1044,7 +1044,7 @@ export function registerTelegramCommandsAndTools({
         await onTransportChanged?.();
       } else {
         const storedConfig = configStore.getStoredConfig();
-        setupConfigStore = Config.createTelegramConfigStore({
+        setupConfigStore = Config.createBaleConfigStore({
           initialConfig: {
             ...storedConfig,
             profiles: {
@@ -1061,12 +1061,12 @@ export function registerTelegramCommandsAndTools({
             if (previousProfileName !== profileName) {
               await (stopPolling ?? lockedPollingRuntime.stop)();
             }
-            const profile = Config.getTelegramProfileFields(
+            const profile = Config.getBaleProfileFields(
               setupConfigStore.get(),
             );
             if (!profile) {
               throw new Error(
-                `Telegram profile "${profileName}" has no token.`,
+                `Bale profile "${profileName}" has no token.`,
               );
             }
             await configStore.load();
@@ -1082,15 +1082,15 @@ export function registerTelegramCommandsAndTools({
           }
         };
       }
-      const runSetup = Setup.createTelegramSetupPromptRuntime({
+      const runSetup = Setup.createBaleSetupPromptRuntime({
         getConfig: setupConfigStore.get,
         setConfig: setupConfigStore.set,
         setupGuard: setup,
-        getMe: TelegramApi.fetchTelegramBotIdentity,
+        getMe: BaleApi.fetchBaleBotIdentity,
         resolveBotToken: (value) =>
-          Config.resolveTelegramBotToken(value, process.env),
+          Config.resolveBaleBotToken(value, process.env),
         describeBotToken: (value) =>
-          Config.getTelegramBotTokenDiagnostic(value, process.env),
+          Config.getBaleBotTokenDiagnostic(value, process.env),
         persistConfig: persistSetupConfig,
         startPolling: lockedPollingRuntime.start,
         updateStatus,
@@ -1122,7 +1122,7 @@ export function registerTelegramCommandsAndTools({
     getSessionGeneration,
     connectionIntent,
     getProfileNames: () =>
-      Config.getTelegramProfileNames(configStore.getStoredConfig()),
+      Config.getBaleProfileNames(configStore.getStoredConfig()),
     activateDefaultProfileConfig: async (_ctx, isCurrent) => {
       const previousProfileName = configStore.getActiveProfileName();
       await configStore.load();
@@ -1138,7 +1138,7 @@ export function registerTelegramCommandsAndTools({
       const previousProfileName = configStore.getActiveProfileName();
       await configStore.load();
       if (!isCurrent()) return false;
-      if (!Config.isValidTelegramProfileName(profileName)) return false;
+      if (!Config.isValidBaleProfileName(profileName)) return false;
       const storedConfig = configStore.getStoredConfig();
       if (!storedConfig.profiles?.[profileName]) return false;
       if (previousProfileName !== profileName) {
@@ -1152,44 +1152,44 @@ export function registerTelegramCommandsAndTools({
   });
 }
 
-interface TelegramLifecycleBindingDeps {
+interface BaleLifecycleBindingDeps {
   pi: Pi.ExtensionAPI;
-  publicationRuntime: TelegramBridgePublicationRuntime;
-  activityRuntime: Activity.TelegramActivityRuntime;
-  activityVerbosityRuntime?: ActivityVerbosity.TelegramActivityVerbosityRuntime;
+  publicationRuntime: BaleBridgePublicationRuntime;
+  activityRuntime: Activity.BaleActivityRuntime;
+  activityVerbosityRuntime?: ActivityVerbosity.BaleActivityVerbosityRuntime;
   diagnostics?: { onSessionStart(): void; onSessionShutdown(): Promise<void> };
   assistantOutputRuntime: Pick<
-    Activity.TelegramAssistantOutputRuntime,
+    Activity.BaleAssistantOutputRuntime,
     | "start"
     | "beginTurn"
-    | "hasAdmittedTelegramIntermediate"
+    | "hasAdmittedBaleIntermediate"
     | "waitForIdle"
     | "stop"
   >;
   sessionLifecycleRuntime: Pick<
-    Lifecycle.TelegramLifecycleRegistrationDeps,
+    Lifecycle.BaleLifecycleRegistrationDeps,
     "onSessionStart" | "onSessionShutdown" | "onModelSelect"
   >;
   configStore: Pick<
-    Config.TelegramConfigStore,
+    Config.BaleConfigStore,
     "get" | "getOutboundHandlers" | "hasBotToken" | "load"
   >;
-  abort: Runtime.TelegramRuntimeAbortPort;
-  typing: Runtime.TelegramRuntimeTypingPort;
-  lifecycle: Runtime.TelegramRuntimeLifecyclePort;
-  activeTurnRuntime: Queue.TelegramActiveTurnStore<Queue.PendingTelegramTurn>;
-  telegramQueueStore: Queue.TelegramQueueStore<Pi.ExtensionContext>;
-  modelSwitchController: Model.TelegramModelSwitchController<
+  abort: Runtime.BaleRuntimeAbortPort;
+  typing: Runtime.BaleRuntimeTypingPort;
+  lifecycle: Runtime.BaleRuntimeLifecyclePort;
+  activeTurnRuntime: Queue.BaleActiveTurnStore<Queue.PendingBaleTurn>;
+  baleQueueStore: Queue.BaleQueueStore<Pi.ExtensionContext>;
+  modelSwitchController: Model.BaleModelSwitchController<
     Pi.ExtensionContext,
-    Model.ScopedTelegramModel<ActivePiModel>
+    Model.ScopedBaleModel<ActivePiModel>
   >;
-  previewRuntime: Preview.TelegramAssistantPreviewRuntime<
+  previewRuntime: Preview.BaleAssistantPreviewRuntime<
     Pi.AgentEndEvent["messages"][number],
-    Keyboard.TelegramInlineKeyboardMarkup
+    Keyboard.BaleInlineKeyboardMarkup
   >;
-  promptDispatchRuntime: Runtime.TelegramPromptDispatchRuntime<Pi.ExtensionContext>;
-  deferredQueueDispatchRuntime: Queue.TelegramDeferredQueueDispatchRuntime<Pi.ExtensionContext>;
-  modelContextAvailabilityRuntime: Prompts.TelegramModelContextAvailabilityRuntime;
+  promptDispatchRuntime: Runtime.BalePromptDispatchRuntime<Pi.ExtensionContext>;
+  deferredQueueDispatchRuntime: Queue.BaleDeferredQueueDispatchRuntime<Pi.ExtensionContext>;
+  modelContextAvailabilityRuntime: Prompts.BaleModelContextAvailabilityRuntime;
   disconnectOnQuit?: () => Promise<unknown>;
   onSessionStarted?: (
     event: Pi.SessionStartEvent,
@@ -1197,81 +1197,81 @@ interface TelegramLifecycleBindingDeps {
   ) => void;
   shutdownGenerativeAppLiveSurfaces?: () => void;
   resolveAutomaticThreadCleanupEnabled?: () => boolean | Promise<boolean>;
-  buttonActionStore: OutboundHandlers.TelegramButtonActionStore;
-  callMultipart: (...args: Parameters<TelegramApi.TelegramBridgeApiRuntime["callMultipart"]>) => Promise<unknown>;
+  buttonActionStore: OutboundHandlers.BaleButtonActionStore;
+  callMultipart: (...args: Parameters<BaleApi.BaleBridgeApiRuntime["callMultipart"]>) => Promise<unknown>;
   sendChatAction: NonNullable<
-    OutboundHandlers.TelegramVoiceReplySenderDeps["sendChatAction"]
+    OutboundHandlers.BaleVoiceReplySenderDeps["sendChatAction"]
   >;
   sendRecordVoiceAction: NonNullable<
-    OutboundHandlers.TelegramVoiceReplySenderDeps["sendRecordVoiceAction"]
+    OutboundHandlers.BaleVoiceReplySenderDeps["sendRecordVoiceAction"]
   >;
-  sendMarkdownReply: Queue.TelegramAgentEndHookRuntimeDeps<
-    Queue.PendingTelegramTurn,
+  sendMarkdownReply: Queue.BaleAgentEndHookRuntimeDeps<
+    Queue.PendingBaleTurn,
     Pi.ExtensionContext,
     Pi.AgentEndEvent["messages"][number],
-    Keyboard.TelegramInlineKeyboardMarkup
+    Keyboard.BaleInlineKeyboardMarkup
   >["sendMarkdownReply"];
-  sendTextReply: Queue.TelegramAgentEndHookRuntimeDeps<
-    Queue.PendingTelegramTurn,
+  sendTextReply: Queue.BaleAgentEndHookRuntimeDeps<
+    Queue.PendingBaleTurn,
     Pi.ExtensionContext,
     Pi.AgentEndEvent["messages"][number],
-    Keyboard.TelegramInlineKeyboardMarkup
+    Keyboard.BaleInlineKeyboardMarkup
   >["sendTextReply"] &
-    NonNullable<OutboundHandlers.TelegramVoiceReplySenderDeps["sendTextReply"]>;
-  dispatchNextQueuedTelegramTurn: (ctx: Pi.ExtensionContext) => void;
-  onSteerTurnEnd?: TelegramQueueBindingRuntime<Pi.ExtensionContext>["onTurnEnd"];
+    NonNullable<OutboundHandlers.BaleVoiceReplySenderDeps["sendTextReply"]>;
+  dispatchNextQueuedBaleTurn: (ctx: Pi.ExtensionContext) => void;
+  onSteerTurnEnd?: BaleQueueBindingRuntime<Pi.ExtensionContext>["onTurnEnd"];
   onPromptHandedOff?: (
-    turn: Queue.PendingTelegramTurn,
+    turn: Queue.PendingBaleTurn,
     ctx: Pi.ExtensionContext,
   ) => void;
-  answerGuestQuery: TelegramApi.TelegramBridgeApiRuntime["answerGuestQuery"];
-  editGuestInlineMessage?: TelegramApi.TelegramBridgeApiRuntime["editGuestInlineMessage"];
-  deleteMessage: TelegramApi.TelegramBridgeApiRuntime["deleteMessage"];
+  answerGuestQuery: BaleApi.BaleBridgeApiRuntime["answerGuestQuery"];
+  editGuestInlineMessage?: BaleApi.BaleBridgeApiRuntime["editGuestInlineMessage"];
+  deleteMessage: BaleApi.BaleBridgeApiRuntime["deleteMessage"];
   sendGuestReply: NonNullable<
-    Queue.TelegramAgentEndHookRuntimeDeps<
-      Queue.PendingTelegramTurn,
+    Queue.BaleAgentEndHookRuntimeDeps<
+      Queue.PendingBaleTurn,
       Pi.ExtensionContext,
       Pi.AgentEndEvent["messages"][number],
-      Keyboard.TelegramInlineKeyboardMarkup
+      Keyboard.BaleInlineKeyboardMarkup
     >["sendGuestReply"]
   >;
-  editGuestReply?: Queue.TelegramAgentEndHookRuntimeDeps<
-    Queue.PendingTelegramTurn,
+  editGuestReply?: Queue.BaleAgentEndHookRuntimeDeps<
+    Queue.PendingBaleTurn,
     Pi.ExtensionContext,
     Pi.AgentEndEvent["messages"][number],
-    Keyboard.TelegramInlineKeyboardMarkup
+    Keyboard.BaleInlineKeyboardMarkup
   >["editGuestReply"];
-  stopGuestPlaceholder?: Queue.TelegramAgentEndHookRuntimeDeps<
-    Queue.PendingTelegramTurn,
+  stopGuestPlaceholder?: Queue.BaleAgentEndHookRuntimeDeps<
+    Queue.PendingBaleTurn,
     Pi.ExtensionContext,
     Pi.AgentEndEvent["messages"][number],
-    Keyboard.TelegramInlineKeyboardMarkup
+    Keyboard.BaleInlineKeyboardMarkup
   >["stopGuestPlaceholder"];
-  preparePreviewDelivery?: Queue.TelegramAgentEndRuntimeDeps<Queue.PendingTelegramTurn>["preparePreviewDelivery"];
-  finalizeMarkdownPreview: Queue.TelegramAgentEndHookRuntimeDeps<
-    Queue.PendingTelegramTurn,
+  preparePreviewDelivery?: Queue.BaleAgentEndRuntimeDeps<Queue.PendingBaleTurn>["preparePreviewDelivery"];
+  finalizeMarkdownPreview: Queue.BaleAgentEndHookRuntimeDeps<
+    Queue.PendingBaleTurn,
     Pi.ExtensionContext,
     Pi.AgentEndEvent["messages"][number],
-    Keyboard.TelegramInlineKeyboardMarkup
+    Keyboard.BaleInlineKeyboardMarkup
   >["finalizeMarkdownPreview"];
-  proactivePushTargetGetter: () => Queue.TelegramQueueTarget | undefined;
+  proactivePushTargetGetter: () => Queue.BaleQueueTarget | undefined;
   getAssistantRenderingMode: () => "rich" | "html";
   recordMessageOwnership?: (input: {
     chatId: number;
     messageId: number;
-    target?: Queue.TelegramQueueTarget;
+    target?: Queue.BaleQueueTarget;
   }) => void;
   canSendAgentActivity: (ctx: Pi.ExtensionContext) => boolean;
   isSessionContextActive: (ctx: Pi.ExtensionContext) => boolean;
   getSessionGeneration?: () => number;
-  isTurnTransportActive?: (turn: Queue.PendingTelegramTurn) => boolean;
-  updateStatus: TelegramBridgeStatusUpdater;
-  recordRuntimeEvent: TelegramRuntimeEventRecorder;
+  isTurnTransportActive?: (turn: Queue.PendingBaleTurn) => boolean;
+  updateStatus: BaleBridgeStatusUpdater;
+  recordRuntimeEvent: BaleRuntimeEventRecorder;
   /** Settled-session hint for owners that wait on agent idleness, such as old-tab cleanup after a live rebind. */
   onSessionSettled?: (ctx: Pi.ExtensionContext) => void;
 }
 
-export function registerTelegramLifecycleRuntimeHooks({
+export function registerBaleLifecycleRuntimeHooks({
   pi,
   publicationRuntime,
   activityRuntime,
@@ -1284,7 +1284,7 @@ export function registerTelegramLifecycleRuntimeHooks({
   typing,
   lifecycle,
   activeTurnRuntime,
-  telegramQueueStore,
+  baleQueueStore,
   modelSwitchController,
   previewRuntime,
   promptDispatchRuntime,
@@ -1300,7 +1300,7 @@ export function registerTelegramLifecycleRuntimeHooks({
   sendRecordVoiceAction,
   sendMarkdownReply,
   sendTextReply,
-  dispatchNextQueuedTelegramTurn,
+  dispatchNextQueuedBaleTurn,
   onSteerTurnEnd,
   onPromptHandedOff,
   answerGuestQuery,
@@ -1321,8 +1321,8 @@ export function registerTelegramLifecycleRuntimeHooks({
   updateStatus,
   recordRuntimeEvent,
   onSessionSettled,
-}: TelegramLifecycleBindingDeps): void {
-  const agentEndResetter = Runtime.createTelegramAgentEndResetter({
+}: BaleLifecycleBindingDeps): void {
+  const agentEndResetter = Runtime.createBaleAgentEndResetter({
     abort,
     typing,
     clearActiveTurn: activeTurnRuntime.clear,
@@ -1331,20 +1331,20 @@ export function registerTelegramLifecycleRuntimeHooks({
     clearDispatchPending: lifecycle.clearDispatchPending,
   });
   const queuedAttachmentSender =
-    OutboundAttachments.createTelegramQueuedOutboundAttachmentSender({
+    OutboundAttachments.createBaleQueuedOutboundAttachmentSender({
       sendMultipart: callMultipart,
       sendTextReply,
       recordRuntimeEvent,
     });
   const richAttachmentSender =
-    OutboundAttachments.createTelegramRichOutboundAttachmentSender({
+    OutboundAttachments.createBaleRichOutboundAttachmentSender({
       sendMultipart: callMultipart,
       getRenderingMode: getAssistantRenderingMode,
       recordOwnership: recordMessageOwnership,
       recordRuntimeEvent,
     });
   const sendGuestAttachment = async (
-    turn: Queue.PendingTelegramTurn,
+    turn: Queue.PendingBaleTurn,
     attachment: Queue.QueuedAttachment,
     caption?: string,
     options?: { isDeliveryActive?: () => boolean },
@@ -1353,10 +1353,10 @@ export function registerTelegramLifecycleRuntimeHooks({
     const stagingChatId = stagingTarget?.chatId;
     if (stagingChatId === undefined) {
       throw new Error(
-        "Guest attachment staging requires a paired Telegram chat",
+        "Guest attachment staging requires a paired Bale chat",
       );
     }
-    await OutboundAttachments.deliverTelegramGuestCachedAttachment({
+    await OutboundAttachments.deliverBaleGuestCachedAttachment({
       guestQueryId: turn.guestQueryId!,
       guestInlineMessageId: turn.guestInlineMessageId,
       editGuestInlineMessage,
@@ -1377,13 +1377,13 @@ export function registerTelegramLifecycleRuntimeHooks({
         answerGuestQuery(guestQueryId, text),
       fallbackText:
         caption ||
-        "Telegram bridge could not deliver the requested attachment.",
+        "Bale bridge could not deliver the requested attachment.",
       deleteMessage,
       recordRuntimeEvent,
     });
   };
   const outboundReplyPlanner =
-    OutboundHandlers.createTelegramOutboundReplyPlanner(
+    OutboundHandlers.createBaleOutboundReplyPlanner(
       buttonActionStore,
       getAssistantRenderingMode,
     );
@@ -1397,21 +1397,21 @@ export function registerTelegramLifecycleRuntimeHooks({
     recordRuntimeEvent,
   };
   const outboundReplyArtifactSender =
-    OutboundHandlers.createTelegramOutboundReplyArtifactSender(
+    OutboundHandlers.createBaleOutboundReplyArtifactSender(
       voiceReplySenderDeps,
     );
   const sendGuestVoiceReply = async (
-    turn: Queue.PendingTelegramTurn,
-    plan: OutboundHandlers.TelegramOutboundReplyPlan,
+    turn: Queue.PendingBaleTurn,
+    plan: OutboundHandlers.BaleOutboundReplyPlan,
     caption?: string,
   ): Promise<void> => {
     const stagingTarget = proactivePushTargetGetter();
     const stagingChatId = stagingTarget?.chatId;
     if (stagingChatId === undefined) {
-      throw new Error("Guest voice staging requires a paired Telegram chat");
+      throw new Error("Guest voice staging requires a paired Bale chat");
     }
     const guestVoiceSender =
-      OutboundHandlers.createTelegramOutboundReplyArtifactSender({
+      OutboundHandlers.createBaleOutboundReplyArtifactSender({
         ...voiceReplySenderDeps,
         sendChatAction: undefined,
         sendRecordVoiceAction: undefined,
@@ -1423,7 +1423,7 @@ export function registerTelegramLifecycleRuntimeHooks({
           fileName,
         ) => {
           try {
-            await OutboundAttachments.deliverTelegramGuestCachedAttachment({
+            await OutboundAttachments.deliverBaleGuestCachedAttachment({
               guestQueryId: turn.guestQueryId!,
               stagingChatId,
               stagingTarget,
@@ -1435,7 +1435,7 @@ export function registerTelegramLifecycleRuntimeHooks({
               answerGuestText: (guestQueryId, text) =>
                 answerGuestQuery(guestQueryId, text),
               fallbackText:
-                caption || "Telegram bridge could not deliver the voice reply.",
+                caption || "Bale bridge could not deliver the voice reply.",
               deleteMessage,
               recordRuntimeEvent,
             });
@@ -1461,8 +1461,8 @@ export function registerTelegramLifecycleRuntimeHooks({
   };
   let pendingFinalPublication:
     | {
-        turn: Queue.PendingTelegramTurn;
-        reservation: Activity.TelegramActivityPublicationReservation;
+        turn: Queue.PendingBaleTurn;
+        reservation: Activity.BaleActivityPublicationReservation;
       }
     | undefined;
   const cancelPendingFinalPublication = (): void => {
@@ -1477,19 +1477,19 @@ export function registerTelegramLifecycleRuntimeHooks({
   const scheduleActiveTurnDelivery = (task: () => Promise<void>): void => {
     void publicationRuntime.enqueue(task).catch(recordPublicationFailure);
   };
-  const agentLifecycleHooks = Queue.createTelegramAgentLifecycleHooks<
-    Queue.PendingTelegramTurn,
+  const agentLifecycleHooks = Queue.createBaleAgentLifecycleHooks<
+    Queue.PendingBaleTurn,
     Pi.ExtensionContext,
     unknown,
-    Keyboard.TelegramInlineKeyboardMarkup
+    Keyboard.BaleInlineKeyboardMarkup
   >({
-    setAbortHandler: Runtime.createTelegramContextAbortHandlerSetter(abort),
-    getQueuedItems: telegramQueueStore.getQueuedItems,
+    setAbortHandler: Runtime.createBaleContextAbortHandlerSetter(abort),
+    getQueuedItems: baleQueueStore.getQueuedItems,
     hasPendingDispatch: lifecycle.hasDispatchPending,
     hasActiveTurn: activeTurnRuntime.has,
     resetToolExecutions: lifecycle.resetActiveToolExecutions,
     resetPendingModelSwitch: modelSwitchController.clearPendingSwitch,
-    setQueuedItems: telegramQueueStore.setQueuedItems,
+    setQueuedItems: baleQueueStore.setQueuedItems,
     clearDispatchPending: lifecycle.clearDispatchPending,
     setFoldQueuedPromptsIntoHistory: lifecycle.setFoldQueuedPromptsIntoHistory,
     setActiveTurn: activeTurnRuntime.set,
@@ -1510,15 +1510,15 @@ export function registerTelegramLifecycleRuntimeHooks({
     extractAssistant: Replies.extractRunAssistantMessage,
     isAssistantAlreadyPublished: (assistant) =>
       !!assistant.text &&
-      assistantOutputRuntime.hasAdmittedTelegramIntermediate(assistant.text),
+      assistantOutputRuntime.hasAdmittedBaleIntermediate(assistant.text),
     getFoldQueuedPromptsIntoHistory:
       lifecycle.shouldFoldQueuedPromptsIntoHistory,
     resetRuntimeState: agentEndResetter,
     isSessionActive: isSessionContextActive,
     isTurnTransportActive,
     waitForTypingIdle: typing.waitForIdle,
-    dispatchNextQueuedTelegramTurn,
-    requestDeferredDispatchNextQueuedTelegramTurn:
+    dispatchNextQueuedBaleTurn,
+    requestDeferredDispatchNextQueuedBaleTurn:
       deferredQueueDispatchRuntime.request,
     scheduleActiveTurnDelivery,
     reserveActiveTurnDelivery() {
@@ -1613,15 +1613,15 @@ export function registerTelegramLifecycleRuntimeHooks({
   ): void => {
     scheduleActiveTurnDelivery(prepareCompactionNotice(text, ctx));
   };
-  const compactionObserver = Lifecycle.createTelegramCompactionObserverRuntime({
+  const compactionObserver = Lifecycle.createBaleCompactionObserverRuntime({
     isContextActive: isSessionContextActive,
     setCompactionInProgress: lifecycle.setCompactionInProgress,
     updateStatus,
     startTypingLoop: startAgentActivityTypingLoop,
     stopTypingLoop: typing.stop,
-    requestDeferredDispatchNextQueuedTelegramTurn:
+    requestDeferredDispatchNextQueuedBaleTurn:
       deferredQueueDispatchRuntime.request,
-    dispatchNextQueuedTelegramTurn,
+    dispatchNextQueuedBaleTurn,
     recordRuntimeEvent,
     onCompactionAbandoned: () => {
       observedAutomaticCompaction = false;
@@ -1629,7 +1629,7 @@ export function registerTelegramLifecycleRuntimeHooks({
     },
   });
   const messageActivityTypingHooks =
-    Lifecycle.createTelegramMessageActivityTypingHooks({
+    Lifecycle.createBaleMessageActivityTypingHooks({
       hasActiveTurn: activeTurnRuntime.has,
       isContextActive: isSessionContextActive,
       getSessionGeneration,
@@ -1639,7 +1639,7 @@ export function registerTelegramLifecycleRuntimeHooks({
       recordRuntimeEvent,
     });
   const messageActivityHooks = messageActivityTypingHooks;
-  Lifecycle.registerTelegramLifecycleHooks(pi, {
+  Lifecycle.registerBaleLifecycleHooks(pi, {
     isSessionActive: isSessionContextActive,
     ...sessionLifecycleRuntime,
     ...agentLifecycleHooks,
@@ -1699,7 +1699,7 @@ export function registerTelegramLifecycleRuntimeHooks({
       compactionObserver.onSessionBeforeCompact(event, ctx);
       if (shouldNotify)
         sendCompactionNotice(
-          Commands.TELEGRAM_COMPACTION_STARTED_MARKDOWN,
+          Commands.BALE_COMPACTION_STARTED_MARKDOWN,
           ctx,
         );
     },
@@ -1710,7 +1710,7 @@ export function registerTelegramLifecycleRuntimeHooks({
       if (observedAutomaticCompaction) {
         observedAutomaticCompaction = false;
         sendCompactionNotice(
-          Commands.TELEGRAM_COMPACTION_COMPLETED_MARKDOWN,
+          Commands.BALE_COMPACTION_COMPLETED_MARKDOWN,
           ctx,
         );
       }
@@ -1771,7 +1771,7 @@ export function registerTelegramLifecycleRuntimeHooks({
       if (!isSessionContextActive(ctx)) return;
       if (event.assistantMessageEvent) {
         activityRuntime.onAssistantEvent(
-          event.assistantMessageEvent as Activity.TelegramAssistantStreamEvent,
+          event.assistantMessageEvent as Activity.BaleAssistantStreamEvent,
         );
       }
       await messageActivityHooks.onMessageUpdate(event, ctx);
@@ -1849,7 +1849,7 @@ export function registerTelegramLifecycleRuntimeHooks({
       modelContextAvailabilityRuntime.reconcile();
       onSessionSettled?.(ctx);
     },
-    onBeforeAgentStart: Prompts.createTelegramProactiveBeforeAgentStartHook({
+    onBeforeAgentStart: Prompts.createBaleProactiveBeforeAgentStartHook({
       reconcileAvailability: modelContextAvailabilityRuntime.reconcile,
       isAvailable: canSendAgentActivity,
     }),

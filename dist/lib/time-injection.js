@@ -1,9 +1,9 @@
 /**
- * Telegram per-chat time injection runtime
- * Zones: telegram inbound, prompt content
+ * Bale per-chat time injection runtime
+ * Zones: bale inbound, prompt content
  * Owns the formatted `[time]` line and the per-chat interval bookkeeping that decides when to emit it
  */
-export function formatTelegramTimeInjectionLine(now, timezone) {
+export function formatBaleTimeInjectionLine(now, timezone) {
     const parts = new Intl.DateTimeFormat("en-CA", {
         timeZone: timezone,
         year: "numeric",
@@ -33,7 +33,7 @@ export function createTimeInjectionRuntime(deps) {
                 return null;
             let line;
             try {
-                line = formatTelegramTimeInjectionLine(now, config.timezone);
+                line = formatBaleTimeInjectionLine(now, config.timezone);
             }
             catch (error) {
                 deps.recordRuntimeEvent?.("time-injection", error, {

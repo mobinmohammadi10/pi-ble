@@ -1,11 +1,11 @@
 /**
- * Telegram Extension Sections registry and callback routing
- * Zones: telegram ui, extension platform, callback routing
+ * Bale Extension Sections registry and callback routing
+ * Zones: bale ui, extension platform, callback routing
  * Owns section registration, global registry binding, token mapping, main-menu/settings row injection, and section callback dispatch
  */
-import { assertTelegramCallbackData, } from "./keyboard.js";
-const SECTION_REGISTRY_KEY = "__piTelegramSectionRegistry__";
-function buildTelegramSectionContext(sectionId, token, chatId, messageId, callbackQueryId, deps, backCallback = "menu:back", backLabel = "⬆️ Main menu") {
+import { assertBaleCallbackData, } from "./keyboard.js";
+const SECTION_REGISTRY_KEY = "__piBaleSectionRegistry__";
+function buildBaleSectionContext(sectionId, token, chatId, messageId, callbackQueryId, deps, backCallback = "menu:back", backLabel = "⬆️ Main menu") {
     return {
         sectionId,
         chatId,
@@ -23,38 +23,38 @@ function buildTelegramSectionContext(sectionId, token, chatId, messageId, callba
             .sendRichMessage(chatId, message, deps.target ? { target: deps.target } : undefined)
             .then(() => { }),
         enqueuePrompt: deps.enqueuePrompt,
-        callbackData: (action, payload) => buildTelegramSectionCallbackData(token, action, payload),
+        callbackData: (action, payload) => buildBaleSectionCallbackData(token, action, payload),
         deleteMessage: () => messageId !== undefined
             ? deps.deleteMessage(chatId, messageId)
             : Promise.resolve(),
     };
 }
-function buildTelegramSectionCallbackContext(sectionId, token, chatId, messageId, action, payload, callbackQueryId, deps, backCallback = "menu:back", backLabel = "⬆️ Back") {
+function buildBaleSectionCallbackContext(sectionId, token, chatId, messageId, action, payload, callbackQueryId, deps, backCallback = "menu:back", backLabel = "⬆️ Back") {
     return {
-        ...buildTelegramSectionContext(sectionId, token, chatId, messageId, callbackQueryId, deps, backCallback, backLabel),
+        ...buildBaleSectionContext(sectionId, token, chatId, messageId, callbackQueryId, deps, backCallback, backLabel),
         action,
         payload,
     };
 }
 // --- GlobalThis Bridge ---
 /** @internal */
-function setGlobalTelegramSectionRegistry(registry) {
+function setGlobalBaleSectionRegistry(registry) {
     globalThis[SECTION_REGISTRY_KEY] = registry;
 }
 /** @internal */
-export function createAndBindTelegramSectionRegistry() {
-    const registry = createTelegramExtensionSectionRegistry();
-    setGlobalTelegramSectionRegistry(registry);
+export function createAndBindBaleSectionRegistry() {
+    const registry = createBaleExtensionSectionRegistry();
+    setGlobalBaleSectionRegistry(registry);
     return registry;
 }
 /**
- * Register a Telegram Extension Section from any pi extension.
+ * Register a Bale Extension Section from any pi extension.
  * Returns a disposer. Throws if no section registry is active.
  */
-export function registerTelegramSection(section) {
+export function registerBaleSection(section) {
     const registry = globalThis[SECTION_REGISTRY_KEY];
     if (!registry) {
-        throw new Error("Telegram section registry not available. Is pi-telegram loaded and initialized?");
+        throw new Error("Bale section registry not available. Is pi-bale loaded and initialized?");
     }
     return registry.register(section);
 }
@@ -62,7 +62,7 @@ export function registerTelegramSection(section) {
  * Get current section diagnostics. Returns empty array when registry is absent.
  * @internal
  */
-export function getTelegramSectionDiagnostics() {
+export function getBaleSectionDiagnostics() {
     const registry = globalThis[SECTION_REGISTRY_KEY];
     return registry ? registry.getDiagnostics() : [];
 }
@@ -72,11 +72,11 @@ const BACK_NAV_ROW = {
 function sectionErrorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
-function buildTelegramSectionCallbackData(token, action, payload) {
+function buildBaleSectionCallbackData(token, action, payload) {
     const data = payload
         ? `section:${token}:${action}:${payload}`
         : `section:${token}:${action}`;
-    return assertTelegramCallbackData(data, "Telegram section callback_data");
+    return assertBaleCallbackData(data, "Bale section callback_data");
 }
 function prependBackRow(replyMarkup, backCallback, backLabel) {
     const backRow = {
@@ -95,14 +95,14 @@ function prependBackRow(replyMarkup, backCallback, backLabel) {
     };
 }
 /** @internal */
-export function createTelegramExtensionSectionRegistry() {
+export function createBaleExtensionSectionRegistry() {
     const sections = new Map();
     const errors = new Map();
     let nextToken = 0;
     const register = (section) => {
         const duplicate = [...sections.values()].find((s) => s.id === section.id);
         if (duplicate) {
-            throw new Error(`Telegram section id already registered: ${section.id}`);
+            throw new Error(`Bale section id already registered: ${section.id}`);
         }
         const token = String(nextToken++);
         const registered = {
@@ -162,7 +162,7 @@ export function createTelegramExtensionSectionRegistry() {
     };
 }
 /** @internal */
-export function getTelegramExtensionSettingsRows(registry) {
+export function getBaleExtensionSettingsRows(registry) {
     const rows = [];
     for (const section of registry
         .getSections()
@@ -189,7 +189,7 @@ export function getTelegramExtensionSettingsRows(registry) {
     return rows;
 }
 /** @internal */
-export function getTelegramSectionMainMenuRows(registry) {
+export function getBaleSectionMainMenuRows(registry) {
     const rows = [];
     for (const section of registry.getSections()) {
         try {
@@ -206,7 +206,7 @@ export function getTelegramSectionMainMenuRows(registry) {
     return rows;
 }
 /** @internal */
-export function parseTelegramSectionCallback(data) {
+export function parseBaleSectionCallback(data) {
     if (!data.startsWith("section:"))
         return undefined;
     const rest = data.slice("section:".length);
@@ -225,14 +225,14 @@ export function parseTelegramSectionCallback(data) {
         payload: afterToken.slice(secondColon + 1),
     };
 }
-export async function handleTelegramSectionOpen(registry, token, chatId, messageId, callbackQueryId, deps) {
+export async function handleBaleSectionOpen(registry, token, chatId, messageId, callbackQueryId, deps) {
     const section = registry.getByToken(token);
     if (!section) {
         await deps.answerCallbackQuery(callbackQueryId, "This section is no longer available");
         return true;
     }
     try {
-        const sectionCtx = buildTelegramSectionContext(section.id, token, chatId, messageId, callbackQueryId, deps);
+        const sectionCtx = buildBaleSectionContext(section.id, token, chatId, messageId, callbackQueryId, deps);
         const view = await section.registration.render(sectionCtx);
         const viewWithBack = {
             ...view,
@@ -250,7 +250,7 @@ export async function handleTelegramSectionOpen(registry, token, chatId, message
         return true;
     }
 }
-export async function handleTelegramSectionCallback(registry, token, action, payload, chatId, messageId, callbackQueryId, deps) {
+export async function handleBaleSectionCallback(registry, token, action, payload, chatId, messageId, callbackQueryId, deps) {
     const section = registry.getByToken(token);
     if (!section) {
         await deps.answerCallbackQuery(callbackQueryId, "This section is no longer available");
@@ -265,12 +265,12 @@ export async function handleTelegramSectionCallback(registry, token, action, pay
         return true;
     }
     try {
-        const ctx = buildTelegramSectionCallbackContext(section.id, token, chatId, messageId, action, payload, callbackQueryId, deps, mainHandler ? `section:${token}:open` : "settings:list");
+        const ctx = buildBaleSectionCallbackContext(section.id, token, chatId, messageId, action, payload, callbackQueryId, deps, mainHandler ? `section:${token}:open` : "settings:list");
         let result = await handler(ctx);
         // Fallback: if main handler passed and settings handler exists, try settings
         // with the correct navigation context (back → settings list).
         if (result === "pass" && mainHandler && settingsHandler) {
-            const settingsCtx = buildTelegramSectionCallbackContext(section.id, token, chatId, messageId, action, payload, callbackQueryId, deps, "settings:list");
+            const settingsCtx = buildBaleSectionCallbackContext(section.id, token, chatId, messageId, action, payload, callbackQueryId, deps, "settings:list");
             result = await settingsHandler(settingsCtx);
         }
         if (result === "pass") {
@@ -286,14 +286,14 @@ export async function handleTelegramSectionCallback(registry, token, action, pay
         return true;
     }
 }
-export async function handleTelegramSectionSettingsOpen(registry, token, chatId, messageId, callbackQueryId, deps) {
+export async function handleBaleSectionSettingsOpen(registry, token, chatId, messageId, callbackQueryId, deps) {
     const section = registry.getByToken(token);
     if (!section || !section.registration.settings) {
         await deps.answerCallbackQuery(callbackQueryId, "This section is no longer available");
         return true;
     }
     try {
-        const sectionCtx = buildTelegramSectionContext(section.id, token, chatId, messageId, callbackQueryId, deps, "settings:list", "⬆️ Back");
+        const sectionCtx = buildBaleSectionContext(section.id, token, chatId, messageId, callbackQueryId, deps, "settings:list", "⬆️ Back");
         const view = await section.registration.settings.open(sectionCtx);
         const viewWithBack = {
             ...view,

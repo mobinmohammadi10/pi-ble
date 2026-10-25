@@ -106,7 +106,7 @@ jobs:
       - name: Resolve npm publication state
         id: npm-state
         env:
-          PACKAGE_NAME: "@llblab/pi-telegram"
+          PACKAGE_NAME: "@llblab/pi-bale"
           TAG_COMMIT: ${{ steps.preflight.outputs.tag_commit }}
           VERSION: ${{ steps.preflight.outputs.version }}
         run: |
@@ -136,7 +136,7 @@ jobs:
         run: npm publish --access public --provenance
       - name: Verify public npm package and packed manifest
         env:
-          PACKAGE_NAME: "@llblab/pi-telegram"
+          PACKAGE_NAME: "@llblab/pi-bale"
           TAG_COMMIT: ${{ steps.preflight.outputs.tag_commit }}
           VERSION: ${{ steps.preflight.outputs.version }}
         run: |
@@ -152,7 +152,7 @@ jobs:
           if (published.version !== process.env.VERSION || published.gitHead !== process.env.TAG_COMMIT) {
             throw new Error(`Published npm identity does not match the release tag: ${JSON.stringify(published)}.`);
           }
-          if (!published.pi?.extensions?.includes("./dist/pi-telegram/index.js") ||
+          if (!published.pi?.extensions?.includes("./dist/pi-bale/index.js") ||
               !published.pi?.skills?.includes("./dist/skills")) {
             throw new Error("Published npm metadata is missing the built Pi extension or skill manifest.");
           }
@@ -160,8 +160,8 @@ jobs:
           const paths = new Set((packed?.files ?? []).map((file) => file.path));
           if (packed?.name !== process.env.PACKAGE_NAME || packed?.version !== process.env.VERSION ||
               !paths.has("dist/index.js") || !paths.has("dist/index.d.ts") ||
-              !paths.has("dist/pi-telegram/index.js") ||
-              !paths.has("dist/skills/telegram-bridge/SKILL.md") || !paths.has("package.json")) {
+              !paths.has("dist/pi-bale/index.js") ||
+              !paths.has("dist/skills/bale-bridge/SKILL.md") || !paths.has("package.json")) {
             throw new Error("Published npm tarball is missing the expected built runtime or manifests.");
           }
           NODE

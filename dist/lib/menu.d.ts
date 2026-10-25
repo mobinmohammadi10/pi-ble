@@ -1,19 +1,19 @@
 /**
- * Telegram menu and inline-keyboard rendering helpers
- * Zones: telegram ui, controls, status menu
+ * Bale menu and inline-keyboard rendering helpers
+ * Zones: bale ui, controls, status menu
  * Owns app-menu/status state, inline UI text, and callback composition while model/thinking/queue menu details live in dedicated domains
  */
-import { type TelegramMenuMessageRuntimeDeps, type TelegramModelMenuState, type TelegramReplyMarkup } from "./menu-model.ts";
-import { type MenuModel, type ScopedTelegramModel, type TelegramModelSwitchContinuationSource, type ThinkingLevel } from "./model.ts";
-import { type TelegramSectionRegistry } from "./sections.ts";
-import type { TelegramApiCallOptions, TelegramInputRichMessage } from "./telegram-api.ts";
-export { applyTelegramModelPageSelection, applyTelegramModelScopeSelection, buildModelMenuReplyMarkup, buildModelPageMenuReplyMarkup, buildTelegramModelCallbackPlan, buildTelegramModelMenuRenderPayload, buildTelegramModelMenuState, buildTelegramModelMenuStateRuntime, buildTelegramModelPageMenuRenderPayload, createTelegramModelMenuRuntime, createTelegramModelMenuStateBuilder, formatScopedModelButtonText, getModelMenuItems, getStoredTelegramModelMenuState, getTelegramModelMenuPage, getTelegramModelSelection, handleTelegramModelMenuCallbackAction, MODEL_MENU_TITLE, MODEL_PAGE_MENU_TITLE, openTelegramModelMenu, pruneStoredTelegramModelMenus, resolveCachedTelegramModelMenuInputs, sendTelegramModelMenuMessage, storeTelegramModelMenuState, TELEGRAM_MODEL_PAGE_SIZE, updateTelegramModelMenuMessage, } from "./menu-model.ts";
-export type { BuildTelegramModelCallbackPlanParams, BuildTelegramModelMenuStateParams, CachedTelegramModelMenuInputs, MenuSettingsManager, StoredTelegramModelMenuState, TelegramMenuMessageRuntimeDeps, TelegramMenuMutationResult, TelegramMenuRenderPayload, TelegramMenuSelectionResult, TelegramModelCallbackPlan, TelegramModelMenuCallbackDeps, TelegramModelMenuInputCacheDeps, TelegramModelMenuOpenDeps, TelegramModelMenuPage, TelegramModelMenuRuntime, TelegramModelMenuRuntimeContext, TelegramModelMenuRuntimeOptions, TelegramModelMenuState, TelegramModelMenuStateBuilderContext, TelegramModelMenuStateBuilderDeps, TelegramModelMenuStoreOptions, TelegramModelScope, TelegramReplyMarkup, } from "./menu-model.ts";
-export { buildStatusReplyMarkup, buildTelegramStatusMenuRenderPayload, handleTelegramStatusMenuCallbackAction, openTelegramStatusMenu, sendTelegramStatusMessage, updateTelegramStatusMessage, } from "./menu-status.ts";
-export type { TelegramStatusMenuCallbackDeps, TelegramStatusMenuOpenDeps, } from "./menu-status.ts";
-export { buildTelegramThinkingMenuRenderPayload, buildThinkingMenuReplyMarkup, buildThinkingMenuText, handleTelegramThinkingMenuCallbackAction, openTelegramThinkingMenu, updateTelegramThinkingMenuMessage, } from "./menu-thinking.ts";
-export type { TelegramThinkingMenuCallbackDeps, TelegramThinkingMenuOpenDeps, } from "./menu-thinking.ts";
-export interface TelegramMenuCallbackEntryDeps {
+import { type BaleMenuMessageRuntimeDeps, type BaleModelMenuState, type BaleReplyMarkup } from "./menu-model.ts";
+import { type MenuModel, type ScopedBaleModel, type BaleModelSwitchContinuationSource, type ThinkingLevel } from "./model.ts";
+import { type BaleSectionRegistry } from "./sections.ts";
+import type { BaleApiCallOptions, BaleInputRichMessage } from "./bale-api.ts";
+export { applyBaleModelPageSelection, applyBaleModelScopeSelection, buildModelMenuReplyMarkup, buildModelPageMenuReplyMarkup, buildBaleModelCallbackPlan, buildBaleModelMenuRenderPayload, buildBaleModelMenuState, buildBaleModelMenuStateRuntime, buildBaleModelPageMenuRenderPayload, createBaleModelMenuRuntime, createBaleModelMenuStateBuilder, formatScopedModelButtonText, getModelMenuItems, getStoredBaleModelMenuState, getBaleModelMenuPage, getBaleModelSelection, handleBaleModelMenuCallbackAction, MODEL_MENU_TITLE, MODEL_PAGE_MENU_TITLE, openBaleModelMenu, pruneStoredBaleModelMenus, resolveCachedBaleModelMenuInputs, sendBaleModelMenuMessage, storeBaleModelMenuState, BALE_MODEL_PAGE_SIZE, updateBaleModelMenuMessage, } from "./menu-model.ts";
+export type { BuildBaleModelCallbackPlanParams, BuildBaleModelMenuStateParams, CachedBaleModelMenuInputs, MenuSettingsManager, StoredBaleModelMenuState, BaleMenuMessageRuntimeDeps, BaleMenuMutationResult, BaleMenuRenderPayload, BaleMenuSelectionResult, BaleModelCallbackPlan, BaleModelMenuCallbackDeps, BaleModelMenuInputCacheDeps, BaleModelMenuOpenDeps, BaleModelMenuPage, BaleModelMenuRuntime, BaleModelMenuRuntimeContext, BaleModelMenuRuntimeOptions, BaleModelMenuState, BaleModelMenuStateBuilderContext, BaleModelMenuStateBuilderDeps, BaleModelMenuStoreOptions, BaleModelScope, BaleReplyMarkup, } from "./menu-model.ts";
+export { buildStatusReplyMarkup, buildBaleStatusMenuRenderPayload, handleBaleStatusMenuCallbackAction, openBaleStatusMenu, sendBaleStatusMessage, updateBaleStatusMessage, } from "./menu-status.ts";
+export type { BaleStatusMenuCallbackDeps, BaleStatusMenuOpenDeps, } from "./menu-status.ts";
+export { buildBaleThinkingMenuRenderPayload, buildThinkingMenuReplyMarkup, buildThinkingMenuText, handleBaleThinkingMenuCallbackAction, openBaleThinkingMenu, updateBaleThinkingMenuMessage, } from "./menu-thinking.ts";
+export type { BaleThinkingMenuCallbackDeps, BaleThinkingMenuOpenDeps, } from "./menu-thinking.ts";
+export interface BaleMenuCallbackEntryDeps {
     handleStatusAction: () => Promise<boolean>;
     handleThinkingAction: () => Promise<boolean>;
     handleModelAction: () => Promise<boolean>;
@@ -30,23 +30,23 @@ export interface MenuCallbackQuery {
         };
     };
 }
-export interface StoredTelegramMenuCallbackDeps<TModel extends MenuModel = MenuModel> {
-    getStoredModelMenuState: (messageId: number | undefined, chatId?: number) => TelegramModelMenuState<TModel> | undefined;
-    handleStatusAction: (state: TelegramModelMenuState<TModel>) => Promise<boolean>;
-    handleThinkingAction: (state: TelegramModelMenuState<TModel>) => Promise<boolean>;
-    handleModelAction: (state: TelegramModelMenuState<TModel>) => Promise<boolean>;
+export interface StoredBaleMenuCallbackDeps<TModel extends MenuModel = MenuModel> {
+    getStoredModelMenuState: (messageId: number | undefined, chatId?: number) => BaleModelMenuState<TModel> | undefined;
+    handleStatusAction: (state: BaleModelMenuState<TModel>) => Promise<boolean>;
+    handleThinkingAction: (state: BaleModelMenuState<TModel>) => Promise<boolean>;
+    handleModelAction: (state: BaleModelMenuState<TModel>) => Promise<boolean>;
     answerCallbackQuery: (callbackQueryId: string, text?: string) => Promise<void>;
 }
-export interface TelegramMenuCallbackRuntimeDeps<TContext, TModel extends MenuModel = MenuModel> {
-    getStoredModelMenuState: (messageId: number | undefined, chatId?: number) => TelegramModelMenuState<TModel> | undefined;
+export interface BaleMenuCallbackRuntimeDeps<TContext, TModel extends MenuModel = MenuModel> {
+    getStoredModelMenuState: (messageId: number | undefined, chatId?: number) => BaleModelMenuState<TModel> | undefined;
     getActiveModel: (ctx: TContext) => TModel | undefined;
     getThinkingLevel: () => ThinkingLevel;
     setThinkingLevel: (level: ThinkingLevel) => void;
     updateStatus: (ctx: TContext) => void;
-    updateModelMenuMessage: (state: TelegramModelMenuState<TModel>, ctx: TContext) => Promise<void>;
-    updateThinkingMenuMessage: (state: TelegramModelMenuState<TModel>, ctx: TContext) => Promise<void>;
-    updateStatusMessage: (state: TelegramModelMenuState<TModel>, ctx: TContext) => Promise<void>;
-    updateSettingsMenuMessage?: (state: TelegramModelMenuState<TModel>, ctx: TContext) => Promise<void>;
+    updateModelMenuMessage: (state: BaleModelMenuState<TModel>, ctx: TContext) => Promise<void>;
+    updateThinkingMenuMessage: (state: BaleModelMenuState<TModel>, ctx: TContext) => Promise<void>;
+    updateStatusMessage: (state: BaleModelMenuState<TModel>, ctx: TContext) => Promise<void>;
+    updateSettingsMenuMessage?: (state: BaleModelMenuState<TModel>, ctx: TContext) => Promise<void>;
     answerCallbackQuery: (callbackQueryId: string, text?: string) => Promise<void>;
     isIdle: (ctx: TContext) => boolean;
     hasAbortHandler: () => boolean;
@@ -54,17 +54,17 @@ export interface TelegramMenuCallbackRuntimeDeps<TContext, TModel extends MenuMo
     persistScopedModelPatterns?: (patterns: string[], ctx: TContext) => Promise<void>;
     setModel: (model: TModel) => Promise<boolean>;
     setCurrentModel: (model: TModel, ctx: TContext) => void;
-    stagePendingModelSwitch: (selection: ScopedTelegramModel<TModel>, ctx: TContext, continuationTurn: TelegramModelSwitchContinuationSource) => void;
-    restartInterruptedTelegramTurn: (selection: ScopedTelegramModel<TModel>, ctx: TContext, continuationTurn: TelegramModelSwitchContinuationSource) => Promise<boolean> | boolean;
-    sectionRegistry?: TelegramSectionRegistry;
-    editInteractiveMessage?: (chatId: number, messageId: number, text: string, mode: "markdown" | "html" | "plain", replyMarkup: TelegramReplyMarkup) => Promise<void>;
-    sendInteractiveMessage?: (chatId: number, text: string, mode: "markdown" | "html" | "plain", replyMarkup: TelegramReplyMarkup, options?: {
+    stagePendingModelSwitch: (selection: ScopedBaleModel<TModel>, ctx: TContext, continuationTurn: BaleModelSwitchContinuationSource) => void;
+    restartInterruptedBaleTurn: (selection: ScopedBaleModel<TModel>, ctx: TContext, continuationTurn: BaleModelSwitchContinuationSource) => Promise<boolean> | boolean;
+    sectionRegistry?: BaleSectionRegistry;
+    editInteractiveMessage?: (chatId: number, messageId: number, text: string, mode: "markdown" | "html" | "plain", replyMarkup: BaleReplyMarkup) => Promise<void>;
+    sendInteractiveMessage?: (chatId: number, text: string, mode: "markdown" | "html" | "plain", replyMarkup: BaleReplyMarkup, options?: {
         target?: {
             chatId: number;
             threadId?: number;
         };
     }) => Promise<number | undefined>;
-    sendSectionRichMessage?: (chatId: number, message: TelegramInputRichMessage, options?: {
+    sendSectionRichMessage?: (chatId: number, message: BaleInputRichMessage, options?: {
         target?: {
             chatId: number;
             threadId?: number;
@@ -77,14 +77,14 @@ export interface TelegramMenuCallbackRuntimeDeps<TContext, TModel extends MenuMo
     deleteMessage?: (chatId: number, messageId: number) => Promise<void>;
     isVoiceReplyActive?: () => boolean;
 }
-export interface TelegramMenuActionRuntimeDeps<TContext, TModel extends MenuModel = MenuModel> extends TelegramMenuMessageRuntimeDeps {
-    getModelMenuState: (chatId: number, ctx: TContext, threadId?: number) => Promise<TelegramModelMenuState<TModel>>;
+export interface BaleMenuActionRuntimeDeps<TContext, TModel extends MenuModel = MenuModel> extends BaleMenuMessageRuntimeDeps {
+    getModelMenuState: (chatId: number, ctx: TContext, threadId?: number) => Promise<BaleModelMenuState<TModel>>;
     getActiveModel: (ctx: TContext) => TModel | undefined;
     getThinkingLevel: () => ThinkingLevel;
     getQueueItemCount?: () => number;
     getPendingCancellationCount?: () => number;
     buildStatusHtml: (ctx: TContext) => string;
-    storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
+    storeModelMenuState: (state: BaleModelMenuState<TModel>) => void;
     isIdle: (ctx: TContext) => boolean;
     canOfferInFlightModelSwitch: (ctx: TContext) => boolean;
     sendTextReply: (chatId: number, replyToMessageId: number | undefined, text: string, options?: {
@@ -93,25 +93,25 @@ export interface TelegramMenuActionRuntimeDeps<TContext, TModel extends MenuMode
             threadId?: number;
         };
         parseMode?: "HTML";
-        assertAuthority?: TelegramApiCallOptions["assertAuthority"];
+        assertAuthority?: BaleApiCallOptions["assertAuthority"];
     }) => Promise<unknown>;
-    sectionRegistry?: TelegramSectionRegistry;
+    sectionRegistry?: BaleSectionRegistry;
     isVoiceReplyActive?: () => boolean;
 }
-export interface TelegramMenuActionRuntime<TContext, TModel extends MenuModel = MenuModel> {
-    updateModelMenuMessage: (state: TelegramModelMenuState<TModel>, ctx: TContext) => Promise<void>;
-    updateThinkingMenuMessage: (state: TelegramModelMenuState<TModel>, ctx: TContext) => Promise<void>;
-    updateStatusMessage: (state: TelegramModelMenuState<TModel>, ctx: TContext) => Promise<void>;
-    sendStatusMessage: (chatId: number, replyToMessageId: number | undefined, ctx: TContext, threadId?: number, options?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<void>;
-    openModelMenu: (chatId: number, replyToMessageId: number | undefined, ctx: TContext, threadId?: number, options?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<void>;
-    openThinkingMenu: (chatId: number, replyToMessageId: number | undefined, ctx: TContext, threadId?: number, options?: Pick<TelegramApiCallOptions, "assertAuthority">) => Promise<void>;
+export interface BaleMenuActionRuntime<TContext, TModel extends MenuModel = MenuModel> {
+    updateModelMenuMessage: (state: BaleModelMenuState<TModel>, ctx: TContext) => Promise<void>;
+    updateThinkingMenuMessage: (state: BaleModelMenuState<TModel>, ctx: TContext) => Promise<void>;
+    updateStatusMessage: (state: BaleModelMenuState<TModel>, ctx: TContext) => Promise<void>;
+    sendStatusMessage: (chatId: number, replyToMessageId: number | undefined, ctx: TContext, threadId?: number, options?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<void>;
+    openModelMenu: (chatId: number, replyToMessageId: number | undefined, ctx: TContext, threadId?: number, options?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<void>;
+    openThinkingMenu: (chatId: number, replyToMessageId: number | undefined, ctx: TContext, threadId?: number, options?: Pick<BaleApiCallOptions, "assertAuthority">) => Promise<void>;
 }
-export declare function handleTelegramMenuCallbackEntry(callbackQueryId: string, data: string | undefined, state: TelegramModelMenuState | undefined, deps: TelegramMenuCallbackEntryDeps): Promise<void>;
-export declare function handleStoredTelegramMenuCallback<TModel extends MenuModel = MenuModel>(query: MenuCallbackQuery, deps: StoredTelegramMenuCallbackDeps<TModel>): Promise<void>;
-export type TelegramMenuCallbackRuntimeAdapterDeps<TContext, TModel extends MenuModel = MenuModel> = Omit<TelegramMenuCallbackRuntimeDeps<TContext, TModel>, "hasActiveToolExecutions"> & {
+export declare function handleBaleMenuCallbackEntry(callbackQueryId: string, data: string | undefined, state: BaleModelMenuState | undefined, deps: BaleMenuCallbackEntryDeps): Promise<void>;
+export declare function handleStoredBaleMenuCallback<TModel extends MenuModel = MenuModel>(query: MenuCallbackQuery, deps: StoredBaleMenuCallbackDeps<TModel>): Promise<void>;
+export type BaleMenuCallbackRuntimeAdapterDeps<TContext, TModel extends MenuModel = MenuModel> = Omit<BaleMenuCallbackRuntimeDeps<TContext, TModel>, "hasActiveToolExecutions"> & {
     getActiveToolExecutions: () => number;
 };
-export declare function createTelegramMenuCallbackHandler<TQuery extends MenuCallbackQuery, TContext, TModel extends MenuModel = MenuModel>(deps: TelegramMenuCallbackRuntimeDeps<TContext, TModel>): (query: TQuery, ctx: TContext) => Promise<void>;
-export declare function createTelegramMenuCallbackHandlerForContext<TQuery extends MenuCallbackQuery, TContext, TModel extends MenuModel = MenuModel>(deps: TelegramMenuCallbackRuntimeAdapterDeps<TContext, TModel>): (query: TQuery, ctx: TContext) => Promise<void>;
-export declare function handleTelegramMenuCallbackRuntime<TQuery extends MenuCallbackQuery, TContext, TModel extends MenuModel = MenuModel>(query: TQuery, ctx: TContext, deps: TelegramMenuCallbackRuntimeDeps<TContext, TModel>): Promise<void>;
-export declare function createTelegramMenuActionRuntime<TContext, TModel extends MenuModel = MenuModel>(deps: TelegramMenuActionRuntimeDeps<TContext, TModel>): TelegramMenuActionRuntime<TContext, TModel>;
+export declare function createBaleMenuCallbackHandler<TQuery extends MenuCallbackQuery, TContext, TModel extends MenuModel = MenuModel>(deps: BaleMenuCallbackRuntimeDeps<TContext, TModel>): (query: TQuery, ctx: TContext) => Promise<void>;
+export declare function createBaleMenuCallbackHandlerForContext<TQuery extends MenuCallbackQuery, TContext, TModel extends MenuModel = MenuModel>(deps: BaleMenuCallbackRuntimeAdapterDeps<TContext, TModel>): (query: TQuery, ctx: TContext) => Promise<void>;
+export declare function handleBaleMenuCallbackRuntime<TQuery extends MenuCallbackQuery, TContext, TModel extends MenuModel = MenuModel>(query: TQuery, ctx: TContext, deps: BaleMenuCallbackRuntimeDeps<TContext, TModel>): Promise<void>;
+export declare function createBaleMenuActionRuntime<TContext, TModel extends MenuModel = MenuModel>(deps: BaleMenuActionRuntimeDeps<TContext, TModel>): BaleMenuActionRuntime<TContext, TModel>;

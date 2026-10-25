@@ -1,7 +1,7 @@
 /**
- * Regression tests for Telegram status helpers
+ * Regression tests for Bale status helpers
  * Covers runtime diagnostics lines and recent-event redaction/ring-buffer behavior
- * Zones: telegram ui, pi agent diagnostics, tui
+ * Zones: bale ui, pi agent diagnostics, tui
  */
 
 import assert from "node:assert/strict";
@@ -10,44 +10,44 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import * as Queue from "../lib/queue.ts";
-import { createTelegramLockRuntime, mutateTelegramRuntimeStateSection, readTelegramRuntimeState } from "../lib/locks.ts";
+import { createBaleLockRuntime, mutateBaleRuntimeStateSection, readBaleRuntimeState } from "../lib/locks.ts";
 
 import {
-  buildTelegramBridgeStatusLines,
-  buildTelegramRuntimeEventLines,
-  buildTelegramStatusBarText,
-  clearTelegramStatusLineProviders,
-  createTelegramBridgeStatusRuntime,
-  createTelegramRuntimeDiagnosticsSnapshotScheduler,
-  createTelegramRuntimeProjectionStore,
-  type TelegramRuntimeProjectionStoreOptions,
-  type TelegramRuntimeProjectionStorage,
-  type TelegramStatusSnapshot,
-  type TelegramStatusBarState,
-  createTelegramRuntimeEventRecorder,
-  createTelegramRuntimeLogScope,
-  createTelegramStatusHtmlBuilder,
-  createTelegramStatusSnapshot,
-  createTelegramStatusRuntime,
-  formatTelegramConnectionFailure,
-  getTelegramStatusBarProcessingStatus,
-  recordStructuredTelegramRuntimeEvent,
-  registerTelegramStatusLineProvider,
-  type TelegramRuntimeEvent,
+  buildBaleBridgeStatusLines,
+  buildBaleRuntimeEventLines,
+  buildBaleStatusBarText,
+  clearBaleStatusLineProviders,
+  createBaleBridgeStatusRuntime,
+  createBaleRuntimeDiagnosticsSnapshotScheduler,
+  createBaleRuntimeProjectionStore,
+  type BaleRuntimeProjectionStoreOptions,
+  type BaleRuntimeProjectionStorage,
+  type BaleStatusSnapshot,
+  type BaleStatusBarState,
+  createBaleRuntimeEventRecorder,
+  createBaleRuntimeLogScope,
+  createBaleStatusHtmlBuilder,
+  createBaleStatusSnapshot,
+  createBaleStatusRuntime,
+  formatBaleConnectionFailure,
+  getBaleStatusBarProcessingStatus,
+  recordStructuredBaleRuntimeEvent,
+  registerBaleStatusLineProvider,
+  type BaleRuntimeEvent,
 } from "../lib/status.ts";
 
 function createProjectionFixture() {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-runtime-projection-")), path = join(dir, "state.json");
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-runtime-projection-")), path = join(dir, "state.json");
   const scope = { path, profile: "default", generation: 1, now: 1000, onNow: undefined as (() => void) | undefined,
     onPublish: undefined as ((boundary: "before-write" | "after-write-before-rename" | "after-rename") => void) | undefined };
-  const owner = createTelegramLockRuntime({ statePath: path, key: () => scope.profile, pid: 10,
+  const owner = createBaleLockRuntime({ statePath: path, key: () => scope.profile, pid: 10,
     instanceId: "owner", runtimeGeneration: 1, isProcessAlive: () => true });
-  const snapshot: TelegramStatusSnapshot = { runtime: { pollingActive: true }, liveRoster: { busFollowers: [] },
+  const snapshot: BaleStatusSnapshot = { runtime: { pollingActive: true }, liveRoster: { busFollowers: [] },
     diagnostics: { pendingDispatch: false, recentRuntimeEvents: [{ at: 1, category: "bus", message: "already logged" }] } };
   const publishIfOwned = owner.publishStateSectionIfOwned!;
-  const storage: TelegramRuntimeProjectionStorage = {
+  const storage: BaleRuntimeProjectionStorage = {
     read({ path, profile }) {
-      const file = readTelegramRuntimeState(path);
+      const file = readBaleRuntimeState(path);
       return Object.hasOwn(file.profiles, profile) ? file.profiles[profile]?.runtime : undefined;
     },
     publish(expectedScope, mutate, isCurrent) {
@@ -58,7 +58,7 @@ function createProjectionFixture() {
       return outcome.committed && outcome.result;
     },
   };
-  const createStore = (overrides: Partial<TelegramRuntimeProjectionStoreOptions> = {}) => createTelegramRuntimeProjectionStore({
+  const createStore = (overrides: Partial<BaleRuntimeProjectionStoreOptions> = {}) => createBaleRuntimeProjectionStore({
     getPath: () => scope.path, getProfile: () => scope.profile,
     captureAuthority() {
       const epoch = owner.getOwnedLeaderEpoch(), generation = scope.generation;
@@ -86,10 +86,10 @@ test("Consolidated runtime projection compares fresh content, excludes event his
   const f = createProjectionFixture();
   try {
     f.owner.acquire({ cwd: "/repo" });
-    mutateTelegramRuntimeStateSection(f.path, "default", "workspace", () => ({ value: { binding: 55, forwardIssued: true }, result: true }), { isCurrent: () => true });
-    mutateTelegramRuntimeStateSection(f.path, "default", "admission", () => ({ value: { leases: ["busy"], deletionIssued: true }, result: true }), { isCurrent: () => true });
-    mutateTelegramRuntimeStateSection(f.path, "other", "workspace", () => ({ value: { binding: 66 }, result: true }), { isCurrent: () => true });
-    const before = readTelegramRuntimeState(f.path), store = f.createStore();
+    mutateBaleRuntimeStateSection(f.path, "default", "workspace", () => ({ value: { binding: 55, forwardIssued: true }, result: true }), { isCurrent: () => true });
+    mutateBaleRuntimeStateSection(f.path, "default", "admission", () => ({ value: { leases: ["busy"], deletionIssued: true }, result: true }), { isCurrent: () => true });
+    mutateBaleRuntimeStateSection(f.path, "other", "workspace", () => ({ value: { binding: 66 }, result: true }), { isCurrent: () => true });
+    const before = readBaleRuntimeState(f.path), store = f.createStore();
     assert.equal(await store.persist(f.snapshot), true);
     assert.equal(store.read()?.runtime.pollingActive, true);
     assert.equal(store.read()?.diagnostics.recentRuntimeEvents, undefined);
@@ -99,10 +99,10 @@ test("Consolidated runtime projection compares fresh content, excludes event his
     assert.equal(await store.persist(f.snapshot), false);
     assert.equal(readFileSync(f.path, "utf8"), stable);
     assert.equal(statSync(f.path).ino, inode);
-    const after = readTelegramRuntimeState(f.path);
+    const after = readBaleRuntimeState(f.path);
     for (const section of ["transport", "workspace", "admission"] as const) assert.deepEqual(after.profiles.default?.[section], before.profiles.default?.[section]);
     assert.deepEqual(after.profiles.other, before.profiles.other);
-    mutateTelegramRuntimeStateSection(f.path, "default", "runtime", current => {
+    mutateBaleRuntimeStateSection(f.path, "default", "runtime", current => {
       const changed = structuredClone(current) as { diagnostics: { pendingDispatch: boolean } };
       changed.diagnostics.pendingDispatch = true;
       return { value: changed, result: true };
@@ -141,7 +141,7 @@ test("Consolidated runtime projection never persists poll-cycle timestamps", asy
       publications += 1;
       return f.storage.publish(...args);
     } } });
-    const polled = (atMs: number): TelegramStatusSnapshot => ({ ...f.snapshot, runtime: { ...f.snapshot.runtime,
+    const polled = (atMs: number): BaleStatusSnapshot => ({ ...f.snapshot, runtime: { ...f.snapshot.runtime,
       polling: { phase: "long-poll", phaseStartedAtMs: atMs, lastSuccessfulResponseAtMs: atMs, lastSuccessfulResponseUpdateCount: 0, startedAtMs: 1 } } });
     assert.equal(await store.persist(polled(100)), true);
     assert.deepEqual(store.read()?.runtime.polling, { phase: "long-poll", startedAtMs: 1 });
@@ -159,12 +159,12 @@ for (const drift of ["generation", "profile", "path", "owner"] as const) {
       if (drift === "generation") f.scope.generation++;
       if (drift === "profile") f.scope.profile = "other";
       if (drift === "path") f.scope.path = join(f.dir, "other-state.json");
-      if (drift === "owner") createTelegramLockRuntime({ statePath: f.path, pid: 20, instanceId: "replacement", runtimeGeneration: 2,
+      if (drift === "owner") createBaleLockRuntime({ statePath: f.path, pid: 20, instanceId: "replacement", runtimeGeneration: 2,
         isProcessAlive: () => true }).acquire({ cwd: "/other" }, { force: true, expectedOwner: acquired.ok ? acquired.lock : undefined });
       const stable = readFileSync(f.path, "utf8");
       assert.equal(await pending, false);
       assert.equal(readFileSync(f.path, "utf8"), stable);
-      assert.equal(readTelegramRuntimeState(f.path).profiles.default?.runtime, undefined);
+      assert.equal(readBaleRuntimeState(f.path).profiles.default?.runtime, undefined);
       assert.equal(existsSync(join(f.dir, "other-state.json")), false);
     } finally { rmSync(f.dir, { recursive: true, force: true }); }
   });
@@ -190,7 +190,7 @@ test("Consolidated runtime projection freezes queued content and callable capabi
     f.owner.acquire({ cwd: "/repo" });
     const options = { getPath: () => f.path, getProfile: () => "default", captureAuthority: () => () => true,
       storage: f.storage };
-    const store = createTelegramRuntimeProjectionStore(options);
+    const store = createBaleRuntimeProjectionStore(options);
     const pending = store.persist(f.snapshot);
     f.snapshot.runtime.pollingActive = false;
     options.storage.publish = () => { throw new Error("Replacement capability must not be borrowed"); };
@@ -233,8 +233,8 @@ for (const damage of ["projection", "envelope"] as const) {
     const f = createProjectionFixture();
     try {
       f.owner.acquire({ cwd: "/repo" });
-      mutateTelegramRuntimeStateSection(f.path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
-      if (damage === "projection") mutateTelegramRuntimeStateSection(f.path, "default", "runtime", () => ({ value: ["bad"], result: true }), { isCurrent: () => true });
+      mutateBaleRuntimeStateSection(f.path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
+      if (damage === "projection") mutateBaleRuntimeStateSection(f.path, "default", "runtime", () => ({ value: ["bad"], result: true }), { isCurrent: () => true });
       else writeFileSync(f.path, "{", { mode: 0o600 });
       const store = f.createStore(), before = readFileSync(f.path, "utf8");
       assert.equal(store.read(), undefined);
@@ -244,7 +244,7 @@ for (const damage of ["projection", "envelope"] as const) {
         assert.equal(readFileSync(f.path, "utf8"), before);
       } else {
         assert.equal(await store.persist(f.snapshot), true, "Only a known non-authoritative section may be replaced under current owner authority");
-        assert.deepEqual(readTelegramRuntimeState(f.path).profiles.default?.workspace, { binding: 55 });
+        assert.deepEqual(readBaleRuntimeState(f.path).profiles.default?.workspace, { binding: 55 });
       }
     } finally { rmSync(f.dir, { recursive: true, force: true }); }
   });
@@ -252,19 +252,19 @@ for (const damage of ["projection", "envelope"] as const) {
 
 test("Connection notices name known causes and one recovery action without raw detail", () => {
   const cases: Array<[unknown, string]> = [
-    [Object.assign(new Error("raw token secret"), { status: 401 }), "Telegram token rejected. Run /telegram-setup."],
-    [Object.assign(new Error("raw denied"), { status: 403 }), "Telegram access denied. Check /telegram-status --debug."],
-    [Object.assign(new Error("raw host"), { code: "ENOTFOUND" }), "Telegram network unavailable. Retry /telegram-connect."],
-    ["Telegram Workspace slot reservation is unavailable.", "No Telegram slot available. Check /telegram-status --debug."],
-    [{ code: "incompatible-protocol" }, "Telegram instances are incompatible. Update them together."],
-    ["Unsupported journal version 42", "Telegram state version unsupported. Use a compatible runtime."],
-    ["Telegram bridge is active in another Pi instance (private path); follower registration failed: secret", "Telegram leader is active but unavailable. Check /telegram-status --debug."],
-    ["Telegram unfinished Thread creation does not match this session binding.", "Telegram Thread creation is unresolved. Check /telegram-status --debug."],
-    [new Error("stale ctx: use withSession; raw token secret"), "Telegram connection failed. Check /telegram-status --debug."],
-    [null, "Telegram connection failed. Check /telegram-status --debug."],
+    [Object.assign(new Error("raw token secret"), { status: 401 }), "Bale token rejected. Run /bale-setup."],
+    [Object.assign(new Error("raw denied"), { status: 403 }), "Bale access denied. Check /bale-status --debug."],
+    [Object.assign(new Error("raw host"), { code: "ENOTFOUND" }), "Bale network unavailable. Retry /bale-connect."],
+    ["Bale Workspace slot reservation is unavailable.", "No Bale slot available. Check /bale-status --debug."],
+    [{ code: "incompatible-protocol" }, "Bale instances are incompatible. Update them together."],
+    ["Unsupported journal version 42", "Bale state version unsupported. Use a compatible runtime."],
+    ["Bale bridge is active in another Pi instance (private path); follower registration failed: secret", "Bale leader is active but unavailable. Check /bale-status --debug."],
+    ["Bale unfinished Thread creation does not match this session binding.", "Bale Thread creation is unresolved. Check /bale-status --debug."],
+    [new Error("stale ctx: use withSession; raw token secret"), "Bale connection failed. Check /bale-status --debug."],
+    [null, "Bale connection failed. Check /bale-status --debug."],
   ];
   for (const [error, expected] of cases) {
-    assert.equal(formatTelegramConnectionFailure(error), expected);
+    assert.equal(formatBaleConnectionFailure(error), expected);
     assert.ok(expected.length < 100);
     assert.ok(!expected.includes("secret"));
   }
@@ -302,7 +302,7 @@ test("Status helpers build runtime log scope and persisted snapshot projections"
   };
 
   assert.deepEqual(
-    createTelegramRuntimeLogScope({ state, instanceId: "instance-1" }),
+    createBaleRuntimeLogScope({ state, instanceId: "instance-1" }),
     {
       instanceId: "instance-1",
       role: "leader",
@@ -311,7 +311,7 @@ test("Status helpers build runtime log scope and persisted snapshot projections"
       lockState: "active-here",
     },
   );
-  assert.deepEqual(createTelegramStatusSnapshot(state), {
+  assert.deepEqual(createBaleStatusSnapshot(state), {
     runtime: {
       busRole: "leader",
       botThreadMode: "enabled",
@@ -352,7 +352,7 @@ test("Status runtime diagnostics scheduler coalesces snapshot persists", async (
   let scheduledDelayMs: number | undefined;
   let persistCount = 0;
   const errors: unknown[] = [];
-  const schedule = createTelegramRuntimeDiagnosticsSnapshotScheduler({
+  const schedule = createBaleRuntimeDiagnosticsSnapshotScheduler({
     persistSnapshot: async () => {
       persistCount += 1;
     },
@@ -378,7 +378,7 @@ test("Status snapshot scheduler serializes in-flight publication and retains one
   const callbacks: Array<() => void> = [];
   const releases: Array<() => void> = [];
   let persistCount = 0;
-  const schedule = createTelegramRuntimeDiagnosticsSnapshotScheduler({
+  const schedule = createBaleRuntimeDiagnosticsSnapshotScheduler({
     persistSnapshot: () =>
       new Promise<void>((resolve) => {
         persistCount += 1;
@@ -412,7 +412,7 @@ test("Status snapshot shutdown cancels timers and fences already-dequeued callba
   const callbacks: Array<() => void> = [];
   const cleared: unknown[] = [];
   let reads = 0;
-  const schedule = createTelegramRuntimeDiagnosticsSnapshotScheduler({
+  const schedule = createBaleRuntimeDiagnosticsSnapshotScheduler({
     persistSnapshot: async () => { reads += 1; },
     recordError: error => assert.fail(String(error)),
     setTimer(callback) { callbacks.push(callback); return { unref() {} }; },
@@ -440,7 +440,7 @@ test("Status snapshot shutdown drains publication and discards predecessor rerun
   const callbacks: Array<() => void> = [];
   let release: (() => void) | undefined;
   let writes = 0, stopped = false;
-  const schedule = createTelegramRuntimeDiagnosticsSnapshotScheduler({
+  const schedule = createBaleRuntimeDiagnosticsSnapshotScheduler({
     persistSnapshot: () => new Promise<void>(resolve => { writes += 1; release = resolve; }),
     recordError: error => assert.fail(String(error)),
     setTimer(callback) { callbacks.push(callback); return { unref() {} }; },
@@ -469,7 +469,7 @@ test("Status snapshot shutdown drains publication and discards predecessor rerun
 test("Status snapshot queued microtasks cannot renew a revoked session scope", async () => {
   const callbacks: Array<() => void> = [];
   let session = 1, writes = 0;
-  const schedule = createTelegramRuntimeDiagnosticsSnapshotScheduler({
+  const schedule = createBaleRuntimeDiagnosticsSnapshotScheduler({
     captureScope() { const captured = session; return () => session === captured; },
     persistSnapshot: async () => { writes += 1; },
     recordError: error => assert.fail(String(error)),
@@ -488,12 +488,12 @@ test("Status snapshot queued microtasks cannot renew a revoked session scope", a
   await schedule.suspend();
 });
 
-for (const name of ["Telegram", "TeLeGrAm", "LeAdEr", "FoLlOwEr", "CuStOm"] as const) {
+for (const name of ["Bale", "TeLeGrAm", "LeAdEr", "FoLlOwEr", "CuStOm"] as const) {
   test(`Explicit Thread status labels preserve acknowledged title casing in every connection state (${name})`, () => {
     const theme = { fg: (token: string, text: string) => `<${token}>${text}</${token}>` };
-    const base: TelegramStatusBarState = { hasBotToken: true, pollingActive: true, paired: true, busRole: "leader",
+    const base: BaleStatusBarState = { hasBotToken: true, pollingActive: true, paired: true, busRole: "leader",
       compactionInProgress: false, processing: false, queuedStatus: " +2", instanceThreadName: name };
-    const cases: { state: Partial<TelegramStatusBarState>; suffix: string }[] = [
+    const cases: { state: Partial<BaleStatusBarState>; suffix: string }[] = [
       { state: {}, suffix: "<success>leader</success><warning> +2</warning>" },
       { state: { busRole: "follower", pollingActive: false }, suffix: "<success>follower</success><warning> +2</warning>" },
       { state: { busRole: undefined }, suffix: "<success>connected</success><warning> +2</warning>" },
@@ -505,14 +505,14 @@ for (const name of ["Telegram", "TeLeGrAm", "LeAdEr", "FoLlOwEr", "CuStOm"] as c
       { state: { paired: false }, suffix: "<warning>awaiting pairing</warning><warning> +2</warning>" },
       { state: { hasBotToken: false }, suffix: "<muted>not configured</muted><warning> +2</warning>" },
     ];
-    for (const { state, suffix } of cases) assert.equal(buildTelegramStatusBarText(theme, { ...base, ...state }), `<accent>${name}</accent> ${suffix}`);
+    for (const { state, suffix } of cases) assert.equal(buildBaleStatusBarText(theme, { ...base, ...state }), `<accent>${name}</accent> ${suffix}`);
   });
 }
 
 test("Thread status uses the generic bridge label only when its title is absent", () => {
   const theme = { fg: (_token: string, text: string) => text };
-  for (const instanceThreadName of [undefined, "", "  "]) assert.equal(buildTelegramStatusBarText(theme,
-    { hasBotToken: true, pollingActive: true, paired: true, compactionInProgress: false, processing: false, queuedStatus: "", instanceThreadName }), "telegram connected");
+  for (const instanceThreadName of [undefined, "", "  "]) assert.equal(buildBaleStatusBarText(theme,
+    { hasBotToken: true, pollingActive: true, paired: true, compactionInProgress: false, processing: false, queuedStatus: "", instanceThreadName }), "bale connected");
 });
 
 test("Status bar text renders bridge connection and queue states", () => {
@@ -520,7 +520,7 @@ test("Status bar text renders bridge connection and queue states", () => {
     fg: (token: string, text: string) => `<${token}>${text}</${token}>`,
   };
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: false,
       pollingActive: false,
       paired: false,
@@ -528,10 +528,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processing: false,
       queuedStatus: "",
     }),
-    "<accent>telegram</accent> <muted>not configured</muted>",
+    "<accent>bale</accent> <muted>not configured</muted>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: true,
       paired: true,
@@ -539,10 +539,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processing: true,
       queuedStatus: " +1",
     }),
-    "<accent>telegram</accent> <success>connected</success><warning> +1</warning>",
+    "<accent>bale</accent> <success>connected</success><warning> +1</warning>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: true,
       paired: true,
@@ -551,10 +551,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processingStatus: "dispatching",
       queuedStatus: " +1",
     }),
-    "<accent>telegram</accent> <success>connected</success><warning> +1</warning>",
+    "<accent>bale</accent> <success>connected</success><warning> +1</warning>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: true,
       paired: true,
@@ -563,10 +563,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processingStatus: "active",
       queuedStatus: "",
     }),
-    "<accent>telegram</accent> <success>connected</success>",
+    "<accent>bale</accent> <success>connected</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: true,
       paired: true,
@@ -574,10 +574,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processing: false,
       queuedStatus: "",
     }),
-    "<accent>telegram</accent> <success>connected</success>",
+    "<accent>bale</accent> <success>connected</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: true,
       paired: true,
@@ -586,10 +586,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processingStatus: "active",
       queuedStatus: "",
     }),
-    "<accent>telegram</accent> <success>connected</success>",
+    "<accent>bale</accent> <success>connected</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -602,19 +602,19 @@ test("Status bar text renders bridge connection and queue states", () => {
     "<accent>Aurora</accent> <dim>disconnected</dim><warning> +2</warning>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
       compactionInProgress: false,
       processing: true,
       queuedStatus: " +2",
-      error: "Telegram bus follower is not registered.",
+      error: "Bale bus follower is not registered.",
     }),
-    "<accent>telegram</accent> <dim>disconnected</dim><warning> +2</warning>",
+    "<accent>bale</accent> <dim>disconnected</dim><warning> +2</warning>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -623,10 +623,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processing: false,
       queuedStatus: "",
     }),
-    "<accent>telegram</accent> <success>follower</success>",
+    "<accent>bale</accent> <success>follower</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -640,7 +640,7 @@ test("Status bar text renders bridge connection and queue states", () => {
     "<accent>Haven</accent> <warning>reconnecting</warning><warning> +1</warning>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -654,7 +654,7 @@ test("Status bar text renders bridge connection and queue states", () => {
     "<accent>Amber</accent> <success>follower</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -664,10 +664,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processing: false,
       queuedStatus: "",
     }),
-    "<accent>telegram</accent> <warning>electing</warning>",
+    "<accent>bale</accent> <warning>electing</warning>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -680,7 +680,7 @@ test("Status bar text renders bridge connection and queue states", () => {
     "<accent>Cinder</accent> <warning>electing</warning>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -693,7 +693,7 @@ test("Status bar text renders bridge connection and queue states", () => {
     "<accent>Follower</accent> <success>follower</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -706,7 +706,7 @@ test("Status bar text renders bridge connection and queue states", () => {
     "<accent>Lname</accent> <success>follower</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -720,7 +720,7 @@ test("Status bar text renders bridge connection and queue states", () => {
     "<accent>extensions Follower</accent> <success>follower</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: false,
       paired: true,
@@ -734,7 +734,7 @@ test("Status bar text renders bridge connection and queue states", () => {
     "<accent>Oname</accent> <success>follower</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: true,
       paired: true,
@@ -743,10 +743,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processing: true,
       queuedStatus: " +1",
     }),
-    "<accent>telegram</accent> <success>leader</success><warning> +1</warning>",
+    "<accent>bale</accent> <success>leader</success><warning> +1</warning>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: true,
       paired: true,
@@ -759,7 +759,7 @@ test("Status bar text renders bridge connection and queue states", () => {
     "<accent>🌙 A-identity</accent> <success>leader</success>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: true,
       paired: false,
@@ -768,10 +768,10 @@ test("Status bar text renders bridge connection and queue states", () => {
       processingStatus: "queued",
       queuedStatus: " +1",
     }),
-    "<accent>telegram</accent> <warning>awaiting pairing</warning><warning> +1</warning>",
+    "<accent>bale</accent> <warning>awaiting pairing</warning><warning> +1</warning>",
   );
   assert.equal(
-    buildTelegramStatusBarText(theme, {
+    buildBaleStatusBarText(theme, {
       hasBotToken: true,
       pollingActive: true,
       paired: true,
@@ -780,7 +780,7 @@ test("Status bar text renders bridge connection and queue states", () => {
       queuedStatus: "",
       error: "typing failed",
     }),
-    "<accent>telegram</accent> <error>error</error>",
+    "<accent>bale</accent> <error>error</error>",
   );
 });
 
@@ -796,7 +796,7 @@ test("Status runtime updates the status bar and exposes bridge lines", () => {
       },
     },
   };
-  const runtime = createTelegramStatusRuntime({
+  const runtime = createBaleStatusRuntime({
     getStatusBarState: (_ctx, error) => ({
       hasBotToken: true,
       pollingActive: true,
@@ -823,7 +823,7 @@ test("Status runtime updates the status bar and exposes bridge lines", () => {
   runtime.updateStatus(ctx, "demo error");
   assert.equal(
     events[0],
-    "telegram:<accent>telegram</accent> <error>error</error>",
+    "bale:<accent>bale</accent> <error>error</error>",
   );
   assert.deepEqual(runtime.getStatusLines().slice(0, 3), [
     "connection:",
@@ -893,7 +893,7 @@ test("Status lines expose polling and inbound-worker progress separately", () =>
     recentRuntimeEvents: [],
   };
 
-  const compact = buildTelegramBridgeStatusLines(state);
+  const compact = buildBaleBridgeStatusLines(state);
   assert.ok(compact.includes("- polling: running (persisting-journal)"));
   assert.ok(
     compact.includes(
@@ -901,7 +901,7 @@ test("Status lines expose polling and inbound-worker progress separately", () =>
     ),
   );
 
-  const diagnostic = buildTelegramBridgeStatusLines(state, { verbose: true });
+  const diagnostic = buildBaleBridgeStatusLines(state, { verbose: true });
   assert.ok(diagnostic.includes("- phase: persisting-journal"));
   assert.ok(diagnostic.includes("- current update id: 11"));
   assert.ok(diagnostic.includes("inbound worker:"));
@@ -941,7 +941,7 @@ test("Status lines expose polling and inbound-worker progress separately", () =>
 });
 
 test("Status lines expose thread reconciliation state", () => {
-  const lines = buildTelegramBridgeStatusLines({
+  const lines = buildBaleBridgeStatusLines({
     botUsername: "demo_bot",
     allowedUserId: 7,
     pollingActive: true,
@@ -971,7 +971,7 @@ test("Status lines expose thread reconciliation state", () => {
 });
 
 test("Status runtime propagates status update failures to safety wrappers", () => {
-  const runtime = createTelegramStatusRuntime({
+  const runtime = createBaleStatusRuntime({
     getStatusBarState: () => ({
       hasBotToken: true,
       pollingActive: true,
@@ -1009,7 +1009,7 @@ test("Status runtime propagates status update failures to safety wrappers", () =
 
 test("Status bar processing labels prefer the most specific live state", () => {
   assert.equal(
-    getTelegramStatusBarProcessingStatus({
+    getBaleStatusBarProcessingStatus({
       hasActiveTurn: true,
       hasPendingDispatch: true,
       hasPendingModelSwitch: true,
@@ -1019,7 +1019,7 @@ test("Status bar processing labels prefer the most specific live state", () => {
     "model",
   );
   assert.equal(
-    getTelegramStatusBarProcessingStatus({
+    getBaleStatusBarProcessingStatus({
       hasActiveTurn: true,
       hasPendingDispatch: false,
       hasPendingModelSwitch: false,
@@ -1029,7 +1029,7 @@ test("Status bar processing labels prefer the most specific live state", () => {
     "active",
   );
   assert.equal(
-    getTelegramStatusBarProcessingStatus({
+    getBaleStatusBarProcessingStatus({
       hasActiveTurn: false,
       hasPendingDispatch: false,
       hasPendingModelSwitch: false,
@@ -1039,7 +1039,7 @@ test("Status bar processing labels prefer the most specific live state", () => {
     "active",
   );
   assert.equal(
-    getTelegramStatusBarProcessingStatus({
+    getBaleStatusBarProcessingStatus({
       hasActiveTurn: false,
       hasPendingDispatch: true,
       hasPendingModelSwitch: false,
@@ -1049,7 +1049,7 @@ test("Status bar processing labels prefer the most specific live state", () => {
     "dispatching",
   );
   assert.equal(
-    getTelegramStatusBarProcessingStatus({
+    getBaleStatusBarProcessingStatus({
       hasActiveTurn: false,
       hasPendingDispatch: false,
       hasPendingModelSwitch: false,
@@ -1062,7 +1062,7 @@ test("Status bar processing labels prefer the most specific live state", () => {
 
 test("Bridge status runtime excludes active work from the waiting count", () => {
   const events: string[] = [];
-  const runtime = createTelegramBridgeStatusRuntime({
+  const runtime = createBaleBridgeStatusRuntime({
     getConfig: () => ({
       botToken: "token",
       botUsername: "demo_bot",
@@ -1090,12 +1090,12 @@ test("Bridge status runtime excludes active work from the waiting count", () => 
   });
   assert.equal(
     events[0],
-    "telegram:<accent>telegram</accent> <success>connected</success><warning> +1</warning>",
+    "bale:<accent>bale</accent> <success>connected</success><warning> +1</warning>",
   );
 });
 
 test("Bridge status totals all waiting lanes in one yellow counter using Queue executability", () => {
-  const prompt = (queueLane: Queue.TelegramQueueLane, extra: Partial<Queue.PendingTelegramTurn> = {}): Queue.PendingTelegramTurn => ({
+  const prompt = (queueLane: Queue.BaleQueueLane, extra: Partial<Queue.PendingBaleTurn> = {}): Queue.PendingBaleTurn => ({
     kind: "prompt", chatId: 1, replyToMessageId: 10, queueOrder: 1, laneOrder: 1, queueLane,
     statusSummary: "prompt", sourceMessageIds: [10], queuedAttachments: [],
     content: [{ type: "text", text: "prompt" }], historyText: "prompt", ...extra,
@@ -1103,11 +1103,11 @@ test("Bridge status totals all waiting lanes in one yellow counter using Queue e
   const normal = prompt("default"), priority = prompt("priority"), steer = prompt("steer");
   const frozen = prompt("steer", { steerAttempted: true });
   const pendingPacket = prompt("steer", { steerAttempted: true, steerPacketTail: [frozen] });
-  const control: Queue.PendingTelegramControlItem = {
+  const control: Queue.PendingBaleControlItem = {
     kind: "control", queueLane: "control", queueOrder: 0, laneOrder: 0, chatId: 1,
     replyToMessageId: 9, statusSummary: "status", controlType: "status", execute: async () => {},
   };
-  const cases: { items: Queue.TelegramQueueItem[]; pending?: boolean; suffix: string }[] = [
+  const cases: { items: Queue.BaleQueueItem[]; pending?: boolean; suffix: string }[] = [
     { items: [], suffix: "" },
     { items: [normal, priority], suffix: "<warning> +2</warning>" },
     { items: [steer], suffix: "<warning> +1</warning>" },
@@ -1122,19 +1122,19 @@ test("Bridge status totals all waiting lanes in one yellow counter using Queue e
   for (const { items, pending = false, suffix } of cases) {
     const before = JSON.stringify(items);
     let rendered = "";
-    const runtime = createTelegramBridgeStatusRuntime({
+    const runtime = createBaleBridgeStatusRuntime({
       getConfig: () => ({ botToken: "token", allowedUserId: 7 }), isPollingActive: () => true,
       getActiveSourceMessageIds: () => [99], hasActiveTurn: () => true,
       hasDispatchPending: () => pending, isCompactionInProgress: () => true,
       getActiveToolExecutions: () => 1, hasPendingModelSwitch: () => false,
-      getQueuedItems: () => items, getQueuedItemCount: Queue.countExecutableTelegramQueueItems,
+      getQueuedItems: () => items, getQueuedItemCount: Queue.countExecutableBaleQueueItems,
       getRecentRuntimeEvents: () => [],
     });
     runtime.updateStatus({ ui: {
       theme: { fg: (token: string, text: string) => `<${token}>${text}</${token}>` },
       setStatus: (_key: string, text: string) => { rendered = text; },
     } });
-    assert.equal(rendered, `<accent>telegram</accent> <success>connected</success>${suffix}`);
+    assert.equal(rendered, `<accent>bale</accent> <success>connected</success>${suffix}`);
     assert.equal(JSON.stringify(items), before, "Status projection never mutates queued work");
   }
 });
@@ -1144,7 +1144,7 @@ test("Persistent polling conflict remains visible across ordinary refreshes unti
   let busRole: "follower" | undefined;
   let followerRegistered = false;
   const rendered: string[] = [];
-  const runtime = createTelegramBridgeStatusRuntime({
+  const runtime = createBaleBridgeStatusRuntime({
     getConfig: () => ({ botToken: "token", allowedUserId: 7 }),
     isPollingActive: () => stopReason === undefined,
     getPollingState: () => ({ phase: stopReason ? "stopped" : "starting", stopReason }),
@@ -1161,23 +1161,23 @@ test("Persistent polling conflict remains visible across ordinary refreshes unti
   } };
   runtime.updateStatus(ctx);
   runtime.updateStatus(ctx);
-  assert.deepEqual(rendered, ["telegram error", "telegram error"]);
+  assert.deepEqual(rendered, ["bale error", "bale error"]);
   assert.ok(runtime.getStatusLines().some((line) => line.includes("persistent-conflict")));
   busRole = "follower";
   runtime.updateStatus(ctx);
-  assert.equal(rendered.at(-1), "telegram reconnecting");
+  assert.equal(rendered.at(-1), "bale reconnecting");
   followerRegistered = true;
   runtime.updateStatus(ctx);
-  assert.equal(rendered.at(-1), "telegram follower");
+  assert.equal(rendered.at(-1), "bale follower");
   busRole = undefined;
   stopReason = undefined;
   runtime.updateStatus(ctx);
-  assert.equal(rendered.at(-1), "telegram connected");
+  assert.equal(rendered.at(-1), "bale connected");
 });
 
 test("Bridge status runtime excludes skipped items from queued processing", () => {
   const events: string[] = [];
-  const runtime = createTelegramBridgeStatusRuntime({
+  const runtime = createBaleBridgeStatusRuntime({
     getConfig: () => ({ botToken: "token", allowedUserId: 7 }),
     isPollingActive: () => true,
     getActiveSourceMessageIds: () => undefined,
@@ -1200,13 +1200,13 @@ test("Bridge status runtime excludes skipped items from queued processing", () =
   });
   assert.equal(
     events[0],
-    "telegram:<accent>telegram</accent> <success>connected</success>",
+    "bale:<accent>bale</accent> <success>connected</success>",
   );
 });
 
 test("Bridge status runtime builds status state from live ports", () => {
   const events: string[] = [];
-  const runtime = createTelegramBridgeStatusRuntime({
+  const runtime = createBaleBridgeStatusRuntime({
     getConfig: () => ({
       botToken: "token",
       botUsername: "demo_bot",
@@ -1239,7 +1239,7 @@ test("Bridge status runtime builds status state from live ports", () => {
   });
   assert.equal(
     events[0],
-    "telegram:<accent>telegram</accent> <success>connected</success>",
+    "bale:<accent>bale</accent> <success>connected</success>",
   );
   assert.deepEqual(runtime.getStatusLines(), [
     "connection:",
@@ -1256,14 +1256,14 @@ test("Bridge status runtime builds status state from live ports", () => {
     "- pending model switch: yes",
     "",
     "diagnostics:",
-    "- state: ~/.pi/agent/tmp/pi-telegram/state.json",
-    "- logs: ~/.pi/agent/tmp/pi-telegram/logs.jsonl",
-    "- full dump: /telegram-status --debug",
+    "- state: ~/.pi/agent/tmp/pi-bale/state.json",
+    "- logs: ~/.pi/agent/tmp/pi-bale/logs.jsonl",
+    "- full dump: /bale-status --debug",
   ]);
 });
 
 test("Bridge status lines retain the named profile with shared diagnostic paths", () => {
-  const lines = buildTelegramBridgeStatusLines({
+  const lines = buildBaleBridgeStatusLines({
     activeProfileName: "work",
     botUsername: "work_bot",
     pollingActive: false,
@@ -1275,8 +1275,8 @@ test("Bridge status lines retain the named profile with shared diagnostic paths"
     recentRuntimeEvents: [],
   });
   assert.ok(lines.includes("- profile: work"));
-  assert.ok(lines.includes("- state: ~/.pi/agent/tmp/pi-telegram/state.json"));
-  assert.ok(lines.includes("- logs: ~/.pi/agent/tmp/pi-telegram/logs.jsonl"));
+  assert.ok(lines.includes("- state: ~/.pi/agent/tmp/pi-bale/state.json"));
+  assert.ok(lines.includes("- logs: ~/.pi/agent/tmp/pi-bale/logs.jsonl"));
 });
 
 test("Bridge status lines distinguish unknown bot identity from missing config", () => {
@@ -1292,32 +1292,32 @@ test("Bridge status lines distinguish unknown bot identity from missing config",
     recentRuntimeEvents: [],
   };
   assert.equal(
-    buildTelegramBridgeStatusLines({ ...base, hasBotToken: true })[1],
+    buildBaleBridgeStatusLines({ ...base, hasBotToken: true })[1],
     "- bot: unknown",
   );
   assert.equal(
-    buildTelegramBridgeStatusLines({ ...base, hasBotToken: false })[1],
+    buildBaleBridgeStatusLines({ ...base, hasBotToken: false })[1],
     "- bot: not configured",
   );
   assert.equal(
-    buildTelegramBridgeStatusLines({
+    buildBaleBridgeStatusLines({
       ...base,
       hasBotToken: false,
       botTokenDiagnostic:
-        "Telegram bot token environment variable WORK_BOT_TOKEN is not set.",
+        "Bale bot token environment variable WORK_BOT_TOKEN is not set.",
     })[1],
-    "- bot: Telegram bot token environment variable WORK_BOT_TOKEN is not set.",
+    "- bot: Bale bot token environment variable WORK_BOT_TOKEN is not set.",
   );
 });
 
 test("Bridge status honors caller-resolved token availability and diagnostics", () => {
   const rendered: string[] = [];
-  const runtime = createTelegramBridgeStatusRuntime({
+  const runtime = createBaleBridgeStatusRuntime({
     getConfig: () => ({
-      botToken: "$PI_TELEGRAM_TEST_MISSING_TOKEN",
+      botToken: "$PI_BALE_TEST_MISSING_TOKEN",
       botHasToken: false,
       botTokenDiagnostic:
-        "Telegram bot token environment variable PI_TELEGRAM_TEST_MISSING_TOKEN is not set.",
+        "Bale bot token environment variable PI_BALE_TEST_MISSING_TOKEN is not set.",
     }),
     isPollingActive: () => false,
     getActiveSourceMessageIds: () => undefined,
@@ -1337,19 +1337,19 @@ test("Bridge status honors caller-resolved token availability and diagnostics", 
       },
     },
   });
-  assert.equal(rendered[0], "telegram not configured");
+  assert.equal(rendered[0], "bale not configured");
   assert.ok(
     runtime
       .getStatusLines()
       .includes(
-        "- bot: Telegram bot token environment variable PI_TELEGRAM_TEST_MISSING_TOKEN is not set.",
+        "- bot: Bale bot token environment variable PI_BALE_TEST_MISSING_TOKEN is not set.",
       ),
   );
 });
 
 test("Bridge status falls back to raw token presence without a resolved flag", () => {
   const rendered: string[] = [];
-  const runtime = createTelegramBridgeStatusRuntime({
+  const runtime = createBaleBridgeStatusRuntime({
     getConfig: () => ({ botToken: "123:abc" }),
     isPollingActive: () => true,
     getActiveSourceMessageIds: () => undefined,
@@ -1369,7 +1369,7 @@ test("Bridge status falls back to raw token presence without a resolved flag", (
       },
     },
   });
-  assert.equal(rendered[0], "telegram awaiting pairing");
+  assert.equal(rendered[0], "bale awaiting pairing");
 });
 
 test("Bridge status lines include role, instance, and protocol identity", () => {
@@ -1393,7 +1393,7 @@ test("Bridge status lines include role, instance, and protocol identity", () => 
     queuedItems: [],
     recentRuntimeEvents: [],
   };
-  const lines = buildTelegramBridgeStatusLines(state);
+  const lines = buildBaleBridgeStatusLines(state);
 
   assert.deepEqual(lines.slice(0, 5), [
     "connection:",
@@ -1403,14 +1403,14 @@ test("Bridge status lines include role, instance, and protocol identity", () => 
     "- instance: A-identity",
   ]);
   assert.ok(
-    buildTelegramBridgeStatusLines(state, { verbose: true }).includes(
+    buildBaleBridgeStatusLines(state, { verbose: true }).includes(
       "- bus protocol=v1 build=0.28.0 capabilities=none",
     ),
   );
 });
 
 test("Bridge status lines include sync slice diagnostics", () => {
-  const lines = buildTelegramBridgeStatusLines(
+  const lines = buildBaleBridgeStatusLines(
     {
       botUsername: "demo_bot",
       allowedUserId: 42,
@@ -1443,7 +1443,7 @@ test("Bridge status lines include sync slice diagnostics", () => {
 });
 
 test("Bridge status lines include bot thread capability diagnostics", () => {
-  const lines = buildTelegramBridgeStatusLines(
+  const lines = buildBaleBridgeStatusLines(
     {
       botUsername: "demo_bot",
       allowedUserId: 42,
@@ -1466,7 +1466,7 @@ test("Bridge status lines include bot thread capability diagnostics", () => {
 });
 
 test("Bridge status lines include topic binding diagnostics", () => {
-  const lines = buildTelegramBridgeStatusLines(
+  const lines = buildBaleBridgeStatusLines(
     {
       botUsername: "demo_bot",
       allowedUserId: 42,
@@ -1545,7 +1545,7 @@ test("Bridge status lines include topic binding diagnostics", () => {
 });
 
 test("Bridge status lines include bus follower diagnostics when present", () => {
-  const lines = buildTelegramBridgeStatusLines(
+  const lines = buildBaleBridgeStatusLines(
     {
       botUsername: "demo_bot",
       allowedUserId: 42,
@@ -1586,7 +1586,7 @@ test("Bridge status lines include bus follower diagnostics when present", () => 
 });
 
 test("Bridge status lines include local bus diagnostics", () => {
-  const lines = buildTelegramBridgeStatusLines(
+  const lines = buildBaleBridgeStatusLines(
     {
       botUsername: "demo_bot",
       allowedUserId: 42,
@@ -1597,9 +1597,9 @@ test("Bridge status lines include local bus diagnostics", () => {
       pendingModelSwitch: false,
       queuedItems: [],
       localBus: {
-        leaderSocketPath: "\\\\.\\pipe\\pi-telegram-demo-bus",
+        leaderSocketPath: "\\\\.\\pipe\\pi-bale-demo-bus",
         leaderTransport: "pipe",
-        followerSocketPath: "\\\\.\\pipe\\pi-telegram-demo-follower",
+        followerSocketPath: "\\\\.\\pipe\\pi-bale-demo-follower",
         followerTransport: "pipe",
         followerRegistered: true,
         followerTarget: { chatId: 42, threadId: 9 },
@@ -1622,12 +1622,12 @@ test("Bridge status lines include local bus diagnostics", () => {
   );
   assert.ok(
     lines.includes(
-      "- leader endpoint [pipe]: \\\\.\\pipe\\pi-telegram-demo-bus",
+      "- leader endpoint [pipe]: \\\\.\\pipe\\pi-bale-demo-bus",
     ),
   );
   assert.ok(
     lines.includes(
-      "- follower endpoint [pipe]: \\\\.\\pipe\\pi-telegram-demo-follower",
+      "- follower endpoint [pipe]: \\\\.\\pipe\\pi-bale-demo-follower",
     ),
   );
 });
@@ -1639,15 +1639,15 @@ test("Bridge status counts Steer without changing legacy empty-lane copy", () =>
     queuedItems: [{ queueLane: "steer" as const }, { queueLane: "priority" as const }],
     recentRuntimeEvents: [],
   };
-  assert.ok(buildTelegramBridgeStatusLines(state).includes(
+  assert.ok(buildBaleBridgeStatusLines(state).includes(
     "- queued turns: 2 (control=0, steer=1, priority=1, default=0)"));
-  assert.ok(buildTelegramBridgeStatusLines(state, { verbose: true }).includes(
+  assert.ok(buildBaleBridgeStatusLines(state, { verbose: true }).includes(
     "- lanes: control=0, steer=1, priority=1, default=0"));
-  assert.ok(!buildTelegramBridgeStatusLines({ ...state, queuedItems: [] }).join("\n").includes("steer="));
+  assert.ok(!buildBaleBridgeStatusLines({ ...state, queuedItems: [] }).join("\n").includes("steer="));
 });
 
 test("Bridge status lines include queue lanes and recent runtime events", () => {
-  const lines = buildTelegramBridgeStatusLines(
+  const lines = buildBaleBridgeStatusLines(
     {
       botUsername: "demo_bot",
       allowedUserId: 42,
@@ -1698,7 +1698,7 @@ test("Bridge status lines include queue lanes and recent runtime events", () => 
 
 test("Status HTML builder binds active model lookup", () => {
   const model = { provider: "openai", id: "gpt-5", contextWindow: 1000 };
-  const buildStatusHtml = createTelegramStatusHtmlBuilder({
+  const buildStatusHtml = createBaleStatusHtmlBuilder({
     getActiveModel: () => model,
   });
   const html = buildStatusHtml({
@@ -1713,7 +1713,7 @@ test("Status HTML builder binds active model lookup", () => {
 });
 
 test("Status HTML separates token and cache telemetry", () => {
-  const buildStatusHtml = createTelegramStatusHtmlBuilder({
+  const buildStatusHtml = createBaleStatusHtmlBuilder({
     getActiveModel: () => ({ contextWindow: 1000 }),
   });
   const html = buildStatusHtml({
@@ -1759,7 +1759,7 @@ test("Status HTML separates token and cache telemetry", () => {
 });
 
 test("Status HTML builder appends Threaded Mode bus role to status row", () => {
-  const buildStatusHtml = createTelegramStatusHtmlBuilder({
+  const buildStatusHtml = createBaleStatusHtmlBuilder({
     getActiveModel: () => undefined,
     getBridgeStatusLineState: () => ({
       hasBotToken: true,
@@ -1783,26 +1783,26 @@ test("Status HTML builder appends Threaded Mode bus role to status row", () => {
   });
   assert.match(html, /<b>Status:<\/b> <code>idle @leader<\/code>/);
   assert.doesNotMatch(html, /<b>Thread:<\/b>/);
-  assert.doesNotMatch(html, /Telegram/s);
+  assert.doesNotMatch(html, /Bale/s);
 });
 
 test("Status HTML builder includes extension-provided status lines", () => {
-  clearTelegramStatusLineProviders();
-  const unregisterCodex = registerTelegramStatusLineProvider(
+  clearBaleStatusLineProviders();
+  const unregisterCodex = registerBaleStatusLineProvider(
     ({ activeModel }) =>
       activeModel?.contextWindow === 1000
         ? { label: "codex", value: "████ 23.7h" }
         : undefined,
     { id: "@scope/codex" },
   );
-  const unregisterBroken = registerTelegramStatusLineProvider(
+  const unregisterBroken = registerBaleStatusLineProvider(
     () => {
       throw new Error("optional provider failed");
     },
     { id: "@scope/broken" },
   );
   try {
-    const buildStatusHtml = createTelegramStatusHtmlBuilder({
+    const buildStatusHtml = createBaleStatusHtmlBuilder({
       getActiveModel: () => ({ contextWindow: 1000 }),
     });
     const html = buildStatusHtml({
@@ -1816,12 +1816,12 @@ test("Status HTML builder includes extension-provided status lines", () => {
   } finally {
     unregisterCodex();
     unregisterBroken();
-    clearTelegramStatusLineProviders();
+    clearBaleStatusLineProviders();
   }
 });
 
 test("Status HTML reports compaction before generic active state", () => {
-  const buildStatusHtml = createTelegramStatusHtmlBuilder({
+  const buildStatusHtml = createBaleStatusHtmlBuilder({
     getActiveModel: () => undefined,
     isCompactionInProgress: () => true,
   });
@@ -1836,11 +1836,11 @@ test("Status HTML reports compaction before generic active state", () => {
 });
 
 test("Runtime event lines render the recent-event ring newest first", () => {
-  assert.deepEqual(buildTelegramRuntimeEventLines([]), [
+  assert.deepEqual(buildBaleRuntimeEventLines([]), [
     "recent runtime events: none",
   ]);
   assert.deepEqual(
-    buildTelegramRuntimeEventLines([
+    buildBaleRuntimeEventLines([
       { at: 0, category: "poll", message: "started" },
       { at: 1000, category: "api:sendMessage", message: "rate limited" },
     ]),
@@ -1854,8 +1854,8 @@ test("Runtime event lines render the recent-event ring newest first", () => {
 });
 
 test("Structured runtime event recording redacts messages and details", () => {
-  const events: TelegramRuntimeEvent[] = [];
-  recordStructuredTelegramRuntimeEvent(
+  const events: BaleRuntimeEvent[] = [];
+  recordStructuredBaleRuntimeEvent(
     events,
     {
       category: "api",
@@ -1876,7 +1876,7 @@ test("Structured runtime event recording redacts messages and details", () => {
       },
     },
   ]);
-  assert.deepEqual(buildTelegramRuntimeEventLines(events), [
+  assert.deepEqual(buildBaleRuntimeEventLines(events), [
     "recent runtime events:",
     "- summary: api:sendMessage=1",
     '- 1970-01-01T00:00:01.000Z api:sendMessage: token <redacted-token> failed (token="<redacted-token>", retryable=true)',
@@ -1884,8 +1884,8 @@ test("Structured runtime event recording redacts messages and details", () => {
 });
 
 test("Runtime event recording bounds messages and string details", () => {
-  const events: TelegramRuntimeEvent[] = [];
-  recordStructuredTelegramRuntimeEvent(
+  const events: BaleRuntimeEvent[] = [];
+  recordStructuredBaleRuntimeEvent(
     events,
     {
       category: "handler",
@@ -1902,7 +1902,7 @@ test("Runtime event recording bounds messages and string details", () => {
 });
 
 test("Runtime event recorder owns redacted bounded event state", () => {
-  const recorder = createTelegramRuntimeEventRecorder({
+  const recorder = createBaleRuntimeEventRecorder({
     getBotToken: () => "123:abc",
     maxEvents: 1,
     now: () => 1000,
@@ -1919,8 +1919,8 @@ test("Runtime event recorder owns redacted bounded event state", () => {
 });
 
 test("Runtime event recording redacts bot tokens and keeps a bounded ring", () => {
-  const events: TelegramRuntimeEvent[] = [];
-  recordStructuredTelegramRuntimeEvent(
+  const events: BaleRuntimeEvent[] = [];
+  recordStructuredBaleRuntimeEvent(
     events,
     { category: "one", error: new Error("token 123:abc failed") },
     {
@@ -1932,12 +1932,12 @@ test("Runtime event recording redacts bot tokens and keeps a bounded ring", () =
   assert.deepEqual(events, [
     { at: 1, category: "one", message: "token <redacted-token> failed" },
   ]);
-  recordStructuredTelegramRuntimeEvent(
+  recordStructuredBaleRuntimeEvent(
     events,
     { category: "two", error: "plain" },
     { botToken: "123:abc", maxEvents: 3, now: 2 },
   );
-  recordStructuredTelegramRuntimeEvent(
+  recordStructuredBaleRuntimeEvent(
     events,
     { category: "three", error: "last" },
     { botToken: "123:abc", maxEvents: 2, now: 3 },
@@ -1960,7 +1960,7 @@ test("Status runtime skips the status bar when the host theme is uninitialized",
       },
     },
   };
-  const runtime = createTelegramStatusRuntime({
+  const runtime = createBaleStatusRuntime({
     getStatusBarState: () => ({
       hasBotToken: true,
       pollingActive: true,

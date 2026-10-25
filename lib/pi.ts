@@ -128,8 +128,8 @@ export function canStartPollingInExtensionContext(ctx: unknown): boolean {
 export function formatPollingStartBlockedByRunMode(ctx: unknown): string {
   const mode = getExtensionContextMode(ctx);
   return mode
-    ? `Telegram polling is unavailable in Pi ${mode} mode. Use /telegram-connect from a long-lived Pi session.`
-    : "Telegram polling is unavailable in this Pi run mode.";
+    ? `Bale polling is unavailable in Pi ${mode} mode. Use /bale-connect from a long-lived Pi session.`
+    : "Bale polling is unavailable in this Pi run mode.";
 }
 
 export function getSessionCompactionReason(

@@ -1,6 +1,8 @@
+> Bale port: only the supported subset in [Bale compatibility](bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
 # Inbound Handlers
 
-`pi-telegram` can run ordered inbound handlers before a Telegram turn enters the Pi queue. Inbound handlers are the provider-neutral Telegram → Pi transformation bus for raw text and downloaded media/files. Extensions can also register programmatic inbound handlers with `registerTelegramInboundHandler()`, and voice extensions can register STT providers as a zero-config fallback for Telegram voice/audio files.
+`pi-bale` can run ordered inbound handlers before a Bale turn enters the Pi queue. Inbound handlers are the provider-neutral Bale → Pi transformation bus for raw text and downloaded media/files. Extensions can also register programmatic inbound handlers with `registerBaleInboundHandler()`, and voice extensions can register STT providers as a zero-config fallback for Bale voice/audio files.
 
 This document is the local inbound adaptation of the portable [Command Template Standard](./command-templates.md). It is also the canonical home for the legacy `attachmentHandlers` compatibility config.
 
@@ -30,7 +32,7 @@ Prefer `inboundHandlers` for new configs:
 }
 ```
 
-Legacy `telegram.json` files may still define `attachmentHandlers` for media/file preprocessing:
+Legacy `bale.json` files may still define `attachmentHandlers` for media/file preprocessing:
 
 ```json
 {
@@ -55,7 +57,7 @@ Handlers match by optional `type`, `mime`, or `match`. `mime` and `type` are ind
 
 ## Text Handlers
 
-`type: "text"` handlers transform raw Telegram text before prompt construction. Raw Telegram text also has synthetic `mime: "text/plain"`, so a handler can match it with `type: "text"`, `mime: "text/plain"`, `mime: "text/*"`, or `match: "text/plain"`. The source text is provided on stdin and as `{text}`. Successful non-empty stdout replaces the current text and is passed to the next matching text handler. Empty stdout, non-zero exit, or handler failure keeps the previous text and records diagnostics.
+`type: "text"` handlers transform raw Bale text before prompt construction. Raw Bale text also has synthetic `mime: "text/plain"`, so a handler can match it with `type: "text"`, `mime: "text/plain"`, `mime: "text/*"`, or `match: "text/plain"`. The source text is provided on stdin and as `{text}`. Successful non-empty stdout replaces the current text and is passed to the next matching text handler. Empty stdout, non-zero exit, or handler failure keeps the previous text and records diagnostics.
 
 Built-in placeholders for text handlers:
 
@@ -88,23 +90,23 @@ If a matching handler fails with a non-zero exit code, the runtime records diagn
 
 ## Programmatic Inbound Handlers And STT Fallbacks
 
-Extensions can register programmatic inbound handlers with `registerTelegramInboundHandler(kind, handler)` from `@llblab/pi-telegram/inbound`. This is the code-level counterpart to configured `inboundHandlers`; use it for extension-owned transformations that are not voice-specific.
+Extensions can register programmatic inbound handlers with `registerBaleInboundHandler(kind, handler)` from `@llblab/pi-bale/inbound`. This is the code-level counterpart to configured `inboundHandlers`; use it for extension-owned transformations that are not voice-specific.
 
-Voice extensions can register STT providers with `registerTelegramVoiceTranscriptionProvider()` from `@llblab/pi-telegram/voice`. This is the zero-config extension path for voice/audio input: a companion extension can transcribe Telegram voice notes without requiring the operator to write an `inboundHandlers` command template.
+Voice extensions can register STT providers with `registerBaleVoiceTranscriptionProvider()` from `@llblab/pi-bale/voice`. This is the zero-config extension path for voice/audio input: a companion extension can transcribe Bale voice notes without requiring the operator to write an `inboundHandlers` command template.
 
 Priority stays explicit and predictable:
 
 1. configured `inboundHandlers`
 2. legacy `attachmentHandlers`
-3. programmatic `registerTelegramInboundHandler(kind, ...)` handlers
+3. programmatic `registerBaleInboundHandler(kind, ...)` handlers
 4. registered STT providers for `voice`/`audio` files that still have no handler output
 5. built-in text-file fallback for text attachments
 
 ```ts
-import { registerTelegramInboundHandler } from "@llblab/pi-telegram/inbound";
-import { registerTelegramVoiceTranscriptionProvider } from "@llblab/pi-telegram/voice";
+import { registerBaleInboundHandler } from "@llblab/pi-bale/inbound";
+import { registerBaleVoiceTranscriptionProvider } from "@llblab/pi-bale/voice";
 
-const disposeInbound = registerTelegramInboundHandler(
+const disposeInbound = registerBaleInboundHandler(
   "document",
   async ({ file }) => {
     if (!file?.mimeType?.includes("pdf")) return undefined;
@@ -113,7 +115,7 @@ const disposeInbound = registerTelegramInboundHandler(
   },
 );
 
-const dispose = registerTelegramVoiceTranscriptionProvider(
+const dispose = registerBaleVoiceTranscriptionProvider(
   async (file) => {
     if (file.kind !== "voice" && file.kind !== "audio") return undefined;
     const result = await transcribe(file.path);
@@ -131,6 +133,6 @@ If several programmatic inbound handlers are registered for a kind, they are tri
 
 ## Prompt Output
 
-Local attachments stay in the prompt under `[attachments] <directory>` with relative file entries. They live flat in `<agent-dir>/tmp/pi-telegram/attachments`, named `<kind>-<scope>-<messageId>[-<index>][-<sender file name>|.<ext>]`: `scope` is the bot `@username` (numeric id fallback) in a private chat and the public chat `@username` (unsigned numeric id fallback) in a group or channel; titles never name files. A message id is unique inside its chat, a forward gets a new id, and a repeated delivery of one message maps to the same path; files are published by rename so concurrent writers never expose partial content, and files older than 24 hours are removed by age alone. Successful media/file handler stdout is added under `[outputs]`. For composed media/file handlers, each step receives the previous step's stdout on stdin by default, and stdout from the last successful step is used as the handler output. Empty output and failed handler output are omitted from the prompt text.
+Local attachments stay in the prompt under `[attachments] <directory>` with relative file entries. They live flat in `<agent-dir>/tmp/pi-bale/attachments`, named `<kind>-<scope>-<messageId>[-<index>][-<sender file name>|.<ext>]`: `scope` is the bot `@username` (numeric id fallback) in a private chat and the public chat `@username` (unsigned numeric id fallback) in a group or channel; titles never name files. A message id is unique inside its chat, a forward gets a new id, and a repeated delivery of one message maps to the same path; files are published by rename so concurrent writers never expose partial content, and files older than 24 hours are removed by age alone. Successful media/file handler stdout is added under `[outputs]`. For composed media/file handlers, each step receives the previous step's stdout on stdin by default, and stdout from the last successful step is used as the handler output. Empty output and failed handler output are omitted from the prompt text.
 
 Text handler output replaces the prompt text directly and is not duplicated under `[outputs]`.

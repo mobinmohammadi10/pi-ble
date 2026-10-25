@@ -1,4 +1,4 @@
-export interface TelegramWorkspaceBindingIdentity {
+export interface BaleWorkspaceBindingIdentity {
     cwd: string;
     workspaceKey: string;
     /** Exact durable Pi session identity; absent only on legacy cwd-only bindings. */
@@ -11,10 +11,10 @@ export interface TelegramWorkspaceBindingIdentity {
     /** Profile-wide letter reserved by the transient claim. */
     slot?: string;
 }
-export declare const TELEGRAM_WORKSPACE_KEY_MAX_LENGTH = 180;
-export declare function normalizeTelegramSessionId(sessionId: string): string | undefined;
-export declare function createTelegramSessionKey(sessionId: string): string | undefined;
-export declare function normalizeTelegramWorkspacePath(cwd: string): string | undefined;
-export declare function createTelegramWorkspaceDirectoryKey(cwd: string): string | undefined;
-export declare function createTelegramWorkspaceBindingIdentityWithKey(cwd: string, workspaceKey: string, ordinal: number, sessionId?: string): TelegramWorkspaceBindingIdentity | undefined;
-export declare function createTelegramWorkspaceBindingIdentity(cwd: string, ordinal?: number, sessionId?: string): TelegramWorkspaceBindingIdentity | undefined;
+export declare const BALE_WORKSPACE_KEY_MAX_LENGTH = 180;
+export declare function normalizeBaleSessionId(sessionId: string): string | undefined;
+export declare function createBaleSessionKey(sessionId: string): string | undefined;
+export declare function normalizeBaleWorkspacePath(cwd: string): string | undefined;
+export declare function createBaleWorkspaceDirectoryKey(cwd: string): string | undefined;
+export declare function createBaleWorkspaceBindingIdentityWithKey(cwd: string, workspaceKey: string, ordinal: number, sessionId?: string): BaleWorkspaceBindingIdentity | undefined;
+export declare function createBaleWorkspaceBindingIdentity(cwd: string, ordinal?: number, sessionId?: string): BaleWorkspaceBindingIdentity | undefined;

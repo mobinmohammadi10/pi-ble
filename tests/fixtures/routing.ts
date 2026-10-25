@@ -1,4 +1,4 @@
-/** Native routing composition shared by route regressions and cross-domain custody acceptance. Zones: telegram, pi agent, shared utils. */
+/** Native routing composition shared by route regressions and cross-domain custody acceptance. Zones: bale, pi agent, shared utils. */
 import * as Bindings from "../../lib/bindings.ts";
 import * as Commands from "../../lib/commands.ts";
 import * as Media from "../../lib/media.ts";
@@ -14,8 +14,8 @@ import * as Updates from "../../lib/updates.ts";
 
 export interface TestContext { cwd: string; }
 export interface TestModel extends Model.MenuModel { provider: "test"; id: "model"; }
-export interface TestUser extends Updates.TelegramUser {}
-export interface TestMessage extends Routing.TelegramRoutedMessage {
+export interface TestUser extends Updates.BaleUser {}
+export interface TestMessage extends Routing.BaleRoutedMessage {
   date?: number;
   chat: { id: number; type: "private" };
   from?: TestUser;
@@ -25,15 +25,15 @@ export interface TestMessage extends Routing.TelegramRoutedMessage {
   photo?: Array<{ file_id: string; file_unique_id: string; width: number; height: number }>;
   caption?: string;
   text?: string;
-  reply_markup?: Outbound.TelegramOutboundButtonMarkup;
+  reply_markup?: Outbound.BaleOutboundButtonMarkup;
 }
-export interface TestCallbackQuery extends Routing.TelegramRoutedCallbackQuery {
+export interface TestCallbackQuery extends Routing.BaleRoutedCallbackQuery {
   id: string;
   from: TestUser;
   message?: TestMessage;
   data?: string;
 }
-export interface TestUpdate extends Updates.TelegramUpdateFlow {
+export interface TestUpdate extends Updates.BaleUpdateFlow {
   update_id?: number;
   message?: TestMessage;
   edited_message?: TestMessage;
@@ -42,137 +42,137 @@ export interface TestUpdate extends Updates.TelegramUpdateFlow {
 
 export interface RouteHarnessOptions {
   config?: unknown;
-  configStore?: Routing.TelegramInboundRouteRuntimeDeps<
+  configStore?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage, TestCallbackQuery, TestContext, TestModel
   >["configStore"];
-  sendStatusMessage?: Menu.TelegramMenuActionRuntime<TestContext, TestModel>["sendStatusMessage"];
-  beginCommandEffectWork?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["beginCommandEffectWork"];
-  recordRuntimeEvent?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["recordRuntimeEvent"];
-  isIdle?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["isIdle"];
-  dispatchNextQueuedTelegramTurn?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["dispatchNextQueuedTelegramTurn"];
-  requestNextDispatchAnnouncement?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["requestNextDispatchAnnouncement"];
-  cancelNextDispatchAnnouncement?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["cancelNextDispatchAnnouncement"];
-  menuActions?: Menu.TelegramMenuActionRuntime<TestContext, TestModel>;
-  openQueueMenu?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["openQueueMenu"];
-  openSettingsMenu?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["openSettingsMenu"];
-  sendInteractiveMessage?: Routing.TelegramInboundRouteRuntimeDeps<
+  sendStatusMessage?: Menu.BaleMenuActionRuntime<TestContext, TestModel>["sendStatusMessage"];
+  beginCommandEffectWork?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["beginCommandEffectWork"];
+  recordRuntimeEvent?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["recordRuntimeEvent"];
+  isIdle?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["isIdle"];
+  dispatchNextQueuedBaleTurn?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["dispatchNextQueuedBaleTurn"];
+  requestNextDispatchAnnouncement?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["requestNextDispatchAnnouncement"];
+  cancelNextDispatchAnnouncement?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["cancelNextDispatchAnnouncement"];
+  menuActions?: Menu.BaleMenuActionRuntime<TestContext, TestModel>;
+  openQueueMenu?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["openQueueMenu"];
+  openSettingsMenu?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["openSettingsMenu"];
+  sendInteractiveMessage?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage, TestCallbackQuery, TestContext, TestModel
   >["sendInteractiveMessage"];
-  editInteractiveMessage?: Routing.TelegramInboundRouteRuntimeDeps<
+  editInteractiveMessage?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage, TestCallbackQuery, TestContext, TestModel
   >["editInteractiveMessage"];
-  threadStore?: Threads.TelegramTopicTargetStore;
-  runWorkspaceOperation?: Routing.TelegramInboundRouteRuntimeDeps<
+  threadStore?: Threads.BaleTopicTargetStore;
+  runWorkspaceOperation?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["runWorkspaceOperation"];
-  callApi?: Routing.TelegramInboundRouteRuntimeDeps<
+  callApi?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["callApi"];
-  answerGuestQueryForInlineMessage?: Routing.TelegramInboundRouteRuntimeDeps<
+  answerGuestQueryForInlineMessage?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["answerGuestQueryForInlineMessage"];
-  startGuestPlaceholder?: Routing.TelegramInboundRouteRuntimeDeps<
+  startGuestPlaceholder?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["startGuestPlaceholder"];
-  deleteMessage?: Routing.TelegramInboundRouteRuntimeDeps<
+  deleteMessage?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["deleteMessage"];
-  editMessageReplyMarkup?: Routing.TelegramInboundRouteRuntimeDeps<
+  editMessageReplyMarkup?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["editMessageReplyMarkup"];
-  workspaceRestoreRecipient?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["workspaceRestoreRecipient"];
-  getWorkspaceRestoreStore?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["getWorkspaceRestoreStore"];
-  captureWorkspaceExternalProtection?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["captureWorkspaceExternalProtection"];
-  inspectRestoreSourceAbandonment?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectRestoreSourceAbandonment"];
-  inspectRoutingInputGroupExpiry?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectRoutingInputGroupExpiry"];
-  inspectRestoreSourceCompletion?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectRestoreSourceCompletion"];
-  inspectRestoreQueuedReceipt?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectRestoreQueuedReceipt"];
+  workspaceRestoreRecipient?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["workspaceRestoreRecipient"];
+  getWorkspaceRestoreStore?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["getWorkspaceRestoreStore"];
+  captureWorkspaceExternalProtection?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["captureWorkspaceExternalProtection"];
+  inspectRestoreSourceAbandonment?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectRestoreSourceAbandonment"];
+  inspectRoutingInputGroupExpiry?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectRoutingInputGroupExpiry"];
+  inspectRestoreSourceCompletion?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectRestoreSourceCompletion"];
+  inspectRestoreQueuedReceipt?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectRestoreQueuedReceipt"];
   hasWorkspaceRestoreAuthority?: () => boolean;
   hasWorkspaceLiveRebindAuthority?: () => boolean;
-  canUsePreDispatchRebind?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["canUsePreDispatchRebind"];
-  inspectTemporaryThreadSources?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectTemporaryThreadSources"];
-  recoverTemporaryThreadDeadQueueOwners?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["recoverTemporaryThreadDeadQueueOwners"];
-  onItemsDiscarded?: Queue.TelegramQueueMutationControllerDeps<TestContext>["onItemsDiscarded"];
-  queueAdmission?: Parameters<typeof Bindings.createTelegramQueueBindingRuntime<TestContext>>[0]["admission"];
+  canUsePreDispatchRebind?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["canUsePreDispatchRebind"];
+  inspectTemporaryThreadSources?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["inspectTemporaryThreadSources"];
+  recoverTemporaryThreadDeadQueueOwners?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["recoverTemporaryThreadDeadQueueOwners"];
+  onItemsDiscarded?: Queue.BaleQueueMutationControllerDeps<TestContext>["onItemsDiscarded"];
+  queueAdmission?: Parameters<typeof Bindings.createBaleQueueBindingRuntime<TestContext>>[0]["admission"];
   hasPendingMessages?: (ctx: TestContext) => boolean;
   liveRebindCommandCompletionTimeoutMs?: number;
-  liveRebindCleanupSchedule?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["liveRebindCleanupSchedule"];
+  liveRebindCleanupSchedule?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["liveRebindCleanupSchedule"];
   temporaryThreadCleanupDelayMs?: number;
   getSessionGeneration?: () => number;
-  foreignOwnedUpdateForwarder?: Routing.TelegramInboundRouteRuntimeDeps<
+  foreignOwnedUpdateForwarder?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["foreignOwnedUpdateForwarder"];
-  getTargetOwnership?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["getTargetOwnership"];
-  getMessageOwnership?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["getMessageOwnership"];
+  getTargetOwnership?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["getTargetOwnership"];
+  getMessageOwnership?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["getMessageOwnership"];
   getCurrentLeaderEpoch?: () => number | string | undefined;
   getAdmissionJournalBinding?: () => string | undefined;
   isContextActive?: (ctx: TestContext) => boolean;
-  setCurrentLeaderIdentity?: Routing.TelegramInboundRouteRuntimeDeps<
+  setCurrentLeaderIdentity?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["setCurrentLeaderIdentity"];
-  getLiveThreadTargets?: () => Queue.TelegramQueueTarget[];
-  getDisplayTitle?: (target: Queue.TelegramQueueTarget) => string | undefined;
+  getLiveThreadTargets?: () => Queue.BaleQueueTarget[];
+  getDisplayTitle?: (target: Queue.BaleQueueTarget) => string | undefined;
   getLocalThreadLabelForTarget?: (
-    target: Queue.TelegramQueueTarget,
+    target: Queue.BaleQueueTarget,
   ) => string | undefined;
   instanceId?: string;
   isVoiceReplyActive?: () => boolean;
   getCommands?: () => any[];
-  mediaGroupRuntime?: Media.TelegramMediaGroupController<
+  mediaGroupRuntime?: Media.BaleMediaGroupController<
     TestMessage,
     TestContext
   >;
-  downloadFile?: Routing.TelegramInboundRouteRuntimeDeps<
+  downloadFile?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["downloadFile"];
-  processInbound?: Routing.TelegramInboundRouteRuntimeDeps<
+  processInbound?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["inboundHandlerRuntime"]["process"];
-  invokeBoundButtonAction?: Routing.TelegramInboundRouteRuntimeDeps<
+  invokeBoundButtonAction?: Routing.BaleInboundRouteRuntimeDeps<
     TestMessage,
     TestCallbackQuery,
     TestContext,
     TestModel
   >["invokeBoundButtonAction"];
   validateThreadName?: (name: string) => string | undefined;
-  renameCurrentThread?: Commands.TelegramThreadDisplayNameRenamePort;
-  resetCurrentThreadName?: Commands.TelegramThreadDisplayNameResetPort;
-  setMyCommands?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["setMyCommands"];
-  sendTextReply?: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["sendTextReply"];
+  renameCurrentThread?: Commands.BaleThreadDisplayNameRenamePort;
+  resetCurrentThreadName?: Commands.BaleThreadDisplayNameResetPort;
+  setMyCommands?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["setMyCommands"];
+  sendTextReply?: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel>["sendTextReply"];
   observeTextReply?: (
     text: string,
     options: Parameters<
-      Routing.TelegramInboundRouteRuntimeDeps<
+      Routing.BaleInboundRouteRuntimeDeps<
         TestMessage,
         TestCallbackQuery,
         TestContext,
@@ -185,21 +185,21 @@ export interface RouteHarnessOptions {
 export function createRouteHarness(options: RouteHarnessOptions = {}) {
   const events: string[] = [];
   const model: TestModel = { provider: "test", id: "model" };
-  const bridgeRuntime = Runtime.createTelegramBridgeRuntime();
-  const activeTurnRuntime = Queue.createTelegramActiveTurnStore();
-  const telegramQueueStore = Queue.createTelegramQueueStore<TestContext>();
-  const buttonActionStore = Outbound.createTelegramButtonActionStore();
-  const deferredDispatch = Queue.createTelegramDeferredQueueDispatchRuntime<TestContext>();
+  const bridgeRuntime = Runtime.createBaleBridgeRuntime();
+  const activeTurnRuntime = Queue.createBaleActiveTurnStore();
+  const baleQueueStore = Queue.createBaleQueueStore<TestContext>();
+  const buttonActionStore = Outbound.createBaleButtonActionStore();
+  const deferredDispatch = Queue.createBaleDeferredQueueDispatchRuntime<TestContext>();
   deferredDispatch.bind({ cwd: "/repo" });
-  const queueBinding = options.queueAdmission && Bindings.createTelegramQueueBindingRuntime<TestContext>({
-    store: telegramQueueStore, queue: bridgeRuntime.queue, lifecycle: bridgeRuntime.lifecycle, activeTurn: activeTurnRuntime,
+  const queueBinding = options.queueAdmission && Bindings.createBaleQueueBindingRuntime<TestContext>({
+    store: baleQueueStore, queue: bridgeRuntime.queue, lifecycle: bridgeRuntime.lifecycle, activeTurn: activeTurnRuntime,
     admission: options.queueAdmission, deferredDispatch, transportStamp: { isActive: () => true },
     promptDispatch: { startTypingLoop() {}, onPromptDispatchStart() {}, onPromptDispatchFailure() {} },
     isIdle: options.isIdle ?? (() => true), hasPendingMessages: options.hasPendingMessages ?? (() => false), updateStatus: () => events.push("status"),
     sendTextReply: async () => { events.push("queue-notice"); }, sendUserMessage: () => events.push("queue-model-send"),
   });
-  const queueMutationRuntime = queueBinding?.mutation ?? Queue.createTelegramQueueMutationController({
-    ...telegramQueueStore,
+  const queueMutationRuntime = queueBinding?.mutation ?? Queue.createBaleQueueMutationController({
+    ...baleQueueStore,
     hasPendingDispatch: bridgeRuntime.lifecycle.hasDispatchPending,
     allocateLaneOrder: bridgeRuntime.queue.allocateItemOrder,
     onItemsDiscarded: options.onItemsDiscarded,
@@ -213,9 +213,9 @@ export function createRouteHarness(options: RouteHarnessOptions = {}) {
     updateStatus: () => events.push("status"),
   });
   const modelSwitchController =
-    Model.createTelegramModelSwitchControllerRuntime<
+    Model.createBaleModelSwitchControllerRuntime<
       TestContext,
-      Model.ScopedTelegramModel<TestModel>
+      Model.ScopedBaleModel<TestModel>
     >({
       isIdle: () => true,
       getActiveTurn: activeTurnRuntime.get,
@@ -227,7 +227,7 @@ export function createRouteHarness(options: RouteHarnessOptions = {}) {
       appendQueuedItem: queueMutationRuntime.append,
       updateStatus: () => events.push("status"),
     });
-  const menuActions: Menu.TelegramMenuActionRuntime<TestContext, TestModel> = {
+  const menuActions: Menu.BaleMenuActionRuntime<TestContext, TestModel> = {
     updateModelMenuMessage: async () => undefined,
     updateThinkingMenuMessage: async () => undefined,
     updateStatusMessage: async () => undefined,
@@ -238,7 +238,7 @@ export function createRouteHarness(options: RouteHarnessOptions = {}) {
     openModelMenu: async () => undefined,
     openThinkingMenu: async () => undefined,
   };
-  const routingDeps: Routing.TelegramInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel> = {
+  const routingDeps: Routing.BaleInboundRouteRuntimeDeps<TestMessage, TestCallbackQuery, TestContext, TestModel> = {
     configStore: options.configStore ?? {
       get: () => (options.config ?? {}) as never,
       getAllowedUserId: () => 7,
@@ -278,14 +278,14 @@ export function createRouteHarness(options: RouteHarnessOptions = {}) {
     activeTurnRuntime,
     mediaGroupRuntime:
       options.mediaGroupRuntime ??
-      Media.createTelegramMediaGroupController<TestMessage, TestContext>(),
-    textGroupRuntime: TextGroups.createTelegramTextGroupController<
+      Media.createBaleMediaGroupController<TestMessage, TestContext>(),
+    textGroupRuntime: TextGroups.createBaleTextGroupController<
       TestMessage,
       TestContext
     >({ forwardCommentWaitMs: false }),
-    telegramQueueStore,
+    baleQueueStore,
     queueMutationRuntime,
-    modelMenuRuntime: Menu.createTelegramModelMenuRuntime<TestModel>(),
+    modelMenuRuntime: Menu.createBaleModelMenuRuntime<TestModel>(),
     currentModelRuntime,
     modelSwitchController,
     menuActions: options.menuActions ?? menuActions,
@@ -307,7 +307,7 @@ export function createRouteHarness(options: RouteHarnessOptions = {}) {
     buttonActionStore,
     invokeBoundButtonAction: options.invokeBoundButtonAction,
     updateStatus: () => events.push("status"),
-    dispatchNextQueuedTelegramTurn: options.dispatchNextQueuedTelegramTurn ?? queueBinding?.dispatchNext ?? (() => events.push("dispatch")),
+    dispatchNextQueuedBaleTurn: options.dispatchNextQueuedBaleTurn ?? queueBinding?.dispatchNext ?? (() => events.push("dispatch")),
     requestNextDispatchAnnouncement: options.requestNextDispatchAnnouncement ?? queueBinding?.requestNextDispatchAnnouncement,
     cancelNextDispatchAnnouncement: options.cancelNextDispatchAnnouncement ?? queueBinding?.cancelNextDispatchAnnouncement,
     answerCallbackQuery: async (_id, text) => {
@@ -362,6 +362,6 @@ export function createRouteHarness(options: RouteHarnessOptions = {}) {
       events.push(`event:${category}:${String(error)}`);
     }),
   };
-  const routeRuntime = Routing.createTelegramInboundRouteRuntime<TestUpdate, TestMessage, TestCallbackQuery, TestContext, TestModel>(routingDeps);
-  return { buttonActionStore, bridgeRuntime, events, routeRuntime, routingDeps, telegramQueueStore, activeTurnRuntime, queueBinding };
+  const routeRuntime = Routing.createBaleInboundRouteRuntime<TestUpdate, TestMessage, TestCallbackQuery, TestContext, TestModel>(routingDeps);
+  return { buttonActionStore, bridgeRuntime, events, routeRuntime, routingDeps, baleQueueStore, activeTurnRuntime, queueBinding };
 }

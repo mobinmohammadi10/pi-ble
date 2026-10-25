@@ -1,16 +1,16 @@
 /**
- * Telegram multi-instance bus protocol and IPC helpers
+ * Bale multi-instance bus protocol and IPC helpers
  * Zones: multi-instance bus, local IPC contract, live instance routing
  * Owns serializable bus envelopes, socket/auth helpers, local IPC client/server primitives,
  * cross-instance forwarding helpers, and the live follower registry model.
  */
-import { type TelegramBusEndpointLayout, type TelegramBusTransportEventRecorder, type TelegramBusTransportRetryPolicy } from "./bus-transport.ts";
-import type { TelegramThreadDisplayMode } from "./config.ts";
-import { type TelegramLockEntry, type TelegramLockState } from "./locks.ts";
-import { type TelegramQueueHandoffPayload } from "./queue.ts";
-import { type TelegramTarget } from "./target.ts";
-import { type TelegramSessionReplacementIntent } from "./threads.ts";
-interface TelegramBusProcessRuntime {
+import { type BaleBusEndpointLayout, type BaleBusTransportEventRecorder, type BaleBusTransportRetryPolicy } from "./bus-transport.ts";
+import type { BaleThreadDisplayMode } from "./config.ts";
+import { type BaleLockEntry, type BaleLockState } from "./locks.ts";
+import { type BaleQueueHandoffPayload } from "./queue.ts";
+import { type BaleTarget } from "./target.ts";
+import { type BaleSessionReplacementIntent } from "./threads.ts";
+interface BaleBusProcessRuntime {
     instanceId: string;
     processId: number;
     processBirthId: string;
@@ -18,57 +18,57 @@ interface TelegramBusProcessRuntime {
     getLeaderSocketPath: () => string;
     getFollowerSocketPath: () => string;
 }
-export declare function createCurrentTelegramBusProcessRuntime(input: {
+export declare function createCurrentBaleBusProcessRuntime(input: {
     getActiveProfileName: () => string | undefined;
-    endpointLayout?: TelegramBusEndpointLayout;
+    endpointLayout?: BaleBusEndpointLayout;
     pid?: number;
     parentPid?: number;
     createdAtMs?: number;
-}): TelegramBusProcessRuntime;
-export declare function createTelegramBusProcessRuntime(input: {
+}): BaleBusProcessRuntime;
+export declare function createBaleBusProcessRuntime(input: {
     getActiveProfileName: () => string | undefined;
-    endpointLayout?: TelegramBusEndpointLayout;
+    endpointLayout?: BaleBusEndpointLayout;
     pid: number;
     parentPid: number;
     parentProcessIdentity?: string;
     createdAtMs: number;
-}): TelegramBusProcessRuntime;
-export declare function createTelegramBusAuthSecret(): string;
-export declare const TELEGRAM_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION: "durable-follower-admission-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_QUEUE_HANDOFF: "queue-handoff-v1";
+}): BaleBusProcessRuntime;
+export declare function createBaleBusAuthSecret(): string;
+export declare const BALE_BUS_CAPABILITY_DURABLE_FOLLOWER_ADMISSION: "durable-follower-admission-v1";
+export declare const BALE_BUS_CAPABILITY_QUEUE_HANDOFF: "queue-handoff-v1";
 /** Unspent Steer lane codec; independent from baseline receipt handoff support. */
-export declare const TELEGRAM_BUS_CAPABILITY_QUEUE_STEER: "queue-steer-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_CONNECT_RECOVERY: "explicit-connect-recovery-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE: "input-custody-reference-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME: "workspace-thread-rename-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_THREAD_DISPLAY_MODE: "thread-display-mode-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_DIRECTORY_DISPLAY_FORMAT: "directory-display-format-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT: "workspace-follower-auto-connect-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT: "session-replacement-intent-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_WORKSPACE_RESTORE: "workspace-restore-v1";
+export declare const BALE_BUS_CAPABILITY_QUEUE_STEER: "queue-steer-v1";
+export declare const BALE_BUS_CAPABILITY_CONNECT_RECOVERY: "explicit-connect-recovery-v1";
+export declare const BALE_BUS_CAPABILITY_INPUT_CUSTODY_REFERENCE: "input-custody-reference-v1";
+export declare const BALE_BUS_CAPABILITY_WORKSPACE_THREAD_RENAME: "workspace-thread-rename-v1";
+export declare const BALE_BUS_CAPABILITY_THREAD_DISPLAY_MODE: "thread-display-mode-v1";
+export declare const BALE_BUS_CAPABILITY_DIRECTORY_DISPLAY_FORMAT: "directory-display-format-v1";
+export declare const BALE_BUS_CAPABILITY_WORKSPACE_FOLLOWER_AUTO_CONNECT: "workspace-follower-auto-connect-v1";
+export declare const BALE_BUS_CAPABILITY_SESSION_REPLACEMENT_INTENT: "session-replacement-intent-v1";
+export declare const BALE_BUS_CAPABILITY_WORKSPACE_RESTORE: "workspace-restore-v1";
 /** Shared Workspace readers understand independent pre-dispatch input/cleanup state. */
-export declare const TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND: "live-rebind-pre-dispatch-reader-v2";
-export declare const TELEGRAM_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION: "live-rebind-pre-dispatch-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SAVE: "live-thread-rebind-save-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_APPLY: "live-thread-rebind-apply-v1";
-export declare const TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_SETTLE: "live-thread-rebind-settle-v1";
+export declare const BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND: "live-rebind-pre-dispatch-reader-v2";
+export declare const BALE_BUS_CAPABILITY_PRE_DISPATCH_REBIND_EXECUTION: "live-rebind-pre-dispatch-v1";
+export declare const BALE_BUS_CAPABILITY_LIVE_REBIND_SAVE: "live-thread-rebind-save-v1";
+export declare const BALE_BUS_CAPABILITY_LIVE_REBIND_APPLY: "live-thread-rebind-apply-v1";
+export declare const BALE_BUS_CAPABILITY_LIVE_REBIND_SETTLE: "live-thread-rebind-settle-v1";
 /** Restricted recipient text/menu delivery; negotiated identity and captured effect authority remain required. */
-export declare const TELEGRAM_BUS_CAPABILITY_SELECTED_MENU_DELIVERY: "selected-menu-delivery-v1";
+export declare const BALE_BUS_CAPABILITY_SELECTED_MENU_DELIVERY: "selected-menu-delivery-v1";
 /** Versioned held-command set; syntax is shared, while the captured recipient Commands registry owns supported plans. */
-export declare const TELEGRAM_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET: "live-thread-rebind-command-set-v1";
+export declare const BALE_BUS_CAPABILITY_LIVE_REBIND_COMMAND_SET: "live-thread-rebind-command-set-v1";
 /** Every live rebinding needs the save/apply/settle trio; held command selections additionally need these two. */
-export declare const TELEGRAM_BUS_LIVE_REBIND_CAPABILITIES: readonly ["live-thread-rebind-save-v1", "live-thread-rebind-apply-v1", "live-thread-rebind-settle-v1"];
-export declare const TELEGRAM_BUS_HELD_COMMAND_CAPABILITIES: readonly ["live-thread-rebind-command-set-v1", "selected-menu-delivery-v1"];
+export declare const BALE_BUS_LIVE_REBIND_CAPABILITIES: readonly ["live-thread-rebind-save-v1", "live-thread-rebind-apply-v1", "live-thread-rebind-settle-v1"];
+export declare const BALE_BUS_HELD_COMMAND_CAPABILITIES: readonly ["live-thread-rebind-command-set-v1", "selected-menu-delivery-v1"];
 /** Start/help are restricted menu aliases, negotiated separately from the original held-command set. */
-export declare const TELEGRAM_BUS_CAPABILITY_HELD_MENU_ALIASES: "held-menu-aliases-v1";
-export declare function getTelegramBusHeldCommandCapabilities(name: string): readonly string[];
-export interface TelegramBusSelectedCommandInput {
+export declare const BALE_BUS_CAPABILITY_HELD_MENU_ALIASES: "held-menu-aliases-v1";
+export declare function getBaleBusHeldCommandCapabilities(name: string): readonly string[];
+export interface BaleBusSelectedCommandInput {
     name: string;
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
 }
-export type TelegramBusSelectedMenuTextEffect = {
+export type BaleBusSelectedMenuTextEffect = {
     text: string;
     parseMode?: "HTML";
     replyMarkup?: {
@@ -85,7 +85,7 @@ export type TelegramBusSelectedMenuTextEffect = {
     messageId: number;
 });
 /** Serializable identity/effect description, never a process-local callback or standalone delivery grant. */
-export interface TelegramBusSelectedMenuDelivery {
+export interface BaleBusSelectedMenuDelivery {
     kind: "follower.deliverSelectedMenu";
     requestId: string;
     instanceId: string;
@@ -98,7 +98,7 @@ export interface TelegramBusSelectedMenuDelivery {
         processBirthId: string;
         profileKey: string;
         journalBindingKey: string;
-        target: TelegramTarget & {
+        target: BaleTarget & {
             threadId: number;
         };
     };
@@ -107,23 +107,23 @@ export interface TelegramBusSelectedMenuDelivery {
         leaderEpoch: string;
     };
     operatorUserId: number;
-    effect: TelegramBusSelectedMenuTextEffect;
+    effect: BaleBusSelectedMenuTextEffect;
     sentAtMs: number;
 }
-export interface TelegramBusSelectedMenuDeliveryObservation {
+export interface BaleBusSelectedMenuDeliveryObservation {
     operationId: string;
-    recipient: TelegramBusSelectedMenuDelivery["recipient"];
+    recipient: BaleBusSelectedMenuDelivery["recipient"];
     registrationGeneration: string;
-    effect: TelegramBusSelectedMenuTextEffect["kind"];
+    effect: BaleBusSelectedMenuTextEffect["kind"];
     messageId: number;
 }
 /** Closed wire projection of prepared recipient source; independent of journal implementation and never a removal grant. */
-export interface TelegramBusPreparedCommandSource {
+export interface BaleBusPreparedCommandSource {
     journalBindingKey: string;
     updateId: number;
     sourceSha256: string;
 }
-export interface TelegramBusLiveRebindSaveObservation {
+export interface BaleBusLiveRebindSaveObservation {
     operationId: string;
     recipient: {
         instanceId: string;
@@ -132,43 +132,43 @@ export interface TelegramBusLiveRebindSaveObservation {
         bindingKey: string;
     };
     sourceUpdateIds: number[];
-    selectedCommand?: TelegramBusSelectedCommandInput;
-    preparedSource?: TelegramBusPreparedCommandSource;
+    selectedCommand?: BaleBusSelectedCommandInput;
+    preparedSource?: BaleBusPreparedCommandSource;
     status: "saved";
 }
 /** Read-only warm observation; semantic completion and exact source ACK are distinct from detached delivery. */
-export interface TelegramBusLiveRebindCommandObservation extends Omit<TelegramBusLiveRebindSaveObservation, "status" | "preparedSource" | "selectedCommand"> {
+export interface BaleBusLiveRebindCommandObservation extends Omit<BaleBusLiveRebindSaveObservation, "status" | "preparedSource" | "selectedCommand"> {
     status: "command-observed";
-    selectedCommand: TelegramBusSelectedCommandInput;
-    preparedSource: TelegramBusPreparedCommandSource;
+    selectedCommand: BaleBusSelectedCommandInput;
+    preparedSource: BaleBusPreparedCommandSource;
     command: "completed" | "unknown" | "not-issued";
-    sourceAck?: TelegramBusPreparedCommandSource;
+    sourceAck?: BaleBusPreparedCommandSource;
 }
-export interface TelegramBusLiveRebindWorkState {
+export interface BaleBusLiveRebindWorkState {
     sessionBusy: boolean;
     targetWork: boolean;
     deliveryPending: boolean;
     unknown: boolean;
 }
-export interface TelegramBusLiveRebindWorkObservation extends Omit<TelegramBusLiveRebindSaveObservation, "status"> {
+export interface BaleBusLiveRebindWorkObservation extends Omit<BaleBusLiveRebindSaveObservation, "status"> {
     status: "observed";
-    oldTarget: TelegramTarget & {
+    oldTarget: BaleTarget & {
         threadId: number;
     };
-    work: TelegramBusLiveRebindWorkState;
+    work: BaleBusLiveRebindWorkState;
 }
-export interface TelegramBusLiveRebindSettlementObservation extends Omit<TelegramBusLiveRebindSaveObservation, "status"> {
+export interface BaleBusLiveRebindSettlementObservation extends Omit<BaleBusLiveRebindSaveObservation, "status"> {
     action: "release" | "discard";
     status: "released" | "discarded" | "protected" | "unknown";
 }
-export interface TelegramBusLiveRebindApplyObservation extends Omit<TelegramBusLiveRebindSaveObservation, "status"> {
+export interface BaleBusLiveRebindApplyObservation extends Omit<BaleBusLiveRebindSaveObservation, "status"> {
     status: "saved" | "applied";
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
     slot: string;
 }
-export interface TelegramBusWorkspaceRestoreObservation {
+export interface BaleBusWorkspaceRestoreObservation {
     operationId: string;
     recipient: {
         kind: "follower";
@@ -176,39 +176,39 @@ export interface TelegramBusWorkspaceRestoreObservation {
         sessionId: string;
         generation: string;
     };
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
     slot: string;
     ready: boolean;
 }
-export interface TelegramBusProtocolIdentity {
+export interface BaleBusProtocolIdentity {
     protocolVersion: number;
     runtimeBuild: string;
     capabilities: string[];
 }
-interface TelegramBusProtocolCompatibility {
+interface BaleBusProtocolCompatibility {
     compatible: boolean;
     reason?: "missing-identity" | "version-mismatch" | "missing-capability";
     missingCapabilities: string[];
 }
-export declare function createTelegramBusProtocolIdentity(input: {
+export declare function createBaleBusProtocolIdentity(input: {
     runtimeBuild: string;
     capabilities?: readonly string[];
-}): TelegramBusProtocolIdentity;
-export declare function createTelegramCurrentBusProtocolIdentity(capabilities?: readonly string[]): TelegramBusProtocolIdentity;
-export declare function hasTelegramBusCapability(identity: TelegramBusProtocolIdentity | undefined, capability: string): boolean;
-export declare function hasTelegramBusSteerQueueHandoffCapability(identity: TelegramBusProtocolIdentity | undefined): boolean;
-export declare function getTelegramInputCustodyPeerReadiness(followers: readonly Pick<TelegramBusFollowerView, "registrationGeneration" | "protocol">[]): ("ready" | "legacy" | "unknown")[];
+}): BaleBusProtocolIdentity;
+export declare function createBaleCurrentBusProtocolIdentity(capabilities?: readonly string[]): BaleBusProtocolIdentity;
+export declare function hasBaleBusCapability(identity: BaleBusProtocolIdentity | undefined, capability: string): boolean;
+export declare function hasBaleBusSteerQueueHandoffCapability(identity: BaleBusProtocolIdentity | undefined): boolean;
+export declare function getBaleInputCustodyPeerReadiness(followers: readonly Pick<BaleBusFollowerView, "registrationGeneration" | "protocol">[]): ("ready" | "legacy" | "unknown")[];
 /** Both peers advertise every required capability over a compatible protocol; reads only the two identities. */
-export declare function hasTelegramBusSharedCapabilities(local: TelegramBusProtocolIdentity, remote: TelegramBusProtocolIdentity | undefined, required: readonly string[]): boolean;
-export declare function getTelegramBusProtocolCompatibility(input: {
-    local: TelegramBusProtocolIdentity;
-    remote?: TelegramBusProtocolIdentity;
-}): TelegramBusProtocolCompatibility;
-export declare function getTelegramBusSocketPath(agentDir?: string, platform?: NodeJS.Platform, profileName?: string, layout?: TelegramBusEndpointLayout): string;
-export declare function getTelegramBusFollowerSocketPath(instanceId: string, agentDir?: string, platform?: NodeJS.Platform, profileName?: string, layout?: TelegramBusEndpointLayout): string;
-export interface TelegramBusInstanceRegistration {
+export declare function hasBaleBusSharedCapabilities(local: BaleBusProtocolIdentity, remote: BaleBusProtocolIdentity | undefined, required: readonly string[]): boolean;
+export declare function getBaleBusProtocolCompatibility(input: {
+    local: BaleBusProtocolIdentity;
+    remote?: BaleBusProtocolIdentity;
+}): BaleBusProtocolCompatibility;
+export declare function getBaleBusSocketPath(agentDir?: string, platform?: NodeJS.Platform, profileName?: string, layout?: BaleBusEndpointLayout): string;
+export declare function getBaleBusFollowerSocketPath(instanceId: string, agentDir?: string, platform?: NodeJS.Platform, profileName?: string, layout?: BaleBusEndpointLayout): string;
+export interface BaleBusInstanceRegistration {
     instanceId: string;
     previousInstanceId?: string;
     profileKey?: string;
@@ -217,22 +217,22 @@ export interface TelegramBusInstanceRegistration {
     cwd?: string;
     sessionId?: string;
     pid?: number;
-    target?: TelegramTarget;
+    target?: BaleTarget;
     busSocketPath?: string;
     registrationGeneration?: string;
-    protocol?: TelegramBusProtocolIdentity;
+    protocol?: BaleBusProtocolIdentity;
     sessionGeneration?: number;
     processBirthId?: string;
     connectedAtMs: number;
 }
-export interface TelegramBusFollowerView extends TelegramBusInstanceRegistration {
+export interface BaleBusFollowerView extends BaleBusInstanceRegistration {
     lastHeartbeatMs: number;
 }
 /** Whether a live follower is still exactly the captured registration: identity, process, session, endpoint and negotiated protocol. */
-export declare function isSameTelegramBusFollowerRegistration(live: TelegramBusInstanceRegistration, captured: TelegramBusInstanceRegistration): boolean;
-export declare function getTelegramFollowerTargetOwnership(input: {
-    target: TelegramTarget;
-    followers: readonly TelegramBusFollowerView[];
+export declare function isSameBaleBusFollowerRegistration(live: BaleBusInstanceRegistration, captured: BaleBusInstanceRegistration): boolean;
+export declare function getBaleFollowerTargetOwnership(input: {
+    target: BaleTarget;
+    followers: readonly BaleBusFollowerView[];
     activeThreadRecords?: readonly {
         status?: string;
         instanceId?: string;
@@ -240,48 +240,48 @@ export declare function getTelegramFollowerTargetOwnership(input: {
         owner?: {
             kind?: string;
         };
-        target: TelegramTarget;
+        target: BaleTarget;
     }[];
     currentInstanceId?: string;
 }): {
     instanceId: string;
     ownerGeneration: string;
     recipientBindingKey: string;
-    protocolIdentity: TelegramBusProtocolIdentity;
+    protocolIdentity: BaleBusProtocolIdentity;
 } | undefined;
-export declare function markTelegramBusCrossTargetDelivery<T extends Record<string, unknown>>(body: T): T;
-export declare function stripTelegramBusApiMetadata<T extends Record<string, unknown>>(body: T): T;
-export declare function isTelegramFollowerApiCallAllowed(input: {
-    follower: TelegramBusFollowerView;
+export declare function markBaleBusCrossTargetDelivery<T extends Record<string, unknown>>(body: T): T;
+export declare function stripBaleBusApiMetadata<T extends Record<string, unknown>>(body: T): T;
+export declare function isBaleFollowerApiCallAllowed(input: {
+    follower: BaleBusFollowerView;
     method: string;
     args: unknown[];
     isMessageOwned?: (chatId: number, messageId: number) => boolean;
 }): boolean;
-interface TelegramFollowerApiCallAuthorizationInput {
-    follower: TelegramBusFollowerView;
+interface BaleFollowerApiCallAuthorizationInput {
+    follower: BaleBusFollowerView;
     method: string;
     args: unknown[];
 }
-export declare function createTelegramFollowerApiCallAuthorizer(deps: {
+export declare function createBaleFollowerApiCallAuthorizer(deps: {
     isMessageOwned(input: {
         chatId: number;
         messageId: number;
-        follower: TelegramBusFollowerView;
+        follower: BaleBusFollowerView;
     }): boolean;
-}): (input: TelegramFollowerApiCallAuthorizationInput) => boolean;
-export interface TelegramBusAgentTargetSelector {
+}): (input: BaleFollowerApiCallAuthorizationInput) => boolean;
+export interface BaleBusAgentTargetSelector {
     chatId?: number;
     threadId?: number;
     threadName?: string;
 }
-export interface TelegramBusAgentMessage {
-    target: TelegramTarget & {
+export interface BaleBusAgentMessage {
+    target: BaleTarget & {
         threadId: number;
     };
     messageId: number;
     text: string;
 }
-export interface TelegramBusFollowerDeliveryIdentity {
+export interface BaleBusFollowerDeliveryIdentity {
     deliveryId: string;
     sourceUpdateId: number;
     recipientBindingKey: string;
@@ -291,18 +291,18 @@ export interface TelegramBusFollowerDeliveryIdentity {
         handoffId: string;
     };
 }
-type TelegramBusForeignUpdateFailureClass = "source-update-identity-missing" | "recipient-binding-missing" | "recipient-generation-missing" | "source-reference-missing" | "recipient-ownership-stale" | "transport-failed" | "acknowledgement-missing" | "acknowledgement-rejected" | "acknowledgement-mismatched" | "durable-receipt-missing" | "durable-receipt-mismatched";
-export type TelegramBusForeignUpdateSettlement = {
+type BaleBusForeignUpdateFailureClass = "source-update-identity-missing" | "recipient-binding-missing" | "recipient-generation-missing" | "source-reference-missing" | "recipient-ownership-stale" | "transport-failed" | "acknowledgement-missing" | "acknowledgement-rejected" | "acknowledgement-mismatched" | "durable-receipt-missing" | "durable-receipt-mismatched";
+export type BaleBusForeignUpdateSettlement = {
     status: "accepted";
-    delivery: TelegramBusFollowerDeliveryIdentity;
+    delivery: BaleBusFollowerDeliveryIdentity;
 } | {
     status: "retryable" | "terminal-rejected";
-    failureClass: TelegramBusForeignUpdateFailureClass;
+    failureClass: BaleBusForeignUpdateFailureClass;
     message: string;
-    delivery?: TelegramBusFollowerDeliveryIdentity;
+    delivery?: BaleBusFollowerDeliveryIdentity;
     sourceUpdateId?: number;
 };
-export declare function createTelegramBusFollowerDeliveryIdentity(input: {
+export declare function createBaleBusFollowerDeliveryIdentity(input: {
     kind: "leader.forwardCallback" | "leader.forwardReaction" | "leader.forwardMessage" | "leader.forwardEditedMessage" | "leader.wakeInputCustody";
     recipientBindingKey: string;
     sourceUpdateId: number;
@@ -311,12 +311,12 @@ export declare function createTelegramBusFollowerDeliveryIdentity(input: {
         acquisitionId: string;
         handoffId: string;
     };
-}): TelegramBusFollowerDeliveryIdentity;
-export declare function canUseTelegramBusInputCustodyReference(input: {
-    local?: TelegramBusProtocolIdentity;
-    remote?: TelegramBusProtocolIdentity;
+}): BaleBusFollowerDeliveryIdentity;
+export declare function canUseBaleBusInputCustodyReference(input: {
+    local?: BaleBusProtocolIdentity;
+    remote?: BaleBusProtocolIdentity;
 }): boolean;
-export declare function createTelegramBusFollowerSourceReferenceDeliveryIdentity(input: {
+export declare function createBaleBusFollowerSourceReferenceDeliveryIdentity(input: {
     kind: "leader.forwardCallback" | "leader.forwardReaction" | "leader.forwardMessage" | "leader.forwardEditedMessage" | "leader.wakeInputCustody";
     recipientBindingKey: string;
     sourceRecoveryKey: string;
@@ -327,16 +327,16 @@ export declare function createTelegramBusFollowerSourceReferenceDeliveryIdentity
             handoffId?: string;
         };
     };
-}): TelegramBusFollowerDeliveryIdentity;
-export type TelegramBusEnvelope = ({
+}): BaleBusFollowerDeliveryIdentity;
+export type BaleBusEnvelope = ({
     kind: "follower.register";
     requestId: string;
     recoverConnection?: true;
-    registration: TelegramBusInstanceRegistration;
+    registration: BaleBusInstanceRegistration;
 } | {
     kind: "follower.restoreWorkspace";
     requestId: string;
-    registration: TelegramBusInstanceRegistration;
+    registration: BaleBusInstanceRegistration;
 } | {
     kind: "follower.heartbeat";
     requestId: string;
@@ -354,13 +354,13 @@ export type TelegramBusEnvelope = ({
     requestId: string;
     instanceId: string;
     registrationGeneration: string;
-    mode: TelegramThreadDisplayMode;
+    mode: BaleThreadDisplayMode;
 } | {
     kind: "follower.renameThread";
     requestId: string;
     instanceId: string;
     registrationGeneration: string;
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
     threadName: string;
@@ -370,7 +370,7 @@ export type TelegramBusEnvelope = ({
     requestId: string;
     instanceId: string;
     registrationGeneration: string;
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
     sentAtMs: number;
@@ -379,14 +379,14 @@ export type TelegramBusEnvelope = ({
     requestId: string;
     instanceId: string;
     registrationGeneration: string;
-    intent: TelegramSessionReplacementIntent;
+    intent: BaleSessionReplacementIntent;
     sentAtMs: number;
 } | {
     kind: "leader.forwardCallback";
     requestId: string;
     recipientInstanceId: string;
     recipientRegistrationGeneration: string;
-    delivery: TelegramBusFollowerDeliveryIdentity;
+    delivery: BaleBusFollowerDeliveryIdentity;
     query: unknown;
     sentAtMs: number;
 } | {
@@ -394,7 +394,7 @@ export type TelegramBusEnvelope = ({
     requestId: string;
     recipientInstanceId: string;
     recipientRegistrationGeneration: string;
-    delivery: TelegramBusFollowerDeliveryIdentity;
+    delivery: BaleBusFollowerDeliveryIdentity;
     reactionUpdate: unknown;
     sentAtMs: number;
 } | {
@@ -402,7 +402,7 @@ export type TelegramBusEnvelope = ({
     requestId: string;
     recipientInstanceId: string;
     recipientRegistrationGeneration: string;
-    delivery: TelegramBusFollowerDeliveryIdentity;
+    delivery: BaleBusFollowerDeliveryIdentity;
     message: unknown;
     forwardCommentBatchPosition?: "comment" | "forward";
     sentAtMs: number;
@@ -411,7 +411,7 @@ export type TelegramBusEnvelope = ({
     requestId: string;
     recipientInstanceId: string;
     recipientRegistrationGeneration: string;
-    delivery: TelegramBusFollowerDeliveryIdentity;
+    delivery: BaleBusFollowerDeliveryIdentity;
     message: unknown;
     sentAtMs: number;
 } | {
@@ -433,7 +433,7 @@ export type TelegramBusEnvelope = ({
     requestId: string;
     recipientInstanceId: string;
     recipientRegistrationGeneration: string;
-    delivery: TelegramBusFollowerDeliveryIdentity;
+    delivery: BaleBusFollowerDeliveryIdentity;
     sentAtMs: number;
 } | {
     kind: "leader.prepareLiveRebind";
@@ -446,7 +446,7 @@ export type TelegramBusEnvelope = ({
     updates: ({
         update_id: number;
     } & Record<string, unknown>)[];
-    selectedCommand?: TelegramBusSelectedCommandInput;
+    selectedCommand?: BaleBusSelectedCommandInput;
     sentAtMs: number;
 } | {
     kind: "leader.applyLiveRebind";
@@ -458,8 +458,8 @@ export type TelegramBusEnvelope = ({
     operationId: string;
     sourceUpdateIds: number[];
     mode: "apply" | "inspect";
-    preparedSource?: TelegramBusPreparedCommandSource;
-    selectedCommand?: TelegramBusSelectedCommandInput;
+    preparedSource?: BaleBusPreparedCommandSource;
+    selectedCommand?: BaleBusSelectedCommandInput;
     sentAtMs: number;
 } | {
     kind: "leader.settleLiveRebind";
@@ -471,11 +471,11 @@ export type TelegramBusEnvelope = ({
     operationId: string;
     sourceUpdateIds: number[];
     mode: "release" | "discard" | "observe" | "observe-held" | "observe-command";
-    oldTarget?: TelegramTarget & {
+    oldTarget?: BaleTarget & {
         threadId: number;
     };
-    preparedSource?: TelegramBusPreparedCommandSource;
-    selectedCommand?: TelegramBusSelectedCommandInput;
+    preparedSource?: BaleBusPreparedCommandSource;
+    selectedCommand?: BaleBusSelectedCommandInput;
     sentAtMs: number;
 } | {
     kind: "leader.workspaceRestore";
@@ -497,7 +497,7 @@ export type TelegramBusEnvelope = ({
     donorAcquisitionId: string;
     donorAcquiredAtMs: number;
     handoffToken: string;
-    payload: TelegramQueueHandoffPayload;
+    payload: BaleQueueHandoffPayload;
     sentAtMs: number;
 } | {
     kind: "follower.offerQueueHandoff";
@@ -512,23 +512,23 @@ export type TelegramBusEnvelope = ({
     donorAcquisitionId: string;
     donorAcquiredAtMs: number;
     handoffToken: string;
-    payload: TelegramQueueHandoffPayload;
+    payload: BaleQueueHandoffPayload;
     sentAtMs: number;
 } | {
     kind: "follower.resolveAgentTarget";
     requestId: string;
     instanceId: string;
     registrationGeneration?: string;
-    selector: TelegramBusAgentTargetSelector;
+    selector: BaleBusAgentTargetSelector;
     sentAtMs: number;
 } | {
     kind: "follower.routeAgentMessage";
     requestId: string;
     instanceId: string;
     registrationGeneration?: string;
-    message: TelegramBusAgentMessage;
+    message: BaleBusAgentMessage;
     sentAtMs: number;
-} | TelegramBusSelectedMenuDelivery | {
+} | BaleBusSelectedMenuDelivery | {
     kind: "follower.callApi";
     requestId: string;
     instanceId: string;
@@ -546,7 +546,7 @@ export type TelegramBusEnvelope = ({
     ok: boolean;
     message?: string;
     result?: unknown;
-    protocol?: TelegramBusProtocolIdentity;
+    protocol?: BaleBusProtocolIdentity;
     error?: {
         code: "commit-unknown" | "request-id-collision" | "ledger-overloaded" | "incompatible-protocol" | "stale-target" | "follower-api-not-allowed" | "workspace-binding-unavailable";
         method?: string;
@@ -557,90 +557,90 @@ export type TelegramBusEnvelope = ({
     auth?: string;
 };
 /** Follower-staged queue handoff offer before the follower adds its own request and registration framing. */
-export type TelegramBusFollowerQueueHandoffOffer = Omit<Extract<TelegramBusEnvelope, {
+export type BaleBusFollowerQueueHandoffOffer = Omit<Extract<BaleBusEnvelope, {
     kind: "follower.offerQueueHandoff";
 }>, "kind" | "requestId" | "instanceId" | "registrationGeneration" | "sentAtMs" | "auth">;
 /** Leader-routed queue handoff offer as donors and leaders exchange it before envelope framing. */
-export type TelegramBusLeaderQueueHandoffOffer = Omit<Extract<TelegramBusEnvelope, {
+export type BaleBusLeaderQueueHandoffOffer = Omit<Extract<BaleBusEnvelope, {
     kind: "leader.offerQueueHandoff";
 }>, "kind">;
-type TelegramBusEnvelopeTrafficClass = "bootstrap" | "generation-fenced" | "response";
-export declare function getTelegramBusEnvelopeTrafficClass(envelope: TelegramBusEnvelope): TelegramBusEnvelopeTrafficClass;
-export declare function createTelegramBusRequestId(input: {
+type BaleBusEnvelopeTrafficClass = "bootstrap" | "generation-fenced" | "response";
+export declare function getBaleBusEnvelopeTrafficClass(envelope: BaleBusEnvelope): BaleBusEnvelopeTrafficClass;
+export declare function createBaleBusRequestId(input: {
     instanceId: string;
     sequence: number;
 }): string;
-export declare function createTelegramBusRequestIdFactory(instanceId: string): () => string;
-export declare function encodeTelegramBusEnvelope(envelope: TelegramBusEnvelope): string;
-export declare function parseTelegramBusEnvelope(line: string): TelegramBusEnvelope | undefined;
+export declare function createBaleBusRequestIdFactory(instanceId: string): () => string;
+export declare function encodeBaleBusEnvelope(envelope: BaleBusEnvelope): string;
+export declare function parseBaleBusEnvelope(line: string): BaleBusEnvelope | undefined;
 /**
  * One leader liveness observation. `silent` (connected or connecting, no answer within the window) and
  * `unreachable` (an endpoint that refuses connections: nobody listens) can support a takeover. A missing endpoint is
  * `unknown`: a live classic-mode leader has no socket at all. Any bytes or an orderly close prove the peer's event
  * loop handled the connection, so even an older leader rejecting the unknown kind is `responsive`.
  */
-export type TelegramBusLeaderProbeResult = "responsive" | "silent" | "unreachable" | "unknown";
-export declare function probeTelegramBusLeader(input: {
-    socketPath: TelegramBusSocketPathSource;
+export type BaleBusLeaderProbeResult = "responsive" | "silent" | "unreachable" | "unknown";
+export declare function probeBaleBusLeader(input: {
+    socketPath: BaleBusSocketPathSource;
     secret?: string;
     timeoutMs?: number;
-}): Promise<TelegramBusLeaderProbeResult>;
+}): Promise<BaleBusLeaderProbeResult>;
 /**
  * Takeover evidence replacing the retired file heartbeat: a full silent window, or an unreachable endpoint
  * confirmed again after one more window (a just-started leader binds its socket well within it). The owner must
  * stay the same throughout; the lock acquisition then CAS-checks that exact owner.
  */
-export declare function proveTelegramBusLeaderUnresponsive(input: {
-    probe: () => Promise<TelegramBusLeaderProbeResult>;
+export declare function proveBaleBusLeaderUnresponsive(input: {
+    probe: () => Promise<BaleBusLeaderProbeResult>;
     isSameOwner: () => boolean;
     sleep: (ms: number) => Promise<void>;
     windowMs?: number;
 }): Promise<boolean>;
 /** Composition-ready takeover proof for one profile's leader lock and endpoint. */
-export declare function createTelegramBusLeaderUnresponsivenessProof(deps: {
-    getLeaderState: () => TelegramLockState;
+export declare function createBaleBusLeaderUnresponsivenessProof(deps: {
+    getLeaderState: () => BaleLockState;
     getLeaderSocketPath: () => string;
-    probe?: typeof probeTelegramBusLeader;
+    probe?: typeof probeBaleBusLeader;
     sleep?: (ms: number) => Promise<void>;
-}): (owner: TelegramLockEntry) => Promise<boolean>;
-interface TelegramBusLocalServer {
+}): (owner: BaleLockEntry) => Promise<boolean>;
+interface BaleBusLocalServer {
     start: () => Promise<void>;
     stop: () => Promise<void>;
     ensureEndpoint: () => Promise<boolean>;
 }
-export type TelegramBusSocketPathSource = string | (() => string);
-export declare function resolveTelegramBusSocketPath(source: TelegramBusSocketPathSource, platform?: NodeJS.Platform | string): string;
-interface TelegramBusLocalServerDeps {
-    socketPath: TelegramBusSocketPathSource;
-    handleEnvelope: (envelope: TelegramBusEnvelope) => Promise<TelegramBusEnvelope | undefined> | TelegramBusEnvelope | undefined;
-    recordTransportEvent?: TelegramBusTransportEventRecorder;
+export type BaleBusSocketPathSource = string | (() => string);
+export declare function resolveBaleBusSocketPath(source: BaleBusSocketPathSource, platform?: NodeJS.Platform | string): string;
+interface BaleBusLocalServerDeps {
+    socketPath: BaleBusSocketPathSource;
+    handleEnvelope: (envelope: BaleBusEnvelope) => Promise<BaleBusEnvelope | undefined> | BaleBusEnvelope | undefined;
+    recordTransportEvent?: BaleBusTransportEventRecorder;
     beforeEndpointPublication?: () => Promise<void> | void;
     commitEndpointPublication?: (commit: () => void) => boolean;
     requestLedgerMaxEntries?: number;
-    shouldDropResponse?: (request: TelegramBusEnvelope, response: TelegramBusEnvelope) => boolean;
+    shouldDropResponse?: (request: BaleBusEnvelope, response: BaleBusEnvelope) => boolean;
 }
 /** Local IPC issuance proof only: this callback/error never enters the envelope or certifies a remote API effect. */
-export declare class TelegramBusLocalAuthorityError extends Error {
+export declare class BaleBusLocalAuthorityError extends Error {
     readonly requestIssued: boolean;
     constructor(requestIssued: boolean, reason?: string);
 }
-interface TelegramBusLocalClientOptions {
+interface BaleBusLocalClientOptions {
     assertAuthority?: () => void;
     socketPath: string;
-    envelope: TelegramBusEnvelope;
+    envelope: BaleBusEnvelope;
     timeoutMs?: number;
-    retry?: TelegramBusTransportRetryPolicy;
-    recordTransportEvent?: TelegramBusTransportEventRecorder;
+    retry?: BaleBusTransportRetryPolicy;
+    recordTransportEvent?: BaleBusTransportEventRecorder;
 }
-interface TelegramBusForeignOwnedForwarderDeps<TMessage = unknown> {
-    socketPath: TelegramBusSocketPathSource;
+interface BaleBusForeignOwnedForwarderDeps<TMessage = unknown> {
+    socketPath: BaleBusSocketPathSource;
     createRequestId: () => string;
     getNowMs?: () => number;
     timeoutMs?: number;
     getAuthSecret?: () => string | undefined;
     getForwardCommentBatchPosition?: (message: TMessage) => "comment" | "forward" | undefined;
-    localProtocolIdentity?: TelegramBusProtocolIdentity;
-    validateForwardOwnership?: (ownership: TelegramBusForwardOwnership) => boolean;
+    localProtocolIdentity?: BaleBusProtocolIdentity;
+    validateForwardOwnership?: (ownership: BaleBusForwardOwnership) => boolean;
     resolveInputCustodyReference?: (input: {
         sourceUpdateId: number;
         recipientBindingKey: string;
@@ -656,45 +656,45 @@ interface TelegramBusForeignOwnedForwarderDeps<TMessage = unknown> {
     } | undefined;
     recordRuntimeEvent?: (category: string, error: unknown, details?: Record<string, unknown>) => void;
 }
-export interface TelegramBusForwardOwnership {
+export interface BaleBusForwardOwnership {
     instanceId: string;
     ownerGeneration?: string;
     recipientBindingKey?: string;
-    protocolIdentity?: TelegramBusProtocolIdentity;
+    protocolIdentity?: BaleBusProtocolIdentity;
 }
-export declare function isTelegramBusForwardOwnershipCurrent(expected: TelegramBusForwardOwnership, current: TelegramBusForwardOwnership | undefined): boolean;
-export declare function createTelegramBusForeignOwnedUpdateForwarder<TContext, TReactionUpdate, TCallbackQuery, TMessage = unknown>(deps: TelegramBusForeignOwnedForwarderDeps<TMessage>): {
+export declare function isBaleBusForwardOwnershipCurrent(expected: BaleBusForwardOwnership, current: BaleBusForwardOwnership | undefined): boolean;
+export declare function createBaleBusForeignOwnedUpdateForwarder<TContext, TReactionUpdate, TCallbackQuery, TMessage = unknown>(deps: BaleBusForeignOwnedForwarderDeps<TMessage>): {
     forwardCallback: (input: {
         query: TCallbackQuery;
-        ownership: TelegramBusForwardOwnership;
+        ownership: BaleBusForwardOwnership;
         ctx: TContext;
-    }) => Promise<TelegramBusForeignUpdateSettlement>;
+    }) => Promise<BaleBusForeignUpdateSettlement>;
     forwardReaction: (input: {
         reactionUpdate: TReactionUpdate;
-        ownership: TelegramBusForwardOwnership;
+        ownership: BaleBusForwardOwnership;
         ctx: TContext;
-    }) => Promise<TelegramBusForeignUpdateSettlement>;
+    }) => Promise<BaleBusForeignUpdateSettlement>;
     forwardMessage: (input: {
         message: TMessage;
-        ownership: TelegramBusForwardOwnership;
+        ownership: BaleBusForwardOwnership;
         ctx: TContext;
         /** Process-local source/recipient lifetime; never part of the wire envelope. */
         assertAuthority?: () => void;
-    }) => Promise<TelegramBusForeignUpdateSettlement>;
+    }) => Promise<BaleBusForeignUpdateSettlement>;
     forwardEditedMessage: (input: {
         message: TMessage;
-        ownership: TelegramBusForwardOwnership;
+        ownership: BaleBusForwardOwnership;
         ctx: TContext;
-    }) => Promise<TelegramBusForeignUpdateSettlement>;
+    }) => Promise<BaleBusForeignUpdateSettlement>;
 };
-export declare function listTelegramBusLiveThreadTargets(input: {
-    leaderTarget?: TelegramTarget;
-    followers: readonly TelegramBusFollowerView[];
-}): TelegramTarget[];
+export declare function listBaleBusLiveThreadTargets(input: {
+    leaderTarget?: BaleTarget;
+    followers: readonly BaleBusFollowerView[];
+}): BaleTarget[];
 /** Caller owns the durable one-shot apply grant. Inspections never grant another apply. */
-export declare function createTelegramBusWorkspaceRestoreController(deps: {
-    getFollower: (instanceId: string) => TelegramBusFollowerView | undefined;
-    localProtocolIdentity: TelegramBusProtocolIdentity;
+export declare function createBaleBusWorkspaceRestoreController(deps: {
+    getFollower: (instanceId: string) => BaleBusFollowerView | undefined;
+    localProtocolIdentity: BaleBusProtocolIdentity;
     createRequestId: () => string;
     getAuthSecret: () => string | undefined;
     timeoutMs?: number;
@@ -703,19 +703,19 @@ export declare function createTelegramBusWorkspaceRestoreController(deps: {
     instanceId: string;
     sessionId: string;
     slot: string;
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
-    oldTarget: TelegramTarget & {
+    oldTarget: BaleTarget & {
         threadId: number;
     };
     mode: "apply" | "inspect";
     isCurrent: () => boolean;
-}) => Promise<TelegramBusWorkspaceRestoreObservation | undefined>;
+}) => Promise<BaleBusWorkspaceRestoreObservation | undefined>;
 /** Each capability has its own effect boundary; transport retries never replay save/dispatch/disposal. */
-export declare function createTelegramBusLiveRebindController(deps: {
-    getFollower(instanceId: string): TelegramBusFollowerView | undefined;
-    localProtocolIdentity: TelegramBusProtocolIdentity;
+export declare function createBaleBusLiveRebindController(deps: {
+    getFollower(instanceId: string): BaleBusFollowerView | undefined;
+    localProtocolIdentity: BaleBusProtocolIdentity;
     createRequestId(): string;
     getAuthSecret(): string | undefined;
     timeoutMs?: number;
@@ -725,8 +725,8 @@ export declare function createTelegramBusLiveRebindController(deps: {
     sessionId: string;
     recipientBindingKey: string;
     isCurrent(): boolean;
-    selectedCommand?: TelegramBusSelectedCommandInput;
-    preparedSource?: TelegramBusPreparedCommandSource;
+    selectedCommand?: BaleBusSelectedCommandInput;
+    preparedSource?: BaleBusPreparedCommandSource;
 } & ({
     updates: ({
         update_id: number;
@@ -735,38 +735,38 @@ export declare function createTelegramBusLiveRebindController(deps: {
     mode: "apply" | "inspect" | "release" | "discard" | "observe" | "observe-held" | "observe-command";
     sourceUpdateIds: number[];
     slot: string;
-    target: TelegramTarget & {
+    target: BaleTarget & {
         threadId: number;
     };
-    oldTarget: TelegramTarget & {
+    oldTarget: BaleTarget & {
         threadId: number;
     };
-})) => Promise<TelegramBusLiveRebindSaveObservation | TelegramBusLiveRebindApplyObservation | TelegramBusLiveRebindSettlementObservation | TelegramBusLiveRebindWorkObservation | TelegramBusLiveRebindCommandObservation | undefined>;
-export declare function isTelegramBusEnvelopeAuthorized(envelope: TelegramBusEnvelope, secret: string | undefined): boolean;
+})) => Promise<BaleBusLiveRebindSaveObservation | BaleBusLiveRebindApplyObservation | BaleBusLiveRebindSettlementObservation | BaleBusLiveRebindWorkObservation | BaleBusLiveRebindCommandObservation | undefined>;
+export declare function isBaleBusEnvelopeAuthorized(envelope: BaleBusEnvelope, secret: string | undefined): boolean;
 /** Negative acknowledgement carrying only a diagnostic message. */
-export declare const TELEGRAM_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE = "Telegram bus API call is not allowed for this follower.";
-export declare function rejectTelegramBusRequest(requestId: string, message: string): Extract<TelegramBusEnvelope, {
+export declare const BALE_BUS_FOLLOWER_API_NOT_ALLOWED_MESSAGE = "Bale bus API call is not allowed for this follower.";
+export declare function rejectBaleBusRequest(requestId: string, message: string): Extract<BaleBusEnvelope, {
     kind: "bus.ack";
 }>;
-export declare function createUnauthorizedBusAck(requestId: string): TelegramBusEnvelope;
-export declare function createTelegramBusLocalServer(deps: TelegramBusLocalServerDeps): TelegramBusLocalServer;
-export declare function sendTelegramBusLocalEnvelope(options: TelegramBusLocalClientOptions): Promise<TelegramBusEnvelope | undefined>;
-export interface TelegramBusFollowerRegistry {
-    register: (registration: TelegramBusInstanceRegistration) => TelegramBusFollowerView;
-    heartbeat: (instanceId: string, nowMs: number) => TelegramBusFollowerView | undefined;
-    get: (instanceId: string) => TelegramBusFollowerView | undefined;
-    getByTarget: (target: TelegramTarget) => TelegramBusFollowerView | undefined;
-    list: () => TelegramBusFollowerView[];
+export declare function createUnauthorizedBusAck(requestId: string): BaleBusEnvelope;
+export declare function createBaleBusLocalServer(deps: BaleBusLocalServerDeps): BaleBusLocalServer;
+export declare function sendBaleBusLocalEnvelope(options: BaleBusLocalClientOptions): Promise<BaleBusEnvelope | undefined>;
+export interface BaleBusFollowerRegistry {
+    register: (registration: BaleBusInstanceRegistration) => BaleBusFollowerView;
+    heartbeat: (instanceId: string, nowMs: number) => BaleBusFollowerView | undefined;
+    get: (instanceId: string) => BaleBusFollowerView | undefined;
+    getByTarget: (target: BaleTarget) => BaleBusFollowerView | undefined;
+    list: () => BaleBusFollowerView[];
     remove: (instanceId: string) => boolean;
     clear: () => void;
-    observeUnregistered: (follower: TelegramBusFollowerView) => {
+    observeUnregistered: (follower: BaleBusFollowerView) => {
         isCurrent: () => boolean;
         release: () => void;
     };
-    pruneStale: (nowMs: number, staleAfterMs: number) => TelegramBusFollowerView[];
+    pruneStale: (nowMs: number, staleAfterMs: number) => BaleBusFollowerView[];
 }
-export declare function createTelegramBusForwardOwnershipValidator(registry: Pick<TelegramBusFollowerRegistry, "get">): (ownership: TelegramBusForwardOwnership) => boolean;
-export declare function createTelegramBusFollowerRegistry(): TelegramBusFollowerRegistry;
+export declare function createBaleBusForwardOwnershipValidator(registry: Pick<BaleBusFollowerRegistry, "get">): (ownership: BaleBusForwardOwnership) => boolean;
+export declare function createBaleBusFollowerRegistry(): BaleBusFollowerRegistry;
 /** Shared closed text-effect codec; parsing alone supplies no recipient or issuance authority. */
-export declare function parseTelegramBusSelectedMenuTextEffect(effect: unknown): TelegramBusSelectedMenuTextEffect | undefined;
+export declare function parseBaleBusSelectedMenuTextEffect(effect: unknown): BaleBusSelectedMenuTextEffect | undefined;
 export {};

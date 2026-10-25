@@ -1,8 +1,8 @@
 /**
- * Telegram thread lifecycle reconciler
- * Zones: telegram, multi-instance bus, synchronization control plane
- * Owns pure planning for Telegram thread/tab lifecycle reconciliation and destructive topic cleanup authority
- * Excludes live Telegram API calls, inbound routing, menu rendering, and direct thread-store persistence
+ * Bale thread lifecycle reconciler
+ * Zones: bale, multi-instance bus, synchronization control plane
+ * Owns pure planning for Bale thread/tab lifecycle reconciliation and destructive topic cleanup authority
+ * Excludes live Bale API calls, inbound routing, menu rendering, and direct thread-store persistence
  */
 const DEFAULT_FRESH_CREATION_GRACE_MS = 30_000;
 function targetKey(target) {
@@ -102,7 +102,7 @@ function getActionLeaderEpoch(action) {
     return "leaderEpoch" in action ? action.leaderEpoch : undefined;
 }
 /** Pure Bot API vocabulary for a deleted/missing Thread; callers own their HTTP-status policy. */
-export function isTelegramTopicDeletedErrorMessage(message) {
+export function isBaleTopicDeletedErrorMessage(message) {
     const text = message.toLowerCase();
     return [
         "topic_id_invalid",
@@ -113,7 +113,7 @@ export function isTelegramTopicDeletedErrorMessage(message) {
     ].some((fragment) => text.includes(fragment));
 }
 /** Pure Bot API vocabulary for a closed Thread; closure is not deletion evidence. */
-export function isTelegramTopicClosedErrorMessage(message) {
+export function isBaleTopicClosedErrorMessage(message) {
     const text = message.toLowerCase();
     return [
         "topic closed",
@@ -122,13 +122,13 @@ export function isTelegramTopicClosedErrorMessage(message) {
         "message thread closed",
     ].some((fragment) => text.includes(fragment));
 }
-function isTelegramTopicTargetDeletedOrMissingError(error) {
-    return (error instanceof Error && isTelegramTopicDeletedErrorMessage(error.message));
+function isBaleTopicTargetDeletedOrMissingError(error) {
+    return (error instanceof Error && isBaleTopicDeletedErrorMessage(error.message));
 }
-function isTelegramTopicTargetGoneError(error) {
+function isBaleTopicTargetGoneError(error) {
     return (error instanceof Error &&
-        (isTelegramTopicDeletedErrorMessage(error.message) ||
-            isTelegramTopicClosedErrorMessage(error.message)));
+        (isBaleTopicDeletedErrorMessage(error.message) ||
+            isBaleTopicClosedErrorMessage(error.message)));
 }
 function shouldSkipForStaleLeaderEpoch(action, ports) {
     const actionLeaderEpoch = getActionLeaderEpoch(action);
@@ -136,7 +136,7 @@ function shouldSkipForStaleLeaderEpoch(action, ports) {
     if (actionLeaderEpoch === undefined) {
         if (!ports.getCurrentLeaderEpoch)
             return false;
-        ports.recordRuntimeEvent?.("telegram", "Thread reconciliation destructive action has no leader epoch", {
+        ports.recordRuntimeEvent?.("bale", "Thread reconciliation destructive action has no leader epoch", {
             phase: "thread-reconciler-missing-leader-epoch",
             currentLeaderEpoch,
             action: action.kind,
@@ -147,7 +147,7 @@ function shouldSkipForStaleLeaderEpoch(action, ports) {
     }
     if (currentLeaderEpoch === actionLeaderEpoch)
         return false;
-    ports.recordRuntimeEvent?.("telegram", "Skipped stale-epoch thread reconciliation action", {
+    ports.recordRuntimeEvent?.("bale", "Skipped stale-epoch thread reconciliation action", {
         phase: "thread-reconciler-stale-epoch-skip",
         action: action.kind,
         actionLeaderEpoch,
@@ -164,7 +164,7 @@ export function createThreadReconciliationRuntime(deps) {
             return;
         state = plan.state;
         if (plan.transition) {
-            deps.recordRuntimeEvent("telegram", "Thread reconciliation phase changed", {
+            deps.recordRuntimeEvent("bale", "Thread reconciliation phase changed", {
                 phase: "thread-reconciliation-transition",
                 from: plan.transition.from,
                 to: plan.transition.to,
@@ -261,7 +261,7 @@ export async function applyThreadReconciliationPlan(plan, ports) {
             }
             const changed = ports.removeCleanupIntentById?.(action.cleanupIntentId) ?? false;
             shouldPersist = changed || shouldPersist;
-            ports.recordRuntimeEvent?.("telegram", "Cancelled superseded Telegram topic cleanup", {
+            ports.recordRuntimeEvent?.("bale", "Cancelled superseded Bale topic cleanup", {
                 phase: "thread-reconciler-cleanup-superseded",
                 instanceId: action.instanceId,
                 chatId: action.target.chatId,
@@ -275,7 +275,7 @@ export async function applyThreadReconciliationPlan(plan, ports) {
                 continue;
             }
             if (!ports.callApi) {
-                ports.recordRuntimeEvent?.("telegram", "Skipped topic close without API port", {
+                ports.recordRuntimeEvent?.("bale", "Skipped topic close without API port", {
                     phase: "thread-reconciler-close-skip-no-api",
                     reason: action.reason,
                     chatId: action.target.chatId,
@@ -295,9 +295,9 @@ export async function applyThreadReconciliationPlan(plan, ports) {
                 closeConfirmed = true;
             }
             catch (error) {
-                closeConfirmed = isTelegramTopicTargetGoneError(error);
+                closeConfirmed = isBaleTopicTargetGoneError(error);
                 if (!closeConfirmed) {
-                    ports.recordRuntimeEvent?.("telegram", error, {
+                    ports.recordRuntimeEvent?.("bale", error, {
                         phase: `thread-reconciler-${action.reason}-closeForumTopic`,
                         instanceId: action.instanceId,
                         chatId: action.target.chatId,
@@ -328,7 +328,7 @@ export async function applyThreadReconciliationPlan(plan, ports) {
                 continue;
             }
             if (!ports.callApi) {
-                ports.recordRuntimeEvent?.("telegram", "Skipped topic cleanup without API port", {
+                ports.recordRuntimeEvent?.("bale", "Skipped topic cleanup without API port", {
                     phase: "thread-reconciler-cleanup-skip-no-api",
                     reason: action.reason,
                     chatId: action.target.chatId,
@@ -339,7 +339,7 @@ export async function applyThreadReconciliationPlan(plan, ports) {
             }
             let deleteConfirmed = false;
             let superseded = false;
-            // Private-chat topics (positive chat ids) cannot be closed; Telegram only supports closeForumTopic in forums.
+            // Private-chat topics (positive chat ids) cannot be closed; Bale only supports closeForumTopic in forums.
             const skipClose = ports.skipCloseBeforeDelete ||
                 (action.kind === "close-delete-graceful-shutdown-topic" &&
                     action.target.chatId > 0);
@@ -362,14 +362,14 @@ export async function applyThreadReconciliationPlan(plan, ports) {
                 }
                 catch (error) {
                     const confirmsMethodOutcome = method === "deleteForumTopic"
-                        ? isTelegramTopicTargetDeletedOrMissingError(error)
-                        : isTelegramTopicTargetGoneError(error);
+                        ? isBaleTopicTargetDeletedOrMissingError(error)
+                        : isBaleTopicTargetGoneError(error);
                     if (confirmsMethodOutcome) {
                         if (method === "deleteForumTopic")
                             deleteConfirmed = true;
                     }
                     else {
-                        ports.recordRuntimeEvent?.("telegram", error, {
+                        ports.recordRuntimeEvent?.("bale", error, {
                             phase: `thread-reconciler-${action.reason}-${method}`,
                             chatId: action.target.chatId,
                             threadId: action.target.threadId,
@@ -383,7 +383,7 @@ export async function applyThreadReconciliationPlan(plan, ports) {
             }
             if (superseded ||
                 ports.isCleanupTargetProtected?.(action.target, action)) {
-                ports.recordRuntimeEvent?.("telegram", "Cancelled cleanup of a protected Telegram target", {
+                ports.recordRuntimeEvent?.("bale", "Cancelled cleanup of a protected Bale target", {
                     phase: "thread-reconciler-cleanup-target-reused",
                     action: action.kind,
                     chatId: action.target.chatId,
@@ -392,7 +392,7 @@ export async function applyThreadReconciliationPlan(plan, ports) {
                 continue;
             }
             if (!deleteConfirmed) {
-                ports.recordRuntimeEvent?.("telegram", "Telegram topic cleanup incomplete", {
+                ports.recordRuntimeEvent?.("bale", "Bale topic cleanup incomplete", {
                     phase: "thread-reconciler-cleanup-incomplete",
                     action: action.kind,
                     reason: action.reason,
@@ -413,17 +413,17 @@ export async function applyThreadReconciliationPlan(plan, ports) {
                     persistFences.push(action);
                 shouldPersist = changed || shouldPersist;
             }
-            ports.recordRuntimeEvent?.("telegram", action.kind === "close-delete-unbound-topic"
-                ? "Unbound Telegram topic deleted"
+            ports.recordRuntimeEvent?.("bale", action.kind === "close-delete-unbound-topic"
+                ? "Unbound Bale topic deleted"
                 : action.kind === "close-delete-reserved-topic"
-                    ? "Reserved Telegram topic deleted"
+                    ? "Reserved Bale topic deleted"
                     : action.kind === "close-delete-replaced-follower-topic"
-                        ? "Replaced follower Telegram topic deleted"
+                        ? "Replaced follower Bale topic deleted"
                         : action.kind === "close-delete-previous-leader-topic"
-                            ? "Previous leader Telegram topic deleted"
+                            ? "Previous leader Bale topic deleted"
                             : action.kind === "close-delete-graceful-shutdown-topic"
-                                ? "Graceful shutdown Telegram topic deleted"
-                                : "Expired pending provision Telegram topic deleted", {
+                                ? "Graceful shutdown Bale topic deleted"
+                                : "Expired pending provision Bale topic deleted", {
                 phase: action.kind === "close-delete-unbound-topic"
                     ? "thread-reconciler-unbound-topic-delete"
                     : action.kind === "close-delete-reserved-topic"

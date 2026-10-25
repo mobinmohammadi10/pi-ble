@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram outbound markup helpers
+ * Regression tests for Bale outbound markup helpers
  * Exercises top-level assistant action comment parsing, stripping, and voice reply planning
  */
 
@@ -8,48 +8,48 @@ import test from "node:test";
 
 import {
   collectTopLevelHtmlComments,
-  getTelegramActionString,
-  planTelegramVoiceReply,
-  stripTelegramCommentMarkupForDelivery,
-  stripTelegramCommentMarkupForPreview,
+  getBaleActionString,
+  planBaleVoiceReply,
+  stripBaleCommentMarkupForDelivery,
+  stripBaleCommentMarkupForPreview,
 } from "../lib/outbound-markup.ts";
 
 test("Action string fields trim exactly once without coercion or payload mutation", () => {
   for (const value of [undefined, null, 1, false, {}, [], new String("text"), "", " \t\n"]) {
-    assert.equal(getTelegramActionString({ value }, "value"), undefined);
+    assert.equal(getBaleActionString({ value }, "value"), undefined);
   }
-  assert.equal(getTelegramActionString({ value: "\t label \n" }, "value"), "label");
-  assert.equal(getTelegramActionString({}, "missing"), undefined);
+  assert.equal(getBaleActionString({ value: "\t label \n" }, "value"), "label");
+  assert.equal(getBaleActionString({}, "missing"), undefined);
   let reads = 0;
   const payload = { get value() { reads++; return " text "; } };
-  assert.equal(getTelegramActionString(payload, "value"), "text");
+  assert.equal(getBaleActionString(payload, "value"), "text");
   assert.equal(reads, 1);
   assert.ok(Object.getOwnPropertyDescriptor(payload, "value")?.get);
 });
 
 test("Drafts hide complete and unfinished button fences but preserve outer code examples", () => {
-  assert.equal(stripTelegramCommentMarkupForPreview('Before\n```telegram_button\n{Hidden|secret prompt}'), 'Before');
-  assert.equal(stripTelegramCommentMarkupForPreview('Before\n```telegram_button\n{Hidden}\n```\nAfter'), 'Before\n\nAfter');
-  const example = '````markdown\n```telegram_button\n{Literal}\n```\n````';
-  assert.equal(stripTelegramCommentMarkupForPreview(example), example);
+  assert.equal(stripBaleCommentMarkupForPreview('Before\n```bale_button\n{Hidden|secret prompt}'), 'Before');
+  assert.equal(stripBaleCommentMarkupForPreview('Before\n```bale_button\n{Hidden}\n```\nAfter'), 'Before\n\nAfter');
+  const example = '````markdown\n```bale_button\n{Literal}\n```\n````';
+  assert.equal(stripBaleCommentMarkupForPreview(example), example);
 });
 
 test("Markup collector ignores comments inside fenced code", () => {
   const markdown = [
     "```",
-    "<!-- telegram_voice: literal -->",
+    "<!-- bale_voice: literal -->",
     "```",
     "",
-    "<!-- telegram_voice: real -->",
+    "<!-- bale_voice: real -->",
   ].join("\n");
 
   const { comments } = collectTopLevelHtmlComments(markdown);
 
   assert.equal(comments.length, 1);
-  assert.equal(comments[0]?.content.trim(), "telegram_voice: real");
+  assert.equal(comments[0]?.content.trim(), "bale_voice: real");
 });
 
-test("Markup stripping removes every HTML comment from Telegram surfaces", () => {
+test("Markup stripping removes every HTML comment from Bale surfaces", () => {
   const markdown = [
     "Visible <!-- inline --> text.",
     "",
@@ -62,8 +62,8 @@ test("Markup stripping removes every HTML comment from Telegram surfaces", () =>
     "const visible = true;",
     "```",
   ].join("\n");
-  const delivery = stripTelegramCommentMarkupForDelivery(markdown);
-  const preview = stripTelegramCommentMarkupForPreview(markdown);
+  const delivery = stripBaleCommentMarkupForDelivery(markdown);
+  const preview = stripBaleCommentMarkupForPreview(markdown);
 
   assert.equal(delivery, preview);
   assert.doesNotMatch(delivery, /<!--|-->/u);
@@ -72,29 +72,29 @@ test("Markup stripping removes every HTML comment from Telegram surfaces", () =>
   assert.match(delivery, /- Listed  text\./u);
   assert.match(delivery, /const visible = true;/u);
   assert.equal(
-    stripTelegramCommentMarkupForDelivery(
+    stripBaleCommentMarkupForDelivery(
       " \n<!-- first -->\n<!-- second -->\n ",
     ),
     "",
   );
   assert.equal(
-    stripTelegramCommentMarkupForPreview("Visible\n\n<!-- streaming private tail"),
+    stripBaleCommentMarkupForPreview("Visible\n\n<!-- streaming private tail"),
     "Visible",
   );
 });
 
 test("Voice reply planner retains legacy attribute compatibility", () => {
-  const plan = planTelegramVoiceReply(
+  const plan = planBaleVoiceReply(
     [
       "Visible answer.",
       "",
-      '<!-- telegram_voice {"text":"JSON voice.","lang":"ru"} -->',
-      '<!-- telegram_voice {"text":"Rated JSON voice.","rate":"+10%"} -->',
-      '<!-- telegram_voice text="Attribute voice." lang="en" -->',
-      '<!-- telegram_voice {"value":"JSON value voice."} -->',
-      '<!-- telegram_voice value="Attribute value voice." -->',
-      '<!-- telegram_voice {"value":"Fallback voice.","text":"Explicit voice."} -->',
-      '<!-- telegram_voice {Keep this voice.} [unrelated envelope text] -->',
+      '<!-- bale_voice {"text":"JSON voice.","lang":"ru"} -->',
+      '<!-- bale_voice {"text":"Rated JSON voice.","rate":"+10%"} -->',
+      '<!-- bale_voice text="Attribute voice." lang="en" -->',
+      '<!-- bale_voice {"value":"JSON value voice."} -->',
+      '<!-- bale_voice value="Attribute value voice." -->',
+      '<!-- bale_voice {"value":"Fallback voice.","text":"Explicit voice."} -->',
+      '<!-- bale_voice {Keep this voice.} [unrelated envelope text] -->',
     ].join("\n"),
   );
 
@@ -111,17 +111,17 @@ test("Voice reply planner retains legacy attribute compatibility", () => {
 });
 
 test("Voice reply planner ignores payloads outside the canonical action shape", () => {
-  const plan = planTelegramVoiceReply(
+  const plan = planBaleVoiceReply(
     [
-      '<!-- telegram_voice [{"text":"Array is unsupported."}] -->',
-      '<!-- telegram_voice {"lang":"ru"} -->',
-      '<!-- telegram_voice {"text": -->',
-      '<!-- telegram_voice {"text":"Must not become CML","rate":} -->',
-      '<!-- telegram_voice unknown="Speak this." -->',
-      '<!-- telegram_voice [broken text=Must-not-recover] -->',
-      '<!-- telegram_voice [[{Matrix is unsupported.}]] -->',
-      '<!-- telegram_voice {|en} -->',
-      '<!-- telegram_voice {Too|many|voice|atoms} -->',
+      '<!-- bale_voice [{"text":"Array is unsupported."}] -->',
+      '<!-- bale_voice {"lang":"ru"} -->',
+      '<!-- bale_voice {"text": -->',
+      '<!-- bale_voice {"text":"Must not become CML","rate":} -->',
+      '<!-- bale_voice unknown="Speak this." -->',
+      '<!-- bale_voice [broken text=Must-not-recover] -->',
+      '<!-- bale_voice [[{Matrix is unsupported.}]] -->',
+      '<!-- bale_voice {|en} -->',
+      '<!-- bale_voice {Too|many|voice|atoms} -->',
     ].join("\n"),
   );
 
@@ -131,13 +131,13 @@ test("Voice reply planner ignores payloads outside the canonical action shape", 
 });
 
 test("Voice reply planner extracts multiple voice replies and cleans markdown", () => {
-  const plan = planTelegramVoiceReply(
+  const plan = planBaleVoiceReply(
     [
       "Visible answer.",
       "",
-      '<!-- telegram_voice {"text":"Первый ответ.","lang":"ru","rate":"+20%"} -->',
+      '<!-- bale_voice {"text":"Первый ответ.","lang":"ru","rate":"+20%"} -->',
       "",
-      '<!-- telegram_voice lang="en" text="Second answer." -->',
+      '<!-- bale_voice lang="en" text="Second answer." -->',
       "",
       "Tail.",
     ].join("\n"),

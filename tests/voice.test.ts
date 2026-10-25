@@ -8,120 +8,120 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 
 import {
-  clearTelegramVoiceTranscriptionProviders,
+  clearBaleVoiceTranscriptionProviders,
   computeVoiceTurnFlags,
-  getTelegramVoiceReplyMode,
-  getTelegramVoiceTranscriptionProviders,
+  getBaleVoiceReplyMode,
+  getBaleVoiceTranscriptionProviders,
   isVoiceTurn,
-  registerTelegramVoiceTranscriptionProvider,
+  registerBaleVoiceTranscriptionProvider,
   shouldSuppressPreviewForVoice,
-  TELEGRAM_VOICE_REPLY_MODES,
+  BALE_VOICE_REPLY_MODES,
 } from "../lib/voice.ts";
 
 import {
-  clearTelegramVoiceSynthesisProviders,
-  getTelegramVoiceSynthesisProviders,
-  hasTelegramVoiceSynthesisProvider,
-  registerTelegramVoiceSynthesisProvider,
+  clearBaleVoiceSynthesisProviders,
+  getBaleVoiceSynthesisProviders,
+  hasBaleVoiceSynthesisProvider,
+  registerBaleVoiceSynthesisProvider,
 } from "../lib/outbound.ts";
 import {
-  planTelegramVoiceReply,
-  stripTelegramCommentMarkupForPreview,
+  planBaleVoiceReply,
+  stripBaleCommentMarkupForPreview,
 } from "../lib/outbound-markup.ts";
 
 // --- Test Setup ---
 
 beforeEach(() => {
-  clearTelegramVoiceSynthesisProviders();
-  clearTelegramVoiceTranscriptionProviders();
+  clearBaleVoiceSynthesisProviders();
+  clearBaleVoiceTranscriptionProviders();
 });
 
 afterEach(() => {
-  clearTelegramVoiceSynthesisProviders();
-  clearTelegramVoiceTranscriptionProviders();
+  clearBaleVoiceSynthesisProviders();
+  clearBaleVoiceTranscriptionProviders();
 });
 
 // --- Policy Resolution ---
 
 test("voice reply modes expose only manual, mirror, and always", () => {
-  assert.deepEqual(TELEGRAM_VOICE_REPLY_MODES, ["manual", "mirror", "always"]);
+  assert.deepEqual(BALE_VOICE_REPLY_MODES, ["manual", "mirror", "always"]);
 });
 
-test("getTelegramVoiceReplyMode returns 'manual' by default", () => {
-  assert.equal(getTelegramVoiceReplyMode(), "manual");
-  assert.equal(getTelegramVoiceReplyMode(undefined), "manual");
-  assert.equal(getTelegramVoiceReplyMode({}), "manual");
-  assert.equal(getTelegramVoiceReplyMode({ voice: {} }), "manual");
+test("getBaleVoiceReplyMode returns 'manual' by default", () => {
+  assert.equal(getBaleVoiceReplyMode(), "manual");
+  assert.equal(getBaleVoiceReplyMode(undefined), "manual");
+  assert.equal(getBaleVoiceReplyMode({}), "manual");
+  assert.equal(getBaleVoiceReplyMode({ voice: {} }), "manual");
 });
 
-test("getTelegramVoiceReplyMode reads current modes and legacy hidden", () => {
+test("getBaleVoiceReplyMode reads current modes and legacy hidden", () => {
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "mirror" } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "mirror" } }),
     "mirror",
   );
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "always" } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "always" } }),
     "always",
   );
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "hidden" } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "hidden" } }),
     "manual",
   );
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "manual" } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "manual" } }),
     "manual",
   );
 });
 
-test("getTelegramVoiceReplyMode ignores invalid config values", () => {
+test("getBaleVoiceReplyMode ignores invalid config values", () => {
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "invalid" as any } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "invalid" as any } }),
     "manual",
   );
   assert.equal(
-    getTelegramVoiceReplyMode({ voice: { replyMode: "foo" as any } }),
+    getBaleVoiceReplyMode({ voice: { replyMode: "foo" as any } }),
     "manual",
   );
 });
 
-test("getTelegramVoiceReplyMode ignores provider policy without config", () => {
-  registerTelegramVoiceSynthesisProvider(
+test("getBaleVoiceReplyMode ignores provider policy without config", () => {
+  registerBaleVoiceSynthesisProvider(
     {
       getVoicePolicy: () => ({ replyMode: "always" }),
     } as any,
     { id: "test-provider-1" },
   );
 
-  assert.equal(getTelegramVoiceReplyMode({}), "manual");
+  assert.equal(getBaleVoiceReplyMode({}), "manual");
 });
 
-test("getTelegramVoiceReplyMode reads config even when provider returns invalid policy", () => {
-  registerTelegramVoiceSynthesisProvider(
+test("getBaleVoiceReplyMode reads config even when provider returns invalid policy", () => {
+  registerBaleVoiceSynthesisProvider(
     {
       getVoicePolicy: () => ({ replyMode: "invalid" as any }),
     } as any,
     { id: "bad-provider" },
   );
 
-  const result = getTelegramVoiceReplyMode({ voice: { replyMode: "mirror" } });
+  const result = getBaleVoiceReplyMode({ voice: { replyMode: "mirror" } });
   assert.equal(result, "mirror");
 });
 
-test("getTelegramVoiceReplyMode defaults to manual despite provider policies", () => {
-  registerTelegramVoiceSynthesisProvider(
+test("getBaleVoiceReplyMode defaults to manual despite provider policies", () => {
+  registerBaleVoiceSynthesisProvider(
     {
       getVoicePolicy: () => ({ replyMode: "mirror" }),
     } as any,
     { id: "mirror-provider" },
   );
-  registerTelegramVoiceSynthesisProvider(
+  registerBaleVoiceSynthesisProvider(
     {
       getVoicePolicy: () => ({ replyMode: "always" }),
     } as any,
     { id: "always-provider" },
   );
 
-  assert.equal(getTelegramVoiceReplyMode(), "manual");
+  assert.equal(getBaleVoiceReplyMode(), "manual");
 });
 
 // --- Turn Tagging Helpers ---
@@ -188,96 +188,96 @@ test("shouldSuppressPreviewForVoice works correctly", () => {
 
 // --- Voice Markup Parsing ---
 
-test("planTelegramVoiceReply extracts simple voice text", () => {
-  const result = planTelegramVoiceReply(
-    'Hello\n\n<!-- telegram_voice {"text":"World"} -->',
+test("planBaleVoiceReply extracts simple voice text", () => {
+  const result = planBaleVoiceReply(
+    'Hello\n\n<!-- bale_voice {"text":"World"} -->',
   );
   assert.equal(result.voiceText, "World");
   assert.ok(result.voiceReplies?.length === 1);
 });
 
-test("planTelegramVoiceReply extracts lang and rate attributes", () => {
-  const result = planTelegramVoiceReply(
-    'Say\n\n<!-- telegram_voice text="Hallo" lang="de" rate="1.2" -->',
+test("planBaleVoiceReply extracts lang and rate attributes", () => {
+  const result = planBaleVoiceReply(
+    'Say\n\n<!-- bale_voice text="Hallo" lang="de" rate="1.2" -->',
   );
   assert.equal(result.lang, "de");
   assert.equal(result.rate, "1.2");
   assert.equal(result.voiceText, "Hallo");
 });
 
-test("planTelegramVoiceReply handles JSON payloads", () => {
-  const result = planTelegramVoiceReply(
-    'Text\n\n<!-- telegram_voice {"text":"This is the voice text"} -->',
+test("planBaleVoiceReply handles JSON payloads", () => {
+  const result = planBaleVoiceReply(
+    'Text\n\n<!-- bale_voice {"text":"This is the voice text"} -->',
   );
   assert.equal(result.voiceText, "This is the voice text");
   assert.ok(result.voiceReplies?.length === 1);
 });
 
-test("planTelegramVoiceReply handles multiple voice blocks", () => {
-  const result = planTelegramVoiceReply(
-    'First\n\n<!-- telegram_voice {"text":"One"} -->\n\nand second\n\n<!-- telegram_voice {"text":"Two"} -->',
+test("planBaleVoiceReply handles multiple voice blocks", () => {
+  const result = planBaleVoiceReply(
+    'First\n\n<!-- bale_voice {"text":"One"} -->\n\nand second\n\n<!-- bale_voice {"text":"Two"} -->',
   );
   assert.equal(result.voiceReplies?.length, 2);
   assert.equal(result.voiceText, "One\n\nTwo");
   assert.ok(result.markdown.includes("First"));
   assert.ok(result.markdown.includes("and second"));
-  assert.ok(!result.markdown.includes("telegram_voice"));
+  assert.ok(!result.markdown.includes("bale_voice"));
 });
 
-test("planTelegramVoiceReply returns cleaned markdown", () => {
-  const result = planTelegramVoiceReply(
-    'Normal\n\n<!-- telegram_voice {"text":"Voice only"} -->\n\ntext',
+test("planBaleVoiceReply returns cleaned markdown", () => {
+  const result = planBaleVoiceReply(
+    'Normal\n\n<!-- bale_voice {"text":"Voice only"} -->\n\ntext',
   );
   assert.ok(result.markdown.includes("Normal"));
   assert.ok(result.markdown.includes("text"));
   assert.equal(result.voiceText, "Voice only");
-  assert.ok(!result.markdown.includes("telegram_voice"));
+  assert.ok(!result.markdown.includes("bale_voice"));
 });
 
 // --- Voice Provider Registry ---
 
 test("Voice synthesis provider registry - basic register / get / has / clear", () => {
-  assert.equal(hasTelegramVoiceSynthesisProvider(), false);
-  assert.equal(getTelegramVoiceSynthesisProviders().length, 0);
+  assert.equal(hasBaleVoiceSynthesisProvider(), false);
+  assert.equal(getBaleVoiceSynthesisProviders().length, 0);
 
-  const dispose1 = registerTelegramVoiceSynthesisProvider(
+  const dispose1 = registerBaleVoiceSynthesisProvider(
     () => Promise.resolve("audio.mp3"),
     { id: "p1" },
   );
-  assert.equal(hasTelegramVoiceSynthesisProvider(), true);
-  assert.equal(getTelegramVoiceSynthesisProviders().length, 1);
+  assert.equal(hasBaleVoiceSynthesisProvider(), true);
+  assert.equal(getBaleVoiceSynthesisProviders().length, 1);
 
-  const dispose2 = registerTelegramVoiceSynthesisProvider(
+  const dispose2 = registerBaleVoiceSynthesisProvider(
     {
       getVoicePolicy: () => ({ replyMode: "always" }),
       getVoicePromptContribution: () => "Be concise.",
     } as any,
     { id: "p2" },
   );
-  assert.equal(getTelegramVoiceSynthesisProviders().length, 2);
+  assert.equal(getBaleVoiceSynthesisProviders().length, 2);
 
   dispose1();
-  assert.equal(getTelegramVoiceSynthesisProviders().length, 1);
+  assert.equal(getBaleVoiceSynthesisProviders().length, 1);
 
   dispose2();
-  assert.equal(hasTelegramVoiceSynthesisProvider(), false);
+  assert.equal(hasBaleVoiceSynthesisProvider(), false);
 });
 
 test("Voice synthesis provider registry accepts both function and object form", () => {
   // Function form (backward compat)
-  registerTelegramVoiceSynthesisProvider(() => Promise.resolve("audio1"), {
+  registerBaleVoiceSynthesisProvider(() => Promise.resolve("audio1"), {
     id: "fn",
   });
 
   // Object form
-  registerTelegramVoiceSynthesisProvider(
+  registerBaleVoiceSynthesisProvider(
     {
       getVoicePolicy: () => ({ replyMode: "mirror" }),
     } as any,
     { id: "obj" },
   );
 
-  const providers = getTelegramVoiceSynthesisProviders();
+  const providers = getBaleVoiceSynthesisProviders();
   assert.equal(providers.length, 2);
   assert.equal(typeof providers[0], "function");
   assert.equal(typeof providers[1], "object");
@@ -297,22 +297,22 @@ const voiceProviderRegistries: VoiceProviderRegistryFixture[] = [
     generatedId: "voice-synthesis-provider-0",
     fixtureId: "fixture-tts",
     register: (value, id) =>
-      registerTelegramVoiceSynthesisProvider(
+      registerBaleVoiceSynthesisProvider(
         () => Promise.resolve(value),
         id ? { id } : undefined,
       ),
-    count: () => getTelegramVoiceSynthesisProviders().length,
+    count: () => getBaleVoiceSynthesisProviders().length,
   },
   {
     label: "transcription",
     generatedId: "voice-transcription-provider-0",
     fixtureId: "fixture-stt",
     register: (value, id) =>
-      registerTelegramVoiceTranscriptionProvider(
+      registerBaleVoiceTranscriptionProvider(
         () => Promise.resolve(value),
         id ? { id } : undefined,
       ),
-    count: () => getTelegramVoiceTranscriptionProviders().length,
+    count: () => getBaleVoiceTranscriptionProviders().length,
   },
 ];
 
@@ -355,27 +355,27 @@ for (const registry of voiceProviderRegistries) {
 }
 
 test("Voice synthesis provider registry clear works reliably for tests", () => {
-  registerTelegramVoiceSynthesisProvider(() => Promise.resolve("x"), {
+  registerBaleVoiceSynthesisProvider(() => Promise.resolve("x"), {
     id: "tmp",
   });
-  assert.equal(hasTelegramVoiceSynthesisProvider(), true);
+  assert.equal(hasBaleVoiceSynthesisProvider(), true);
 
-  clearTelegramVoiceSynthesisProviders();
-  assert.equal(hasTelegramVoiceSynthesisProvider(), false);
+  clearBaleVoiceSynthesisProviders();
+  assert.equal(hasBaleVoiceSynthesisProvider(), false);
 });
 
 // --- Stripping And Generic Parser Interaction ---
 
-test("stripTelegramCommentMarkupForPreview removes voice blocks and normalizes whitespace", () => {
-  const input = 'Hello\n\n<!-- telegram_voice {"text":"World"} -->\n\nWorld';
-  const result = stripTelegramCommentMarkupForPreview(input);
-  assert.ok(!result.includes("telegram_voice"));
+test("stripBaleCommentMarkupForPreview removes voice blocks and normalizes whitespace", () => {
+  const input = 'Hello\n\n<!-- bale_voice {"text":"World"} -->\n\nWorld';
+  const result = stripBaleCommentMarkupForPreview(input);
+  assert.ok(!result.includes("bale_voice"));
   assert.ok(!result.includes("\n\n\n"));
 });
 
-test("planTelegramVoiceReply works with the original generic parsers (fence + comment)", () => {
-  const input = 'Text\n```\ncode\n```\n<!-- telegram_voice {"text":"Spoken"} -->';
-  const result = planTelegramVoiceReply(input);
+test("planBaleVoiceReply works with the original generic parsers (fence + comment)", () => {
+  const input = 'Text\n```\ncode\n```\n<!-- bale_voice {"text":"Spoken"} -->';
+  const result = planBaleVoiceReply(input);
   assert.equal(result.voiceText, "Spoken");
   assert.ok(result.markdown.includes("Text"));
   assert.ok(result.markdown.includes("code"));

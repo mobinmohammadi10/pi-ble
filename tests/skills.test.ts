@@ -1,5 +1,5 @@
 /**
- * Bundled Telegram skill discovery regressions
+ * Bundled Bale skill discovery regressions
  * Covers source/runtime path contribution and package publication metadata
  */
 
@@ -10,10 +10,10 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
-  getTelegramExtensionPackageRoot,
-  isRawTelegramExtensionCheckout,
-  registerTelegramSkillDiscovery,
-  TELEGRAM_SKILLS_PATH,
+  getBaleExtensionPackageRoot,
+  isRawBaleExtensionCheckout,
+  registerBaleSkillDiscovery,
+  BALE_SKILLS_PATH,
 } from "../lib/skills.ts";
 
 async function readSkillReference(
@@ -21,14 +21,14 @@ async function readSkillReference(
   reference: string,
 ): Promise<string> {
   return readFile(
-    join(TELEGRAM_SKILLS_PATH, skill, "references", reference),
+    join(BALE_SKILLS_PATH, skill, "references", reference),
     "utf8",
   );
 }
 
 test("Local Bot API reference documents generation-stop controls on both draft methods", async () => {
   const reference = (await readFile(
-    join(dirname(TELEGRAM_SKILLS_PATH), ".agents", "skills", "telegram-bot", "api.md"),
+    join(dirname(BALE_SKILLS_PATH), ".agents", "skills", "bale-bot", "api.md"),
     "utf8",
   )).replace(/\r\n/g, "\n");
   const section = (name: string): string => {
@@ -49,7 +49,7 @@ test("Local Bot API reference documents generation-stop controls on both draft m
 
 test("Bundled source Skills remain focused and self-contained", async () => {
   const skillNames = [
-    "telegram-bridge",
+    "bale-bridge",
     "show-me",
     "generated-control-surface",
     "generative-apps",
@@ -57,7 +57,7 @@ test("Bundled source Skills remain focused and self-contained", async () => {
   const sources = new Map<string, string>();
   for (const name of skillNames) {
     const source = await readFile(
-      join(TELEGRAM_SKILLS_PATH, name, "SKILL.md"),
+      join(BALE_SKILLS_PATH, name, "SKILL.md"),
       "utf8",
     );
     sources.set(name, source);
@@ -65,13 +65,13 @@ test("Bundled source Skills remain focused and self-contained", async () => {
     assert.match(source, /^description: .+$/m);
   }
 
-  const bridge = sources.get("telegram-bridge") ?? "";
+  const bridge = sources.get("bale-bridge") ?? "";
   assert.ok(
     bridge.trim().split(/\s+/u).length <= 1_100,
-    "telegram-bridge core exceeded its progressive-disclosure budget",
+    "bale-bridge core exceeded its progressive-disclosure budget",
   );
   assert.match(bridge, /capability, not user intent/u);
-  assert.match(bridge, /Never call `telegram_message` for the current active target/u);
+  assert.match(bridge, /Never call `bale_message` for the current active target/u);
   assert.match(bridge, /Positional CML — default/u);
   assert.match(bridge, /JSON — only when multiline content, named fields, or escaping earns it/u);
   assert.match(bridge, /\{text\|lang\|rate\}/u);
@@ -80,7 +80,7 @@ test("Bundled source Skills remain focused and self-contained", async () => {
   assert.match(bridge, /\{\|prompt\}.*prompt as both visible text and queued prompt/u);
   assert.match(bridge, /click creates an ordinary user request/u);
   assert.match(bridge, /\{\|Next\|\|1\}/u);
-  assert.match(bridge, /Hidden comment for footer; `telegram_button` fence for in-body rows/u);
+  assert.match(bridge, /Hidden comment for footer; `bale_button` fence for in-body rows/u);
   assert.match(bridge, /singleton JSON\/CML cell or mixed matrix/u);
   assert.doesNotMatch(bridge, /only recognized top-level comments activate|one complete action in one comment/u);
   assert.match(bridge, /Disabled controls.*no callback, queued prompt, or bound-method invocation/u);
@@ -94,9 +94,9 @@ test("Bundled source Skills remain focused and self-contained", async () => {
   );
   assert.match(bridge, /dangerous button opens a consequence\/confirmation step/u);
   assert.match(bridge, /Serialize|serialization/u);
-  assert.doesNotMatch(bridge, /telegram_buttons/u);
-  assert.doesNotMatch(bridge, /telegram_button label=/u);
-  assert.ok(bridge.indexOf("<!-- telegram_button [") < bridge.indexOf("<!-- telegram_button {\""));
+  assert.doesNotMatch(bridge, /bale_buttons/u);
+  assert.doesNotMatch(bridge, /bale_button label=/u);
+  assert.ok(bridge.indexOf("<!-- bale_button [") < bridge.indexOf("<!-- bale_button {\""));
 
   for (const reference of [
     "delivery-and-threads.md",
@@ -104,7 +104,7 @@ test("Bundled source Skills remain focused and self-contained", async () => {
     "diagnosis.md",
   ]) {
     assert.match(bridge, new RegExp(reference.replace(".", "\\."), "u"));
-    assert.ok((await readSkillReference("telegram-bridge", reference)).length > 200);
+    assert.ok((await readSkillReference("bale-bridge", reference)).length > 200);
   }
 
   const showMe = sources.get("show-me") ?? "";
@@ -112,19 +112,19 @@ test("Bundled source Skills remain focused and self-contained", async () => {
     showMe.trim().split(/\s+/u).length <= 1_100,
     "show-me core exceeded its progressive-disclosure budget",
   );
-  assert.match(showMe, /references\/telegram-surfaces\.md/u);
+  assert.match(showMe, /references\/bale-surfaces\.md/u);
   assert.match(showMe, /retained diff, status, and validation evidence/u);
   assert.match(showMe, /Do not infer that an affordance is clickable/u);
   assert.match(showMe, /State: locally implemented \| validated \| not released \| not live/u);
-  const telegramSurfaces = await readSkillReference(
+  const baleSurfaces = await readSkillReference(
     "show-me",
-    "telegram-surfaces.md",
+    "bale-surfaces.md",
   );
-  assert.match(telegramSurfaces, /Design for a phone before a desktop/u);
-  assert.match(telegramSurfaces, /rendered Markdown in the current reply/u);
-  assert.match(telegramSurfaces, /single self-contained file/u);
-  assert.match(telegramSurfaces, /source shape does not prove native clickability/u);
-  assert.match(telegramSurfaces, /Do not expose local paths/u);
+  assert.match(baleSurfaces, /Design for a phone before a desktop/u);
+  assert.match(baleSurfaces, /rendered Markdown in the current reply/u);
+  assert.match(baleSurfaces, /single self-contained file/u);
+  assert.match(baleSurfaces, /source shape does not prove native clickability/u);
+  assert.match(baleSurfaces, /Do not expose local paths/u);
 
   const generatedSurface = sources.get("generated-control-surface") ?? "";
   assert.ok(
@@ -147,7 +147,7 @@ test("Bundled source Skills remain focused and self-contained", async () => {
   assert.match(generatedSurface, /does not own.*transport syntax/su);
   assert.match(generatedSurface, /High-impact actions use two stages/u);
   assert.match(generatedSurface, /follow `generative-apps`/u);
-  assert.doesNotMatch(generatedSurface, /telegram_button/u);
+  assert.doesNotMatch(generatedSurface, /bale_button/u);
   assert.doesNotMatch(generatedSurface, /Compact Matrix Literal/u);
 
   const layoutReference = await readSkillReference(
@@ -180,12 +180,12 @@ test("Bundled source Skills remain focused and self-contained", async () => {
   assert.doesNotMatch(generativeApps, /states\.jsonl|worker-isolated|transition lock/u);
 
   const generativeAppsDoc = await readFile(
-    join(dirname(TELEGRAM_SKILLS_PATH), "docs", "generative-apps.md"),
+    join(dirname(BALE_SKILLS_PATH), "docs", "generative-apps.md"),
     "utf8",
   );
   assert.match(
     generativeAppsDoc,
-    /concrete Generative App runtime implemented by `pi-telegram`/u,
+    /concrete Generative App runtime implemented by `pi-bale`/u,
   );
   assert.match(generativeAppsDoc, /states\.jsonl/u);
   assert.match(generativeAppsDoc, /worker-isolated/u);
@@ -216,19 +216,19 @@ test("Generated filesystem reference preserves bounded structural navigation", a
 });
 
 test("Bridge diagnosis distinguishes Pi commands from the agent file fallback", async () => {
-  const diagnosis = await readSkillReference("telegram-bridge", "diagnosis.md");
-  assert.match(diagnosis, /`\/telegram-status`/u);
-  assert.match(diagnosis, /`\/telegram-status --debug`/u);
+  const diagnosis = await readSkillReference("bale-bridge", "diagnosis.md");
+  assert.match(diagnosis, /`\/bale-status`/u);
+  assert.match(diagnosis, /`\/bale-status --debug`/u);
   assert.match(diagnosis, /not shell executables or agent tools/u);
   assert.match(diagnosis, /read the diagnostic files directly/u);
   assert.match(diagnosis, /state\.json.*logs\.jsonl/u);
 });
 
 test("Manifest-loaded package leaves filtered Skill discovery to Pi", () => {
-  const packageRoot = dirname(TELEGRAM_SKILLS_PATH);
+  const packageRoot = dirname(BALE_SKILLS_PATH);
   const compiledModule = join(packageRoot, "dist", "lib", "skills.js");
   let registered = false;
-  assert.equal(registerTelegramSkillDiscovery({
+  assert.equal(registerBaleSkillDiscovery({
     on() {
       registered = true;
     },
@@ -240,7 +240,7 @@ test("Manifest-loaded package leaves filtered Skill discovery to Pi", () => {
 });
 
 test("Pi resolver preserves checkout Skills and package filters with package provenance", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pi-telegram-resolver-"));
+  const root = await mkdtemp(join(tmpdir(), "pi-bale-resolver-"));
   try {
     const packageManagerModule = await import(
       "../node_modules/@earendil-works/pi-coding-agent/dist/core/package-manager.js"
@@ -250,25 +250,25 @@ test("Pi resolver preserves checkout Skills and package filters with package pro
     );
     const cwd = join(root, "cwd");
     const agentDir = join(root, "agent");
-    const checkoutRoot = join(agentDir, "extensions", "pi-telegram");
-    const checkoutEntry = join(checkoutRoot, "dist", "pi-telegram", "index.js");
-    const checkoutSkill = join(checkoutRoot, "skills", "telegram-bridge", "SKILL.md");
+    const checkoutRoot = join(agentDir, "extensions", "pi-bale");
+    const checkoutEntry = join(checkoutRoot, "dist", "pi-bale", "index.js");
+    const checkoutSkill = join(checkoutRoot, "skills", "bale-bridge", "SKILL.md");
     await mkdir(dirname(checkoutEntry), { recursive: true });
     await mkdir(dirname(checkoutSkill), { recursive: true });
-    await mkdir(join(checkoutRoot, "dist", "skills", "telegram-bridge"), { recursive: true });
+    await mkdir(join(checkoutRoot, "dist", "skills", "bale-bridge"), { recursive: true });
     await mkdir(cwd, { recursive: true });
     await writeFile(join(checkoutRoot, "package.json"), JSON.stringify({
-      name: "@llblab/pi-telegram-checkout-fixture",
+      name: "@llblab/pi-bale-checkout-fixture",
       pi: {
-        extensions: ["./dist/pi-telegram/index.js"],
+        extensions: ["./dist/pi-bale/index.js"],
         skills: ["./dist/skills"],
       },
     }));
     await writeFile(checkoutEntry, "export default function () {}\n");
-    await writeFile(checkoutSkill, "---\nname: telegram-bridge\ndescription: source fixture\n---\n");
+    await writeFile(checkoutSkill, "---\nname: bale-bridge\ndescription: source fixture\n---\n");
     await writeFile(
-      join(checkoutRoot, "dist", "skills", "telegram-bridge", "SKILL.md"),
-      "---\nname: telegram-bridge\ndescription: dist fixture\n---\n",
+      join(checkoutRoot, "dist", "skills", "bale-bridge", "SKILL.md"),
+      "---\nname: bale-bridge\ndescription: dist fixture\n---\n",
     );
     const checkoutResolved = await new packageManagerModule.DefaultPackageManager({
       cwd,
@@ -283,12 +283,12 @@ test("Pi resolver preserves checkout Skills and package filters with package pro
     ), false);
     const checkoutSkillsModule = join(checkoutRoot, "dist", "lib", "skills.js");
     let resourceHook: (() => { skillPaths: string[] }) | undefined;
-    assert.equal(isRawTelegramExtensionCheckout(checkoutSkillsModule, { agentDir, cwd }), true);
+    assert.equal(isRawBaleExtensionCheckout(checkoutSkillsModule, { agentDir, cwd }), true);
     assert.equal(
-      getTelegramExtensionPackageRoot(checkoutSkillsModule),
+      getBaleExtensionPackageRoot(checkoutSkillsModule),
       checkoutRoot,
     );
-    assert.equal(registerTelegramSkillDiscovery({
+    assert.equal(registerBaleSkillDiscovery({
       on(name: string, hook: unknown) {
         assert.equal(name, "resources_discover");
         resourceHook = hook as () => { skillPaths: string[] };
@@ -296,20 +296,20 @@ test("Pi resolver preserves checkout Skills and package filters with package pro
     } as never, checkoutSkillsModule, { agentDir, cwd }), true);
     assert.deepEqual(resourceHook?.(), { skillPaths: [join(checkoutRoot, "skills")] });
 
-    const managedRoot = join(root, "managed", "pi-telegram");
-    const managedEntry = join(managedRoot, "dist", "pi-telegram", "index.js");
-    const managedSkill = join(managedRoot, "dist", "skills", "telegram-bridge", "SKILL.md");
+    const managedRoot = join(root, "managed", "pi-bale");
+    const managedEntry = join(managedRoot, "dist", "pi-bale", "index.js");
+    const managedSkill = join(managedRoot, "dist", "skills", "bale-bridge", "SKILL.md");
     await mkdir(dirname(managedEntry), { recursive: true });
     await mkdir(dirname(managedSkill), { recursive: true });
     await writeFile(join(managedRoot, "package.json"), JSON.stringify({
-      name: "@llblab/pi-telegram-managed-fixture",
+      name: "@llblab/pi-bale-managed-fixture",
       pi: {
-        extensions: ["./dist/pi-telegram/index.js"],
+        extensions: ["./dist/pi-bale/index.js"],
         skills: ["./dist/skills"],
       },
     }));
     await writeFile(managedEntry, "export default function () {}\n");
-    await writeFile(managedSkill, "---\nname: telegram-bridge\ndescription: managed fixture\n---\n");
+    await writeFile(managedSkill, "---\nname: bale-bridge\ndescription: managed fixture\n---\n");
     const managedAgentDir = join(root, "managed-agent");
     const managedResolved = await new packageManagerModule.DefaultPackageManager({
       cwd,
@@ -324,7 +324,7 @@ test("Pi resolver preserves checkout Skills and package filters with package pro
     assert.ok(filteredSkill);
     assert.equal(filteredSkill.enabled, false);
     assert.equal(filteredSkill.metadata.origin, "package");
-    assert.equal(isRawTelegramExtensionCheckout(
+    assert.equal(isRawBaleExtensionCheckout(
       join(managedRoot, "dist", "lib", "skills.js"),
       { agentDir: managedAgentDir, cwd },
     ), false);
@@ -334,7 +334,7 @@ test("Pi resolver preserves checkout Skills and package filters with package pro
 });
 
 test("Package metadata publishes only Pi-supported compiled resources", async () => {
-  const packageRoot = dirname(TELEGRAM_SKILLS_PATH);
+  const packageRoot = dirname(BALE_SKILLS_PATH);
   const manifest = JSON.parse(
     await readFile(join(packageRoot, "package.json"), "utf8"),
   ) as {
@@ -344,7 +344,7 @@ test("Package metadata publishes only Pi-supported compiled resources", async ()
 
   assert.ok(manifest.files?.includes("skills/"));
   assert.ok(manifest.files?.includes("dist/"));
-  assert.deepEqual(manifest.pi?.extensions, ["./dist/pi-telegram/index.js"]);
+  assert.deepEqual(manifest.pi?.extensions, ["./dist/pi-bale/index.js"]);
   assert.deepEqual(manifest.pi?.skills, ["./dist/skills"]);
   assert.equal("sourceExtensions" in (manifest.pi ?? {}), false);
   assert.equal("sourceSkills" in (manifest.pi ?? {}), false);

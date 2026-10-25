@@ -1,6 +1,6 @@
 /**
- * Telegram bridge config and pairing helpers
- * Zones: telegram config, pairing, filesystem
+ * Bale bridge config and pairing helpers
+ * Zones: bale config, pairing, filesystem
  * Owns persisted bot/session pairing state, local config storage, live config controls, authorization policy, and first-user pairing side effects
  */
 
@@ -17,17 +17,17 @@ import {
 } from "node:fs";
 
 import type { CommandTemplateObjectConfig } from "./command-templates.ts";
-import type { TelegramInboundHandlerConfig } from "./inbound.ts";
-import { withTelegramFileTransaction } from "./locks.ts";
+import type { BaleInboundHandlerConfig } from "./inbound.ts";
+import { withBaleFileTransaction } from "./locks.ts";
 import {
   resolveAgentDir,
-  resolveTelegramConfigPath,
-  TELEGRAM_DEFAULT_PROFILE_NAME,
+  resolveBaleConfigPath,
+  BALE_DEFAULT_PROFILE_NAME,
 } from "./paths.ts";
 import { isPiStaleContextError } from "./pi.ts";
 import { isWireRecord as isPlainConfigRecord } from "./wire.ts";
 
-export { TELEGRAM_DEFAULT_PROFILE_NAME } from "./paths.ts";
+export { BALE_DEFAULT_PROFILE_NAME } from "./paths.ts";
 
 const CONFIG_REPLACE_RETRY_ATTEMPTS = 5;
 const CONFIG_REPLACE_RETRY_DELAY_MS = 25;
@@ -42,7 +42,7 @@ function sleepConfigReplaceRetry(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function replaceTelegramConfigFile(tempPath: string, configPath: string): void {
+function replaceBaleConfigFile(tempPath: string, configPath: string): void {
   for (let attempt = 0; attempt < CONFIG_REPLACE_RETRY_ATTEMPTS; attempt += 1) {
     try {
       renameSync(tempPath, configPath);
@@ -60,13 +60,13 @@ function replaceTelegramConfigFile(tempPath: string, configPath: string): void {
 }
 
 function getConfigPath(): string {
-  return resolveTelegramConfigPath();
+  return resolveBaleConfigPath();
 }
 
-const TELEGRAM_BOT_TOKEN_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const BALE_BOT_TOKEN_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** Parsed stored bot-token form: a literal secret or one environment-variable reference. */
-export type TelegramBotTokenReference =
+export type BaleBotTokenReference =
   | { kind: "literal"; token: string }
   | { kind: "environment"; variable: string }
   | { kind: "malformed" };
@@ -76,9 +76,9 @@ export type TelegramBotTokenReference =
  * environment-variable references. Any other `$`-prefixed value is malformed
  * rather than a literal secret so a broken reference fails closed.
  */
-function getTelegramBotTokenReference(
+function getBaleBotTokenReference(
   value: string | undefined,
-): TelegramBotTokenReference | undefined {
+): BaleBotTokenReference | undefined {
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
   if (!trimmed.startsWith("$")) return { kind: "literal", token: trimmed };
@@ -86,90 +86,90 @@ function getTelegramBotTokenReference(
     trimmed.startsWith("${") && trimmed.endsWith("}")
       ? trimmed.slice(2, -1)
       : trimmed.slice(1);
-  return TELEGRAM_BOT_TOKEN_ENV_NAME_PATTERN.test(body)
+  return BALE_BOT_TOKEN_ENV_NAME_PATTERN.test(body)
     ? { kind: "environment", variable: body }
     : { kind: "malformed" };
 }
 
 /** Resolve a persisted token at a validation/activation boundary. */
-export function resolveTelegramBotToken(
+export function resolveBaleBotToken(
   value: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
-  const reference = getTelegramBotTokenReference(value);
+  const reference = getBaleBotTokenReference(value);
   if (reference?.kind === "literal") return reference.token;
   if (reference?.kind !== "environment") return undefined;
   return env[reference.variable]?.trim() || undefined;
 }
 
 /** Redacted diagnostic for an unresolved or malformed token reference. */
-export function getTelegramBotTokenDiagnostic(
+export function getBaleBotTokenDiagnostic(
   value: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
-  const reference = getTelegramBotTokenReference(value);
+  const reference = getBaleBotTokenReference(value);
   if (reference?.kind === "malformed") {
-    return "Telegram bot token environment reference is malformed; use $NAME or ${NAME}.";
+    return "Bale bot token environment reference is malformed; use $NAME or ${NAME}.";
   }
   if (reference?.kind !== "environment") return undefined;
-  if (resolveTelegramBotToken(value, env)) return undefined;
-  return `Telegram bot token environment variable ${reference.variable} is not set.`;
+  if (resolveBaleBotToken(value, env)) return undefined;
+  return `Bale bot token environment variable ${reference.variable} is not set.`;
 }
 
-export interface TelegramOutboundHandlerConfig extends CommandTemplateObjectConfig {
+export interface BaleOutboundHandlerConfig extends CommandTemplateObjectConfig {
   type?: string;
   match?: string | string[];
   output?: string;
   timeout?: number | string;
 }
 
-export type TelegramTimeMode = "hidden" | "always" | "interval";
+export type BaleTimeMode = "hidden" | "always" | "interval";
 
-export interface TelegramTimeConfig {
+export interface BaleTimeConfig {
   interval?: number;
 }
 
-export interface ResolvedTelegramTimeConfig {
-  injectionMode: TelegramTimeMode;
+export interface ResolvedBaleTimeConfig {
+  injectionMode: BaleTimeMode;
   interval: number;
   timezone: string;
 }
 
-export type TelegramThreadDisplayMode =
+export type BaleThreadDisplayMode =
   "letters" | "names" | "directories" | "directory-snake" | "directory-title";
 
-const TELEGRAM_THREAD_DISPLAY_MODES: readonly TelegramThreadDisplayMode[] = [
+const BALE_THREAD_DISPLAY_MODES: readonly BaleThreadDisplayMode[] = [
   "letters",
   "names",
   "directory-snake",
   "directory-title",
 ];
 
-export function resolveTelegramThreadDisplayMode(
-  config: Pick<TelegramConfig, "threads">,
-): TelegramThreadDisplayMode {
+export function resolveBaleThreadDisplayMode(
+  config: Pick<BaleConfig, "threads">,
+): BaleThreadDisplayMode {
   const mode = config.threads?.displayMode;
-  return TELEGRAM_THREAD_DISPLAY_MODES.includes(mode as TelegramThreadDisplayMode)
-    ? (mode as TelegramThreadDisplayMode)
+  return BALE_THREAD_DISPLAY_MODES.includes(mode as BaleThreadDisplayMode)
+    ? (mode as BaleThreadDisplayMode)
     : "letters";
 }
 
-export async function setTelegramThreadDisplayMode(
-  store: TelegramConfigStore,
-  mode: TelegramThreadDisplayMode,
+export async function setBaleThreadDisplayMode(
+  store: BaleConfigStore,
+  mode: BaleThreadDisplayMode,
   isCurrent: () => boolean,
 ): Promise<void> {
-  if (!TELEGRAM_THREAD_DISPLAY_MODES.includes(mode)) {
-    throw new Error("Invalid Telegram Thread display mode.");
+  if (!BALE_THREAD_DISPLAY_MODES.includes(mode)) {
+    throw new Error("Invalid Bale Thread display mode.");
   }
   const profile = store.getActiveProfileName();
   const current = () => isCurrent() && store.getActiveProfileName() === profile;
   if (!current())
-    throw new Error("Telegram Thread display setting lost authority.");
+    throw new Error("Bale Thread display setting lost authority.");
   await store.load();
   if (!current() || !store.hasBotToken()) {
     throw new Error(
-      "Telegram Thread display setting lost its configured profile.",
+      "Bale Thread display setting lost its configured profile.",
     );
   }
   const latest = store.get();
@@ -179,15 +179,15 @@ export async function setTelegramThreadDisplayMode(
   );
   if (!current())
     throw new Error(
-      "Telegram Thread display setting changed during persistence.",
+      "Bale Thread display setting changed during persistence.",
     );
 }
 
-export type TelegramAssistantRenderingMode = "rich" | "html";
-export type TelegramActivityVerbosity =
+export type BaleAssistantRenderingMode = "rich" | "html";
+export type BaleActivityVerbosity =
   "quiet" | "thinking" | "tools" | "verbose";
 
-export interface TelegramConfig {
+export interface BaleConfig {
   /** @deprecated persisted identity belongs in profiles.default; retained for effective/legacy views */
   botToken?: string;
   /** @deprecated persisted identity belongs in profiles.default; retained for effective/legacy views */
@@ -196,80 +196,80 @@ export interface TelegramConfig {
   botId?: number;
   /** @deprecated persisted identity belongs in profiles.default; retained for effective/legacy views */
   allowedUserId?: number;
-  inboundHandlers?: TelegramInboundHandlerConfig[];
-  attachmentHandlers?: TelegramInboundHandlerConfig[];
-  outboundHandlers?: TelegramOutboundHandlerConfig[];
+  inboundHandlers?: BaleInboundHandlerConfig[];
+  attachmentHandlers?: BaleInboundHandlerConfig[];
+  outboundHandlers?: BaleOutboundHandlerConfig[];
   assistant?: {
     draftPreviews?: boolean;
-    rendering?: TelegramAssistantRenderingMode;
-    activity?: TelegramActivityVerbosity;
-    timeInjection?: TelegramTimeMode;
+    rendering?: BaleAssistantRenderingMode;
+    activity?: BaleActivityVerbosity;
+    timeInjection?: BaleTimeMode;
     /** @deprecated use activity */
-    activityVerbosity?: TelegramActivityVerbosity;
+    activityVerbosity?: BaleActivityVerbosity;
   };
   /** @deprecated use assistant.draftPreviews */
   draftPreviews?: boolean;
   /** @deprecated use assistant.draftPreviews */
   richDraftPreviews?: boolean;
   /** @deprecated use assistant.rendering */
-  assistantRendering?: TelegramAssistantRenderingMode;
+  assistantRendering?: BaleAssistantRenderingMode;
   voice?: {
     /** `hidden` is a read-only compatibility alias for the former manual mode. */
     replyMode?: "manual" | "hidden" | "mirror" | "always";
   };
-  time?: TelegramTimeConfig;
+  time?: BaleTimeConfig;
   threads?: {
-    /** Delete this instance's bound Telegram thread on graceful Pi quit. */
+    /** Delete this instance's bound Bale thread on graceful Pi quit. */
     automaticCleanup?: boolean;
     /** Automatic Thread title strategy shared by every profile; absent or invalid resolves to `letters`. */
-    displayMode?: TelegramThreadDisplayMode;
+    displayMode?: BaleThreadDisplayMode;
   };
   /** Canonical bot/session profiles, including profiles.default. */
-  profiles?: Record<string, TelegramBotProfile>;
+  profiles?: Record<string, BaleBotProfile>;
 }
 
 /**
  * Per-profile bot identity and paired owner only.
- * Stored under `profiles.<name>` in telegram.json.
+ * Stored under `profiles.<name>` in bale.json.
  * Shared bridge settings (handlers, assistant, voice, time, threads) stay at
  * the top level and never leak into profiles.
  */
-export interface TelegramBotProfile {
+export interface BaleBotProfile {
   botToken: string;
   botUsername?: string;
   botId?: number;
   allowedUserId?: number;
 }
 
-interface TelegramLegacyCursorCarrier {
+interface BaleLegacyCursorCarrier {
   lastUpdateId?: number;
 }
 
 /** Profile names must contain only lowercase ASCII letters and digits; max 32 chars. */
-const TELEGRAM_PROFILE_NAME_PATTERN = /^[a-z0-9]{1,32}$/;
-const TELEGRAM_RESERVED_PROFILE_NAMES: ReadonlySet<string> = new Set([
+const BALE_PROFILE_NAME_PATTERN = /^[a-z0-9]{1,32}$/;
+const BALE_RESERVED_PROFILE_NAMES: ReadonlySet<string> = new Set([
   "main",
   "active",
 ]);
 
-export function isValidTelegramProfileName(name: string): boolean {
+export function isValidBaleProfileName(name: string): boolean {
   return (
-    TELEGRAM_PROFILE_NAME_PATTERN.test(name) &&
-    !TELEGRAM_RESERVED_PROFILE_NAMES.has(name)
+    BALE_PROFILE_NAME_PATTERN.test(name) &&
+    !BALE_RESERVED_PROFILE_NAMES.has(name)
   );
 }
 
 /** List defined profile names. */
-export function getTelegramProfileNames(config: TelegramConfig): string[] {
+export function getBaleProfileNames(config: BaleConfig): string[] {
   return Object.keys(config.profiles ?? {}).sort();
 }
 
-export interface TelegramConfigStore {
-  get: () => TelegramConfig;
-  getStoredConfig: () => TelegramConfig;
-  set: (config: TelegramConfig) => void;
-  setProfile: (profileName: string, profile: TelegramBotProfile) => void;
-  update: (mutate: (config: TelegramConfig) => void) => void;
+export interface BaleConfigStore {
+  get: () => BaleConfig;
+  getStoredConfig: () => BaleConfig;
+  set: (config: BaleConfig) => void;
+  setProfile: (profileName: string, profile: BaleBotProfile) => void;
+  update: (mutate: (config: BaleConfig) => void) => void;
   activateProfile: (profileName: string | undefined) => boolean;
   getActiveProfileName: () => string | undefined;
   getBotToken: () => string | undefined;
@@ -278,9 +278,9 @@ export interface TelegramConfigStore {
   getAllowedUserId: () => number | undefined;
   getLegacyPollingCursor: () => number | undefined;
   removeLegacyPollingCursor: () => void;
-  getInboundHandlers: () => TelegramInboundHandlerConfig[] | undefined;
-  getAttachmentHandlers: () => TelegramInboundHandlerConfig[] | undefined;
-  getOutboundHandlers: () => TelegramOutboundHandlerConfig[] | undefined;
+  getInboundHandlers: () => BaleInboundHandlerConfig[] | undefined;
+  getAttachmentHandlers: () => BaleInboundHandlerConfig[] | undefined;
+  getOutboundHandlers: () => BaleOutboundHandlerConfig[] | undefined;
   setAllowedUserId: (userId: number) => void;
   /** Publish an unpaired profile owner atomically; true only for the resulting exact owner. */
   persistAllowedUserId: (
@@ -305,25 +305,25 @@ export interface TelegramConfigStore {
   load: () => Promise<void>;
   didLastLoadRecoverInvalidConfig: () => boolean;
   persist: (
-    config?: TelegramConfig,
+    config?: BaleConfig,
     options?: { isCurrent?: () => boolean },
   ) => Promise<void>;
 }
 
-export function createTelegramConfigBotIdGetter(
-  store: Pick<TelegramConfigStore, "get">,
+export function createBaleConfigBotIdGetter(
+  store: Pick<BaleConfigStore, "get">,
 ): () => number | undefined {
   return () => store.get().botId;
 }
 
-export function createTelegramActiveProfileKeyGetter(
-  store: Pick<TelegramConfigStore, "getActiveProfileName">,
+export function createBaleActiveProfileKeyGetter(
+  store: Pick<BaleConfigStore, "getActiveProfileName">,
 ): () => string {
-  return () => store.getActiveProfileName() ?? TELEGRAM_DEFAULT_PROFILE_NAME;
+  return () => store.getActiveProfileName() ?? BALE_DEFAULT_PROFILE_NAME;
 }
 
-export interface TelegramConfigStoreOptions {
-  initialConfig?: TelegramConfig;
+export interface BaleConfigStoreOptions {
+  initialConfig?: BaleConfig;
   agentDir?: string;
   configPath?: string;
   /** Environment used to resolve `$NAME` token references; defaults to process.env. */
@@ -335,61 +335,61 @@ export interface TelegramConfigStoreOptions {
   ) => void;
 }
 
-export interface TelegramInvalidConfigRecovery {
+export interface BaleInvalidConfigRecovery {
   configPath: string;
   recoveryPath: string;
   error: unknown;
 }
 
-type TelegramMutableConfigStore = Pick<
-  TelegramConfigStore,
+type BaleMutableConfigStore = Pick<
+  BaleConfigStore,
   "get" | "set" | "persist"
 > & {
   load?: () => Promise<void>;
   didLastLoadRecoverInvalidConfig?: () => boolean;
 };
 
-function isEmptyTelegramConfig(config: TelegramConfig): boolean {
+function isEmptyBaleConfig(config: BaleConfig): boolean {
   return Object.keys(config).length === 0;
 }
 
-async function loadLatestTelegramConfig(
-  configStore: TelegramMutableConfigStore,
+async function loadLatestBaleConfig(
+  configStore: BaleMutableConfigStore,
 ): Promise<void> {
   if (!configStore.load) return;
   const before = configStore.get();
   await configStore.load();
   if (
-    !isEmptyTelegramConfig(before) &&
-    isEmptyTelegramConfig(configStore.get())
+    !isEmptyBaleConfig(before) &&
+    isEmptyBaleConfig(configStore.get())
   ) {
     configStore.set(before);
   }
 }
 
-function getInvalidTelegramConfigRecoveryPath(configPath: string): string {
+function getInvalidBaleConfigRecoveryPath(configPath: string): string {
   return `${configPath}.invalid-${process.pid}-${Date.now()}`;
 }
 
-export async function readTelegramConfig(
+export async function readBaleConfig(
   configPath: string,
   options: {
-    onInvalidConfig?: (recovery: TelegramInvalidConfigRecovery) => void;
+    onInvalidConfig?: (recovery: BaleInvalidConfigRecovery) => void;
   } = {},
-): Promise<TelegramConfig> {
+): Promise<BaleConfig> {
   if (!existsSync(configPath)) return {};
   const content = readFileSync(configPath, "utf8");
   try {
-    return JSON.parse(content) as TelegramConfig;
+    return JSON.parse(content) as BaleConfig;
   } catch {
     // Atomic config publication makes ordinary reads safe without serialization.
     // Acquire the transaction only before destructive invalid-file recovery.
-    return withTelegramFileTransaction(`${configPath}.transaction`, () => {
+    return withBaleFileTransaction(`${configPath}.transaction`, () => {
       if (!existsSync(configPath)) return {};
       const identity = statSync(configPath);
       const currentContent = readFileSync(configPath, "utf8");
       try {
-        return JSON.parse(currentContent) as TelegramConfig;
+        return JSON.parse(currentContent) as BaleConfig;
       } catch (error) {
         const currentIdentity = statSync(configPath);
         if (
@@ -399,11 +399,11 @@ export async function readTelegramConfig(
           currentIdentity.mtimeMs !== identity.mtimeMs
         ) {
           throw new Error(
-            `Telegram config changed while validating invalid content: ${configPath}`,
+            `Bale config changed while validating invalid content: ${configPath}`,
             { cause: error },
           );
         }
-        const recoveryPath = getInvalidTelegramConfigRecoveryPath(configPath);
+        const recoveryPath = getInvalidBaleConfigRecoveryPath(configPath);
         renameSync(configPath, recoveryPath);
         options.onInvalidConfig?.({ configPath, recoveryPath, error });
         return {};
@@ -412,7 +412,7 @@ export async function readTelegramConfig(
   }
 }
 
-function cloneTelegramConfig<T>(value: T): T {
+function cloneBaleConfig<T>(value: T): T {
   return structuredClone(value);
 }
 
@@ -420,12 +420,12 @@ function configValuesEqual(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function mergeTelegramConfigDelta(
+function mergeBaleConfigDelta(
   base: Record<string, unknown>,
   desired: Record<string, unknown>,
   latest: Record<string, unknown>,
 ): Record<string, unknown> {
-  const merged = cloneTelegramConfig(latest);
+  const merged = cloneBaleConfig(latest);
   for (const key of new Set([...Object.keys(base), ...Object.keys(desired)])) {
     const baseHas = Object.hasOwn(base, key);
     const desiredHas = Object.hasOwn(desired, key);
@@ -442,31 +442,31 @@ function mergeTelegramConfigDelta(
       isPlainConfigRecord(desiredValue) &&
       (!baseHas || isPlainConfigRecord(baseValue))
     ) {
-      merged[key] = mergeTelegramConfigDelta(
+      merged[key] = mergeBaleConfigDelta(
         isPlainConfigRecord(baseValue) ? baseValue : {},
         desiredValue,
         isPlainConfigRecord(merged[key]) ? merged[key] : {},
       );
       continue;
     }
-    merged[key] = cloneTelegramConfig(desiredValue);
+    merged[key] = cloneBaleConfig(desiredValue);
   }
   return merged;
 }
 
-function readTelegramConfigForTransaction(configPath: string): TelegramConfig {
+function readBaleConfigForTransaction(configPath: string): BaleConfig {
   if (!existsSync(configPath)) return {};
   const parsed: unknown = JSON.parse(readFileSync(configPath, "utf8"));
   if (!isPlainConfigRecord(parsed)) {
-    throw new Error(`Invalid Telegram config object: ${configPath}`);
+    throw new Error(`Invalid Bale config object: ${configPath}`);
   }
-  return parsed as TelegramConfig;
+  return parsed as BaleConfig;
 }
 
-function writeTelegramConfigInTransaction(
+function writeBaleConfigInTransaction(
   agentDir: string,
   configPath: string,
-  config: TelegramConfig,
+  config: BaleConfig,
 ): void {
   mkdirSync(agentDir, { recursive: true, mode: 0o700 });
   const tempConfigPath = `${configPath}.tmp-${process.pid}-${randomUUID()}`;
@@ -476,7 +476,7 @@ function writeTelegramConfigInTransaction(
   });
   chmodSync(tempConfigPath, 0o600);
   try {
-    replaceTelegramConfigFile(tempConfigPath, configPath);
+    replaceBaleConfigFile(tempConfigPath, configPath);
     chmodSync(configPath, 0o600);
   } finally {
     try {
@@ -487,19 +487,19 @@ function writeTelegramConfigInTransaction(
   }
 }
 
-export function getTelegramProfileFields(
-  config: TelegramConfig,
-): TelegramBotProfile | undefined {
+export function getBaleProfileFields(
+  config: BaleConfig,
+): BaleBotProfile | undefined {
   const token = config.botToken?.trim();
   if (!token) return undefined;
-  return { botToken: token, ...pickTelegramRootProfileFields(config) };
+  return { botToken: token, ...pickBaleRootProfileFields(config) };
 }
 
 /** Root-level profile fields other than the token, including the retired legacy cursor. */
-function pickTelegramRootProfileFields(
-  config: TelegramConfig,
-): Omit<TelegramBotProfile, "botToken"> & TelegramLegacyCursorCarrier {
-  const legacyCursor = (config as TelegramConfig & TelegramLegacyCursorCarrier)
+function pickBaleRootProfileFields(
+  config: BaleConfig,
+): Omit<BaleBotProfile, "botToken"> & BaleLegacyCursorCarrier {
+  const legacyCursor = (config as BaleConfig & BaleLegacyCursorCarrier)
     .lastUpdateId;
   return {
     ...(config.botUsername !== undefined
@@ -513,7 +513,7 @@ function pickTelegramRootProfileFields(
   };
 }
 
-function omitTelegramRootProfileFields(config: TelegramConfig): TelegramConfig {
+function omitBaleRootProfileFields(config: BaleConfig): BaleConfig {
   const {
     botToken: _botToken,
     botUsername: _botUsername,
@@ -521,16 +521,16 @@ function omitTelegramRootProfileFields(config: TelegramConfig): TelegramConfig {
     allowedUserId: _allowedUserId,
     lastUpdateId: _lastUpdateId,
     ...sharedConfig
-  } = config as TelegramConfig & TelegramLegacyCursorCarrier;
+  } = config as BaleConfig & BaleLegacyCursorCarrier;
   return sharedConfig;
 }
 
-function omitRetiredProactivePush(config: TelegramConfig): {
-  config: TelegramConfig;
+function omitRetiredProactivePush(config: BaleConfig): {
+  config: BaleConfig;
   changed: boolean;
 } {
   const assistant = config.assistant as
-    | (NonNullable<TelegramConfig["assistant"]> & { proactivePush?: unknown })
+    | (NonNullable<BaleConfig["assistant"]> & { proactivePush?: unknown })
     | undefined;
   if (!assistant || !Object.hasOwn(assistant, "proactivePush")) {
     return { config, changed: false };
@@ -545,8 +545,8 @@ function omitRetiredProactivePush(config: TelegramConfig): {
   return { config: next, changed: true };
 }
 
-export function normalizeTelegramDefaultProfileConfig(config: TelegramConfig): {
-  config: TelegramConfig;
+export function normalizeBaleDefaultProfileConfig(config: BaleConfig): {
+  config: BaleConfig;
   changed: boolean;
 } {
   const retiredProactivePush = omitRetiredProactivePush(config);
@@ -561,85 +561,85 @@ export function normalizeTelegramDefaultProfileConfig(config: TelegramConfig): {
   if (!hasLegacyRootProfile) {
     return { config, changed: retiredProactivePush.changed };
   }
-  const canonicalProfile = config.profiles?.[TELEGRAM_DEFAULT_PROFILE_NAME];
+  const canonicalProfile = config.profiles?.[BALE_DEFAULT_PROFILE_NAME];
   const legacyToken = config.botToken?.trim();
   if (Object.hasOwn(config, "botToken") && !legacyToken) {
-    throw new Error("Legacy Telegram default profile has no bot token");
+    throw new Error("Legacy Bale default profile has no bot token");
   }
-  const legacyProfile: Partial<TelegramBotProfile> &
-    TelegramLegacyCursorCarrier = {
+  const legacyProfile: Partial<BaleBotProfile> &
+    BaleLegacyCursorCarrier = {
     ...(legacyToken ? { botToken: legacyToken } : {}),
-    ...pickTelegramRootProfileFields(config),
+    ...pickBaleRootProfileFields(config),
   };
   if (!canonicalProfile && !legacyToken) {
-    throw new Error("Legacy Telegram default profile has no bot token");
+    throw new Error("Legacy Bale default profile has no bot token");
   }
   const hasConflict = canonicalProfile
     ? Object.entries(legacyProfile).some(
         ([field, value]) =>
           Object.hasOwn(canonicalProfile, field) &&
           !configValuesEqual(
-            canonicalProfile[field as keyof TelegramBotProfile],
+            canonicalProfile[field as keyof BaleBotProfile],
             value,
           ),
       )
     : false;
   if (hasConflict) {
     throw new Error(
-      "Conflicting Telegram default profile identity at root and profiles.default",
+      "Conflicting Bale default profile identity at root and profiles.default",
     );
   }
-  const normalizedProfile: TelegramBotProfile = canonicalProfile
+  const normalizedProfile: BaleBotProfile = canonicalProfile
     ? { ...legacyProfile, ...canonicalProfile }
-    : (legacyProfile as TelegramBotProfile);
+    : (legacyProfile as BaleBotProfile);
   return {
     config: {
-      ...omitTelegramRootProfileFields(config),
+      ...omitBaleRootProfileFields(config),
       profiles: {
         ...(config.profiles ?? {}),
-        [TELEGRAM_DEFAULT_PROFILE_NAME]: normalizedProfile,
+        [BALE_DEFAULT_PROFILE_NAME]: normalizedProfile,
       },
     },
     changed: true,
   };
 }
 
-function applyTelegramProfile(
-  config: TelegramConfig,
+function applyBaleProfile(
+  config: BaleConfig,
   profileName: string | undefined,
-): TelegramConfig {
-  const effectiveProfileName = profileName ?? TELEGRAM_DEFAULT_PROFILE_NAME;
+): BaleConfig {
+  const effectiveProfileName = profileName ?? BALE_DEFAULT_PROFILE_NAME;
   const profile = config.profiles?.[effectiveProfileName];
-  if (!profile) return omitTelegramRootProfileFields(config);
+  if (!profile) return omitBaleRootProfileFields(config);
   return {
-    ...omitTelegramRootProfileFields(config),
+    ...omitBaleRootProfileFields(config),
     ...profile,
   };
 }
 
-function storeTelegramEffectiveConfig(
-  baseConfig: TelegramConfig,
-  nextConfig: TelegramConfig,
+function storeBaleEffectiveConfig(
+  baseConfig: BaleConfig,
+  nextConfig: BaleConfig,
   profileName: string | undefined,
-): TelegramConfig {
-  const effectiveProfileName = profileName ?? TELEGRAM_DEFAULT_PROFILE_NAME;
-  const profile = getTelegramProfileFields(nextConfig);
+): BaleConfig {
+  const effectiveProfileName = profileName ?? BALE_DEFAULT_PROFILE_NAME;
+  const profile = getBaleProfileFields(nextConfig);
   const profiles = { ...(baseConfig.profiles ?? {}) };
   if (profile) profiles[effectiveProfileName] = profile;
   else delete profiles[effectiveProfileName];
   return {
-    ...omitTelegramRootProfileFields(nextConfig),
+    ...omitBaleRootProfileFields(nextConfig),
     profiles: Object.keys(profiles).length > 0 ? profiles : undefined,
   };
 }
 
-export function createTelegramConfigStore(
-  options: TelegramConfigStoreOptions = {},
-): TelegramConfigStore {
-  let config: TelegramConfig = normalizeTelegramDefaultProfileConfig(
-    cloneTelegramConfig(options.initialConfig ?? {}),
+export function createBaleConfigStore(
+  options: BaleConfigStoreOptions = {},
+): BaleConfigStore {
+  let config: BaleConfig = normalizeBaleDefaultProfileConfig(
+    cloneBaleConfig(options.initialConfig ?? {}),
   ).config;
-  let persistedConfig: TelegramConfig = {};
+  let persistedConfig: BaleConfig = {};
   let mutationVersion = 0;
   let persistQueue: Promise<void> = Promise.resolve();
   let activeProfileName: string | undefined;
@@ -648,9 +648,9 @@ export function createTelegramConfigStore(
   const configPath = options.configPath ?? getConfigPath();
   const env = options.env ?? process.env;
   const getEffectiveConfig = () =>
-    applyTelegramProfile(config, activeProfileName);
-  const setEffectiveConfig = (nextConfig: TelegramConfig) => {
-    config = storeTelegramEffectiveConfig(
+    applyBaleProfile(config, activeProfileName);
+  const setEffectiveConfig = (nextConfig: BaleConfig) => {
+    config = storeBaleEffectiveConfig(
       config,
       nextConfig,
       activeProfileName,
@@ -658,38 +658,38 @@ export function createTelegramConfigStore(
     mutationVersion += 1;
   };
   const adoptPersistedConfig = (
-    merged: TelegramConfig,
+    merged: BaleConfig,
     preserveLocalChanges: boolean,
   ) => {
     // Local edits are relative to the latest observation, not a queued write's older request baseline.
     const nextConfig = preserveLocalChanges
-      ? (mergeTelegramConfigDelta(
+      ? (mergeBaleConfigDelta(
           persistedConfig as Record<string, unknown>,
           config as Record<string, unknown>,
           merged as Record<string, unknown>,
-        ) as TelegramConfig)
-      : cloneTelegramConfig(merged);
-    persistedConfig = cloneTelegramConfig(merged);
+        ) as BaleConfig)
+      : cloneBaleConfig(merged);
+    persistedConfig = cloneBaleConfig(merged);
     config = nextConfig;
   };
   const withPersistedPairingProfile = <T>(
     profileName: string,
     tokenSha256: string,
-    observe: (latest: TelegramConfig, profile: TelegramBotProfile) => T,
+    observe: (latest: BaleConfig, profile: BaleBotProfile) => T,
   ): T => {
     if (
-      (profileName !== TELEGRAM_DEFAULT_PROFILE_NAME &&
-        !isValidTelegramProfileName(profileName)) ||
+      (profileName !== BALE_DEFAULT_PROFILE_NAME &&
+        !isValidBaleProfileName(profileName)) ||
       !/^[a-f0-9]{64}$/u.test(tokenSha256)
     ) {
-      throw new Error("Invalid Telegram pairing admission identity.");
+      throw new Error("Invalid Bale pairing admission identity.");
     }
-    return withTelegramFileTransaction(`${configPath}.transaction`, () => {
-      const latest = readTelegramConfigForTransaction(configPath);
+    return withBaleFileTransaction(`${configPath}.transaction`, () => {
+      const latest = readBaleConfigForTransaction(configPath);
       const profile = latest.profiles?.[profileName];
       const resolvedToken =
         typeof profile?.botToken === "string"
-          ? resolveTelegramBotToken(profile.botToken, env)
+          ? resolveBaleBotToken(profile.botToken, env)
           : undefined;
       if (
         !profile ||
@@ -701,7 +701,7 @@ export function createTelegramConfigStore(
             profile.allowedUserId <= 0))
       ) {
         throw new Error(
-          "Telegram pairing admission authority is unavailable or changed.",
+          "Bale pairing admission authority is unavailable or changed.",
         );
       }
       return observe(latest, profile);
@@ -713,10 +713,10 @@ export function createTelegramConfigStore(
     set: setEffectiveConfig,
     setProfile: (profileName, profile) => {
       config = {
-        ...omitTelegramRootProfileFields(config),
+        ...omitBaleRootProfileFields(config),
         profiles: {
           ...(config.profiles ?? {}),
-          [profileName]: cloneTelegramConfig(profile),
+          [profileName]: cloneBaleConfig(profile),
         },
       };
       mutationVersion += 1;
@@ -728,7 +728,7 @@ export function createTelegramConfigStore(
     },
     activateProfile: (profileName) => {
       const normalizedProfileName =
-        !profileName || profileName === TELEGRAM_DEFAULT_PROFILE_NAME
+        !profileName || profileName === BALE_DEFAULT_PROFILE_NAME
           ? undefined
           : profileName;
       if (normalizedProfileName && !config.profiles?.[normalizedProfileName]) {
@@ -739,19 +739,19 @@ export function createTelegramConfigStore(
     },
     getActiveProfileName: () => activeProfileName,
     getBotToken: () =>
-      resolveTelegramBotToken(getEffectiveConfig().botToken, env),
+      resolveBaleBotToken(getEffectiveConfig().botToken, env),
     getBotTokenDiagnostic: () =>
-      getTelegramBotTokenDiagnostic(getEffectiveConfig().botToken, env),
+      getBaleBotTokenDiagnostic(getEffectiveConfig().botToken, env),
     hasBotToken: () =>
-      !!resolveTelegramBotToken(getEffectiveConfig().botToken, env),
+      !!resolveBaleBotToken(getEffectiveConfig().botToken, env),
     getAllowedUserId: () => getEffectiveConfig().allowedUserId,
     getLegacyPollingCursor: () =>
-      (getEffectiveConfig() as TelegramConfig & TelegramLegacyCursorCarrier)
+      (getEffectiveConfig() as BaleConfig & BaleLegacyCursorCarrier)
         .lastUpdateId,
     removeLegacyPollingCursor: () => {
       const next = {
-        ...(getEffectiveConfig() as TelegramConfig &
-          TelegramLegacyCursorCarrier),
+        ...(getEffectiveConfig() as BaleConfig &
+          BaleLegacyCursorCarrier),
       };
       delete next.lastUpdateId;
       setEffectiveConfig(next);
@@ -793,7 +793,7 @@ export function createTelegramConfigStore(
           const previousOwner =
             persistedConfig.profiles?.[profileName]?.allowedUserId;
           if (
-            (activeProfileName ?? TELEGRAM_DEFAULT_PROFILE_NAME) !==
+            (activeProfileName ?? BALE_DEFAULT_PROFILE_NAME) !==
               profileName ||
             current.botToken !== profile.botToken ||
             (current.allowedUserId !== undefined &&
@@ -801,7 +801,7 @@ export function createTelegramConfigStore(
             (current.allowedUserId === undefined && previousOwner !== undefined)
           ) {
             throw new Error(
-              "Telegram paired admission lost local profile authority.",
+              "Bale paired admission lost local profile authority.",
             );
           }
           // Observation is not a local edit; queued persistence still adopts its own fresh disk result.
@@ -812,7 +812,7 @@ export function createTelegramConfigStore(
     },
     persistAllowedUserId: (userId, assertExecutionCurrent, commitIfOwned) => {
       const profileName = activeProfileName;
-      const profileKey = profileName ?? TELEGRAM_DEFAULT_PROFILE_NAME;
+      const profileKey = profileName ?? BALE_DEFAULT_PROFILE_NAME;
       const botToken = getEffectiveConfig().botToken;
       const previousOwner = getEffectiveConfig().allowedUserId;
       const assertCurrent = () => {
@@ -823,24 +823,24 @@ export function createTelegramConfigStore(
           getEffectiveConfig().allowedUserId !== previousOwner
         ) {
           throw new Error(
-            "Telegram pairing lost its originating profile authority.",
+            "Bale pairing lost its originating profile authority.",
           );
         }
       };
       const pairing = persistQueue.then(() => {
         assertCurrent();
         if (!Number.isSafeInteger(userId) || userId <= 0)
-          throw new Error("Invalid Telegram pairing user ID.");
-        let merged: TelegramConfig | undefined;
+          throw new Error("Invalid Bale pairing user ID.");
+        let merged: BaleConfig | undefined;
         const publish = () => {
-          merged = withTelegramFileTransaction(
+          merged = withBaleFileTransaction(
             `${configPath}.transaction`,
             () => {
-              const latest = readTelegramConfigForTransaction(configPath);
+              const latest = readBaleConfigForTransaction(configPath);
               const profile = latest.profiles?.[profileKey];
               if (!botToken || profile?.botToken !== botToken) {
                 throw new Error(
-                  "Telegram pairing profile is unavailable or changed.",
+                  "Bale pairing profile is unavailable or changed.",
                 );
               }
               assertCurrent();
@@ -852,7 +852,7 @@ export function createTelegramConfigStore(
                   [profileKey]: { ...profile, allowedUserId: userId },
                 },
               };
-              writeTelegramConfigInTransaction(agentDir, configPath, next);
+              writeBaleConfigInTransaction(agentDir, configPath, next);
               return next;
             },
           );
@@ -860,13 +860,13 @@ export function createTelegramConfigStore(
         if (commitIfOwned) {
           if (!commitIfOwned(publish))
             throw new Error(
-              "Telegram pairing lost transport ownership before publication.",
+              "Bale pairing lost transport ownership before publication.",
             );
         } else {
           publish();
         }
         if (!merged)
-          throw new Error("Telegram pairing publication did not execute.");
+          throw new Error("Bale pairing publication did not execute.");
         adoptPersistedConfig(merged, true);
         return merged.profiles?.[profileKey]?.allowedUserId === userId;
       });
@@ -878,7 +878,7 @@ export function createTelegramConfigStore(
     },
     load: async () => {
       lastLoadRecoveredInvalidConfig = false;
-      const loadedConfig = await readTelegramConfig(configPath, {
+      const loadedConfig = await readBaleConfig(configPath, {
         onInvalidConfig: (recovery) => {
           lastLoadRecoveredInvalidConfig = true;
           options.recordRuntimeEvent?.("config", recovery.error, {
@@ -888,9 +888,9 @@ export function createTelegramConfigStore(
           });
         },
       });
-      let normalized: ReturnType<typeof normalizeTelegramDefaultProfileConfig>;
+      let normalized: ReturnType<typeof normalizeBaleDefaultProfileConfig>;
       try {
-        normalized = normalizeTelegramDefaultProfileConfig(loadedConfig);
+        normalized = normalizeBaleDefaultProfileConfig(loadedConfig);
       } catch (error) {
         options.recordRuntimeEvent?.("config", error, {
           phase: "default-profile-normalize",
@@ -899,12 +899,12 @@ export function createTelegramConfigStore(
         throw error;
       }
       config = normalized.changed
-        ? withTelegramFileTransaction(`${configPath}.transaction`, () => {
-            const latestConfig = readTelegramConfigForTransaction(configPath);
+        ? withBaleFileTransaction(`${configPath}.transaction`, () => {
+            const latestConfig = readBaleConfigForTransaction(configPath);
             const latestNormalized =
-              normalizeTelegramDefaultProfileConfig(latestConfig);
+              normalizeBaleDefaultProfileConfig(latestConfig);
             if (latestNormalized.changed) {
-              writeTelegramConfigInTransaction(
+              writeBaleConfigInTransaction(
                 agentDir,
                 configPath,
                 latestNormalized.config,
@@ -913,36 +913,36 @@ export function createTelegramConfigStore(
             return latestNormalized.config;
           })
         : normalized.config;
-      persistedConfig = cloneTelegramConfig(config);
+      persistedConfig = cloneBaleConfig(config);
       mutationVersion += 1;
     },
     didLastLoadRecoverInvalidConfig: () => lastLoadRecoveredInvalidConfig,
     persist: (nextConfig = getEffectiveConfig(), options) => {
       const profileName = activeProfileName;
-      const desiredConfig = storeTelegramEffectiveConfig(
+      const desiredConfig = storeBaleEffectiveConfig(
         config,
-        cloneTelegramConfig(nextConfig),
+        cloneBaleConfig(nextConfig),
         profileName,
       );
-      const baseConfig = cloneTelegramConfig(persistedConfig);
+      const baseConfig = cloneBaleConfig(persistedConfig);
       const capturedMutationVersion = mutationVersion;
       const persist = persistQueue.then(() => {
-        const mergedConfig = withTelegramFileTransaction(
+        const mergedConfig = withBaleFileTransaction(
           `${configPath}.transaction`,
           () => {
             if (options?.isCurrent && !options.isCurrent()) {
               throw new Error(
-                "Telegram config update lost its originating authority.",
+                "Bale config update lost its originating authority.",
               );
             }
-            const latestConfig = readTelegramConfigForTransaction(configPath);
-            const merged = mergeTelegramConfigDelta(
+            const latestConfig = readBaleConfigForTransaction(configPath);
+            const merged = mergeBaleConfigDelta(
               baseConfig as Record<string, unknown>,
               desiredConfig as Record<string, unknown>,
               latestConfig as Record<string, unknown>,
-            ) as TelegramConfig;
+            ) as BaleConfig;
             if (!configValuesEqual(latestConfig, merged)) {
-              writeTelegramConfigInTransaction(agentDir, configPath, merged);
+              writeBaleConfigInTransaction(agentDir, configPath, merged);
             }
             return merged;
           },
@@ -958,8 +958,8 @@ export function createTelegramConfigStore(
   };
 }
 
-function createTelegramDraftPreviewsChecker(
-  configStore: Pick<TelegramConfigStore, "get">,
+function createBaleDraftPreviewsChecker(
+  configStore: Pick<BaleConfigStore, "get">,
 ): () => boolean {
   return () => {
     const config = configStore.get();
@@ -967,16 +967,16 @@ function createTelegramDraftPreviewsChecker(
       config.assistant?.draftPreviews ??
       config.draftPreviews ??
       config.richDraftPreviews ??
-      true
+      false
     );
   };
 }
 
-function createTelegramDraftPreviewsSetter(
-  configStore: TelegramMutableConfigStore,
+function createBaleDraftPreviewsSetter(
+  configStore: BaleMutableConfigStore,
 ): (enabled: boolean) => Promise<void> {
   return async (enabled) => {
-    await loadLatestTelegramConfig(configStore);
+    await loadLatestBaleConfig(configStore);
     const {
       draftPreviews: _legacyDraftPreviews,
       richDraftPreviews: _legacyRichDraftPreviews,
@@ -991,21 +991,21 @@ function createTelegramDraftPreviewsSetter(
   };
 }
 
-function createTelegramAssistantRenderingModeGetter(
-  configStore: Pick<TelegramConfigStore, "get">,
-): () => TelegramAssistantRenderingMode {
+function createBaleAssistantRenderingModeGetter(
+  configStore: Pick<BaleConfigStore, "get">,
+): () => BaleAssistantRenderingMode {
   return () => {
     const config = configStore.get();
     const mode = config.assistant?.rendering ?? config.assistantRendering;
-    return mode === "html" ? "html" : "rich";
+    return mode === "rich" ? "rich" : "html";
   };
 }
 
-function createTelegramAssistantRenderingModeSetter(
-  configStore: TelegramMutableConfigStore,
-): (mode: TelegramAssistantRenderingMode) => Promise<void> {
+function createBaleAssistantRenderingModeSetter(
+  configStore: BaleMutableConfigStore,
+): (mode: BaleAssistantRenderingMode) => Promise<void> {
   return async (mode) => {
-    await loadLatestTelegramConfig(configStore);
+    await loadLatestBaleConfig(configStore);
     const { assistantRendering: _legacyAssistantRendering, ...current } =
       configStore.get();
     const config = {
@@ -1017,9 +1017,9 @@ function createTelegramAssistantRenderingModeSetter(
   };
 }
 
-function createTelegramActivityVerbosityGetter(
-  configStore: Pick<TelegramConfigStore, "get">,
-): () => TelegramActivityVerbosity {
+function createBaleActivityVerbosityGetter(
+  configStore: Pick<BaleConfigStore, "get">,
+): () => BaleActivityVerbosity {
   return () => {
     const assistant = configStore.get().assistant;
     if (assistant?.activity !== undefined) {
@@ -1035,21 +1035,21 @@ function createTelegramActivityVerbosityGetter(
     if (assistant?.activityVerbosity !== undefined) {
       return assistant.activityVerbosity === "verbose" ? "verbose" : "quiet";
     }
-    return "verbose";
+    return "quiet";
   };
 }
 
-function createTelegramActivityVerbosityRefresher(
-  configStore: TelegramMutableConfigStore,
+function createBaleActivityVerbosityRefresher(
+  configStore: BaleMutableConfigStore,
 ): () => Promise<void> {
-  return () => loadLatestTelegramConfig(configStore);
+  return () => loadLatestBaleConfig(configStore);
 }
 
-function createTelegramActivityVerbositySetter(
-  configStore: TelegramMutableConfigStore,
-): (verbosity: TelegramActivityVerbosity) => Promise<void> {
+function createBaleActivityVerbositySetter(
+  configStore: BaleMutableConfigStore,
+): (verbosity: BaleActivityVerbosity) => Promise<void> {
   return async (verbosity) => {
-    await loadLatestTelegramConfig(configStore);
+    await loadLatestBaleConfig(configStore);
     const current = configStore.get();
     const { activityVerbosity: _legacyActivityVerbosity, ...assistant } =
       current.assistant ?? {};
@@ -1065,8 +1065,8 @@ function createTelegramActivityVerbositySetter(
   };
 }
 
-export function createTelegramVoiceReplyModeGetter(
-  configStore: Pick<TelegramConfigStore, "get">,
+export function createBaleVoiceReplyModeGetter(
+  configStore: Pick<BaleConfigStore, "get">,
 ): () => "manual" | "mirror" | "always" {
   return () => {
     const mode = configStore.get().voice?.replyMode;
@@ -1074,8 +1074,8 @@ export function createTelegramVoiceReplyModeGetter(
   };
 }
 
-export function createTelegramVoiceReplyModeConfiguredChecker(
-  configStore: Pick<TelegramConfigStore, "get">,
+export function createBaleVoiceReplyModeConfiguredChecker(
+  configStore: Pick<BaleConfigStore, "get">,
 ): () => boolean {
   return () => {
     const mode = configStore.get().voice?.replyMode;
@@ -1083,13 +1083,13 @@ export function createTelegramVoiceReplyModeConfiguredChecker(
   };
 }
 
-export function createTelegramVoiceReplyModeSetter(
-  configStore: TelegramMutableConfigStore,
+export function createBaleVoiceReplyModeSetter(
+  configStore: BaleMutableConfigStore,
 ): (
   replyMode: "manual" | "hidden" | "mirror" | "always" | undefined,
 ) => Promise<void> {
   return async (replyMode) => {
-    await loadLatestTelegramConfig(configStore);
+    await loadLatestBaleConfig(configStore);
     const current = configStore.get();
     if (
       replyMode === undefined ||
@@ -1119,11 +1119,11 @@ function getSystemTimezone(): string {
   }
 }
 
-export function resolveTelegramTimeConfig(
-  raw: TelegramTimeConfig | undefined,
-  timeInjection: TelegramTimeMode | undefined = undefined,
-): ResolvedTelegramTimeConfig {
-  const injectionMode: TelegramTimeMode =
+export function resolveBaleTimeConfig(
+  raw: BaleTimeConfig | undefined,
+  timeInjection: BaleTimeMode | undefined = undefined,
+): ResolvedBaleTimeConfig {
+  const injectionMode: BaleTimeMode =
     timeInjection === undefined
       ? "interval"
       : timeInjection === "always" || timeInjection === "interval"
@@ -1137,35 +1137,35 @@ export function resolveTelegramTimeConfig(
   return { injectionMode, interval, timezone };
 }
 
-export function createTelegramTimeConfigGetter(
-  configStore: Pick<TelegramConfigStore, "get">,
-): () => ResolvedTelegramTimeConfig {
+export function createBaleTimeConfigGetter(
+  configStore: Pick<BaleConfigStore, "get">,
+): () => ResolvedBaleTimeConfig {
   return () => {
     const config = configStore.get();
-    return resolveTelegramTimeConfig(
+    return resolveBaleTimeConfig(
       config.time,
       config.assistant?.timeInjection,
     );
   };
 }
 
-export function createTelegramTimeInjectionModeGetter(
-  configStore: Pick<TelegramConfigStore, "get">,
-): () => TelegramTimeMode {
+export function createBaleTimeInjectionModeGetter(
+  configStore: Pick<BaleConfigStore, "get">,
+): () => BaleTimeMode {
   return () => {
     const config = configStore.get();
-    return resolveTelegramTimeConfig(
+    return resolveBaleTimeConfig(
       config.time,
       config.assistant?.timeInjection,
     ).injectionMode;
   };
 }
 
-export function createTelegramTimeInjectionModeSetter(
-  configStore: TelegramMutableConfigStore,
-): (injectionMode: TelegramTimeMode) => Promise<void> {
+export function createBaleTimeInjectionModeSetter(
+  configStore: BaleMutableConfigStore,
+): (injectionMode: BaleTimeMode) => Promise<void> {
   return async (injectionMode) => {
-    await loadLatestTelegramConfig(configStore);
+    await loadLatestBaleConfig(configStore);
     const current = configStore.get();
     const next = {
       ...current,
@@ -1179,22 +1179,22 @@ export function createTelegramTimeInjectionModeSetter(
   };
 }
 
-export interface TelegramProactivePushTarget {
+export interface BaleProactivePushTarget {
   chatId: number;
   threadId?: number;
 }
 
-export function createTelegramProactivePushChatIdGetter(
-  getTarget: () => TelegramProactivePushTarget | undefined,
+export function createBaleProactivePushChatIdGetter(
+  getTarget: () => BaleProactivePushTarget | undefined,
 ): () => number | undefined {
   return () => getTarget()?.chatId;
 }
 
-export function createTelegramProactivePushTargetGetter(deps: {
-  getActiveTurnTarget: () => TelegramProactivePushTarget | undefined;
-  getAssignedTarget: () => TelegramProactivePushTarget | undefined;
+export function createBaleProactivePushTargetGetter(deps: {
+  getActiveTurnTarget: () => BaleProactivePushTarget | undefined;
+  getAssignedTarget: () => BaleProactivePushTarget | undefined;
   getAllowedUserId: () => number | undefined;
-}): () => TelegramProactivePushTarget | undefined {
+}): () => BaleProactivePushTarget | undefined {
   return () => {
     const activeTarget = deps.getActiveTurnTarget();
     if (activeTarget) return activeTarget;
@@ -1205,31 +1205,31 @@ export function createTelegramProactivePushTargetGetter(deps: {
   };
 }
 
-function createTelegramAutomaticThreadCleanupChecker(
-  configStore: Pick<TelegramConfigStore, "get">,
+function createBaleAutomaticThreadCleanupChecker(
+  configStore: Pick<BaleConfigStore, "get">,
 ): () => boolean {
   return () => configStore.get().threads?.automaticCleanup ?? true;
 }
 
-function createTelegramAutomaticThreadCleanupResolver(
-  configStore: TelegramMutableConfigStore,
+function createBaleAutomaticThreadCleanupResolver(
+  configStore: BaleMutableConfigStore,
 ): () => Promise<boolean> {
   return async () => {
-    await loadLatestTelegramConfig(configStore);
+    await loadLatestBaleConfig(configStore);
     if (configStore.didLastLoadRecoverInvalidConfig?.()) {
       throw new Error(
-        "Thread cleanup setting is unavailable after invalid Telegram config recovery.",
+        "Thread cleanup setting is unavailable after invalid Bale config recovery.",
       );
     }
-    return createTelegramAutomaticThreadCleanupChecker(configStore)();
+    return createBaleAutomaticThreadCleanupChecker(configStore)();
   };
 }
 
-function createTelegramAutomaticThreadCleanupSetter(
-  configStore: TelegramMutableConfigStore,
+function createBaleAutomaticThreadCleanupSetter(
+  configStore: BaleMutableConfigStore,
 ): (enabled: boolean) => Promise<void> {
   return async (enabled) => {
-    await loadLatestTelegramConfig(configStore);
+    await loadLatestBaleConfig(configStore);
     const current = configStore.get();
     const config = {
       ...current,
@@ -1240,53 +1240,53 @@ function createTelegramAutomaticThreadCleanupSetter(
   };
 }
 
-export function createTelegramConfigControls(
-  configStore: TelegramMutableConfigStore,
+export function createBaleConfigControls(
+  configStore: BaleMutableConfigStore,
 ) {
   return {
-    areDraftPreviewsEnabled: createTelegramDraftPreviewsChecker(configStore),
-    setDraftPreviewsEnabled: createTelegramDraftPreviewsSetter(configStore),
+    areDraftPreviewsEnabled: createBaleDraftPreviewsChecker(configStore),
+    setDraftPreviewsEnabled: createBaleDraftPreviewsSetter(configStore),
     getAssistantRenderingMode:
-      createTelegramAssistantRenderingModeGetter(configStore),
+      createBaleAssistantRenderingModeGetter(configStore),
     setAssistantRenderingMode:
-      createTelegramAssistantRenderingModeSetter(configStore),
-    getActivityVerbosity: createTelegramActivityVerbosityGetter(configStore),
+      createBaleAssistantRenderingModeSetter(configStore),
+    getActivityVerbosity: createBaleActivityVerbosityGetter(configStore),
     refreshActivityVerbosity:
-      createTelegramActivityVerbosityRefresher(configStore),
-    setActivityVerbosity: createTelegramActivityVerbositySetter(configStore),
-    getVoiceReplyMode: createTelegramVoiceReplyModeGetter(configStore),
+      createBaleActivityVerbosityRefresher(configStore),
+    setActivityVerbosity: createBaleActivityVerbositySetter(configStore),
+    getVoiceReplyMode: createBaleVoiceReplyModeGetter(configStore),
     isVoiceReplyModeConfigured:
-      createTelegramVoiceReplyModeConfiguredChecker(configStore),
-    setVoiceReplyMode: createTelegramVoiceReplyModeSetter(configStore),
-    getTimeInjectionMode: createTelegramTimeInjectionModeGetter(configStore),
-    setTimeInjectionMode: createTelegramTimeInjectionModeSetter(configStore),
+      createBaleVoiceReplyModeConfiguredChecker(configStore),
+    setVoiceReplyMode: createBaleVoiceReplyModeSetter(configStore),
+    getTimeInjectionMode: createBaleTimeInjectionModeGetter(configStore),
+    setTimeInjectionMode: createBaleTimeInjectionModeSetter(configStore),
     isAutomaticThreadCleanupEnabled:
-      createTelegramAutomaticThreadCleanupChecker(configStore),
+      createBaleAutomaticThreadCleanupChecker(configStore),
     resolveAutomaticThreadCleanupEnabled:
-      createTelegramAutomaticThreadCleanupResolver(configStore),
+      createBaleAutomaticThreadCleanupResolver(configStore),
     setAutomaticThreadCleanupEnabled:
-      createTelegramAutomaticThreadCleanupSetter(configStore),
+      createBaleAutomaticThreadCleanupSetter(configStore),
   };
 }
 
-export type TelegramAuthorizationState =
+export type BaleAuthorizationState =
   { kind: "pair"; userId: number } | { kind: "allow" } | { kind: "deny" };
 
-export interface TelegramUserPairingDeps<TContext> {
+export interface BaleUserPairingDeps<TContext> {
   allowedUserId?: number;
   ctx: TContext;
-  persistAllowedUserId: TelegramConfigStore["persistAllowedUserId"];
+  persistAllowedUserId: BaleConfigStore["persistAllowedUserId"];
   updateStatus: (ctx: TContext) => void;
   assertExecutionCurrent?: () => void;
 }
 
-export interface TelegramUserPairingRuntimeDeps<TContext> {
+export interface BaleUserPairingRuntimeDeps<TContext> {
   getAllowedUserId: () => number | undefined;
-  persistAllowedUserId: TelegramConfigStore["persistAllowedUserId"];
+  persistAllowedUserId: BaleConfigStore["persistAllowedUserId"];
   updateStatus: (ctx: TContext) => void;
 }
 
-export interface TelegramUserPairingRuntime<TContext> {
+export interface BaleUserPairingRuntime<TContext> {
   /** True means this user is authorized, whether newly paired or already configured. */
   pairIfNeeded: (
     userId: number,
@@ -1295,10 +1295,10 @@ export interface TelegramUserPairingRuntime<TContext> {
   ) => Promise<boolean>;
 }
 
-export function getTelegramAuthorizationState(
+export function getBaleAuthorizationState(
   userId: number,
   allowedUserId?: number,
-): TelegramAuthorizationState {
+): BaleAuthorizationState {
   if (allowedUserId === undefined) {
     return { kind: "pair", userId };
   }
@@ -1308,11 +1308,11 @@ export function getTelegramAuthorizationState(
   return { kind: "deny" };
 }
 
-export async function pairTelegramUserIfNeeded<TContext>(
+export async function pairBaleUserIfNeeded<TContext>(
   userId: number,
-  deps: TelegramUserPairingDeps<TContext>,
+  deps: BaleUserPairingDeps<TContext>,
 ): Promise<boolean> {
-  const authorization = getTelegramAuthorizationState(
+  const authorization = getBaleAuthorizationState(
     userId,
     deps.allowedUserId,
   );
@@ -1332,12 +1332,12 @@ export async function pairTelegramUserIfNeeded<TContext>(
   return true;
 }
 
-export function createTelegramUserPairingRuntime<TContext>(
-  deps: TelegramUserPairingRuntimeDeps<TContext>,
-): TelegramUserPairingRuntime<TContext> {
+export function createBaleUserPairingRuntime<TContext>(
+  deps: BaleUserPairingRuntimeDeps<TContext>,
+): BaleUserPairingRuntime<TContext> {
   return {
     pairIfNeeded: (userId, ctx, assertExecutionCurrent) =>
-      pairTelegramUserIfNeeded(userId, {
+      pairBaleUserIfNeeded(userId, {
         allowedUserId: deps.getAllowedUserId(),
         ctx,
         persistAllowedUserId: deps.persistAllowedUserId,

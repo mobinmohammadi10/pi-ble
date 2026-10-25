@@ -1,5 +1,5 @@
 /**
- * Telegram runtime storage housekeeping
+ * Bale runtime storage housekeeping
  * Zones: filesystem diagnostics, unclean-shutdown recovery
  * Owns best-effort removal of obsolete recovery folders and orphaned session journal families
  */
@@ -7,8 +7,8 @@
  * Remove recovery folders written by earlier releases (runtime root and session folders).
  * Current releases delete damaged files instead of quarantining them; nothing reads these copies.
  */
-export declare function removeTelegramLegacyRecoveryStorage(runtimeDir: string): string[];
-export interface TelegramSessionFolderSweeperDeps {
+export declare function removeBaleLegacyRecoveryStorage(runtimeDir: string): string[];
+export interface BaleSessionFolderSweeperDeps {
     getSessionsDir: () => string;
     getProfileName: () => string | undefined;
     /** Sessions holding a Workspace slot binding, live registrations and this process's own session. */
@@ -20,6 +20,6 @@ export interface TelegramSessionFolderSweeperDeps {
  * Leader housekeeping (operator policy): a session without a Workspace slot loses its
  * current-profile journal family; the folder disappears once no profile uses it.
  */
-export declare function createTelegramSessionFolderSweeper(deps: TelegramSessionFolderSweeperDeps): {
+export declare function createBaleSessionFolderSweeper(deps: BaleSessionFolderSweeperDeps): {
     sweep: () => string[];
 };

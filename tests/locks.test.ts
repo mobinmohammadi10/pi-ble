@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram transport ownership helpers
+ * Regression tests for Bale transport ownership helpers
  * Covers owners.json authority, stale-owner replacement, and owner-gated polling behavior
  */
 
@@ -20,45 +20,45 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import test from "node:test";
 import { runNodeEval } from "./fixtures/node-eval.ts";
-import { createTelegramJournalSourceSerialization, createTelegramUpdateJournalBindingRuntime } from "../lib/journal.ts";
+import { createBaleJournalSourceSerialization, createBaleUpdateJournalBindingRuntime } from "../lib/journal.ts";
 import {
-  resolveTelegramOwnersPath,
-  resolveTelegramSessionsDir,
-  resolveTelegramTempDir,
+  resolveBaleOwnersPath,
+  resolveBaleSessionsDir,
+  resolveBaleTempDir,
 } from "../lib/paths.ts";
-import { createTelegramSessionFolderSweeper } from "../lib/recovery.ts";
+import { createBaleSessionFolderSweeper } from "../lib/recovery.ts";
 import {
-  createTelegramLockedPollingRuntime,
-  createTelegramLockKeyResolver,
-  createTelegramLockRuntime,
+  createBaleLockedPollingRuntime,
+  createBaleLockKeyResolver,
+  createBaleLockRuntime,
   readLocks,
-  readTelegramRuntimeState,
-  resetDamagedTelegramRuntimeState,
-  mutateTelegramRuntimeStateSection,
-  type TelegramRuntimeStateSection,
-  resolveTelegramLockKey,
-  TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS,
-  TELEGRAM_LOCK_KEY,
-  TELEGRAM_OWNERSHIP_CHECK_MS,
-  TELEGRAM_OWNERSHIP_CHECK_FAILURE_TOLERANCE,
-  TELEGRAM_OWNERSHIP_REFRESH_MS,
-  withTelegramFileTransaction,
-  publishTelegramPrivateFile,
-  readTelegramPrivateFile,
-  TelegramPrivateFileError,
+  readBaleRuntimeState,
+  resetDamagedBaleRuntimeState,
+  mutateBaleRuntimeStateSection,
+  type BaleRuntimeStateSection,
+  resolveBaleLockKey,
+  BALE_BUS_LEADER_STALE_HEARTBEAT_MS,
+  BALE_LOCK_KEY,
+  BALE_OWNERSHIP_CHECK_MS,
+  BALE_OWNERSHIP_CHECK_FAILURE_TOLERANCE,
+  BALE_OWNERSHIP_REFRESH_MS,
+  withBaleFileTransaction,
+  publishBalePrivateFile,
+  readBalePrivateFile,
+  BalePrivateFileError,
   writeLocks,
-  type TelegramLockEntry,
-  createTelegramLeaderJournalPathResolver,
-  createTelegramOwnedStateAuthorityCapture,
+  type BaleLockEntry,
+  createBaleLeaderJournalPathResolver,
+  createBaleOwnedStateAuthorityCapture,
 } from "../lib/locks.ts";
-import { createTelegramSessionContextStore } from "../lib/lifecycle.ts";
+import { createBaleSessionContextStore } from "../lib/lifecycle.ts";
 
 for (const change of ["replace-session", "same-context-restart", "clear", "release", "re-elect"] as const) {
   test(`Shared-state grant binds exact session generation and leader epoch (${change})`, () => {
     const dir = mkdtempSync(join(tmpdir(), "pt-state-grant-")), path = join(dir, "state.json");
     try {
-      const lock = createTelegramLockRuntime<{ cwd: string }>({ statePath: path, instanceId: "grant-fixture", isProcessAlive: () => true });
-      const sessions = createTelegramSessionContextStore<{ cwd: string }>(), capture = createTelegramOwnedStateAuthorityCapture(lock, sessions);
+      const lock = createBaleLockRuntime<{ cwd: string }>({ statePath: path, instanceId: "grant-fixture", isProcessAlive: () => true });
+      const sessions = createBaleSessionContextStore<{ cwd: string }>(), capture = createBaleOwnedStateAuthorityCapture(lock, sessions);
       assert.equal(capture(), undefined, "No session context means no shared-state grant");
       const ctx = { cwd: "/fixture" };
       sessions.set(ctx);
@@ -82,26 +82,26 @@ for (const change of ["replace-session", "same-context-restart", "clear", "relea
 }
 
 function createTempLockPath(): { dir: string; path: string } {
-  const dir = mkdtempSync(join(tmpdir(), "pi-telegram-owners-"));
+  const dir = mkdtempSync(join(tmpdir(), "pi-bale-owners-"));
   return { dir, path: join(dir, "owners.json") };
 }
 
 test("Consolidated runtime state publishes only the selected section and profile", () => {
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
-  const publish = (profile: string, section: TelegramRuntimeStateSection, value: unknown) =>
-    mutateTelegramRuntimeStateSection(path, profile, section, () => ({ value, result: "published" }), { isCurrent: () => true });
+  const publish = (profile: string, section: BaleRuntimeStateSection, value: unknown) =>
+    mutateBaleRuntimeStateSection(path, profile, section, () => ({ value, result: "published" }), { isCurrent: () => true });
   try {
-    assert.deepEqual(readTelegramRuntimeState(path), { version: 2, profiles: {} });
+    assert.deepEqual(readBaleRuntimeState(path), { version: 2, profiles: {} });
     assert.equal(existsSync(path), false, "An observational read never creates state");
     publish("default", "transport", { leaderEpoch: "a", journalPath: "/sessions/owner/inbox.json" });
     publish("default", "workspace", { binding: { sessionId: "s", threadId: 55 }, restoreIssued: true });
     publish("other", "admission", { leases: [{ operationId: "busy" }], fence: "deletion-issued" });
-    const before = readTelegramRuntimeState(path);
-    mutateTelegramRuntimeStateSection(path, "default", "runtime", (_, observed) => {
+    const before = readBaleRuntimeState(path);
+    mutateBaleRuntimeStateSection(path, "default", "runtime", (_, observed) => {
       (observed.transport as { leaderEpoch: string }).leaderEpoch = "forged";
       return { value: { polling: true }, result: 42 };
     }, { isCurrent: () => true });
-    const after = readTelegramRuntimeState(path);
+    const after = readBaleRuntimeState(path);
     assert.deepEqual(after.profiles.default?.transport, before.profiles.default?.transport, "Sibling mutation of an observed copy is not authority");
     assert.deepEqual(after.profiles.default?.workspace, before.profiles.default?.workspace);
     assert.deepEqual(after.profiles.other, before.profiles.other);
@@ -111,9 +111,9 @@ test("Consolidated runtime state publishes only the selected section and profile
     assert.equal(readFileSync(path, "utf8"), stableBytes);
     assert.equal(statSync(path).ino, stableIdentity.ino, "No-op does not replace the shared file");
     publish("default", "runtime", undefined);
-    assert.deepEqual(readTelegramRuntimeState(path), before, "Removing diagnostics leaves every durable fact untouched");
+    assert.deepEqual(readBaleRuntimeState(path), before, "Removing diagnostics leaves every durable fact untouched");
     publish("__proto__", "runtime", { polling: false });
-    assert.equal(Object.hasOwn(readTelegramRuntimeState(path).profiles, "__proto__"), true, "Profile names cannot mutate object prototypes");
+    assert.equal(Object.hasOwn(readBaleRuntimeState(path).profiles, "__proto__"), true, "Profile names cannot mutate object prototypes");
     assert.deepEqual(readdirSync(temp.dir).sort(), ["runtime", "state.json"], "Staging and guards stay below runtime");
     assert.deepEqual(readdirSync(join(temp.dir, "runtime")), []);
   } finally { rmSync(temp.dir, { recursive: true, force: true }); }
@@ -123,16 +123,16 @@ for (const boundary of ["before-mutation", "after-mutation", "before-write", "af
   test(`Consolidated runtime state fences lost authority without undoing published facts (${boundary})`, () => {
     const temp = createTempLockPath(), path = join(temp.dir, "state.json");
     try {
-      mutateTelegramRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
+      mutateBaleRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
       const before = readFileSync(path, "utf8");
       let current = boundary !== "before-mutation", ran = false;
-      assert.throws(() => mutateTelegramRuntimeStateSection(path, "default", "workspace", () => {
+      assert.throws(() => mutateBaleRuntimeStateSection(path, "default", "workspace", () => {
         ran = true;
         if (boundary === "after-mutation") current = false;
         return { value: { binding: 66, forwardIssued: true }, result: true };
       }, { isCurrent: () => current, onPublicationBoundary(at) { if (at === boundary) current = false; } }), /authority changed|outcome is unknown/);
       assert.equal(ran, boundary !== "before-mutation");
-      if (boundary === "after-rename") assert.deepEqual(readTelegramRuntimeState(path).profiles.default?.workspace, { binding: 66, forwardIssued: true });
+      if (boundary === "after-rename") assert.deepEqual(readBaleRuntimeState(path).profiles.default?.workspace, { binding: 66, forwardIssued: true });
       else assert.equal(readFileSync(path, "utf8"), before);
       assert.deepEqual(readdirSync(join(temp.dir, "runtime")), [], "Fault cleanup never leaves an authoritative guard or temporary snapshot");
     } finally { rmSync(temp.dir, { recursive: true, force: true }); }
@@ -143,10 +143,10 @@ for (const code of ["EPERM", "EACCES", "EBUSY"] as const) for (const revoked of 
   test(`Runtime publication sharing retry respects its grant (${code}, revoked=${revoked})`, () => {
     const temp = createTempLockPath(), path = join(temp.dir, "state.json");
     try {
-      mutateTelegramRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
+      mutateBaleRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
       const before = readFileSync(path, "utf8");
       let current = true, attempts = 0, stagedPath: unknown;
-      const publish = () => mutateTelegramRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 66 }, result: true }), {
+      const publish = () => mutateBaleRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 66 }, result: true }), {
         isCurrent: () => current,
         publishRename(from, to) {
           attempts++;
@@ -164,7 +164,7 @@ for (const code of ["EPERM", "EACCES", "EBUSY"] as const) for (const revoked of 
         assert.equal(readFileSync(path, "utf8"), before, "Revoked publication cannot overwrite retained state");
       } else {
         assert.equal(publish(), true);
-        assert.deepEqual(readTelegramRuntimeState(path).profiles.default?.workspace, { binding: 66 });
+        assert.deepEqual(readBaleRuntimeState(path).profiles.default?.workspace, { binding: 66 });
       }
       assert.equal(attempts, revoked ? 1 : 2, "A sharing retry must revalidate authority before another rename");
       assert.deepEqual(readdirSync(join(temp.dir, "runtime")), [], "The guard and staged candidate are released");
@@ -178,8 +178,8 @@ for (const malformed of ["{", "null", "[]", '{"version":1,"threads":[]}', '{"ver
     const temp = createTempLockPath(), path = join(temp.dir, "state.json");
     try {
       writeFileSync(path, malformed, { mode: 0o600 });
-      assert.throws(() => readTelegramRuntimeState(path));
-      assert.throws(() => mutateTelegramRuntimeStateSection(path, "default", "runtime", () => ({ value: {}, result: true }), { isCurrent: () => true }));
+      assert.throws(() => readBaleRuntimeState(path));
+      assert.throws(() => mutateBaleRuntimeStateSection(path, "default", "runtime", () => ({ value: {}, result: true }), { isCurrent: () => true }));
       assert.equal(readFileSync(path, "utf8"), malformed);
       assert.deepEqual(readdirSync(temp.dir).sort(), ["runtime", "state.json"]);
     } finally { rmSync(temp.dir, { recursive: true, force: true }); }
@@ -197,20 +197,20 @@ for (const damaged of ["{", "null", '{"version":3,"profiles":{}}', '{"version":2
       };
       writeFileSync(path, damaged === "invalid-workspace"
         ? JSON.stringify({ version: 2, profiles: { work: { workspace: "broken" } } }) : damaged, { mode: 0o600 });
-      const runtime = createTelegramLockedPollingRuntime({
-        lock: createTelegramLockRuntime({ statePath: path, pid: process.pid, instanceId: "reset" }),
-        resetDamagedState: () => resetDamagedTelegramRuntimeState(path, validator),
+      const runtime = createBaleLockedPollingRuntime({
+        lock: createBaleLockRuntime({ statePath: path, pid: process.pid, instanceId: "reset" }),
+        resetDamagedState: () => resetDamagedBaleRuntimeState(path, validator),
         hasBotToken: () => true, startPolling: async () => undefined, stopPolling: async () => undefined, updateStatus: () => undefined,
         recordRuntimeEvent: (_category, _error, details) => { events.push(String(details?.phase)); },
       });
       assert.equal((await runtime.start({ cwd: "/repo" })).ok, true, "connect proceeds after an optimistic reset");
       assert.deepEqual(events, ["state-reset"]);
-      const state = readTelegramRuntimeState(path);
-      assert.deepEqual(Object.keys(state.profiles), [TELEGRAM_LOCK_KEY], "only the new owner is published");
+      const state = readBaleRuntimeState(path);
+      assert.deepEqual(Object.keys(state.profiles), [BALE_LOCK_KEY], "only the new owner is published");
       if (process.platform !== "win32") assert.equal(statSync(path).mode & 0o777, 0o600);
       assert.deepEqual(readdirSync(temp.dir).sort(), ["runtime", "state.json"]);
       await runtime.stop();
-      assert.equal(resetDamagedTelegramRuntimeState(path, validator), false, "healthy state is never reset");
+      assert.equal(resetDamagedBaleRuntimeState(path, validator), false, "healthy state is never reset");
     } finally { rmSync(temp.dir, { recursive: true, force: true }); }
   });
 }
@@ -218,15 +218,15 @@ for (const damaged of ["{", "null", '{"version":3,"profiles":{}}', '{"version":2
 test("Healthy runtime state is never reset and elections never reset", async () => {
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
   try {
-    mutateTelegramRuntimeStateSection(path, "work", "runtime", () => ({ value: { kept: true }, result: true }), { isCurrent: () => true });
+    mutateBaleRuntimeStateSection(path, "work", "runtime", () => ({ value: { kept: true }, result: true }), { isCurrent: () => true });
     const before = readFileSync(path, "utf8");
-    assert.equal(resetDamagedTelegramRuntimeState(path), false);
+    assert.equal(resetDamagedBaleRuntimeState(path), false);
     assert.equal(readFileSync(path, "utf8"), before);
     writeFileSync(path, "{", { mode: 0o600 });
     let resets = 0;
-    const runtime = createTelegramLockedPollingRuntime({
-      lock: createTelegramLockRuntime({ statePath: path, pid: process.pid, instanceId: "election" }),
-      resetDamagedState: () => { resets++; return resetDamagedTelegramRuntimeState(path); },
+    const runtime = createBaleLockedPollingRuntime({
+      lock: createBaleLockRuntime({ statePath: path, pid: process.pid, instanceId: "election" }),
+      resetDamagedState: () => { resets++; return resetDamagedBaleRuntimeState(path); },
       hasBotToken: () => true, startPolling: async () => undefined, stopPolling: async () => undefined, updateStatus: () => undefined,
     });
     await assert.rejects(runtime.start({ cwd: "/repo" }, { election: {} }));
@@ -239,31 +239,31 @@ test("Consolidated runtime state refuses nested publication and retains a rename
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
   const mutate = () => ({ value: { issued: true }, result: true });
   try {
-    assert.throws(() => mutateTelegramRuntimeStateSection(path, "default", "workspace", () => {
-      mutateTelegramRuntimeStateSection(path, "default", "admission", mutate, { isCurrent: () => true });
+    assert.throws(() => mutateBaleRuntimeStateSection(path, "default", "workspace", () => {
+      mutateBaleRuntimeStateSection(path, "default", "admission", mutate, { isCurrent: () => true });
       return mutate();
     }, { isCurrent: () => true }), /Nested/);
     assert.equal(existsSync(path), false);
-    assert.throws(() => mutateTelegramRuntimeStateSection(path, "default", "workspace", mutate, {
+    assert.throws(() => mutateBaleRuntimeStateSection(path, "default", "workspace", mutate, {
       isCurrent: () => true, publishRename(from, to) { renameSync(from, to); throw new Error("Lost publication ACK"); },
     }), /outcome is unknown/);
-    assert.deepEqual(readTelegramRuntimeState(path).profiles.default?.workspace, { issued: true }, "Uncertain publication is not rollback or replay authority");
+    assert.deepEqual(readBaleRuntimeState(path).profiles.default?.workspace, { issued: true }, "Uncertain publication is not rollback or replay authority");
   } finally { rmSync(temp.dir, { recursive: true, force: true }); }
 });
 
 test("Consolidated runtime state serializes competing processes without losing sibling facts", async () => {
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
   try {
-    mutateTelegramRuntimeStateSection(path, "other", "admission", () => ({ value: { leases: ["keep"] }, result: true }), { isCurrent: () => true });
+    mutateBaleRuntimeStateSection(path, "other", "admission", () => ({ value: { leases: ["keep"] }, result: true }), { isCurrent: () => true });
     const moduleUrl = new URL("../lib/locks.ts", import.meta.url).href;
     const source = `
-      import { mutateTelegramRuntimeStateSection } from ${JSON.stringify(moduleUrl)};
-      for (let n = 0; n < 40; n++) mutateTelegramRuntimeStateSection(process.env.STATE_PATH, "default", process.env.SECTION,
+      import { mutateBaleRuntimeStateSection } from ${JSON.stringify(moduleUrl)};
+      for (let n = 0; n < 40; n++) mutateBaleRuntimeStateSection(process.env.STATE_PATH, "default", process.env.SECTION,
         current => ({ value: { count: (current?.count ?? 0) + 1 }, result: true }), { isCurrent: () => true });
     `;
     const children = await Promise.all(["workspace", "runtime"].map(section => runNodeEval(source, { env: { STATE_PATH: path, SECTION: section } })));
     for (const child of children) assert.equal(child.code, 0, child.stderr);
-    const file = readTelegramRuntimeState(path);
+    const file = readBaleRuntimeState(path);
     assert.deepEqual(file.profiles.default, { workspace: { count: 40 }, runtime: { count: 40 } });
     assert.deepEqual(file.profiles.other?.admission, { leases: ["keep"] });
     assert.deepEqual(readdirSync(join(temp.dir, "runtime")), []);
@@ -273,13 +273,13 @@ test("Consolidated runtime state serializes competing processes without losing s
 test("Consolidated transport lifecycle preserves custody, other sections and other profiles", () => {
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
   let now = 1000, journalCreations = 0;
-  const owner = createTelegramLockRuntime({ statePath: path, instanceId: "one", pid: 10, runtimeGeneration: 1,
+  const owner = createBaleLockRuntime({ statePath: path, instanceId: "one", pid: 10, runtimeGeneration: 1,
     getNowMs: () => now, mintLeaderEpoch: () => "epoch-one", isProcessAlive: () => true,
     createJournalPath: () => `/sessions/owner/inbox.json#${++journalCreations}` });
   try {
-    mutateTelegramRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55, restoreIssued: true }, result: true }), { isCurrent: () => true });
-    mutateTelegramRuntimeStateSection(path, "other", "admission", () => ({ value: { leases: ["keep"], deletionIssued: true }, result: true }), { isCurrent: () => true });
-    const before = readTelegramRuntimeState(path);
+    mutateBaleRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55, restoreIssued: true }, result: true }), { isCurrent: () => true });
+    mutateBaleRuntimeStateSection(path, "other", "admission", () => ({ value: { leases: ["keep"], deletionIssued: true }, result: true }), { isCurrent: () => true });
+    const before = readBaleRuntimeState(path);
     assert.equal(owner.acquire({ cwd: "/repo" }).ok, true);
     assert.equal(owner.owns({ cwd: "/repo" }), true);
     assert.equal(owner.getOwnedLeaderEpoch(), "epoch-one");
@@ -292,10 +292,10 @@ test("Consolidated transport lifecycle preserves custody, other sections and oth
     owner.release();
     assert.equal(owner.owns(), false);
     assert.equal(owner.getState().kind, "inactive");
-    assert.deepEqual(readTelegramRuntimeState(path).profiles.default?.transport, { journalPath: "/sessions/owner/inbox.json#1" });
-    assert.deepEqual(readTelegramRuntimeState(path).profiles.default?.workspace, before.profiles.default?.workspace);
-    assert.deepEqual(readTelegramRuntimeState(path).profiles.other, before.profiles.other);
-    const successor = createTelegramLockRuntime({ statePath: path, instanceId: "two", pid: 20, runtimeGeneration: 2,
+    assert.deepEqual(readBaleRuntimeState(path).profiles.default?.transport, { journalPath: "/sessions/owner/inbox.json#1" });
+    assert.deepEqual(readBaleRuntimeState(path).profiles.default?.workspace, before.profiles.default?.workspace);
+    assert.deepEqual(readBaleRuntimeState(path).profiles.other, before.profiles.other);
+    const successor = createBaleLockRuntime({ statePath: path, instanceId: "two", pid: 20, runtimeGeneration: 2,
       isProcessAlive: () => true, createJournalPath: () => { journalCreations++; return "/sessions/new/inbox.json"; } });
     assert.equal(successor.acquire({ cwd: "/new" }).ok, true);
     assert.equal(successor.getJournalPath(), "/sessions/owner/inbox.json#1");
@@ -307,11 +307,11 @@ test("Consolidated transport lifecycle preserves custody, other sections and oth
 test("Consolidated transport profile drift refuses publication and never redirects the selected section", () => {
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
   let profile = "default";
-  const owner = createTelegramLockRuntime({ statePath: path, key: () => profile, instanceId: "owner", pid: 10,
+  const owner = createBaleLockRuntime({ statePath: path, key: () => profile, instanceId: "owner", pid: 10,
     statePublication: { onPublicationBoundary(at) { if (at === "after-write-before-rename") profile = "other"; } } });
   try {
-    mutateTelegramRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
-    mutateTelegramRuntimeStateSection(path, "other", "transport", () => ({ value: { pid: 20, instanceId: "other" }, result: true }), { isCurrent: () => true });
+    mutateBaleRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
+    mutateBaleRuntimeStateSection(path, "other", "transport", () => ({ value: { pid: 20, instanceId: "other" }, result: true }), { isCurrent: () => true });
     const before = readFileSync(path, "utf8");
     assert.throws(() => owner.acquire({ cwd: "/repo" }), /authority changed/);
     assert.equal(readFileSync(path, "utf8"), before);
@@ -324,8 +324,8 @@ test("Consolidated transport profile drift refuses publication and never redirec
 
 test("Consolidated transport same-PID replacement fences old refresh, commit and section publication", () => {
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
-  const first = createTelegramLockRuntime({ statePath: path, instanceId: "old", pid: 10, runtimeGeneration: 1 });
-  const next = createTelegramLockRuntime({ statePath: path, instanceId: "new", pid: 10, runtimeGeneration: 2 });
+  const first = createBaleLockRuntime({ statePath: path, instanceId: "old", pid: 10, runtimeGeneration: 1 });
+  const next = createBaleLockRuntime({ statePath: path, instanceId: "new", pid: 10, runtimeGeneration: 2 });
   try {
     const acquired = first.acquire({ cwd: "/repo" });
     assert.equal(acquired.ok, true);
@@ -346,7 +346,7 @@ test("Consolidated transport same-PID replacement fences old refresh, commit and
 for (const boundary of ["after-write-before-rename", "after-rename"] as const) {
   test(`Consolidated transport refuses stale section ACK after source-generation loss (${boundary})`, () => {
     const temp = createTempLockPath(), path = join(temp.dir, "state.json");
-    const owner = createTelegramLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
+    const owner = createBaleLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
     try {
       owner.acquire({ cwd: "/repo" });
       let current = true;
@@ -354,7 +354,7 @@ for (const boundary of ["after-write-before-rename", "after-rename"] as const) {
       assert.throws(() => owner.publishStateSectionIfOwned!("workspace", () => ({ value: { forwardIssued: true }, result: true }), {
         isCurrent: () => current, onPublicationBoundary(at) { if (at === boundary) current = false; },
       }), /authority changed|outcome is unknown/);
-      if (boundary === "after-rename") assert.deepEqual(readTelegramRuntimeState(path).profiles.default?.workspace, { forwardIssued: true });
+      if (boundary === "after-rename") assert.deepEqual(readBaleRuntimeState(path).profiles.default?.workspace, { forwardIssued: true });
       else assert.equal(readFileSync(path, "utf8"), before);
     } finally { rmSync(temp.dir, { recursive: true, force: true }); }
   });
@@ -363,18 +363,18 @@ for (const boundary of ["after-write-before-rename", "after-rename"] as const) {
 for (const boundary of ["after-write-before-rename", "after-rename"] as const) {
   test(`Consolidated transport preserves replacement-owner facts at the section publication boundary (${boundary})`, () => {
     const temp = createTempLockPath(), path = join(temp.dir, "state.json");
-    const owner = createTelegramLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
+    const owner = createBaleLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
     try {
       owner.acquire({ cwd: "/repo" });
       assert.throws(() => owner.publishStateSectionIfOwned!("workspace", () => ({ value: { forwardIssued: true }, result: true }), {
         isCurrent: () => true, onPublicationBoundary(at) {
           if (at !== boundary) return;
-          const file = readTelegramRuntimeState(path);
+          const file = readBaleRuntimeState(path);
           file.profiles.default!.transport = { pid: 20, instanceId: "replacement", leaderEpoch: "new", runtimeGeneration: 2 };
           writeFileSync(path, JSON.stringify(file), { mode: 0o600 });
         },
       }), /authority changed|outcome is unknown/);
-      const file = readTelegramRuntimeState(path);
+      const file = readBaleRuntimeState(path);
       assert.equal((file.profiles.default?.transport as { pid: number }).pid, 20);
       assert.equal(owner.owns(), false);
       assert.deepEqual(file.profiles.default?.workspace, boundary === "after-rename" ? { forwardIssued: true } : undefined);
@@ -384,18 +384,18 @@ for (const boundary of ["after-write-before-rename", "after-rename"] as const) {
 
 test("Consolidated transport external-file commit retains its effect without a stale positive ACK", () => {
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
-  const owner = createTelegramLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
+  const owner = createBaleLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
   try {
     owner.acquire({ cwd: "/repo" });
     let effect = 0;
     assert.equal(owner.commitIfOwned(() => {
       effect++;
-      const file = readTelegramRuntimeState(path);
+      const file = readBaleRuntimeState(path);
       file.profiles.default!.transport = { pid: 20, instanceId: "replacement" };
       writeFileSync(path, JSON.stringify(file), { mode: 0o600 });
     }), false);
     assert.equal(effect, 1, "Committed external effect is not rolled back or replayed");
-    assert.equal((readTelegramRuntimeState(path).profiles.default?.transport as { pid: number }).pid, 20);
+    assert.equal((readBaleRuntimeState(path).profiles.default?.transport as { pid: number }).pid, 20);
     assert.equal(owner.commitIfOwned(() => { effect++; }), false);
     assert.equal(effect, 1);
   } finally { rmSync(temp.dir, { recursive: true, force: true }); }
@@ -403,7 +403,7 @@ test("Consolidated transport external-file commit retains its effect without a s
 
 test("Consolidated transport rejects nested root publication rather than borrowing owner authority", () => {
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
-  const owner = createTelegramLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
+  const owner = createBaleLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
   try {
     owner.acquire({ cwd: "/repo" });
     const before = readFileSync(path, "utf8");
@@ -422,9 +422,9 @@ for (const malformed of [null, [], {}, { pid: "wrong" }, { pid: 10, unexpected: 
   test(`Consolidated transport never replaces malformed ownership (${JSON.stringify(malformed)})`, () => {
     const temp = createTempLockPath(), path = join(temp.dir, "state.json");
     try {
-      mutateTelegramRuntimeStateSection(path, "default", "transport", () => ({ value: malformed, result: true }), { isCurrent: () => true });
+      mutateBaleRuntimeStateSection(path, "default", "transport", () => ({ value: malformed, result: true }), { isCurrent: () => true });
       const before = readFileSync(path, "utf8");
-      const owner = createTelegramLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
+      const owner = createBaleLockRuntime({ statePath: path, instanceId: "owner", pid: 10 });
       assert.equal(owner.owns(), false, "Read-only queries fail closed instead of throwing into Pi hooks");
       assert.equal(owner.getState().kind, "inactive");
       assert.throws(() => owner.acquire({ cwd: "/repo" }), /transport is malformed/);
@@ -442,7 +442,7 @@ for (const predecessor of ["live", "malformed", "foreign-envelope", "malformed-r
         predecessor === "malformed-record" ? JSON.stringify({ unrelated: { pid: "unknown" } }) : "{";
       writeFileSync(temp.path, source, { mode: 0o600 });
       const before = readFileSync(temp.path, "utf8");
-      const owner = createTelegramLockRuntime({ statePath: path, legacyLocksPath: temp.path, instanceId: "owner", pid: 10,
+      const owner = createBaleLockRuntime({ statePath: path, legacyLocksPath: temp.path, instanceId: "owner", pid: 10,
         getNowMs: () => 1000, staleHeartbeatMs: 8000, isProcessAlive: () => true });
       if (predecessor === "live") {
         const result = owner.acquire({ cwd: "/repo" });
@@ -458,7 +458,7 @@ for (const predecessor of ["live", "malformed", "foreign-envelope", "malformed-r
 test("Consolidated transport acquisition has one cross-process winner in the shared state", async () => {
   const temp = createTempLockPath(), path = join(temp.dir, "state.json");
   try {
-    mutateTelegramRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
+    mutateBaleRuntimeStateSection(path, "default", "workspace", () => ({ value: { binding: 55 }, result: true }), { isCurrent: () => true });
     const startPath = join(temp.dir, "start"), children = [0, 1].map(index => {
       const readyPath = join(temp.dir, `ready-${index}`);
       return { readyPath, child: spawnLockRaceChild({ locksPath: temp.path, statePath: path, key: "default", readyPath, startPath }) };
@@ -467,7 +467,7 @@ test("Consolidated transport acquisition has one cross-process winner in the sha
     writeFileSync(startPath, "start");
     const results = await Promise.all(children.map(child => child.child.result));
     assert.equal(results.filter(result => result.ok).length, 1);
-    assert.deepEqual(readTelegramRuntimeState(path).profiles.default?.workspace, { binding: 55 });
+    assert.deepEqual(readBaleRuntimeState(path).profiles.default?.workspace, { binding: 55 });
   } finally { rmSync(temp.dir, { recursive: true, force: true }); }
 });
 
@@ -498,11 +498,11 @@ function spawnLockRaceChild(input: {
   const moduleUrl = new URL("../lib/locks.ts", import.meta.url).href;
   const source = `
     import { existsSync, writeFileSync } from "node:fs";
-    import { createTelegramLockRuntime } from ${JSON.stringify(moduleUrl)};
+    import { createBaleLockRuntime } from ${JSON.stringify(moduleUrl)};
     const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
     writeFileSync(process.env.READY_PATH, "ready");
     while (!existsSync(process.env.START_PATH)) sleep(2);
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       ...(process.env.STATE_PATH ? { statePath: process.env.STATE_PATH } : { locksPath: process.env.LOCKS_PATH }),
       key: process.env.LOCK_KEY,
     });
@@ -529,7 +529,7 @@ test("Polling journal pointer survives release and is inherited by every success
   const temp = createTempLockPath();
   try {
     let created = 0;
-    const create = (name: string) => createTelegramLockRuntime({ locksPath: temp.path, instanceId: name,
+    const create = (name: string) => createBaleLockRuntime({ locksPath: temp.path, instanceId: name,
       pid: name === "first" ? 101 : 202, isProcessAlive: () => true,
       createJournalPath: () => `/runtime/sessions/${name}/inbox.json#${++created}` });
     const first = create("first");
@@ -553,14 +553,14 @@ test("Polling journal pointer survives release and is inherited by every success
 });
 
 test("Leader journal resolver prefers the owners pointer, then an existing root, then the hosting session", () => {
-  const agentDir = mkdtempSync(join(tmpdir(), "pi-telegram-leader-path-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "pi-bale-leader-path-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
     let named: string | undefined, sessionId: string | undefined = "host";
-    const resolver = createTelegramLeaderJournalPathResolver({ getNamedJournalPath: () => named,
+    const resolver = createBaleLeaderJournalPathResolver({ getNamedJournalPath: () => named,
       getSessionId: () => sessionId, getProfileName: () => "work" });
-    const runtime = join(agentDir, "tmp", "pi-telegram");
+    const runtime = join(agentDir, "tmp", "pi-bale");
     const own = join(runtime, "sessions", "host", "inbox.work.json");
     assert.equal(resolver.createJournalPath(), own);
     assert.equal(resolver.resolve("work"), own);
@@ -582,21 +582,21 @@ test("Leader journal resolver prefers the owners pointer, then an existing root,
 });
 
 test("Leader succession continues the owners-named polling journal, cursor and pending custody", () => {
-  const agentDir = mkdtempSync(join(tmpdir(), "pi-telegram-leader-succession-"));
+  const agentDir = mkdtempSync(join(tmpdir(), "pi-bale-leader-succession-"));
   const previous = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
-    const journalSerialization = createTelegramJournalSourceSerialization(() => join(agentDir, "journals.transaction"));
+    const journalSerialization = createBaleJournalSourceSerialization(() => join(agentDir, "journals.transaction"));
     const createLeader = (sessionId: string, pid: number) => {
-      let lock!: ReturnType<typeof createTelegramLockRuntime>;
-      const path = createTelegramLeaderJournalPathResolver({ getNamedJournalPath: () => lock.getJournalPath(),
+      let lock!: ReturnType<typeof createBaleLockRuntime>;
+      const path = createBaleLeaderJournalPathResolver({ getNamedJournalPath: () => lock.getJournalPath(),
         getSessionId: () => sessionId, getProfileName: () => undefined });
-      lock = createTelegramLockRuntime({ locksPath: resolveTelegramOwnersPath(), instanceId: `leader-${sessionId}`,
+      lock = createBaleLockRuntime({ locksPath: resolveBaleOwnersPath(), instanceId: `leader-${sessionId}`,
         pid, isProcessAlive: () => true, createJournalPath: path.createJournalPath });
-      const journals = createTelegramUpdateJournalBindingRuntime({
+      const journals = createBaleUpdateJournalBindingRuntime({
         base: { getProfileName: () => undefined, getBotToken: () => "123:succession", getBotId: () => 123,
           withSourceSerialization: journalSerialization },
-        getLeaderJournalPath: path.resolve, getRuntimeDir: () => resolveTelegramTempDir(agentDir),
+        getLeaderJournalPath: path.resolve, getRuntimeDir: () => resolveBaleTempDir(agentDir),
         getFollowerJournalPath: () => { throw new Error("leader-only fixture"); },
         getActiveFollowerBindingKey: () => "unused", isFollowerRegistered: () => false,
       });
@@ -608,7 +608,7 @@ test("Leader succession continues the owners-named polling journal, cursor and p
     hosted.journal.appendBatch([{ update_id: 41, message: { text: "unprocessed" } }], 41);
     assert.match(JSON.parse(hosted.runtimeKey).path, /sessions[\\/]session-a[\\/]inbox\.json$/u);
     a.lock.release();
-    const swept = createTelegramSessionFolderSweeper({ getSessionsDir: () => resolveTelegramSessionsDir(agentDir),
+    const swept = createBaleSessionFolderSweeper({ getSessionsDir: () => resolveBaleSessionsDir(agentDir),
       getProfileName: () => undefined, getKeptSessionIds: () => [] }).sweep();
     assert.deepEqual(swept, [], "The sweeper never deletes the polling journal or its hosting folder");
     const b = createLeader("session-b", 202);
@@ -627,7 +627,7 @@ test("Leader succession continues the owners-named polling journal, cursor and p
 test("Lock runtime commits side effects only under its exact transaction owner", () => {
   const temp = createTempLockPath();
   try {
-    const first = createTelegramLockRuntime({
+    const first = createBaleLockRuntime({
       locksPath: temp.path,
       instanceId: "runtime:first",
     });
@@ -641,7 +641,7 @@ test("Lock runtime commits side effects only under its exact transaction owner",
       true,
     );
 
-    const replacement = createTelegramLockRuntime({
+    const replacement = createBaleLockRuntime({
       locksPath: temp.path,
       instanceId: "runtime:replacement",
     });
@@ -674,7 +674,7 @@ test("Lock runtime commits side effects only under its exact transaction owner",
 test("Lock runtime acquires, refreshes, and releases its own key", () => {
   const temp = createTempLockPath();
   try {
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     const acquired = lock.acquire({ cwd: "/repo" });
     assert.deepEqual(acquired, {
       ok: true,
@@ -683,7 +683,7 @@ test("Lock runtime acquires, refreshes, and releases its own key", () => {
     });
     assert.equal(lock.getStatusLabel(), "active here");
     assert.equal(lock.owns(), true);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
     });
@@ -701,9 +701,9 @@ for (const scenario of ["live", "dead", "stale-heartbeat", "other-key", "missing
       const entry = { pid: 77, cwd: "/older", instanceId: "77:1", heartbeatMs: scenario === "stale-heartbeat" ? 1_000 : 99_000,
         leaderEpoch: "epoch", busSocketPath: "/older/bus.sock", busSecret: "secret" };
       if (scenario === "malformed") writeFileSync(legacy.path, "{ not json");
-      else if (scenario !== "missing") writeFileSync(legacy.path, JSON.stringify({ [scenario === "other-key" ? "work" : TELEGRAM_LOCK_KEY]: entry }));
+      else if (scenario !== "missing") writeFileSync(legacy.path, JSON.stringify({ [scenario === "other-key" ? "work" : BALE_LOCK_KEY]: entry }));
       const legacyBytes = existsSync(legacy.path) ? readFileSync(legacy.path, "utf8") : undefined;
-      const lock = createTelegramLockRuntime({ locksPath: current.path, legacyLocksPath: scenario === "same-path" ? current.path : legacy.path,
+      const lock = createBaleLockRuntime({ locksPath: current.path, legacyLocksPath: scenario === "same-path" ? current.path : legacy.path,
         pid: 10, getNowMs: () => 100_000, staleHeartbeatMs: 8_000, isProcessAlive: pid => scenario !== "dead" && pid === 77 });
       const acquired = lock.acquire({ cwd: "/repo" });
       if (scenario === "live") {
@@ -724,11 +724,11 @@ for (const scenario of ["live", "dead", "stale-heartbeat", "other-key", "missing
 
 test("Owner slot resolver uses local default and named profile keys", () => {
   let activeProfileName: string | undefined;
-  const resolveKey = createTelegramLockKeyResolver({
+  const resolveKey = createBaleLockKeyResolver({
     getActiveProfileName: () => activeProfileName,
   });
 
-  assert.equal(resolveTelegramLockKey(), "default");
+  assert.equal(resolveBaleLockKey(), "default");
   assert.equal(resolveKey(), "default");
   activeProfileName = "omp";
   assert.equal(resolveKey(), "omp");
@@ -738,19 +738,19 @@ test("Lock runtime releases only the active profile key", () => {
   const temp = createTempLockPath();
   try {
     let activeProfileName: string | undefined = "work";
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
-      key: createTelegramLockKeyResolver({
+      key: createBaleLockKeyResolver({
         getActiveProfileName: () => activeProfileName,
       }),
     });
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     activeProfileName = "omp";
-    const other = createTelegramLockRuntime({
+    const other = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
-      key: createTelegramLockKeyResolver({
+      key: createBaleLockKeyResolver({
         getActiveProfileName: () => activeProfileName,
       }),
     });
@@ -770,7 +770,7 @@ test("Lock runtime releases only the active profile key", () => {
 test("writeLocks writes private lock files", () => {
   const temp = createTempLockPath();
   try {
-    writeLocks(temp.path, { [TELEGRAM_LOCK_KEY]: { pid: 10 } });
+    writeLocks(temp.path, { [BALE_LOCK_KEY]: { pid: 10 } });
     if (process.platform !== "win32") {
       assert.equal(statSync(temp.path).mode & 0o777, 0o600);
     }
@@ -783,7 +783,7 @@ test("File transaction publishes a private directory guard with owner metadata",
   const temp = createTempLockPath();
   const transactionPath = `${temp.path}.transaction`;
   try {
-    withTelegramFileTransaction(transactionPath, () => {
+    withBaleFileTransaction(transactionPath, () => {
       assert.equal(statSync(transactionPath).isDirectory(), true);
       if (process.platform !== "win32") {
         assert.equal(statSync(transactionPath).mode & 0o777, 0o700);
@@ -813,7 +813,7 @@ test("File transaction retries transient guard publication errors after contenti
   let publishAttempts = 0;
   let operations = 0;
   try {
-    withTelegramFileTransaction(
+    withBaleFileTransaction(
       transactionPath,
       () => {
         operations += 1;
@@ -854,7 +854,7 @@ test("Lock transaction recovers a directory guard left by a dead process", () =>
       }),
       { mode: 0o600 },
     );
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     assert.equal(existsSync(transactionPath), false);
   } finally {
@@ -882,7 +882,7 @@ test("Lock transaction recovers dead directory main and recovery guards", () => 
         { mode: 0o600 },
       );
     }
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     assert.equal(existsSync(transactionPath), false);
     assert.equal(existsSync(recoveryPath), false);
@@ -913,7 +913,7 @@ test("Lock transaction releases recovered ownership when recovery cleanup fails"
     }
     assert.throws(
       () =>
-        withTelegramFileTransaction(transactionPath, () => undefined, {
+        withBaleFileTransaction(transactionPath, () => undefined, {
           recoveryRename(fromPath, toPath) {
             if (fromPath === recoveryPath) {
               throw Object.assign(new Error("injected recovery cleanup busy"), {
@@ -926,7 +926,7 @@ test("Lock transaction releases recovered ownership when recovery cleanup fails"
       /injected recovery cleanup busy/,
     );
     assert.equal(existsSync(transactionPath), false);
-    withTelegramFileTransaction(transactionPath, () => undefined);
+    withBaleFileTransaction(transactionPath, () => undefined);
     assert.equal(existsSync(transactionPath), false);
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
@@ -952,7 +952,7 @@ test("Lock transaction rollback retry restores peer-process recovery", async () 
     );
     assert.throws(
       () =>
-        withTelegramFileTransaction(transactionPath, () => undefined, {
+        withBaleFileTransaction(transactionPath, () => undefined, {
           recoveryRename(fromPath, toPath) {
             const isRollback = basename(String(fromPath)).startsWith(
               "owner.reclaim.",
@@ -976,7 +976,7 @@ test("Lock transaction rollback retry restores peer-process recovery", async () 
     ]);
     const child = spawnLockRaceChild({
       locksPath: temp.path,
-      key: TELEGRAM_LOCK_KEY,
+      key: BALE_LOCK_KEY,
       readyPath,
       startPath,
     });
@@ -1005,7 +1005,7 @@ test("Lock transaction reclaims an inactive same-process marker after rollback f
     );
     assert.throws(
       () =>
-        withTelegramFileTransaction(transactionPath, () => undefined, {
+        withBaleFileTransaction(transactionPath, () => undefined, {
           recoveryRename(fromPath, toPath) {
             if (
               fromPath === transactionPath ||
@@ -1021,7 +1021,7 @@ test("Lock transaction reclaims an inactive same-process marker after rollback f
       AggregateError,
     );
     assert.match(readdirSync(transactionPath)[0], /^owner\.reclaim\./u);
-    withTelegramFileTransaction(transactionPath, () => undefined);
+    withBaleFileTransaction(transactionPath, () => undefined);
     assert.equal(existsSync(transactionPath), false);
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
@@ -1054,7 +1054,7 @@ test("Lock transaction recovery preserves a live recovery guard", () => {
       JSON.stringify(liveRecoveryOwner),
       { mode: 0o600 },
     );
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     assert.deepEqual(
       JSON.parse(
@@ -1089,7 +1089,7 @@ test("Lock transaction recovers dead legacy main and recovery guards", () => {
         { mode: 0o600 },
       );
     }
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     assert.equal(existsSync(transactionPath), false);
     assert.equal(existsSync(recoveryPath), false);
@@ -1116,7 +1116,7 @@ test("Lock transaction resumes a reclaim marker left by a dead recoverer", () =>
       }),
       { mode: 0o600 },
     );
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     assert.equal(existsSync(transactionPath), false);
   } finally {
@@ -1130,7 +1130,7 @@ test("File transaction refuses to release a replacement directory owner", () => 
   try {
     assert.throws(
       () =>
-        withTelegramFileTransaction(transactionPath, () => {
+        withBaleFileTransaction(transactionPath, () => {
           rmSync(transactionPath, { recursive: true, force: true });
           mkdirSync(transactionPath, { mode: 0o700 });
           writeFileSync(
@@ -1173,7 +1173,7 @@ test("Delayed stale recovery cannot claim a replacement generation", () => {
     );
     assert.throws(
       () =>
-        withTelegramFileTransaction(transactionPath, () => undefined, {
+        withBaleFileTransaction(transactionPath, () => undefined, {
           attempts: 2,
           retryDelayMs: 0,
           recoveryRename(fromPath, toPath) {
@@ -1197,7 +1197,7 @@ test("Delayed stale recovery cannot claim a replacement generation", () => {
             renameSync(fromPath, toPath);
           },
         }),
-      /Timed out acquiring Telegram lock transaction/,
+      /Timed out acquiring Bale lock transaction/,
     );
     assert.deepEqual(
       JSON.parse(
@@ -1224,7 +1224,7 @@ test("Lock transaction recovers a guard left by a dead process", () => {
         generation: "dead-guard",
       }),
     );
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     assert.equal(existsSync(`${temp.path}.transaction`), false);
   } finally {
@@ -1238,12 +1238,12 @@ test("Lock transaction fails closed on an unverified guard", () => {
     writeFileSync(`${temp.path}.transaction`, "");
     assert.throws(
       () =>
-        withTelegramFileTransaction(
+        withBaleFileTransaction(
           `${temp.path}.transaction`,
           () => undefined,
           { attempts: 2, retryDelayMs: 0 },
         ),
-      /Timed out acquiring Telegram lock transaction/,
+      /Timed out acquiring Bale lock transaction/,
     );
     assert.equal(readFileSync(`${temp.path}.transaction`, "utf8"), "");
   } finally {
@@ -1258,11 +1258,11 @@ test("Lock transaction fails closed on an unverified directory guard", () => {
     mkdirSync(transactionPath, { mode: 0o700 });
     assert.throws(
       () =>
-        withTelegramFileTransaction(transactionPath, () => undefined, {
+        withBaleFileTransaction(transactionPath, () => undefined, {
           attempts: 2,
           retryDelayMs: 0,
         }),
-      /Timed out acquiring Telegram lock transaction/,
+      /Timed out acquiring Bale lock transaction/,
     );
     assert.equal(statSync(transactionPath).isDirectory(), true);
     assert.deepEqual(readdirSync(transactionPath), []);
@@ -1276,7 +1276,7 @@ test("Lock transaction fails closed on malformed registry content", () => {
   try {
     const malformed = "{not-json";
     writeFileSync(temp.path, malformed);
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     assert.throws(() => lock.acquire({ cwd: "/repo" }), SyntaxError);
     assert.equal(readFileSync(temp.path, "utf8"), malformed);
     assert.equal(existsSync(`${temp.path}.transaction`), false);
@@ -1293,7 +1293,7 @@ test("Lock transaction elects exactly one concurrent child process", async () =>
     const children = readyPaths.map((readyPath) =>
       spawnLockRaceChild({
         locksPath: temp.path,
-        key: TELEGRAM_LOCK_KEY,
+        key: BALE_LOCK_KEY,
         readyPath,
         startPath,
       }),
@@ -1305,7 +1305,7 @@ test("Lock transaction elects exactly one concurrent child process", async () =>
     writeFileSync(startPath, "start");
     const results = await Promise.all(children.map((child) => child.result));
     assert.equal(results.filter((result) => result.ok).length, 1);
-    const persisted = readLocks(temp.path)[TELEGRAM_LOCK_KEY] as {
+    const persisted = readLocks(temp.path)[BALE_LOCK_KEY] as {
       pid: number;
     };
     assert.equal(persisted.pid, results.find((result) => result.ok)?.pid);
@@ -1333,7 +1333,7 @@ test("Concurrent stale-guard recovery elects exactly one child process", async (
     const children = readyPaths.map((readyPath) =>
       spawnLockRaceChild({
         locksPath: temp.path,
-        key: TELEGRAM_LOCK_KEY,
+        key: BALE_LOCK_KEY,
         readyPath,
         startPath,
       }),
@@ -1356,7 +1356,7 @@ test("Lock transaction preserves keys acquired by concurrent profiles", async ()
   const temp = createTempLockPath();
   const startPath = join(temp.dir, "start");
   const readyPaths = [join(temp.dir, "ready-a"), join(temp.dir, "ready-b")];
-  const keys = [TELEGRAM_LOCK_KEY, "work"];
+  const keys = [BALE_LOCK_KEY, "work"];
   try {
     const children = keys.map((key, index) =>
       spawnLockRaceChild({
@@ -1391,13 +1391,13 @@ test("Lock runtime preserves other profile owners and refuses a live default own
       JSON.stringify(
         {
           work: { pid: 123 },
-          [TELEGRAM_LOCK_KEY]: { pid: 99 },
+          [BALE_LOCK_KEY]: { pid: 99 },
         },
         null,
         2,
       ),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       isProcessAlive: (pid) => pid === 99,
@@ -1415,7 +1415,7 @@ test("Lock runtime records bus leader metadata without a heartbeat and refresh w
   const temp = createTempLockPath();
   try {
     let nowMs = 1000;
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "inst-a",
@@ -1425,7 +1425,7 @@ test("Lock runtime records bus leader metadata without a heartbeat and refresh w
     });
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     assert.equal(lock.getOwnedLeaderEpoch(), 1000);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
       instanceId: "inst-a",
@@ -1446,7 +1446,7 @@ test("Lock runtime records bus leader metadata without a heartbeat and refresh w
 test("Lock runtime fences refresh and release to the acquired owner epoch", () => {
   const temp = createTempLockPath();
   try {
-    const first = createTelegramLockRuntime({
+    const first = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "inst-a",
@@ -1454,7 +1454,7 @@ test("Lock runtime fences refresh and release to the acquired owner epoch", () =
       mintLeaderEpoch: () => "epoch-a",
       runtimeGeneration: 1,
     });
-    const second = createTelegramLockRuntime({
+    const second = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 11,
       instanceId: "inst-b",
@@ -1496,7 +1496,7 @@ test("Lock runtime fences refresh and release to the acquired owner epoch", () =
     assert.equal(second.getOwnedLeaderEpoch(), "epoch-b");
     assert.equal(first.refresh({ cwd: "/repo" }), false);
     first.release();
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 11,
       cwd: "/repo",
       instanceId: "inst-b",
@@ -1513,7 +1513,7 @@ test("Lock election cannot replace a proven-unresponsive owner after it was re-a
   const temp = createTempLockPath();
   try {
     let epoch = 0;
-    const leader = createTelegramLockRuntime({
+    const leader = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "leader",
@@ -1521,7 +1521,7 @@ test("Lock election cannot replace a proven-unresponsive owner after it was re-a
       mintLeaderEpoch: () => `leader-epoch-${++epoch}`,
     });
     assert.equal(leader.acquire({ cwd: "/repo" }).ok, true);
-    const follower = createTelegramLockRuntime({
+    const follower = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 11,
       instanceId: "follower",
@@ -1551,15 +1551,15 @@ test("Lock runtime keeps the eight-second stale threshold for older-release hear
     writeFileSync(
       temp.path,
       JSON.stringify({
-        [TELEGRAM_LOCK_KEY]: { pid: 10, cwd: "/leader", instanceId: "older", heartbeatMs: 1000 },
+        [BALE_LOCK_KEY]: { pid: 10, cwd: "/leader", instanceId: "older", heartbeatMs: 1000 },
       }),
     );
-    const follower = createTelegramLockRuntime({
+    const follower = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 11,
       instanceId: "follower",
       getNowMs: () => nowMs,
-      staleHeartbeatMs: TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS,
+      staleHeartbeatMs: BALE_BUS_LEADER_STALE_HEARTBEAT_MS,
       isProcessAlive: () => true,
     });
     nowMs = 8999;
@@ -1575,14 +1575,14 @@ test("Lock runtime never ages a current owner without bus proof", () => {
   const temp = createTempLockPath();
   try {
     let nowMs = 1000;
-    const leader = createTelegramLockRuntime({ locksPath: temp.path, pid: 10, instanceId: "leader", getNowMs: () => nowMs });
+    const leader = createBaleLockRuntime({ locksPath: temp.path, pid: 10, instanceId: "leader", getNowMs: () => nowMs });
     assert.equal(leader.acquire({ cwd: "/leader" }).ok, true);
-    const follower = createTelegramLockRuntime({
+    const follower = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 11,
       instanceId: "follower",
       getNowMs: () => nowMs,
-      staleHeartbeatMs: TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS,
+      staleHeartbeatMs: BALE_BUS_LEADER_STALE_HEARTBEAT_MS,
       isProcessAlive: () => true,
     });
     nowMs = 1_000_000;
@@ -1596,13 +1596,13 @@ test("Lock runtime never ages a current owner without bus proof", () => {
 test("Lock election cannot replace an owner that appeared after inactive observation", () => {
   const temp = createTempLockPath();
   try {
-    const leader = createTelegramLockRuntime({
+    const leader = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "leader",
       runtimeGeneration: 1,
     });
-    const follower = createTelegramLockRuntime({
+    const follower = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 11,
       instanceId: "follower",
@@ -1627,7 +1627,7 @@ test("Lock election cannot replace an owner that appeared after inactive observa
 test("Lock runtime mints collision-resistant epochs independently of heartbeat time", () => {
   const temp = createTempLockPath();
   try {
-    const first = createTelegramLockRuntime({
+    const first = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "inst-a",
@@ -1636,7 +1636,7 @@ test("Lock runtime mints collision-resistant epochs independently of heartbeat t
     const firstResult = first.acquire({ cwd: "/repo" });
     assert.equal(firstResult.ok, true);
     first.release();
-    const second = createTelegramLockRuntime({
+    const second = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 11,
       instanceId: "inst-b",
@@ -1663,10 +1663,10 @@ test("Lock runtime upgrades adopted legacy ownership during refresh", () => {
     writeFileSync(
       temp.path,
       JSON.stringify({
-        [TELEGRAM_LOCK_KEY]: { pid: 10, cwd: "/repo" },
+        [BALE_LOCK_KEY]: { pid: 10, cwd: "/repo" },
       }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "leader",
@@ -1677,7 +1677,7 @@ test("Lock runtime upgrades adopted legacy ownership during refresh", () => {
     assert.equal(lock.owns({ cwd: "/repo" }), true);
     assert.equal(lock.refresh({ cwd: "/repo" }), true);
     assert.equal(lock.owns({ cwd: "/repo" }), true);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
       instanceId: "leader",
@@ -1695,7 +1695,7 @@ test("Lock runtime prunes legacy bus socket path and heartbeat on refresh", () =
     writeFileSync(
       temp.path,
       JSON.stringify({
-        [TELEGRAM_LOCK_KEY]: {
+        [BALE_LOCK_KEY]: {
           pid: 10,
           cwd: "/repo",
           instanceId: "inst-a",
@@ -1706,7 +1706,7 @@ test("Lock runtime prunes legacy bus socket path and heartbeat on refresh", () =
         },
       }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "inst-a",
@@ -1714,7 +1714,7 @@ test("Lock runtime prunes legacy bus socket path and heartbeat on refresh", () =
       getNowMs: () => 1500,
     });
     assert.equal(lock.refresh({ cwd: "/repo" }), true);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
       instanceId: "inst-a",
@@ -1732,7 +1732,7 @@ test("Lock runtime treats stale bus heartbeats as replaceable even when pid is a
     writeFileSync(
       temp.path,
       JSON.stringify({
-        [TELEGRAM_LOCK_KEY]: {
+        [BALE_LOCK_KEY]: {
           pid: 99,
           cwd: "/old",
           instanceId: "old-inst",
@@ -1740,7 +1740,7 @@ test("Lock runtime treats stale bus heartbeats as replaceable even when pid is a
         },
       }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "inst-a",
@@ -1754,7 +1754,7 @@ test("Lock runtime treats stale bus heartbeats as replaceable even when pid is a
     const acquired = lock.acquire({ cwd: "/repo" });
     assert.equal(acquired.ok, true);
     assert.equal(acquired.ok && acquired.replacedStale, true);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
       instanceId: "inst-a",
@@ -1769,23 +1769,23 @@ test("Lock runtime treats stale bus heartbeats as replaceable even when pid is a
 test("Unresponsive leader election admits one proven-owner candidate and fences the old leader", () => {
   const temp = createTempLockPath();
   try {
-    const leader = createTelegramLockRuntime({
+    const leader = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "leader",
       runtimeGeneration: 1,
       mintLeaderEpoch: () => "leader-epoch",
-      staleHeartbeatMs: TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS,
+      staleHeartbeatMs: BALE_BUS_LEADER_STALE_HEARTBEAT_MS,
     });
     assert.equal(leader.acquire({ cwd: "/leader" }).ok, true);
     const createCandidate = (pid: number, instanceId: string) =>
-      createTelegramLockRuntime({
+      createBaleLockRuntime({
         locksPath: temp.path,
         pid,
         instanceId,
         runtimeGeneration: pid,
         mintLeaderEpoch: () => `${instanceId}-epoch`,
-        staleHeartbeatMs: TELEGRAM_BUS_LEADER_STALE_HEARTBEAT_MS,
+        staleHeartbeatMs: BALE_BUS_LEADER_STALE_HEARTBEAT_MS,
         isProcessAlive: () => true,
       });
     const first = createCandidate(11, "candidate-a");
@@ -1829,9 +1829,9 @@ test("Lock runtime replaces stale owners", () => {
   try {
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 99 } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 99 } }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       isProcessAlive: () => false,
@@ -1839,7 +1839,7 @@ test("Lock runtime replaces stale owners", () => {
     const acquired = lock.acquire({ cwd: "/repo" });
     assert.equal(acquired.ok, true);
     assert.equal(acquired.ok && acquired.replacedStale, true);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
     });
@@ -1852,16 +1852,16 @@ test("Locked polling runtime prevents inherited child sessions from polling the 
   const temp = createTempLockPath();
   try {
     const events: string[] = [];
-    const parentLock = createTelegramLockRuntime({
+    const parentLock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
     });
-    const childLock = createTelegramLockRuntime({
+    const childLock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 11,
       isProcessAlive: (pid) => pid === 10,
     });
-    const parentRuntime = createTelegramLockedPollingRuntime({
+    const parentRuntime = createBaleLockedPollingRuntime({
       lock: parentLock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -1874,7 +1874,7 @@ test("Locked polling runtime prevents inherited child sessions from polling the 
         events.push("parent:status");
       },
     });
-    const childRuntime = createTelegramLockedPollingRuntime({
+    const childRuntime = createBaleLockedPollingRuntime({
       lock: childLock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -1895,14 +1895,14 @@ test("Locked polling runtime prevents inherited child sessions from polling the 
       canTakeover: true,
       owner: "pid 10, cwd /repo",
       message:
-        "Telegram bridge is active in another Pi instance (pid 10, cwd /repo).",
+        "Bale bridge is active in another Pi instance (pid 10, cwd /repo).",
     });
     assert.deepEqual(events, ["parent:start", "parent:status"]);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
     });
-    assert.equal(await parentRuntime.stop(), "Telegram bridge disconnected.");
+    assert.equal(await parentRuntime.stop(), "Bale bridge disconnected.");
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
   }
@@ -1916,7 +1916,7 @@ test("Locked polling runtime registers as follower when another live owner block
     writeFileSync(
       temp.path,
       JSON.stringify({
-        [TELEGRAM_LOCK_KEY]: {
+        [BALE_LOCK_KEY]: {
           pid: 99,
           cwd: "/old",
           instanceId: "owner-inst",
@@ -1924,12 +1924,12 @@ test("Locked polling runtime registers as follower when another live owner block
         },
       }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       isProcessAlive: (pid) => pid === 99,
     });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       registerFollowerWithOwner: async (ctx, owner, options) => {
@@ -1970,14 +1970,14 @@ test("Locked polling runtime falls back to takeover when follower registration i
   try {
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 99, cwd: "/old" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 99, cwd: "/old" } }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       isProcessAlive: (pid) => pid === 99,
     });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       registerFollowerWithOwner: async () => undefined,
@@ -2001,14 +2001,14 @@ test("Locked polling runtime records follower registration failures without bloc
     const runtimeEvents: string[] = [];
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 99, cwd: "/old" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 99, cwd: "/old" } }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       isProcessAlive: (pid) => pid === 99,
     });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       registerFollowerWithOwner: async () => {
@@ -2041,9 +2041,9 @@ for (const proven of [false, true]) test(`Locked polling runtime takes over an u
   try {
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 99, cwd: "/old", instanceId: "old", leaderEpoch: "old-epoch" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 99, cwd: "/old", instanceId: "old", leaderEpoch: "old-epoch" } }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "new",
@@ -2052,7 +2052,7 @@ for (const proven of [false, true]) test(`Locked polling runtime takes over an u
     });
     const proofs: unknown[] = [];
     let starts = 0;
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       registerFollowerWithOwner: async () => {
@@ -2086,18 +2086,18 @@ test("Locked polling runtime diagnoses a live owner with unreachable bus endpoin
   try {
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 99, cwd: "/old" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 99, cwd: "/old" } }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       isProcessAlive: (pid) => pid === 99,
     });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       registerFollowerWithOwner: async () => {
-        throw new Error("connect ENOENT /agent/tmp/telegram/bus.sock");
+        throw new Error("connect ENOENT /agent/tmp/bale/bus.sock");
       },
       startPolling: async () => undefined,
       stopPolling: async () => undefined,
@@ -2111,7 +2111,7 @@ test("Locked polling runtime diagnoses a live owner with unreachable bus endpoin
       blocked.message,
       /live owner \/ unreachable bus endpoint after bounded retries/,
     );
-    assert.match(blocked.message, /retry \/telegram-connect/);
+    assert.match(blocked.message, /retry \/bale-connect/);
     assert.match(blocked.message, /Do not force takeover/);
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
@@ -2122,8 +2122,8 @@ test("Locked polling runtime stops follower heartbeat on stop", async () => {
   const temp = createTempLockPath();
   try {
     const events: string[] = [];
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       stopFollowerRegistration: () => {
@@ -2140,7 +2140,7 @@ test("Locked polling runtime stops follower heartbeat on stop", async () => {
       },
     });
     assert.equal((await runtime.start({ cwd: "/repo" })).ok, true);
-    assert.equal(await runtime.stop(), "Telegram bridge disconnected.");
+    assert.equal(await runtime.stop(), "Bale bridge disconnected.");
     assert.deepEqual(events, ["start", "status", "follower:stop", "poll:stop"]);
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
@@ -2153,14 +2153,14 @@ test("Locked polling runtime can force takeover of live polling owners", async (
     const events: string[] = [];
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 99, cwd: "/old" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 99, cwd: "/old" } }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       isProcessAlive: (pid) => pid === 99,
     });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2179,19 +2179,19 @@ test("Locked polling runtime can force takeover of live polling owners", async (
       canTakeover: true,
       owner: "pid 99, cwd /old",
       message:
-        "Telegram bridge is active in another Pi instance (pid 99, cwd /old).",
+        "Bale bridge is active in another Pi instance (pid 99, cwd /old).",
     });
     const moved = await runtime.start({ cwd: "/new" }, { force: true });
     assert.deepEqual(moved, {
       ok: true,
-      message: "Telegram bridge connected.",
+      message: "Bale bridge connected.",
     });
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/new",
     });
     assert.deepEqual(events, ["start", "status"]);
-    assert.equal(await runtime.stop(), "Telegram bridge disconnected.");
+    assert.equal(await runtime.stop(), "Bale bridge disconnected.");
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
   }
@@ -2200,21 +2200,21 @@ test("Locked polling runtime can force takeover of live polling owners", async (
 test("Locked polling runtime hands same-process ownership to a replacement instance", async () => {
   const temp = createTempLockPath();
   try {
-    const previousLock = createTelegramLockRuntime({
+    const previousLock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "old-instance",
       mintLeaderEpoch: () => "old-epoch",
     });
     assert.equal(previousLock.acquire({ cwd: "/repo" }).ok, true);
-    const replacementLock = createTelegramLockRuntime({
+    const replacementLock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "new-instance",
       mintLeaderEpoch: () => "new-epoch",
     });
     const events: string[] = [];
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock: replacementLock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2230,11 +2230,11 @@ test("Locked polling runtime hands same-process ownership to a replacement insta
 
     assert.deepEqual(await runtime.start({ cwd: "/repo" }), {
       ok: true,
-      message: "Telegram bridge connected.",
+      message: "Bale bridge connected.",
     });
     assert.equal(previousLock.refresh({ cwd: "/repo" }), false);
     previousLock.release();
-    const persisted = readLocks(temp.path)[TELEGRAM_LOCK_KEY] as Record<
+    const persisted = readLocks(temp.path)[BALE_LOCK_KEY] as Record<
       string,
       unknown
     >;
@@ -2254,7 +2254,7 @@ test("Default runtime generation supersedes a pre-reload same-process counter", 
   const temp = createTempLockPath();
   try {
     writeLocks(temp.path, {
-      [TELEGRAM_LOCK_KEY]: {
+      [BALE_LOCK_KEY]: {
         pid: 10,
         cwd: "/repo",
         instanceId: "10:old-reload",
@@ -2263,7 +2263,7 @@ test("Default runtime generation supersedes a pre-reload same-process counter", 
         runtimeGeneration: 2,
       },
     });
-    const replacement = createTelegramLockRuntime({
+    const replacement = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "10:new-reload",
@@ -2271,8 +2271,8 @@ test("Default runtime generation supersedes a pre-reload same-process counter", 
     });
 
     const expectedOwner = readLocks(temp.path)[
-      TELEGRAM_LOCK_KEY
-    ] as TelegramLockEntry;
+      BALE_LOCK_KEY
+    ] as BaleLockEntry;
     const acquired = replacement.acquire(
       { cwd: "/repo" },
       { force: true, expectedOwner },
@@ -2290,14 +2290,14 @@ test("Default runtime generation supersedes a pre-reload same-process counter", 
 test("Older same-process runtime cannot reverse a replacement handoff", async () => {
   const temp = createTempLockPath();
   try {
-    const oldLock = createTelegramLockRuntime({
+    const oldLock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "old-instance",
       runtimeGeneration: 1,
       mintLeaderEpoch: () => "old-epoch",
     });
-    const newLock = createTelegramLockRuntime({
+    const newLock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "new-instance",
@@ -2305,7 +2305,7 @@ test("Older same-process runtime cannot reverse a replacement handoff", async ()
       mintLeaderEpoch: () => "new-epoch",
     });
     assert.equal(oldLock.acquire({ cwd: "/repo" }).ok, true);
-    const newRuntime = createTelegramLockedPollingRuntime({
+    const newRuntime = createBaleLockedPollingRuntime({
       lock: newLock,
       hasBotToken: () => true,
       startPolling: async () => undefined,
@@ -2313,7 +2313,7 @@ test("Older same-process runtime cannot reverse a replacement handoff", async ()
       updateStatus: () => undefined,
     });
     assert.equal((await newRuntime.start({ cwd: "/repo" })).ok, true);
-    const oldRuntime = createTelegramLockedPollingRuntime({
+    const oldRuntime = createBaleLockedPollingRuntime({
       lock: oldLock,
       hasBotToken: () => true,
       startPolling: async () => assert.fail("Old runtime must not restart"),
@@ -2323,7 +2323,7 @@ test("Older same-process runtime cannot reverse a replacement handoff", async ()
 
     assert.equal((await oldRuntime.start({ cwd: "/repo" })).ok, false);
     await oldRuntime.onSessionStart({}, { cwd: "/repo" });
-    const persisted = readLocks(temp.path)[TELEGRAM_LOCK_KEY] as Record<
+    const persisted = readLocks(temp.path)[BALE_LOCK_KEY] as Record<
       string,
       unknown
     >;
@@ -2341,14 +2341,14 @@ test("Older same-process runtime cannot reverse a replacement handoff", async ()
 test("Same instance id cannot bypass same-process generation handoff", () => {
   const temp = createTempLockPath();
   try {
-    const first = createTelegramLockRuntime({
+    const first = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "10:1000",
       runtimeGeneration: 1,
       mintLeaderEpoch: () => "first-epoch",
     });
-    const second = createTelegramLockRuntime({
+    const second = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "10:1000",
@@ -2379,10 +2379,10 @@ test("Retained lock ownership cannot cross a dynamic profile key", () => {
   const temp = createTempLockPath();
   try {
     let activeProfileName: string | undefined;
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
-      key: () => resolveTelegramLockKey(activeProfileName),
+      key: () => resolveBaleLockKey(activeProfileName),
     });
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     const locks = readLocks(temp.path);
@@ -2405,8 +2405,8 @@ test("Retained lock ownership cannot cross a dynamic profile key", () => {
 test("Locked polling runtime releases ownership when setup is missing", async () => {
   const temp = createTempLockPath();
   try {
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => false,
       startPolling: async () => undefined,
@@ -2416,7 +2416,7 @@ test("Locked polling runtime releases ownership when setup is missing", async ()
     const started = await runtime.start({ cwd: "/repo" });
     assert.deepEqual(started, {
       ok: false,
-      message: "Telegram bot is not configured.",
+      message: "Bale bot is not configured.",
     });
     assert.deepEqual(readLocks(temp.path), {});
   } finally {
@@ -2427,12 +2427,12 @@ test("Locked polling runtime releases ownership when setup is missing", async ()
 test("Locked polling runtime reports an unresolved token reference", async () => {
   const temp = createTempLockPath();
   try {
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => false,
       getBotTokenDiagnostic: () =>
-        "Telegram bot token environment variable WORK_BOT_TOKEN is not set.",
+        "Bale bot token environment variable WORK_BOT_TOKEN is not set.",
       startPolling: async () => undefined,
       stopPolling: async () => undefined,
       updateStatus: () => undefined,
@@ -2440,7 +2440,7 @@ test("Locked polling runtime reports an unresolved token reference", async () =>
     const started = await runtime.start({ cwd: "/repo" });
     assert.deepEqual(started, {
       ok: false,
-      message: "Telegram bot token environment variable WORK_BOT_TOKEN is not set.",
+      message: "Bale bot token environment variable WORK_BOT_TOKEN is not set.",
     });
     assert.deepEqual(readLocks(temp.path), {});
   } finally {
@@ -2452,14 +2452,14 @@ test("Locked polling runtime refuses start when run mode disallows polling", asy
   const temp = createTempLockPath();
   try {
     const events: string[] = [];
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       canStartPolling: (ctx: { cwd: string; mode?: string }) =>
         ctx.mode !== "print",
       formatStartBlockedMessage: (ctx) =>
-        `Telegram polling is unavailable in Pi ${ctx.mode} mode.`,
+        `Bale polling is unavailable in Pi ${ctx.mode} mode.`,
       startPolling: async () => {
         events.push("start");
       },
@@ -2473,7 +2473,7 @@ test("Locked polling runtime refuses start when run mode disallows polling", asy
     const started = await runtime.start({ cwd: "/repo", mode: "print" });
     assert.deepEqual(started, {
       ok: false,
-      message: "Telegram polling is unavailable in Pi print mode.",
+      message: "Bale polling is unavailable in Pi print mode.",
     });
     assert.deepEqual(events, []);
     assert.deepEqual(readLocks(temp.path), {});
@@ -2490,13 +2490,13 @@ test("Locked polling runtime watches ownership during slow startup", async () =>
       releaseStart = resolve;
     });
     let stopped = 0;
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "leader",
       mintLeaderEpoch: () => "epoch",
     });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2517,7 +2517,7 @@ test("Locked polling runtime watches ownership during slow startup", async () =>
     assert.equal(statSync(temp.path).mtimeMs, owned.mtimeMs, "Refresh ticks publish nothing for an exact owner");
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 99, cwd: "/other", instanceId: "other", leaderEpoch: "other" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 99, cwd: "/other", instanceId: "other", leaderEpoch: "other" } }),
     );
     await waitForCondition(() => stopped > 0, 2_000);
     releaseStart?.();
@@ -2529,10 +2529,10 @@ test("Locked polling runtime watches ownership during slow startup", async () =>
 });
 
 test("Locked polling runtime checks ownership more often than it refreshes the lease", () => {
-  assert.ok(TELEGRAM_OWNERSHIP_CHECK_MS < TELEGRAM_OWNERSHIP_REFRESH_MS);
+  assert.ok(BALE_OWNERSHIP_CHECK_MS < BALE_OWNERSHIP_REFRESH_MS);
   assert.equal(
-    TELEGRAM_OWNERSHIP_REFRESH_MS,
-    TELEGRAM_OWNERSHIP_CHECK_MS * 2,
+    BALE_OWNERSHIP_REFRESH_MS,
+    BALE_OWNERSHIP_CHECK_MS * 2,
   );
 });
 
@@ -2545,12 +2545,12 @@ test("Locked polling runtime fails startup closed after ownership loss", async (
     });
     const events: string[] = [];
     let pollingActive = false;
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "leader",
     });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2569,7 +2569,7 @@ test("Locked polling runtime fails startup closed after ownership loss", async (
     const started = runtime.start({ cwd: "/repo" });
     await waitForCondition(() => events.includes("start"));
     writeLocks(temp.path, {
-      [TELEGRAM_LOCK_KEY]: {
+      [BALE_LOCK_KEY]: {
         pid: 99,
         cwd: "/other",
         instanceId: "replacement",
@@ -2583,7 +2583,7 @@ test("Locked polling runtime fails startup closed after ownership loss", async (
     assert.equal(pollingActive, false);
     assert.deepEqual(events, ["start", "stop", "stop"]);
     assert.equal(
-      (readLocks(temp.path)[TELEGRAM_LOCK_KEY] as { instanceId?: string })
+      (readLocks(temp.path)[BALE_LOCK_KEY] as { instanceId?: string })
         .instanceId,
       "replacement",
     );
@@ -2597,8 +2597,8 @@ test("Locked polling runtime rolls back ownership when startup fails", async () 
   try {
     const events: string[] = [];
     let availabilityChanges = 0;
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2625,7 +2625,7 @@ test("Locked polling runtime rolls back ownership when startup fails", async () 
 test("Locked polling runtime resumes a retained owner before auto-start without rewriting it", async () => {
   const temp = createTempLockPath();
   try {
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "leader",
@@ -2634,7 +2634,7 @@ test("Locked polling runtime resumes a retained owner before auto-start without 
     assert.equal(lock.acquire({ cwd: "/repo" }).ok, true);
     const retained = statSync(temp.path);
     let starts = 0;
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2649,7 +2649,7 @@ test("Locked polling runtime resumes a retained owner before auto-start without 
     const resumed = statSync(temp.path);
     assert.equal(resumed.ino, retained.ino);
     assert.equal(resumed.mtimeMs, retained.mtimeMs);
-    assert.equal((readLocks(temp.path)[TELEGRAM_LOCK_KEY] as { heartbeatMs?: number }).heartbeatMs, undefined);
+    assert.equal((readLocks(temp.path)[BALE_LOCK_KEY] as { heartbeatMs?: number }).heartbeatMs, undefined);
     await runtime.stop();
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
@@ -2662,10 +2662,10 @@ test("Locked polling runtime auto-starts only from an existing owned lock", asyn
     const events: string[] = [];
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 10, cwd: "/repo" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 10, cwd: "/repo" } }),
     );
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2681,11 +2681,11 @@ test("Locked polling runtime auto-starts only from an existing owned lock", asyn
     await runtime.onSessionStart({}, { cwd: "/repo" });
     await waitForCondition(() => events.includes("status"));
     assert.deepEqual(events, ["start", "status"]);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
     });
-    assert.equal(await runtime.stop(), "Telegram bridge disconnected.");
+    assert.equal(await runtime.stop(), "Bale bridge disconnected.");
     assert.deepEqual(events, ["start", "status", "stop"]);
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
@@ -2702,15 +2702,15 @@ test("Locked polling runtime auto-connects a remembered follower under a live le
       heartbeatMs: Date.now(),
       leaderEpoch: "leader-epoch",
     };
-    writeFileSync(temp.path, JSON.stringify({ [TELEGRAM_LOCK_KEY]: owner }));
-    const lock = createTelegramLockRuntime({
+    writeFileSync(temp.path, JSON.stringify({ [BALE_LOCK_KEY]: owner }));
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       instanceId: "follower",
       isProcessAlive: (pid) => pid === 20,
     });
     const events: string[] = [];
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2735,7 +2735,7 @@ test("Locked polling runtime auto-connects a remembered follower under a live le
     await runtime.onSessionStart({}, { cwd: "/repo" });
     await waitForCondition(() => events.includes("status"));
     assert.deepEqual(events, ["follower-restore", "availability", "status"]);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], owner);
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], owner);
     await runtime.suspend();
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
@@ -2745,13 +2745,13 @@ test("Locked polling runtime auto-connects a remembered follower under a live le
 test("Locked polling runtime reports a refused follower restore without claiming transport", async () => {
   const temp = createTempLockPath();
   try {
-    writeFileSync(temp.path, JSON.stringify({ [TELEGRAM_LOCK_KEY]: {
+    writeFileSync(temp.path, JSON.stringify({ [BALE_LOCK_KEY]: {
       pid: 20, cwd: "/leader", instanceId: "leader", heartbeatMs: Date.now(),
       leaderEpoch: "leader-epoch",
     } }));
     const events: string[] = [];
-    const runtime = createTelegramLockedPollingRuntime({
-      lock: createTelegramLockRuntime({ locksPath: temp.path, pid: 10,
+    const runtime = createBaleLockedPollingRuntime({
+      lock: createBaleLockRuntime({ locksPath: temp.path, pid: 10,
         instanceId: "follower", isProcessAlive: (pid) => pid === 20 }),
       hasBotToken: () => true,
       startPolling: async () => { throw new Error("must not poll"); },
@@ -2782,10 +2782,10 @@ test("Locked polling runtime session auto-start does not block session initializ
     });
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 10, cwd: "/repo" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 10, cwd: "/repo" } }),
     );
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2808,7 +2808,7 @@ test("Locked polling runtime session auto-start does not block session initializ
     releaseStart?.();
     await waitForCondition(() => events.includes("status"));
     assert.deepEqual(events, ["start:begin", "start:end", "status"]);
-    assert.equal(await runtime.stop(), "Telegram bridge disconnected.");
+    assert.equal(await runtime.stop(), "Bale bridge disconnected.");
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
   }
@@ -2824,10 +2824,10 @@ test("Locked polling runtime suspend waits for pending session auto-start before
     });
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 10, cwd: "/repo" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 10, cwd: "/repo" } }),
     );
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2860,10 +2860,10 @@ test("Locked polling runtime does not auto-start when run mode disallows polling
     const events: string[] = [];
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 10, cwd: "/repo" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 10, cwd: "/repo" } }),
     );
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       canStartPolling: (ctx: { cwd: string; mode?: string }) =>
@@ -2880,7 +2880,7 @@ test("Locked polling runtime does not auto-start when run mode disallows polling
     });
     await runtime.onSessionStart({}, { cwd: "/repo", mode: "print" });
     assert.deepEqual(events, []);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
     });
@@ -2892,11 +2892,11 @@ test("Locked polling runtime does not auto-start when run mode disallows polling
 test("Suspension proof requires completion in the current polling generation", async () => {
   for (const race of ["none", "failure", "restart", "newer-suspend"] as const) {
     const temp = createTempLockPath();
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     let hold = true;
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock, hasBotToken: () => true, startPolling() {}, updateStatus() {},
       async stopPolling() {
         if (!hold) return;
@@ -2932,10 +2932,10 @@ test("Suspension proof requires completion in the current polling generation", a
 
 test("An unfinished explicit startup cannot certify quiescence even after its stale completion", async () => {
   const temp = createTempLockPath();
-  const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+  const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  const runtime = createTelegramLockedPollingRuntime({
+  const runtime = createBaleLockedPollingRuntime({
     lock, hasBotToken: () => true, startPolling: async () => { await gate; },
     async stopPolling() {}, updateStatus() {},
   });
@@ -2963,8 +2963,8 @@ test("Locked polling runtime suspends session replacement without releasing owne
   const temp = createTempLockPath();
   try {
     const events: string[] = [];
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -2980,7 +2980,7 @@ test("Locked polling runtime suspends session replacement without releasing owne
     assert.equal((await runtime.start({ cwd: "/repo" })).ok, true);
     await runtime.suspend();
     assert.deepEqual(events, ["start", "status", "stop"]);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
     });
@@ -2994,7 +2994,7 @@ test("Persistent conflicts stop watchers and monitoring, revoke sends, and relea
   for (const scenario of ["owned", "lost", "release-failure"] as const) {
     const temp = createTempLockPath();
     const ctx = { cwd: "/repo" };
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path, pid: 10, instanceId: "local", isProcessAlive: () => true,
     });
     let refreshes = 0;
@@ -3007,7 +3007,7 @@ test("Persistent conflicts stop watchers and monitoring, revoke sends, and relea
     let monitoring = false;
     const availability: boolean[] = [];
     const diagnostics: Array<Record<string, unknown> | undefined> = [];
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock, hasBotToken: () => true, ownershipCheckMs: 1, ownershipRefreshMs: 2,
       startPolling: async () => {}, stopPolling: async () => { stops++; },
       transportMonitor: { start: () => { monitoring = true; }, stop: () => { monitoring = false; } },
@@ -3021,12 +3021,12 @@ test("Persistent conflicts stop watchers and monitoring, revoke sends, and relea
       assert.ok(refreshes > 1);
       let replacement: unknown;
       if (scenario === "lost") {
-        const other = createTelegramLockRuntime({
+        const other = createBaleLockRuntime({
           locksPath: temp.path, pid: 20, instanceId: "other", isProcessAlive: () => true,
         });
-        const expectedOwner = readLocks(temp.path)[TELEGRAM_LOCK_KEY] as TelegramLockEntry;
+        const expectedOwner = readLocks(temp.path)[BALE_LOCK_KEY] as BaleLockEntry;
         assert.equal(other.acquire(ctx, { force: true, expectedOwner }).ok, true);
-        replacement = readLocks(temp.path)[TELEGRAM_LOCK_KEY];
+        replacement = readLocks(temp.path)[BALE_LOCK_KEY];
       } else if (scenario === "release-failure") {
         writeFileSync(temp.path, "{");
       }
@@ -3049,7 +3049,7 @@ test("Persistent conflicts stop watchers and monitoring, revoke sends, and relea
         assert.equal(readFileSync(temp.path, "utf8"), "{");
         assert.ok(Array.isArray(diagnostics[0]?.cleanupErrors));
       } else {
-        assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], replacement);
+        assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], replacement);
       }
     } finally {
       await runtime.suspend();
@@ -3062,13 +3062,13 @@ test("Captured disconnect cannot stop or release a replacement connection", asyn
   for (const replacementAt of ["before-stop", "during-stop"] as const) {
     const temp = createTempLockPath();
     const ctx = { cwd: "/repo" };
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path, pid: 10, instanceId: "local", isProcessAlive: () => true,
     });
     let stops = 0;
     let releaseStop!: () => void;
     const heldStop = new Promise<void>((resolve) => { releaseStop = resolve; });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock, hasBotToken: () => true, startPolling: async () => {}, updateStatus: () => {},
       stopPolling: async () => {
         stops++;
@@ -3105,7 +3105,7 @@ test("Captured disconnect cannot stop or release a replacement connection", asyn
 test("A failed durable release stays locally revoked until explicit acquisition mints a new epoch", () => {
   const temp = createTempLockPath();
   const ctx = { cwd: "/repo" };
-  const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10, instanceId: "local" });
+  const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10, instanceId: "local" });
   try {
     lock.acquire(ctx);
     const epoch = lock.getOwnedLeaderEpoch();
@@ -3129,8 +3129,8 @@ test("Conflict fencing accepts same-session context rotation but rejects a repla
   const pollContext = { cwd: "/repo", generation: 1 };
   let generation = 1;
   let stops = 0;
-  const lock = createTelegramLockRuntime<typeof pollContext>({ locksPath: temp.path, pid: 10 });
-  const runtime = createTelegramLockedPollingRuntime({
+  const lock = createBaleLockRuntime<typeof pollContext>({ locksPath: temp.path, pid: 10 });
+  const runtime = createBaleLockedPollingRuntime({
     lock, hasBotToken: () => true,
     isContextCurrent: (ctx) => ctx.generation === generation,
     startPolling: async () => {}, stopPolling: async () => { stops++; }, updateStatus: () => {},
@@ -3163,10 +3163,10 @@ test("A later suspend, disconnect, or session replacement cancels a reconnect wa
     let polling = false;
     let monitoring = false;
     let acquisitions = 0;
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
     const acquire = lock.acquire;
     lock.acquire = (...args) => { acquisitions++; return acquire(...args); };
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock, hasBotToken: () => true, isContextCurrent: (context) => context === current,
       startPolling: async (context) => { if (context === current) polling = true; },
       stopPolling: async () => { await gate; polling = false; },
@@ -3214,10 +3214,10 @@ test("Cancelled startup continuations cannot start transport or tear down a repl
         await gate;
         if (outcome === "reject") throw new Error("Obsolete startup failed");
       };
-      const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+      const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
       const starts: typeof old[] = [];
       let stops = 0;
-      const runtime = createTelegramLockedPollingRuntime({
+      const runtime = createBaleLockedPollingRuntime({
         lock, hasBotToken: () => true,
         startPolling: async (ctx) => {
           starts.push(ctx);
@@ -3248,11 +3248,11 @@ test("Conflict teardown serializes reconnect and ignores an obsolete session sig
   const temp = createTempLockPath();
   const oldContext = { cwd: "/repo" };
   const newContext = { cwd: "/repo" };
-  const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
+  const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
   let finishStop!: () => void;
   let stops = 0;
   const pending = new Promise<void>((resolve) => { finishStop = resolve; });
-  const runtime = createTelegramLockedPollingRuntime({
+  const runtime = createBaleLockedPollingRuntime({
     lock, hasBotToken: () => true, startPolling: async () => {},
     stopPolling: async () => { stops++; await pending; }, updateStatus: () => {},
   });
@@ -3285,8 +3285,8 @@ test("Locked polling runtime stops after ownership loss without live context", a
     }[] = [];
     let availabilityChanges = 0;
     const ctx = { cwd: "/repo" };
-    const lock = createTelegramLockRuntime({ locksPath: temp.path, pid: 10 });
-    const runtime = createTelegramLockedPollingRuntime({
+    const lock = createBaleLockRuntime({ locksPath: temp.path, pid: 10 });
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       ownershipCheckMs: 1,
@@ -3352,10 +3352,10 @@ test("Locked polling runtime tolerates a transient unverified ownership check", 
     refresh: () => {
       if (!unverifiedNextCheck) return true;
       unverifiedNextCheck = false;
-      throw new Error("Telegram runtime state identity changed before reading.");
+      throw new Error("Bale runtime state identity changed before reading.");
     },
   };
-  const runtime = createTelegramLockedPollingRuntime({
+  const runtime = createBaleLockedPollingRuntime({
     lock,
     hasBotToken: () => true,
     ownershipCheckMs: 1,
@@ -3381,7 +3381,7 @@ test("Locked polling runtime tolerates a transient unverified ownership check", 
   assert.equal(failureDetails[0]?.consecutiveFailures, 1);
   assert.equal(
     failureDetails[0]?.tolerance,
-    TELEGRAM_OWNERSHIP_CHECK_FAILURE_TOLERANCE,
+    BALE_OWNERSHIP_CHECK_FAILURE_TOLERANCE,
   );
   // The next verified check resets the streak: polling must stay up.
   await new Promise((resolve) => setTimeout(resolve, 25));
@@ -3423,7 +3423,7 @@ for (const ownsReadable of [true, false]) test(`Locked polling runtime records r
       throw new Error("EPERM: operation not permitted, rename locks tmp");
     },
   };
-  const runtime = createTelegramLockedPollingRuntime({
+  const runtime = createBaleLockedPollingRuntime({
     lock,
     hasBotToken: () => true,
     ownershipCheckMs: 1,
@@ -3455,7 +3455,7 @@ for (const ownsReadable of [true, false]) test(`Locked polling runtime records r
   } else {
     await waitForCondition(() => events.includes("stop"));
     assert.deepEqual(events, ["start", "status", "stop"]);
-    assert.equal(runtimeEvents.length, TELEGRAM_OWNERSHIP_CHECK_FAILURE_TOLERANCE + 1);
+    assert.equal(runtimeEvents.length, BALE_OWNERSHIP_CHECK_FAILURE_TOLERANCE + 1);
   }
   assert.equal(runtimeEvents[0]?.category, "lock");
   assert.equal(runtimeEvents[0]?.phase, "ownership-check-failed");
@@ -3468,14 +3468,14 @@ test("Locked polling runtime resumes stale same-cwd ownership after process rest
     const events: string[] = [];
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 99, cwd: "/repo" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 99, cwd: "/repo" } }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       isProcessAlive: () => false,
     });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -3491,11 +3491,11 @@ test("Locked polling runtime resumes stale same-cwd ownership after process rest
     await runtime.onSessionStart({}, { cwd: "/repo" });
     await waitForCondition(() => events.includes("status"));
     assert.deepEqual(events, ["start", "status"]);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 10,
       cwd: "/repo",
     });
-    assert.equal(await runtime.stop(), "Telegram bridge disconnected.");
+    assert.equal(await runtime.stop(), "Bale bridge disconnected.");
   } finally {
     rmSync(temp.dir, { recursive: true, force: true });
   }
@@ -3507,14 +3507,14 @@ test("Locked polling runtime does not claim stale ownership from another cwd dur
     const events: string[] = [];
     writeFileSync(
       temp.path,
-      JSON.stringify({ [TELEGRAM_LOCK_KEY]: { pid: 99, cwd: "/other" } }),
+      JSON.stringify({ [BALE_LOCK_KEY]: { pid: 99, cwd: "/other" } }),
     );
-    const lock = createTelegramLockRuntime({
+    const lock = createBaleLockRuntime({
       locksPath: temp.path,
       pid: 10,
       isProcessAlive: () => false,
     });
-    const runtime = createTelegramLockedPollingRuntime({
+    const runtime = createBaleLockedPollingRuntime({
       lock,
       hasBotToken: () => true,
       startPolling: async () => {
@@ -3529,7 +3529,7 @@ test("Locked polling runtime does not claim stale ownership from another cwd dur
     });
     await runtime.onSessionStart({}, { cwd: "/repo" });
     assert.deepEqual(events, []);
-    assert.deepEqual(readLocks(temp.path)[TELEGRAM_LOCK_KEY], {
+    assert.deepEqual(readLocks(temp.path)[BALE_LOCK_KEY], {
       pid: 99,
       cwd: "/other",
     });
@@ -3541,18 +3541,18 @@ test("Locked polling runtime does not claim stale ownership from another cwd dur
 test("Private file helpers publish owner-only contents and refuse unsafe or oversized reads", { skip: process.platform === "win32" }, () => {
   const dir = mkdtempSync(join(tmpdir(), "pt-private-file-")), path = join(dir, "nested", "store.json");
   try {
-    assert.equal(readTelegramPrivateFile(path, 64), undefined, "Absence is not a failure");
+    assert.equal(readBalePrivateFile(path, 64), undefined, "Absence is not a failure");
     const boundaries: string[] = [];
-    publishTelegramPrivateFile(path, join(dir, "staging", "store.json"), "{\"ok\":true}\n", "Fixture", value => boundaries.push(value));
+    publishBalePrivateFile(path, join(dir, "staging", "store.json"), "{\"ok\":true}\n", "Fixture", value => boundaries.push(value));
     assert.deepEqual(boundaries, ["after-write-before-rename", "after-rename"]);
     assert.equal(statSync(path).mode & 0o777, 0o600);
     assert.deepEqual(readdirSync(join(dir, "staging")), [], "Rename consumes the staging file");
-    assert.equal(readTelegramPrivateFile(path, 64), "{\"ok\":true}\n");
-    const failure = (fn: () => unknown, expected: string) => assert.throws(fn, error => error instanceof TelegramPrivateFileError && error.failure === expected);
-    failure(() => readTelegramPrivateFile(path, 4), "capacity");
+    assert.equal(readBalePrivateFile(path, 64), "{\"ok\":true}\n");
+    const failure = (fn: () => unknown, expected: string) => assert.throws(fn, error => error instanceof BalePrivateFileError && error.failure === expected);
+    failure(() => readBalePrivateFile(path, 4), "capacity");
     rmSync(path); writeFileSync(path, "{}", { mode: 0o644 });
-    failure(() => readTelegramPrivateFile(path, 64), "unsafe");
+    failure(() => readBalePrivateFile(path, 64), "unsafe");
     rmSync(path); symlinkSync(join(dir, "elsewhere"), path);
-    failure(() => readTelegramPrivateFile(path, 64), "unsafe");
+    failure(() => readBalePrivateFile(path, 64), "unsafe");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

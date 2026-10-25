@@ -1,17 +1,19 @@
-# Telegram Activity API
+> Bale port: only the supported subset in [Bale compatibility](bale-compatibility.md) is enabled. Inherited Thread, reaction, Guest, Rich block and draft contracts are not Bale capabilities.
+
+# Bale Activity API
 
 ## Purpose
 
-The Telegram Activity API lets trusted extension consumers observe normalized Pi work lifecycle without importing pi-telegram internals, correlating raw Pi events with bridge state, or capturing session contexts.
+The Bale Activity API lets trusted extension consumers observe normalized Pi work lifecycle without importing pi-bale internals, correlating raw Pi events with bridge state, or capturing session contexts.
 
-It is a higher-level event surface over the [Telegram Delivery API](./delivery.md). Activity owns lifecycle normalization and event routing; delivery owns target authorization, rendering transport, ordering, chunk reconciliation, and stale-generation behavior.
+It is a higher-level event surface over the [Bale Delivery API](./delivery.md). Activity owns lifecycle normalization and event routing; delivery owns target authorization, rendering transport, ordering, chunk reconciliation, and stale-generation behavior.
 
 The public membrane is:
 
 ```ts
 import {
-  registerTelegramActivityHandler,
-} from "@llblab/pi-telegram/activity";
+  registerBaleActivityHandler,
+} from "@llblab/pi-bale/activity";
 ```
 
 An external consumer can own optional Settings policy for reasoning, intermediate assistant prose, and tool rows. Those visibility choices do not become mandatory bridge-core settings.
@@ -26,10 +28,10 @@ Consumer extension code owns:
 - Coalescing or replacing its own visible activity documents.
 - Redacting additional domain-specific data before display.
 
-pi-telegram owns:
+pi-bale owns:
 
 - Mapping Pi lifecycle events into one normalized activity stream.
-- Correlating events with the current Telegram turn or Pi instance.
+- Correlating events with the current Bale turn or Pi instance.
 - Stable activity/run identity within one runtime generation.
 - Default delivery scope selection.
 - Handler registration, ordering, isolation, disposal, and diagnostics.
@@ -41,57 +43,57 @@ Pi owns the source lifecycle and provider event protocol. The Activity API requi
 ## Registration
 
 ```ts
-export interface TelegramActivityHandlerRegistration {
+export interface BaleActivityHandlerRegistration {
   id: string;
   order?: number;
   handle: (
-    event: TelegramActivityEvent,
-    ctx: TelegramActivityContext,
+    event: BaleActivityEvent,
+    ctx: BaleActivityContext,
   ) => void | Promise<void>;
 }
 
-export function registerTelegramActivityHandler(
-  registration: TelegramActivityHandlerRegistration,
+export function registerBaleActivityHandler(
+  registration: BaleActivityHandlerRegistration,
 ): () => void;
 ```
 
 Rules:
 
 - `id` is a stable consumer identity, normally derived from package identity plus a local activity suffix.
-- Duplicate active ids are rejected rather than silently stacking duplicate Telegram output.
+- Duplicate active ids are rejected rather than silently stacking duplicate Bale output.
 - Handlers run by `order`, then `id`.
 - Registration returns a stale-safe disposer that removes only its own registration.
 - Consumers register on `session_start` and dispose on `session_shutdown`.
 - The bridge creates a fresh dispatcher generation on every `session_start`; shutdown stops and clears only the retiring generation, so same-process session replacement resumes delivery instead of leaving Activity permanently stopped.
-- Handler failures are isolated and recorded in `/telegram-status`; they never break Pi lifecycle or other handlers.
+- Handler failures are isolated and recorded in `/bale-status`; they never break Pi lifecycle or other handlers.
 
 ## Activity Identity And Source
 
 ```ts
-export type TelegramActivitySource =
-  | "telegram"
+export type BaleActivitySource =
+  | "bale"
   | "local"
   | "autonomous"
   | "unknown";
 
-export type TelegramActivityTarget = Readonly<TelegramDeliveryTarget>;
+export type BaleActivityTarget = Readonly<BaleDeliveryTarget>;
 
-export interface TelegramActivityEnvelope {
+export interface BaleActivityEnvelope {
   activityId: string;
   sequence: number;
-  source: TelegramActivitySource;
-  target?: TelegramActivityTarget;
+  source: BaleActivitySource;
+  target?: BaleActivityTarget;
   timestamp: number;
 }
 ```
 
-`activityId` identifies one logical settled-work sequence inside the current delivery generation. `sequence` increases monotonically within that activity and lets consumers reject stale asynchronous rendering. Telegram-owned activities carry a frozen `target` captured when the activity starts; it contains only safe chat/thread identity, never a Telegram client or Pi context.
+`activityId` identifies one logical settled-work sequence inside the current delivery generation. `sequence` increases monotonically within that activity and lets consumers reject stale asynchronous rendering. Bale-owned activities carry a frozen `target` captured when the activity starts; it contains only safe chat/thread identity, never a Bale client or Pi context.
 
 Source classification follows evidence, not guesses:
 
-- `telegram`: a dispatched active Telegram turn exists.
-- `local`: the initiating Pi input event reports `interactive` or `rpc` and no Telegram turn owns the run.
-- `autonomous`: the initiating input reports `extension` and no Telegram turn owns the run.
+- `bale`: a dispatched active Bale turn exists.
+- `local`: the initiating Pi input event reports `interactive` or `rpc` and no Bale turn owns the run.
+- `autonomous`: the initiating input reports `extension` and no Bale turn owns the run.
 - `unknown`: retries, restored continuations, or runtimes without enough input evidence cannot be classified safely.
 
 Automatic retries, overflow compaction retries, and tool continuations inherit the current activity identity/source until `agent_settled`. A new unrelated `agent_start` after settlement allocates a new activity id.
@@ -101,7 +103,7 @@ A standalone compaction owns a temporary activity until `session_compact` or `se
 ## Event Contract
 
 ```ts
-export type TelegramActivityEvent = TelegramActivityEnvelope & (
+export type BaleActivityEvent = BaleActivityEnvelope & (
   | { type: "agent-start" }
   | {
       type: "assistant-text-delta";
@@ -191,44 +193,44 @@ Tool activity uses Pi's executed-tool lifecycle (`tool_execution_start/update/en
 ## Delivery Context
 
 ```ts
-export interface TelegramActivityContext {
+export interface BaleActivityContext {
   activityId: string;
   sequence: number;
-  source: TelegramActivitySource;
-  defaultScope: TelegramDeliveryScope;
+  source: BaleActivitySource;
+  defaultScope: BaleDeliveryScope;
   send(
-    view: TelegramDeliveryView,
+    view: BaleDeliveryView,
     options?: {
-      scope?: TelegramDeliveryScope;
+      scope?: BaleDeliveryScope;
       replyToMessageId?: number;
     },
-  ): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+  ): Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
   edit(
-    handle: TelegramDeliveryHandle,
-    view: TelegramDeliveryView,
-  ): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+    handle: BaleDeliveryHandle,
+    view: BaleDeliveryView,
+  ): Promise<BaleDeliveryResult<BaleDeliveryHandle>>;
   delete(
-    handle: TelegramDeliveryHandle,
-  ): Promise<TelegramDeliveryResult<void>>;
+    handle: BaleDeliveryHandle,
+  ): Promise<BaleDeliveryResult<void>>;
   chatAction(
-    action: TelegramDeliveryChatAction,
-    options?: { scope?: TelegramDeliveryScope },
-  ): Promise<TelegramDeliveryResult<void>>;
+    action: BaleDeliveryChatAction,
+    options?: { scope?: BaleDeliveryScope },
+  ): Promise<BaleDeliveryResult<void>>;
 }
 ```
 
 Default scope:
 
-- `telegram` uses `{ kind: "target", target: event.target }`, binding delayed handlers to the immutable originating thread rather than whichever turn happens to be active later.
+- `bale` uses `{ kind: "target", target: event.target }`, binding delayed handlers to the immutable originating thread rather than whichever turn happens to be active later.
 - `local`, `autonomous`, and `unknown` use `{ kind: "instance" }`.
 
-Handlers may explicitly choose an authorized scope; aggregate output is available only in Classic Mode, never Threaded Mode's input-only All. Context methods delegate to the public delivery runtime on every call; they do not retain Telegram clients, Pi contexts, or transport ownership objects. The Delivery API rechecks authorization when an operation runs, so a captured target that is no longer owned fails closed instead of rerouting.
+Handlers may explicitly choose an authorized scope; aggregate output is available only in Classic Mode, never Threaded Mode's input-only All. Context methods delegate to the public delivery runtime on every call; they do not retain Bale clients, Pi contexts, or transport ownership objects. The Delivery API rechecks authorization when an operation runs, so a captured target that is no longer owned fails closed instead of rerouting.
 
 A handler may still receive events while no target is currently deliverable. Delivery then returns the normal structured `target-unavailable`, `target-unauthorized`, or `runtime-unavailable` result.
 
 ## Dispatch And Backpressure
 
-Pi lifecycle must not wait for extension rendering or Telegram transport.
+Pi lifecycle must not wait for extension rendering or Bale transport.
 
 - Lifecycle hooks normalize and enqueue activity events synchronously, then return.
 - Each handler owns a serialized asynchronous queue so its event order is stable without blocking other handlers.
@@ -238,11 +240,11 @@ Pi lifecycle must not wait for extension rendering or Telegram transport.
 - Boundary events (`assistant-segment`, `reasoning-end`, tool start/end, compaction, agent end/settled) are never dropped or reordered.
 - The 0.21 dispatcher does not impose an event-count drop policy or emit queue-length diagnostics. Adjacent delta/update coalescing reduces common streaming pressure, but boundary events accumulate behind a slow handler; consumers must keep handler work bounded and delegate long-lived work outside the callback when appropriate.
 
-The Delivery API independently serializes concrete Telegram operations per target. Activity serialization preserves semantic event order; delivery serialization preserves transport order.
+The Delivery API independently serializes concrete Bale operations per target. Activity serialization preserves semantic event order; delivery serialization preserves transport order.
 
 ### Core assistant-output projection
 
-Activity's built-in assistant-output projection uses the same normalized `assistant-segment` boundary exposed to public handlers. For `telegram` activity it always projects complete `intermediate` commentary to the immutable originating target, while final and terminal-partial segments remain with active-turn settlement. For `local`, `autonomous`, or unclassified extension follow-up activity, every completed public block—including intermediate commentary/checkpoints and the final block—is projected whenever this Pi instance retains authorized connected transport. This closes actor-follow-up delivery without reclassifying it as direct user input, and the connected companion contract has no projection opt-out. It never projects text token deltas, reasoning events, tool events or payloads, or empty text.
+Activity's built-in assistant-output projection uses the same normalized `assistant-segment` boundary exposed to public handlers. For `bale` activity it always projects complete `intermediate` commentary to the immutable originating target, while final and terminal-partial segments remain with active-turn settlement. For `local`, `autonomous`, or unclassified extension follow-up activity, every completed public block—including intermediate commentary/checkpoints and the final block—is projected whenever this Pi instance retains authorized connected transport. This closes actor-follow-up delivery without reclassifying it as direct user input, and the connected companion contract has no projection opt-out. It never projects text token deltas, reasoning events, tool events or payloads, or empty text.
 
 The projection does not delay Activity dispatch or Pi lifecycle. Its ordered admission tail deduplicates normalized event identity, while existing routing and outbound owners revalidate the immutable admission-time target, profile/token transport generation, direct leader epoch or follower registration generation, and session generation immediately before each send. Active-turn final delivery waits for admitted commentary inside its existing background task. A replacement or stale owner drops queued work rather than rerouting it, and an already-started non-idempotent Bot API mutation follows the normal `commit-unknown` no-replay contract.
 
@@ -253,20 +255,20 @@ This projection consumes ordinary normalized Pi output. It has no runtime depend
 The bridge maps Pi hooks as follows:
 
 - `input`: capture source evidence for the next logical activity.
-- `agent_start`: allocate or reuse activity identity and emit `agent-start` after Telegram queue consumption establishes active-turn ownership.
+- `agent_start`: allocate or reuse activity identity and emit `agent-start` after Bale queue consumption establishes active-turn ownership.
 - `message_update.assistantMessageEvent`: normalize text/reasoning/provider boundaries.
 - `tool_execution_start/update/end`: emit executed tool events.
 - `session_before_compact` / `session_compact` / `session_compact_failed`: emit successful compaction boundaries, abandon failed or cancelled work immediately, and preserve activity identity across retry compaction. Mid-run threshold compaction stays between tool results and the next assistant response, while terminal assistant output awaiting transport keeps later notices behind its final reply. A missing or unrecognized reason maps to `unknown` rather than guessing.
-- `ui_prompt_start` / `ui_prompt_end`: emit one coalesced waiting span for extension-owned local UI, pause Telegram typing while Pi waits for the operator, and resume typing when the prompt closes if agent or compaction work remains unsettled.
+- `ui_prompt_start` / `ui_prompt_end`: emit one coalesced waiting span for extension-owned local UI, pause Bale typing while Pi waits for the operator, and resume typing when the prompt closes if agent or compaction work remains unsettled.
 - `agent_end`: emit low-level run completion but keep identity and connected work presence alive for retry, compaction, or follow-up work.
 - `agent_settled`: emit terminal settlement, flush pending terminal segments, release activity identity, and end agent-owned connected work presence.
 - `session_shutdown`: stop dispatch, clear pending normalization state, and invalidate delivery generation through the existing delivery lifecycle.
 
 ## Diagnostics
 
-Duplicate registration fails synchronously. When a handler throws or rejects, the dispatcher forwards only the handler id, event type, activity id, and error to pi-telegram's existing bounded/redacted runtime event recorder. The bridge does not copy reasoning, assistant prose, tool arguments/results, Telegram payloads, or queue contents into diagnostic metadata. It does not currently record queue phase, queue length, coalescing counts, or handler latency.
+Duplicate registration fails synchronously. When a handler throws or rejects, the dispatcher forwards only the handler id, event type, activity id, and error to pi-bale's existing bounded/redacted runtime event recorder. The bridge does not copy reasoning, assistant prose, tool arguments/results, Bale payloads, or queue contents into diagnostic metadata. It does not currently record queue phase, queue length, coalescing counts, or handler latency.
 
-The first implementation has no public Activity diagnostics getter because handler failures already flow through bridge runtime diagnostics and `/telegram-status`. Add queue telemetry or a dedicated getter only when an observed consumer needs inspectable backpressure state.
+The first implementation has no public Activity diagnostics getter because handler failures already flow through bridge runtime diagnostics and `/bale-status`. Add queue telemetry or a dedicated getter only when an observed consumer needs inspectable backpressure state.
 
 ## Security And Non-Goals
 
@@ -278,15 +280,15 @@ The Activity API itself does not:
 - Render raw tool arguments or results for public handlers automatically. The separate bridge-owned verbose projector renders only bounded redacted evidence after explicit operator opt-in.
 - Replace assistant final replies or Rich Draft previews.
 - Mutate queues, models, thinking levels, sessions, or process state.
-- Expose Telegram clients, bot tokens, Pi contexts, or private runtime objects.
-- Block Pi lifecycle on extension handlers or Telegram delivery.
+- Expose Bale clients, bot tokens, Pi contexts, or private runtime objects.
+- Block Pi lifecycle on extension handlers or Bale delivery.
 
 ## Validation Contract
 
 The implementation must cover:
 
 - Stable id registration, ordering, duplicate rejection, and stale-safe disposal.
-- Telegram, local, autonomous, and unknown source evidence.
+- Bale, local, autonomous, and unknown source evidence.
 - Identity reuse across retry/compaction and reset at settlement.
 - Text delta flow and intermediate/final/terminal segment classification.
 - Reasoning mapping and empty/hidden reasoning behavior.
@@ -308,4 +310,4 @@ The registration and delivery examples above remain the public building blocks f
 - Interactive toggles belong in a registered Section and Settings row; activity messages can remain non-interactive.
 - `session_shutdown` should dispose stable registrations and drop retained delivery handles, so reload/session replacement cannot reuse old contexts or handles.
 
-The separate [`pi-telegram-extension-demo`](https://github.com/llblab/pi-telegram-extension-demo) project remains the maintained companion-extension and managed-UI reference. This document owns the Activity-specific usage pattern; pi-telegram does not ship a redundant `examples/` package directory.
+The separate [`pi-bale-extension-demo`](https://github.com/llblab/pi-bale-extension-demo) project remains the maintained companion-extension and managed-UI reference. This document owns the Activity-specific usage pattern; pi-bale does not ship a redundant `examples/` package directory.

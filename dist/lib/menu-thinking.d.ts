@@ -1,34 +1,34 @@
 /**
- * Telegram thinking menu UI helpers
- * Zones: telegram ui, thinking controls, menu composition
+ * Bale thinking menu UI helpers
+ * Zones: bale ui, thinking controls, menu composition
  * Owns thinking-menu text, reply markup, callback handling, and thinking-menu message rendering
  */
-import { type TelegramMenuMessageRuntimeDeps, type TelegramMenuRenderPayload, type TelegramModelMenuState, type TelegramReplyMarkup } from "./menu-model.ts";
+import { type BaleMenuMessageRuntimeDeps, type BaleMenuRenderPayload, type BaleModelMenuState, type BaleReplyMarkup } from "./menu-model.ts";
 import { type MenuModel, type ThinkingLevel } from "./model.ts";
-export interface TelegramThinkingMenuCallbackDeps {
+export interface BaleThinkingMenuCallbackDeps {
     setThinkingLevel: (level: ThinkingLevel) => void;
     getCurrentThinkingLevel: () => ThinkingLevel;
     updateThinkingMenuMessage: () => Promise<void>;
     answerCallbackQuery: (callbackQueryId: string, text?: string) => Promise<void>;
     isVoiceReplyActive?: () => boolean;
 }
-export interface TelegramThinkingMenuOpenDeps<TModel extends MenuModel = MenuModel> extends TelegramMenuMessageRuntimeDeps {
-    getModelMenuState: () => Promise<TelegramModelMenuState<TModel>>;
+export interface BaleThinkingMenuOpenDeps<TModel extends MenuModel = MenuModel> extends BaleMenuMessageRuntimeDeps {
+    getModelMenuState: () => Promise<BaleModelMenuState<TModel>>;
     getActiveModel: () => TModel | undefined;
     getThinkingLevel: () => ThinkingLevel;
-    storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
+    storeModelMenuState: (state: BaleModelMenuState<TModel>) => void;
     isVoiceReplyActive?: () => boolean;
 }
 /** Answers and returns true when voice replies or a non-reasoning model disable thinking controls. */
-export declare function refuseUnavailableTelegramThinkingControls(callbackQueryId: string, activeModel: MenuModel | undefined, deps: {
+export declare function refuseUnavailableBaleThinkingControls(callbackQueryId: string, activeModel: MenuModel | undefined, deps: {
     answerCallbackQuery: (callbackQueryId: string, text?: string) => Promise<void>;
     isVoiceReplyActive?: () => boolean;
 }): Promise<boolean>;
-export declare function handleTelegramThinkingMenuCallbackAction(callbackQueryId: string, data: string | undefined, activeModel: MenuModel | undefined, deps: TelegramThinkingMenuCallbackDeps): Promise<boolean>;
+export declare function handleBaleThinkingMenuCallbackAction(callbackQueryId: string, data: string | undefined, activeModel: MenuModel | undefined, deps: BaleThinkingMenuCallbackDeps): Promise<boolean>;
 export declare function buildThinkingMenuText(): string;
-export declare function buildThinkingMenuReplyMarkup(currentThinkingLevel: ThinkingLevel): TelegramReplyMarkup;
-export declare function buildTelegramThinkingMenuRenderPayload(_activeModel: MenuModel | undefined, currentThinkingLevel: ThinkingLevel): TelegramMenuRenderPayload;
-export declare function openTelegramThinkingMenu<TModel extends MenuModel = MenuModel>(deps: TelegramThinkingMenuOpenDeps<TModel>): Promise<void>;
-export declare function updateTelegramThinkingMenuMessage(state: TelegramModelMenuState, activeModel: MenuModel | undefined, currentThinkingLevel: ThinkingLevel, deps: TelegramMenuMessageRuntimeDeps & {
+export declare function buildThinkingMenuReplyMarkup(currentThinkingLevel: ThinkingLevel): BaleReplyMarkup;
+export declare function buildBaleThinkingMenuRenderPayload(_activeModel: MenuModel | undefined, currentThinkingLevel: ThinkingLevel): BaleMenuRenderPayload;
+export declare function openBaleThinkingMenu<TModel extends MenuModel = MenuModel>(deps: BaleThinkingMenuOpenDeps<TModel>): Promise<void>;
+export declare function updateBaleThinkingMenuMessage(state: BaleModelMenuState, activeModel: MenuModel | undefined, currentThinkingLevel: ThinkingLevel, deps: BaleMenuMessageRuntimeDeps & {
     isVoiceReplyActive?: () => boolean;
 }): Promise<void>;

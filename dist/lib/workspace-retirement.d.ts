@@ -1,35 +1,35 @@
 /**
  * Workspace slot rotation
- * Zones: telegram, workspace identity, lifecycle
+ * Zones: bale, workspace identity, lifecycle
  * Owns fail-closed protection, demand-driven pressure retirement, exact-intent admission,
  * successor recovery, and fenced one-shot deletion before durable slot reuse.
  */
-import type { TelegramJournalNamespaceInspection, TelegramUpdateJournalDeadQueueOwnerRecoveryInput, TelegramUpdateJournalDeadQueueOwnerRecoveryResult, TelegramUpdateJournalEntry, TelegramUpdateJournalQueueOwnerIdentity } from "./journal.ts";
-import { type TelegramTarget } from "./target.ts";
-import { type TelegramWorkspaceThreadDeletionTransport } from "./telegram-api.ts";
-import type { TelegramTopicTargetStore, TelegramWorkspaceExternalProtectionEvidence, TelegramWorkspaceJournalSource, TelegramWorkspaceProtectionState, TelegramWorkspaceRetirementIntent, TelegramWorkspaceThreadBinding } from "./threads.ts";
-import { type TelegramWorkspaceAdmissionLedger, type TelegramWorkspaceAdmissionScope, type TelegramWorkspaceDeletionPermit } from "./workspace-admission.ts";
-export interface TelegramWorkspaceOperationGate {
+import type { BaleJournalNamespaceInspection, BaleUpdateJournalDeadQueueOwnerRecoveryInput, BaleUpdateJournalDeadQueueOwnerRecoveryResult, BaleUpdateJournalEntry, BaleUpdateJournalQueueOwnerIdentity } from "./journal.ts";
+import { type BaleTarget } from "./target.ts";
+import { type BaleWorkspaceThreadDeletionTransport } from "./bale-api.ts";
+import type { BaleTopicTargetStore, BaleWorkspaceExternalProtectionEvidence, BaleWorkspaceJournalSource, BaleWorkspaceProtectionState, BaleWorkspaceRetirementIntent, BaleWorkspaceThreadBinding } from "./threads.ts";
+import { type BaleWorkspaceAdmissionLedger, type BaleWorkspaceAdmissionScope, type BaleWorkspaceDeletionPermit } from "./workspace-admission.ts";
+export interface BaleWorkspaceOperationGate {
     runExclusive: <T>(operation: () => Promise<T>) => Promise<T>;
 }
-export declare function createTelegramWorkspaceOperationGate(): TelegramWorkspaceOperationGate;
-export type TelegramWorkspaceOperationRunner = <T>(input: {
+export declare function createBaleWorkspaceOperationGate(): BaleWorkspaceOperationGate;
+export type BaleWorkspaceOperationRunner = <T>(input: {
     operationId: string;
     operationKind: string;
-    scopes: readonly TelegramWorkspaceAdmissionScope[];
+    scopes: readonly BaleWorkspaceAdmissionScope[];
 }, operation: () => Promise<T>) => Promise<T>;
-export interface TelegramWorkspaceOperationRuntime extends TelegramWorkspaceOperationGate {
-    run: TelegramWorkspaceOperationRunner;
+export interface BaleWorkspaceOperationRuntime extends BaleWorkspaceOperationGate {
+    run: BaleWorkspaceOperationRunner;
 }
-export declare function createTelegramWorkspaceOperationRuntime(input?: {
-    getWorkspaceAdmission?: () => Pick<TelegramWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission"> | undefined;
+export declare function createBaleWorkspaceOperationRuntime(input?: {
+    getWorkspaceAdmission?: () => Pick<BaleWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission"> | undefined;
     onReleaseError?: (error: unknown, operationKind: string) => void;
-}): TelegramWorkspaceOperationRuntime;
-export interface TelegramWorkspaceJournalProtectionCapture {
-    sources: TelegramWorkspaceJournalProtectionSource[];
+}): BaleWorkspaceOperationRuntime;
+export interface BaleWorkspaceJournalProtectionCapture {
+    sources: BaleWorkspaceJournalProtectionSource[];
     complete: boolean;
 }
-interface TelegramWorkspaceJournalReader {
+interface BaleWorkspaceJournalReader {
     recoveryKey?: string;
     journal: {
         read: () => {
@@ -46,21 +46,21 @@ interface TelegramWorkspaceJournalReader {
         exists?: boolean;
     };
 }
-export declare function captureTelegramWorkspaceJournalProtectionSources(input: {
-    binding: TelegramWorkspaceThreadBinding;
-    resolveLeader: () => TelegramWorkspaceJournalReader | undefined;
-    createFollowerResolver: (journalBindingKey: string) => () => TelegramWorkspaceJournalReader | undefined;
-    createSessionResolver?: (recipientBindingKey: string, sessionId: string) => () => TelegramWorkspaceJournalReader | undefined;
-    withJournalReference?: <T>(binding: TelegramWorkspaceJournalReader, operation: () => T) => T;
+export declare function captureBaleWorkspaceJournalProtectionSources(input: {
+    binding: BaleWorkspaceThreadBinding;
+    resolveLeader: () => BaleWorkspaceJournalReader | undefined;
+    createFollowerResolver: (journalBindingKey: string) => () => BaleWorkspaceJournalReader | undefined;
+    createSessionResolver?: (recipientBindingKey: string, sessionId: string) => () => BaleWorkspaceJournalReader | undefined;
+    withJournalReference?: <T>(binding: BaleWorkspaceJournalReader, operation: () => T) => T;
     discovery?: {
         paths: readonly string[];
         complete: boolean;
-        createResolver: (path: string) => () => TelegramWorkspaceJournalReader | undefined;
+        createResolver: (path: string) => () => BaleWorkspaceJournalReader | undefined;
     };
     /** Snapshot-scoped reuse of binding-independent (shared/discovered) source reads. */
-    sharedSourceReads?: Map<string, TelegramWorkspaceJournalProtectionSource>;
-}): TelegramWorkspaceJournalProtectionCapture;
-export type TelegramWorkspaceJournalProtectionSource = {
+    sharedSourceReads?: Map<string, BaleWorkspaceJournalProtectionSource>;
+}): BaleWorkspaceJournalProtectionCapture;
+export type BaleWorkspaceJournalProtectionSource = {
     kind: "available";
     scope: {
         kind: "shared";
@@ -92,103 +92,103 @@ export type TelegramWorkspaceJournalProtectionSource = {
         path: string;
     };
 };
-export declare function resolveTelegramWorkspaceAcceptedWorkProtection(input: {
-    binding: TelegramWorkspaceThreadBinding;
+export declare function resolveBaleWorkspaceAcceptedWorkProtection(input: {
+    binding: BaleWorkspaceThreadBinding;
     localAcceptedTargets: readonly {
         chatId: number;
         threadId?: number;
     }[];
-    journalSources: readonly TelegramWorkspaceJournalProtectionSource[];
+    journalSources: readonly BaleWorkspaceJournalProtectionSource[];
     sourcesComplete: boolean;
-    /** Relocation cannot infer execution ownership from the original Telegram message target. */
+    /** Relocation cannot infer execution ownership from the original Bale message target. */
     requireBindingProvenance?: boolean;
-}): TelegramWorkspaceProtectionState;
-export type TelegramWorkspaceJournalPruneResult = {
+}): BaleWorkspaceProtectionState;
+export type BaleWorkspaceJournalPruneResult = {
     kind: "committed";
-    binding: TelegramWorkspaceThreadBinding;
+    binding: BaleWorkspaceThreadBinding;
     removedKeys: string[];
-    removedSources?: TelegramWorkspaceJournalSource[];
+    removedSources?: BaleWorkspaceJournalSource[];
 } | {
     kind: "blocked";
     reason: "incomplete-evidence" | "writer-not-quiescent" | "state-changed" | "publication-refused";
 };
-export declare function pruneTelegramWorkspaceJournalEvidence(input: {
-    store: Pick<TelegramTopicTargetStore, "commitWorkspaceJournalEvidence" | "persistWorkspaceJournalEvidence">;
-    binding: TelegramWorkspaceThreadBinding;
+export declare function pruneBaleWorkspaceJournalEvidence(input: {
+    store: Pick<BaleTopicTargetStore, "commitWorkspaceJournalEvidence" | "persistWorkspaceJournalEvidence">;
+    binding: BaleWorkspaceThreadBinding;
     /** Capture fresh source evidence after admission, not a snapshot taken before the lease. */
-    capture: () => TelegramWorkspaceJournalProtectionCapture;
-    runExclusive: TelegramWorkspaceOperationGate["runExclusive"];
-    getJournalWriterProtection: (journalBindingKey: string) => TelegramWorkspaceProtectionState;
+    capture: () => BaleWorkspaceJournalProtectionCapture;
+    runExclusive: BaleWorkspaceOperationGate["runExclusive"];
+    getJournalWriterProtection: (journalBindingKey: string) => BaleWorkspaceProtectionState;
     getLeaderEpoch: () => number | string | undefined;
     getProfileKey: () => string;
-    admission: Pick<TelegramWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission">;
+    admission: Pick<BaleWorkspaceAdmissionLedger, "acquireAdmission" | "releaseAdmission">;
     isCurrent?: () => boolean;
     onAdmissionReleaseError?: (error: unknown) => void;
-}): Promise<TelegramWorkspaceJournalPruneResult>;
-export declare function captureTelegramWorkspaceExternalProtection(input: {
-    binding: TelegramWorkspaceThreadBinding;
+}): Promise<BaleWorkspaceJournalPruneResult>;
+export declare function captureBaleWorkspaceExternalProtection(input: {
+    binding: BaleWorkspaceThreadBinding;
     requireBindingProvenance?: boolean;
-    getLiveOwnerProtection: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceProtectionState;
-    getLocalAcceptedTargets: (binding: TelegramWorkspaceThreadBinding) => {
-        targets: readonly TelegramTarget[];
+    getLiveOwnerProtection: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceProtectionState;
+    getLocalAcceptedTargets: (binding: BaleWorkspaceThreadBinding) => {
+        targets: readonly BaleTarget[];
         complete: boolean;
     };
-    captureJournalSources: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceJournalProtectionCapture;
-    getDeliveryAuthorityProtection?: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceProtectionState;
-}): TelegramWorkspaceExternalProtectionEvidence;
-interface TelegramWorkspaceProtectionObserverDeps {
+    captureJournalSources: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceJournalProtectionCapture;
+    getDeliveryAuthorityProtection?: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceProtectionState;
+}): BaleWorkspaceExternalProtectionEvidence;
+interface BaleWorkspaceProtectionObserverDeps {
     listFollowers: () => readonly {
-        target?: TelegramTarget;
+        target?: BaleTarget;
     }[];
-    getActiveTurnTarget: () => TelegramTarget | undefined;
+    getActiveTurnTarget: () => BaleTarget | undefined;
     getQueuedItems: () => readonly {
         chatId: number;
-        target?: TelegramTarget;
+        target?: BaleTarget;
     }[];
-    resolveLeaderJournal: () => TelegramWorkspaceJournalReader | undefined;
-    createFollowerJournalResolver: (journalBindingKey: string) => () => TelegramWorkspaceJournalReader | undefined;
-    createSessionJournalResolver?: (recipientBindingKey: string, sessionId: string) => () => TelegramWorkspaceJournalReader | undefined;
+    resolveLeaderJournal: () => BaleWorkspaceJournalReader | undefined;
+    createFollowerJournalResolver: (journalBindingKey: string) => () => BaleWorkspaceJournalReader | undefined;
+    createSessionJournalResolver?: (recipientBindingKey: string, sessionId: string) => () => BaleWorkspaceJournalReader | undefined;
     discoverFollowerJournals?: () => {
         paths: readonly string[];
         complete: boolean;
     };
     /** Strict read-only namespace evidence; it never substitutes for writer closure. */
-    inspectJournalNamespace?: () => TelegramJournalNamespaceInspection;
-    createJournalPathResolver?: (path: string) => () => TelegramWorkspaceJournalReader | undefined;
-    withJournalReference?: <T>(binding: TelegramWorkspaceJournalReader, operation: () => T) => T;
-    getJournalWriterProtection?: (journalBindingKey: string) => TelegramWorkspaceProtectionState;
-    getDeliveryAuthorityProtection?: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceProtectionState;
+    inspectJournalNamespace?: () => BaleJournalNamespaceInspection;
+    createJournalPathResolver?: (path: string) => () => BaleWorkspaceJournalReader | undefined;
+    withJournalReference?: <T>(binding: BaleWorkspaceJournalReader, operation: () => T) => T;
+    getJournalWriterProtection?: (journalBindingKey: string) => BaleWorkspaceProtectionState;
+    getDeliveryAuthorityProtection?: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceProtectionState;
 }
-export interface TelegramWorkspaceProtectionObserver {
-    capture: ((binding: TelegramWorkspaceThreadBinding, options?: {
+export interface BaleWorkspaceProtectionObserver {
+    capture: ((binding: BaleWorkspaceThreadBinding, options?: {
         requireBindingProvenance?: boolean;
-    }) => TelegramWorkspaceExternalProtectionEvidence) & {
+    }) => BaleWorkspaceExternalProtectionEvidence) & {
         withSnapshot?: <T>(capture: () => T) => T;
     };
-    captureJournalSources: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceJournalProtectionCapture;
-    getJournalWriterProtection: (journalBindingKey: string) => TelegramWorkspaceProtectionState;
+    captureJournalSources: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceJournalProtectionCapture;
+    getJournalWriterProtection: (journalBindingKey: string) => BaleWorkspaceProtectionState;
 }
 /** Shared read-only observer: protection and metadata pruning use the same scoped evidence path. */
-export declare function createTelegramWorkspaceProtectionObserver(deps: TelegramWorkspaceProtectionObserverDeps): TelegramWorkspaceProtectionObserver;
+export declare function createBaleWorkspaceProtectionObserver(deps: BaleWorkspaceProtectionObserverDeps): BaleWorkspaceProtectionObserver;
 /** Callable protection view retained for callers that need no metadata observation ports. */
-export declare function createTelegramWorkspaceExternalProtectionCapture(deps: TelegramWorkspaceProtectionObserverDeps): TelegramWorkspaceProtectionObserver["capture"];
-export declare function createTelegramWorkspaceJournalEvidencePruner(deps: TelegramWorkspaceOperationGate & {
-    store: TelegramTopicTargetStore;
-    getAdmission: () => TelegramWorkspaceAdmissionLedger | undefined;
+export declare function createBaleWorkspaceExternalProtectionCapture(deps: BaleWorkspaceProtectionObserverDeps): BaleWorkspaceProtectionObserver["capture"];
+export declare function createBaleWorkspaceJournalEvidencePruner(deps: BaleWorkspaceOperationGate & {
+    store: BaleTopicTargetStore;
+    getAdmission: () => BaleWorkspaceAdmissionLedger | undefined;
     getLeaderEpoch: () => number | string | undefined;
-    protection: Pick<TelegramWorkspaceProtectionObserver, "captureJournalSources" | "getJournalWriterProtection">;
-}): (binding: TelegramWorkspaceThreadBinding, isCurrent: () => boolean) => Promise<TelegramWorkspaceJournalPruneResult>;
-export declare function isCurrentTelegramWorkspaceBinding(store: Pick<TelegramTopicTargetStore, "listWorkspaceBindings">, expected: TelegramWorkspaceThreadBinding): boolean;
-export interface TelegramWorkspaceDeadQueueJournalBinding {
+    protection: Pick<BaleWorkspaceProtectionObserver, "captureJournalSources" | "getJournalWriterProtection">;
+}): (binding: BaleWorkspaceThreadBinding, isCurrent: () => boolean) => Promise<BaleWorkspaceJournalPruneResult>;
+export declare function isCurrentBaleWorkspaceBinding(store: Pick<BaleTopicTargetStore, "listWorkspaceBindings">, expected: BaleWorkspaceThreadBinding): boolean;
+export interface BaleWorkspaceDeadQueueJournalBinding {
     recoveryKey?: string;
     readForProtection?: () => {
-        entries: readonly TelegramUpdateJournalEntry[];
+        entries: readonly BaleUpdateJournalEntry[];
     };
     journal: {
-        recoverDeadQueueOwner: (input: TelegramUpdateJournalDeadQueueOwnerRecoveryInput) => TelegramUpdateJournalDeadQueueOwnerRecoveryResult;
+        recoverDeadQueueOwner: (input: BaleUpdateJournalDeadQueueOwnerRecoveryInput) => BaleUpdateJournalDeadQueueOwnerRecoveryResult;
     };
 }
-export type TelegramWorkspaceDeadQueueReclamation = {
+export type BaleWorkspaceDeadQueueReclamation = {
     kind: "not-needed";
 } | {
     kind: "recovered";
@@ -203,47 +203,47 @@ export type TelegramWorkspaceDeadQueueReclamation = {
  * owned by the journal's exact dead-owner CAS; this function never clears local
  * queue memory or turns unknown evidence into deletion authority.
  */
-export declare function createTelegramWorkspaceDeadOwnerQueueReclaimer(deps: {
-    getExternalProtection: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceExternalProtectionEvidence;
-    getActiveTurnTarget: () => TelegramTarget | undefined;
+export declare function createBaleWorkspaceDeadOwnerQueueReclaimer(deps: {
+    getExternalProtection: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceExternalProtectionEvidence;
+    getActiveTurnTarget: () => BaleTarget | undefined;
     getQueuedItems: () => readonly {
         chatId: number;
-        target?: TelegramTarget;
+        target?: BaleTarget;
     }[];
-    resolveLeaderJournal: () => TelegramWorkspaceDeadQueueJournalBinding | undefined;
-    createFollowerJournalResolver: (journalBindingKey: string) => () => TelegramWorkspaceDeadQueueJournalBinding | undefined;
-    createSessionJournalResolver?: (recipientBindingKey: string, sessionId: string) => () => TelegramWorkspaceDeadQueueJournalBinding | undefined;
+    resolveLeaderJournal: () => BaleWorkspaceDeadQueueJournalBinding | undefined;
+    createFollowerJournalResolver: (journalBindingKey: string) => () => BaleWorkspaceDeadQueueJournalBinding | undefined;
+    createSessionJournalResolver?: (recipientBindingKey: string, sessionId: string) => () => BaleWorkspaceDeadQueueJournalBinding | undefined;
     discoverFollowerJournals?: () => {
         paths: readonly string[];
         complete: boolean;
     };
-    createJournalPathResolver?: (path: string) => () => TelegramWorkspaceDeadQueueJournalBinding | undefined;
-    withJournalReference?: <T>(binding: TelegramWorkspaceDeadQueueJournalBinding, operation: () => T) => T;
-    getRecoveryOwner: () => TelegramUpdateJournalQueueOwnerIdentity;
+    createJournalPathResolver?: (path: string) => () => BaleWorkspaceDeadQueueJournalBinding | undefined;
+    withJournalReference?: <T>(binding: BaleWorkspaceDeadQueueJournalBinding, operation: () => T) => T;
+    getRecoveryOwner: () => BaleUpdateJournalQueueOwnerIdentity;
     getQueueOwnerLiveness: (owner: {
         processId: number;
         processBirthId: string;
     }) => "alive" | "dead" | "unverifiable";
-    isBindingCurrent: (binding: TelegramWorkspaceThreadBinding) => boolean;
+    isBindingCurrent: (binding: BaleWorkspaceThreadBinding) => boolean;
     onMutationError?: (error: unknown) => void;
-}): (binding: TelegramWorkspaceThreadBinding, isCurrent: () => boolean) => Promise<TelegramWorkspaceDeadQueueReclamation>;
-export type TelegramWorkspaceRetirementAdoption = {
+}): (binding: BaleWorkspaceThreadBinding, isCurrent: () => boolean) => Promise<BaleWorkspaceDeadQueueReclamation>;
+export type BaleWorkspaceRetirementAdoption = {
     kind: "adopted";
-    intent: TelegramWorkspaceRetirementIntent;
+    intent: BaleWorkspaceRetirementIntent;
 } | {
     kind: "blocked";
     reason: "intent-conflict" | "profile-changed" | "binding-changed" | "protection-changed" | "commit-rejected";
 };
-export declare function adoptTelegramWorkspaceRetirementIntent(input: {
-    store: Pick<TelegramTopicTargetStore, "captureWorkspaceSlotOccupancy" | "listWorkspaceBindings" | "listWorkspaceRetirementIntents" | "replaceWorkspaceRetirementIntent">;
-    intent: TelegramWorkspaceRetirementIntent;
-    getExternalProtection: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceExternalProtectionEvidence;
+export declare function adoptBaleWorkspaceRetirementIntent(input: {
+    store: Pick<BaleTopicTargetStore, "captureWorkspaceSlotOccupancy" | "listWorkspaceBindings" | "listWorkspaceRetirementIntents" | "replaceWorkspaceRetirementIntent">;
+    intent: BaleWorkspaceRetirementIntent;
+    getExternalProtection: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceExternalProtectionEvidence;
     getLeaderEpoch: () => number | string | undefined;
     getProfileKey: () => string;
     isCurrent?: () => boolean;
     runExclusive: <T>(operation: () => Promise<T>) => Promise<T>;
-}): Promise<TelegramWorkspaceRetirementAdoption>;
-export type TelegramWorkspaceRetirementExecution = {
+}): Promise<BaleWorkspaceRetirementAdoption>;
+export type BaleWorkspaceRetirementExecution = {
     kind: "retired";
     bindingKey: string;
     slot: string;
@@ -254,29 +254,29 @@ export type TelegramWorkspaceRetirementExecution = {
     kind: "retained";
     reason: "stale-intent" | "protection-changed" | "admission-active" | "fence-conflict" | "delete-unconfirmed" | "delete-rejected" | "authority-changed" | "commit-rejected" | "fence-release-unconfirmed";
 };
-export type TelegramWorkspaceRetirementAbsence = "absent" | "present" | "unknown";
-export declare function executeTelegramWorkspaceRetirement(input: {
-    store: Pick<TelegramTopicTargetStore, "captureWorkspaceSlotOccupancy" | "listWorkspaceBindings" | "listWorkspaceRetirementIntents" | "commitWorkspaceRetirement" | "removeWorkspaceRetirementIntent" | "markStaleByTarget" | "persist">;
-    admission: Pick<TelegramWorkspaceAdmissionLedger, "getOwner" | "read" | "acquireRetirementFence" | "adoptRetirementFence" | "issueDeletionPermit" | "confirmRetirementAbsence" | "confirmRetirementRejection" | "completeRejectedRetirementFence" | "releaseUnissuedRetirementFence" | "completeRetirementFence">;
-    intent: TelegramWorkspaceRetirementIntent;
-    getExternalProtection: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceExternalProtectionEvidence;
+export type BaleWorkspaceRetirementAbsence = "absent" | "present" | "unknown";
+export declare function executeBaleWorkspaceRetirement(input: {
+    store: Pick<BaleTopicTargetStore, "captureWorkspaceSlotOccupancy" | "listWorkspaceBindings" | "listWorkspaceRetirementIntents" | "commitWorkspaceRetirement" | "removeWorkspaceRetirementIntent" | "markStaleByTarget" | "persist">;
+    admission: Pick<BaleWorkspaceAdmissionLedger, "getOwner" | "read" | "acquireRetirementFence" | "adoptRetirementFence" | "issueDeletionPermit" | "confirmRetirementAbsence" | "confirmRetirementRejection" | "completeRejectedRetirementFence" | "releaseUnissuedRetirementFence" | "completeRetirementFence">;
+    intent: BaleWorkspaceRetirementIntent;
+    getExternalProtection: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceExternalProtectionEvidence;
     getLeaderEpoch: () => number | string | undefined;
     getProfileKey: () => string;
     isCurrent?: () => boolean;
     runExclusive: <T>(operation: () => Promise<T>) => Promise<T>;
-    deleteForumTopic: (permit: TelegramWorkspaceDeletionPermit, body: {
+    deleteForumTopic: (permit: BaleWorkspaceDeletionPermit, body: {
         chat_id: number;
         message_thread_id: number;
     }, options: {
         maxAttempts: 1;
     }) => Promise<unknown>;
-    confirmTargetAbsent?: (target: TelegramTarget & {
+    confirmTargetAbsent?: (target: BaleTarget & {
         threadId: number;
-    }) => Promise<TelegramWorkspaceRetirementAbsence>;
-}): Promise<TelegramWorkspaceRetirementExecution>;
-export type TelegramWorkspaceRetirementPreparation = {
+    }) => Promise<BaleWorkspaceRetirementAbsence>;
+}): Promise<BaleWorkspaceRetirementExecution>;
+export type BaleWorkspaceRetirementPreparation = {
     kind: "ready";
-    intent: TelegramWorkspaceRetirementIntent;
+    intent: BaleWorkspaceRetirementIntent;
 } | {
     kind: "not-needed";
     reason: "free-capacity";
@@ -284,47 +284,47 @@ export type TelegramWorkspaceRetirementPreparation = {
     kind: "blocked";
     reason: "invalid-state" | "protected-capacity" | "state-changed" | "existing-intent-conflict" | "stale-intent";
 };
-export interface TelegramWorkspaceRetirementPreparationDeps {
-    store: Pick<TelegramTopicTargetStore, "captureWorkspaceSlotOccupancy" | "listWorkspaceBindings" | "listWorkspaceRetirementIntents" | "upsertWorkspaceRetirementIntent" | "removeWorkspaceRetirementIntent" | "persist">;
-    getExternalProtection: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceExternalProtectionEvidence;
+export interface BaleWorkspaceRetirementPreparationDeps {
+    store: Pick<BaleTopicTargetStore, "captureWorkspaceSlotOccupancy" | "listWorkspaceBindings" | "listWorkspaceRetirementIntents" | "upsertWorkspaceRetirementIntent" | "removeWorkspaceRetirementIntent" | "persist">;
+    getExternalProtection: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceExternalProtectionEvidence;
     getLeaderEpoch: () => number | string | undefined;
     getProfileKey: () => string;
     isCurrent?: () => boolean;
     getNowMs?: () => number;
 }
-export declare function prepareTelegramWorkspaceRetirement(deps: TelegramWorkspaceRetirementPreparationDeps): Promise<TelegramWorkspaceRetirementPreparation>;
-export type TelegramWorkspaceRetirementLifecycleResult = TelegramWorkspaceRetirementExecution | Extract<TelegramWorkspaceRetirementPreparation, {
+export declare function prepareBaleWorkspaceRetirement(deps: BaleWorkspaceRetirementPreparationDeps): Promise<BaleWorkspaceRetirementPreparation>;
+export type BaleWorkspaceRetirementLifecycleResult = BaleWorkspaceRetirementExecution | Extract<BaleWorkspaceRetirementPreparation, {
     kind: "not-needed";
 }> | {
     kind: "blocked";
     stage: "preparation" | "adoption";
     reason: string;
 };
-export declare function runTelegramWorkspaceRetirementLifecycle(input: {
-    store: TelegramWorkspaceRetirementPreparationDeps["store"] & Pick<TelegramTopicTargetStore, "replaceWorkspaceRetirementIntent" | "commitWorkspaceRetirement" | "markStaleByTarget">;
-    getExternalProtection: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceExternalProtectionEvidence;
+export declare function runBaleWorkspaceRetirementLifecycle(input: {
+    store: BaleWorkspaceRetirementPreparationDeps["store"] & Pick<BaleTopicTargetStore, "replaceWorkspaceRetirementIntent" | "commitWorkspaceRetirement" | "markStaleByTarget">;
+    getExternalProtection: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceExternalProtectionEvidence;
     getLeaderEpoch: () => number | string | undefined;
     getProfileKey: () => string;
     isCurrent?: () => boolean;
     getNowMs?: () => number;
     runExclusive: <T>(operation: () => Promise<T>) => Promise<T>;
-    admission: Parameters<typeof executeTelegramWorkspaceRetirement>[0]["admission"];
-    deleteForumTopic: Parameters<typeof executeTelegramWorkspaceRetirement>[0]["deleteForumTopic"];
-    confirmTargetAbsent?: Parameters<typeof executeTelegramWorkspaceRetirement>[0]["confirmTargetAbsent"];
-}): Promise<TelegramWorkspaceRetirementLifecycleResult>;
-export type TelegramWorkspaceCapacityRunner = <T>(operation: () => Promise<T>) => Promise<T>;
-export interface TelegramWorkspaceSlotRotationPorts extends TelegramWorkspaceOperationGate {
-    getAdmission: () => TelegramWorkspaceAdmissionLedger | undefined;
-    deleteThread: TelegramWorkspaceThreadDeletionTransport;
-    pruneJournalEvidence?: (binding: TelegramWorkspaceThreadBinding, isCurrent: () => boolean) => Promise<TelegramWorkspaceJournalPruneResult>;
-    reclaimDeadOwnerQueuedWork?: (binding: TelegramWorkspaceThreadBinding, isCurrent: () => boolean) => Promise<TelegramWorkspaceDeadQueueReclamation>;
+    admission: Parameters<typeof executeBaleWorkspaceRetirement>[0]["admission"];
+    deleteForumTopic: Parameters<typeof executeBaleWorkspaceRetirement>[0]["deleteForumTopic"];
+    confirmTargetAbsent?: Parameters<typeof executeBaleWorkspaceRetirement>[0]["confirmTargetAbsent"];
+}): Promise<BaleWorkspaceRetirementLifecycleResult>;
+export type BaleWorkspaceCapacityRunner = <T>(operation: () => Promise<T>) => Promise<T>;
+export interface BaleWorkspaceSlotRotationPorts extends BaleWorkspaceOperationGate {
+    getAdmission: () => BaleWorkspaceAdmissionLedger | undefined;
+    deleteThread: BaleWorkspaceThreadDeletionTransport;
+    pruneJournalEvidence?: (binding: BaleWorkspaceThreadBinding, isCurrent: () => boolean) => Promise<BaleWorkspaceJournalPruneResult>;
+    reclaimDeadOwnerQueuedWork?: (binding: BaleWorkspaceThreadBinding, isCurrent: () => boolean) => Promise<BaleWorkspaceDeadQueueReclamation>;
 }
 /** Retry allocation once, only after the failed operation released all ordinary leases. */
-export declare function createTelegramWorkspaceSlotRotation(input: TelegramWorkspaceSlotRotationPorts & {
-    store: TelegramTopicTargetStore;
+export declare function createBaleWorkspaceSlotRotation(input: BaleWorkspaceSlotRotationPorts & {
+    store: BaleTopicTargetStore;
     getLeaderEpoch: () => number | string | undefined;
-    getExternalProtection: (binding: TelegramWorkspaceThreadBinding) => TelegramWorkspaceExternalProtectionEvidence;
+    getExternalProtection: (binding: BaleWorkspaceThreadBinding) => BaleWorkspaceExternalProtectionEvidence;
     recordEvent: (message: string, details: Record<string, unknown>) => void;
     onSlotReused?: (bindingKey: string, isCurrent: () => boolean) => Promise<void>;
-}): TelegramWorkspaceCapacityRunner;
+}): BaleWorkspaceCapacityRunner;
 export {};

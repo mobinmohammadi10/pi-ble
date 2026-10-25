@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram status menu helpers
+ * Regression tests for Bale status menu helpers
  * Exercises status-menu reply markup, callback routing, and message render/update helpers
  */
 
@@ -8,11 +8,11 @@ import test from "node:test";
 
 import {
   buildStatusReplyMarkup,
-  buildTelegramStatusMenuRenderPayload,
-  handleTelegramStatusMenuCallbackAction,
-  openTelegramStatusMenu,
-  sendTelegramStatusMessage,
-  updateTelegramStatusMessage,
+  buildBaleStatusMenuRenderPayload,
+  handleBaleStatusMenuCallbackAction,
+  openBaleStatusMenu,
+  sendBaleStatusMessage,
+  updateBaleStatusMessage,
 } from "../lib/menu-status.ts";
 
 const reasoningModel = {
@@ -78,7 +78,7 @@ test("Status callback routing updates target menus and guards thinking controls"
   };
 
   assert.equal(
-    await handleTelegramStatusMenuCallbackAction(
+    await handleBaleStatusMenuCallbackAction(
       "q1",
       "status:model",
       reasoningModel,
@@ -87,7 +87,7 @@ test("Status callback routing updates target menus and guards thinking controls"
     true,
   );
   assert.equal(
-    await handleTelegramStatusMenuCallbackAction(
+    await handleBaleStatusMenuCallbackAction(
       "q2",
       "menu:thinking",
       reasoningModel,
@@ -96,7 +96,7 @@ test("Status callback routing updates target menus and guards thinking controls"
     true,
   );
   assert.equal(
-    await handleTelegramStatusMenuCallbackAction(
+    await handleBaleStatusMenuCallbackAction(
       "q3",
       "menu:settings",
       reasoningModel,
@@ -105,7 +105,7 @@ test("Status callback routing updates target menus and guards thinking controls"
     true,
   );
   assert.equal(
-    await handleTelegramStatusMenuCallbackAction(
+    await handleBaleStatusMenuCallbackAction(
       "q4",
       "menu:unknown",
       reasoningModel,
@@ -125,7 +125,7 @@ test("Status callback routing updates target menus and guards thinking controls"
 
   const voiceCalls: string[] = [];
   assert.equal(
-    await handleTelegramStatusMenuCallbackAction(
+    await handleBaleStatusMenuCallbackAction(
       "q5",
       "menu:thinking",
       reasoningModel,
@@ -156,7 +156,7 @@ test("Status menu open, send, and update helpers apply status mode", async () =>
     allModels: [],
   };
   const stored: unknown[] = [];
-  await openTelegramStatusMenu({
+  await openBaleStatusMenu({
     isIdle: () => true,
     sendBusyMessage: async () => {},
     getModelMenuState: async () => state,
@@ -174,7 +174,7 @@ test("Status menu open, send, and update helpers apply status mode", async () =>
   assert.equal(state.messageId, 99);
   assert.equal(state.mode, "status");
 
-  const payload = buildTelegramStatusMenuRenderPayload(
+  const payload = buildBaleStatusMenuRenderPayload(
     "status html",
     reasoningModel,
     "medium",
@@ -194,7 +194,7 @@ test("Status menu open, send, and update helpers apply status mode", async () =>
     },
   };
 
-  await updateTelegramStatusMessage(
+  await updateBaleStatusMessage(
     state,
     "updated",
     reasoningModel,
@@ -202,7 +202,7 @@ test("Status menu open, send, and update helpers apply status mode", async () =>
     deps,
     0,
   );
-  const sentId = await sendTelegramStatusMessage(
+  const sentId = await sendBaleStatusMessage(
     state,
     "sent",
     reasoningModel,

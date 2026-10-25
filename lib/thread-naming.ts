@@ -1,96 +1,96 @@
 /**
- * Telegram Thread naming rules and manual-name interaction
+ * Bale Thread naming rules and manual-name interaction
  * Zones: thread identity names, palettes, title formatting, runtime controls
  * Owns name/title value policy and one expiring exact-target dialog per session scope.
  * Excludes occupancy/slot allocation, display-mode projection, transport and API/store effects.
  */
 
 import {
-  areTelegramTargetsEqual as sameTarget,
-  type TelegramTarget,
+  areBaleTargetsEqual as sameTarget,
+  type BaleTarget,
 } from "./target.ts";
 
-export const TELEGRAM_THREAD_NAME_DIALOG_TTL_MS = 5 * 60_000;
+export const BALE_THREAD_NAME_DIALOG_TTL_MS = 5 * 60_000;
 
-export type TelegramThreadNameDialogAction = "reset" | "cancel";
+export type BaleThreadNameDialogAction = "reset" | "cancel";
 
-export interface TelegramThreadNameDialogCandidate {
+export interface BaleThreadNameDialogCandidate {
   scope: string;
-  target: TelegramTarget;
+  target: BaleTarget;
   dialogMessageId: number;
   phase: "input";
   expiresAtMs: number;
 }
 
-function targetKey(target: TelegramTarget): string {
+function targetKey(target: BaleTarget): string {
   return `${target.chatId}:${target.threadId ?? "chat"}`;
 }
 
 function cloneCandidate(
-  candidate: TelegramThreadNameDialogCandidate,
-): TelegramThreadNameDialogCandidate {
+  candidate: BaleThreadNameDialogCandidate,
+): BaleThreadNameDialogCandidate {
   return { ...candidate, target: { ...candidate.target } };
 }
 
-export interface TelegramThreadNameDialogLifetime {
+export interface BaleThreadNameDialogLifetime {
   /** Independent recipient effect authority; never the input handle's deadline or ownership. */
   readonly assertAuthority?: () => void;
   isCurrent(): boolean;
   publish(
     dialogMessageId: number,
     assertPublicationCurrent?: () => void,
-  ): TelegramThreadNameDialogCandidate | undefined;
-  select(action: TelegramThreadNameDialogAction): {
+  ): BaleThreadNameDialogCandidate | undefined;
+  select(action: BaleThreadNameDialogAction): {
     kind: "reset" | "cancel" | "expired";
   };
   consumeName(
     text: string,
   ): { kind: "name"; name: string } | { kind: "none" | "empty" };
-  reopen(): TelegramThreadNameDialogCandidate | undefined;
+  reopen(): BaleThreadNameDialogCandidate | undefined;
   finish(): void;
 }
 
-export function createTelegramThreadNameDialogRuntime(options?: {
+export function createBaleThreadNameDialogRuntime(options?: {
   ttlMs?: number;
   nowMs?: () => number;
 }): {
   prepare(input: {
     scope: string;
-    target: TelegramTarget;
+    target: BaleTarget;
     isCurrent?: () => boolean;
     assertAuthority?: () => void;
-  }): TelegramThreadNameDialogLifetime | undefined;
+  }): BaleThreadNameDialogLifetime | undefined;
   capture(input: {
     scope: string;
-    target: TelegramTarget;
+    target: BaleTarget;
     dialogMessageId: number;
-  }): TelegramThreadNameDialogLifetime | undefined;
+  }): BaleThreadNameDialogLifetime | undefined;
   open(input: {
     scope: string;
-    target: TelegramTarget;
+    target: BaleTarget;
     dialogMessageId: number;
-  }): TelegramThreadNameDialogCandidate;
+  }): BaleThreadNameDialogCandidate;
   select(input: {
     scope: string;
-    target: TelegramTarget;
+    target: BaleTarget;
     dialogMessageId: number;
-    action: TelegramThreadNameDialogAction;
+    action: BaleThreadNameDialogAction;
   }): { kind: "reset" | "cancel" | "expired" };
   consumeName(input: {
     scope: string;
-    target: TelegramTarget;
+    target: BaleTarget;
     text: string;
   }): { kind: "name"; name: string } | { kind: "none" | "empty" };
   clearScope(scope: string): void;
   inspect(
-    target: TelegramTarget,
-  ): TelegramThreadNameDialogCandidate | undefined;
+    target: BaleTarget,
+  ): BaleThreadNameDialogCandidate | undefined;
 } {
-  const ttlMs = options?.ttlMs ?? TELEGRAM_THREAD_NAME_DIALOG_TTL_MS;
+  const ttlMs = options?.ttlMs ?? BALE_THREAD_NAME_DIALOG_TTL_MS;
   const nowMs = options?.nowMs ?? Date.now;
   interface Entry {
     scope: string;
-    target: TelegramTarget;
+    target: BaleTarget;
     dialogMessageId?: number;
     phase: "delivery" | "input" | "consumed";
     expiresAtMs: number;
@@ -106,7 +106,7 @@ export function createTelegramThreadNameDialogRuntime(options?: {
       return false;
     }
   };
-  const view = (entry: Entry): TelegramThreadNameDialogCandidate =>
+  const view = (entry: Entry): BaleThreadNameDialogCandidate =>
     cloneCandidate({
       scope: entry.scope,
       target: entry.target,
@@ -114,7 +114,7 @@ export function createTelegramThreadNameDialogRuntime(options?: {
       phase: "input",
       expiresAtMs: entry.expiresAtMs,
     });
-  const createLifetime = (entry: Entry): TelegramThreadNameDialogLifetime => {
+  const createLifetime = (entry: Entry): BaleThreadNameDialogLifetime => {
     const key = targetKey(entry.target);
     const claim = {};
     let ended = false;
@@ -213,7 +213,7 @@ export function createTelegramThreadNameDialogRuntime(options?: {
   };
   const current = (
     scope: string,
-    target: TelegramTarget,
+    target: BaleTarget,
   ): Entry | undefined => {
     const entry = candidates.get(targetKey(target));
     if (
@@ -228,9 +228,9 @@ export function createTelegramThreadNameDialogRuntime(options?: {
   };
   const capture = (input: {
     scope: string;
-    target: TelegramTarget;
+    target: BaleTarget;
     dialogMessageId: number;
-  }): TelegramThreadNameDialogLifetime | undefined => {
+  }): BaleThreadNameDialogLifetime | undefined => {
     const { scope, dialogMessageId } = input;
     const target = { ...input.target };
     const entry = current(scope, target);
@@ -311,13 +311,13 @@ export function createTelegramThreadNameDialogRuntime(options?: {
   };
 }
 
-export interface TelegramThreadTitleInput {
+export interface BaleThreadTitleInput {
   instanceId: string;
   profileKey: string;
   threadName?: string;
 }
 
-export function normalizeTelegramTopicTargetThreadName(
+export function normalizeBaleTopicTargetThreadName(
   threadName: string,
 ): string {
   return threadName.replace(/\s+/g, " ").trim().slice(0, 96);
@@ -339,13 +339,13 @@ function getGraphemeSegments(value: string): string[] {
   );
 }
 
-export function getTelegramTopicIdentityName(threadName: string): string {
-  return getGraphemeSegments(normalizeTelegramTopicTargetThreadName(threadName))
+export function getBaleTopicIdentityName(threadName: string): string {
+  return getGraphemeSegments(normalizeBaleTopicTargetThreadName(threadName))
     .join("")
     .trim();
 }
 
-const TELEGRAM_THREAD_NAME_PALETTE: Record<string, readonly string[]> = {
+const BALE_THREAD_NAME_PALETTE: Record<string, readonly string[]> = {
   A: ["Atlas", "Aster", "Aurora", "Anchor", "Ashen"],
   B: ["Beacon", "Briar", "Boreal", "Birch", "Bison"],
   C: ["Cedar", "Comet", "Cipher", "Coral", "Cinder"],
@@ -374,17 +374,17 @@ const TELEGRAM_THREAD_NAME_PALETTE: Record<string, readonly string[]> = {
   Z: ["Zenith", "Zephyr", "Zircon", "Zebra", "Zion"],
 };
 
-export function chooseTelegramThreadName(input: {
+export function chooseBaleThreadName(input: {
   slot: string | undefined;
   entropy?: number | string;
   getRandom?: () => number;
   occupied?: readonly string[];
 }): string | undefined {
   if (!input.slot || !/^[A-Z]$/.test(input.slot)) return undefined;
-  const names = TELEGRAM_THREAD_NAME_PALETTE[input.slot];
+  const names = BALE_THREAD_NAME_PALETTE[input.slot];
   if (!names || names.length === 0) return undefined;
   const occupied = new Set(
-    (input.occupied ?? []).map((name) => getTelegramTopicIdentityName(name)),
+    (input.occupied ?? []).map((name) => getBaleTopicIdentityName(name)),
   );
   const start = input.getRandom
     ? Math.max(
@@ -394,28 +394,28 @@ export function chooseTelegramThreadName(input: {
           Math.floor(input.getRandom() * names.length),
         ),
       )
-    : getTelegramThreadNameEntropyIndex(input.entropy, names.length);
+    : getBaleThreadNameEntropyIndex(input.entropy, names.length);
   for (let offset = 0; offset < names.length; offset += 1) {
     const name = names[(start + offset) % names.length];
-    if (!occupied.has(getTelegramTopicIdentityName(name))) return name;
+    if (!occupied.has(getBaleTopicIdentityName(name))) return name;
   }
   for (const paletteSlot of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-    for (const name of TELEGRAM_THREAD_NAME_PALETTE[paletteSlot] ?? []) {
-      if (!occupied.has(getTelegramTopicIdentityName(name))) return name;
+    for (const name of BALE_THREAD_NAME_PALETTE[paletteSlot] ?? []) {
+      if (!occupied.has(getBaleTopicIdentityName(name))) return name;
     }
   }
   return undefined;
 }
 
-export function getTelegramThreadNameLeadingSlot(
+export function getBaleThreadNameLeadingSlot(
   threadName: string | undefined,
 ): string | undefined {
   if (!threadName) return undefined;
-  const first = getTelegramTopicIdentityName(threadName)[0];
+  const first = getBaleTopicIdentityName(threadName)[0];
   return first && /^[A-Z]$/.test(first) ? first : undefined;
 }
 
-function getTelegramThreadNameEntropyIndex(
+function getBaleThreadNameEntropyIndex(
   entropy: number | string | undefined,
   length: number,
 ): number {
@@ -430,11 +430,11 @@ function getTelegramThreadNameEntropyIndex(
   return hash % length;
 }
 
-export function getTelegramTopicThreadNameValidationError(
+export function getBaleTopicThreadNameValidationError(
   threadName: string,
   _slot: string | undefined,
 ): string | undefined {
-  const identity = getTelegramTopicIdentityName(threadName);
+  const identity = getBaleTopicIdentityName(threadName);
   const reasons: string[] = [];
   if (!identity) reasons.push("it is empty after trimming");
   if (/\s/.test(identity)) reasons.push("it contains spaces");
@@ -444,16 +444,16 @@ export function getTelegramTopicThreadNameValidationError(
   if (!/^[A-Z]/.test(identity)) {
     reasons.push("it does not start with an uppercase Latin letter");
   }
-  const genericLabels = new Set(["telegram", "leader", "follower"]);
+  const genericLabels = new Set(["bale", "leader", "follower"]);
   if (genericLabels.has(identity.toLowerCase())) {
     reasons.push("it is a generic role label");
   }
   if (/^[A-Z]$/.test(identity)) reasons.push("it is only a bare slot letter");
   if (reasons.length === 0) return undefined;
-  return `Invalid Telegram instance name: ${reasons.join("; ")}. Use exactly one capitalized Latin word with no spaces, punctuation, emoji, non-Latin letters, or digits; it must not be a generic role label or only a bare slot letter.`;
+  return `Invalid Bale instance name: ${reasons.join("; ")}. Use exactly one capitalized Latin word with no spaces, punctuation, emoji, non-Latin letters, or digits; it must not be a generic role label or only a bare slot letter.`;
 }
 
-export function getTelegramManualThreadDisplayNameValidationError(
+export function getBaleManualThreadDisplayNameValidationError(
   threadName: string,
 ): string | undefined {
   const trimmed = threadName.trim();
@@ -468,19 +468,19 @@ export function getTelegramManualThreadDisplayNameValidationError(
     reasons.push("a bare slot letter is reserved for reset to automatic");
   }
   if (reasons.length === 0) return undefined;
-  return `Invalid Telegram Thread display name: ${reasons.join("; ")}. Use 1–96 printable ASCII characters.`;
+  return `Invalid Bale Thread display name: ${reasons.join("; ")}. Use 1–96 printable ASCII characters.`;
 }
 
-export function isTelegramTopicThreadNameValidForSlot(
+export function isBaleTopicThreadNameValidForSlot(
   threadName: string,
   slot: string | undefined,
 ): boolean {
-  return !getTelegramTopicThreadNameValidationError(threadName, slot);
+  return !getBaleTopicThreadNameValidationError(threadName, slot);
 }
 
 function applyTopicNameTemplate(
   template: string,
-  request: TelegramThreadTitleInput,
+  request: BaleThreadTitleInput,
   slot?: string,
 ): string {
   const threadName =
@@ -493,8 +493,8 @@ function applyTopicNameTemplate(
   return result;
 }
 
-export function getTelegramTopicName(
-  request: TelegramThreadTitleInput,
+export function getBaleTopicName(
+  request: BaleThreadTitleInput,
   template = "{slot}",
   slot?: string,
 ): string {
@@ -504,15 +504,15 @@ export function getTelegramTopicName(
   return (name || slot || "Pi").slice(0, 128);
 }
 
-export function getTelegramTopicTitleForThreadName(
+export function getBaleTopicTitleForThreadName(
   threadName: string,
   slot: string,
   template = "{threadName}",
 ): string {
-  return getTelegramTopicName(
+  return getBaleTopicName(
     {
       instanceId: "",
-      profileKey: normalizeTelegramTopicTargetThreadName(threadName) || "Pi",
+      profileKey: normalizeBaleTopicTargetThreadName(threadName) || "Pi",
       threadName,
     },
     template,

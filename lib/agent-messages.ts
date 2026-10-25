@@ -1,39 +1,39 @@
 /**
- * Cross-instance Telegram agent message resolution and turn injection
+ * Cross-instance Bale agent message resolution and turn injection
  * Zones: multi-instance bus, inbound routing, operational delivery
  * Owns live target resolution, source attribution, same-target fencing, and synthetic turn construction; excludes Bot API delivery and bus transport.
  */
 
 import type {
-  TelegramBusAgentMessage,
-  TelegramBusAgentTargetSelector,
-  TelegramBusFollowerRegistry,
+  BaleBusAgentMessage,
+  BaleBusAgentTargetSelector,
+  BaleBusFollowerRegistry,
 } from "./bus.ts";
-import type { TelegramRoutedMessage } from "./routing.ts";
-import type { TelegramTarget } from "./target.ts";
-import { TELEGRAM_INTERNAL_AGENT_MESSAGE } from "./updates.ts";
+import type { BaleRoutedMessage } from "./routing.ts";
+import type { BaleTarget } from "./target.ts";
+import { BALE_INTERNAL_AGENT_MESSAGE } from "./updates.ts";
 
-export interface TelegramAgentMessageRuntimeDeps<TContext, TUpdate> {
+export interface BaleAgentMessageRuntimeDeps<TContext, TUpdate> {
   instanceId: string;
   getAllowedChatId: () => number | undefined;
-  getLeaderTarget: () => TelegramTarget | undefined;
+  getLeaderTarget: () => BaleTarget | undefined;
   getLeaderThreadName: () => string | undefined;
-  getDisplayTitle?: (target: TelegramTarget) => string | undefined;
-  followerRegistry: TelegramBusFollowerRegistry;
+  getDisplayTitle?: (target: BaleTarget) => string | undefined;
+  followerRegistry: BaleBusFollowerRegistry;
   getContext: () => TContext | undefined;
   handleUpdate: (update: TUpdate, ctx: TContext) => Promise<void>;
   getNowMs?: () => number;
 }
 
-export function createTelegramAgentMessageRuntime<TContext, TUpdate>(
-  deps: TelegramAgentMessageRuntimeDeps<TContext, TUpdate>,
+export function createBaleAgentMessageRuntime<TContext, TUpdate>(
+  deps: BaleAgentMessageRuntimeDeps<TContext, TUpdate>,
 ) {
   const getNowMs = deps.getNowMs ?? Date.now;
-  const sameTarget = (left?: TelegramTarget, right?: TelegramTarget) =>
+  const sameTarget = (left?: BaleTarget, right?: BaleTarget) =>
     left?.chatId === right?.chatId && left?.threadId === right?.threadId;
   const listLiveTargets = () => {
     const targets: Array<{
-      target: TelegramTarget & { threadId: number };
+      target: BaleTarget & { threadId: number };
       threadName?: string;
     }> = [];
     const leaderTarget = deps.getLeaderTarget();
@@ -61,9 +61,9 @@ export function createTelegramAgentMessageRuntime<TContext, TUpdate>(
     return targets;
   };
   const resolveTarget = (
-    selector: TelegramBusAgentTargetSelector,
-    sourceTarget?: TelegramTarget,
-  ): (TelegramTarget & { threadId: number }) | undefined => {
+    selector: BaleBusAgentTargetSelector,
+    sourceTarget?: BaleTarget,
+  ): (BaleTarget & { threadId: number }) | undefined => {
     const allowedChatId = deps.getAllowedChatId();
     const chatId = selector.chatId ?? allowedChatId;
     if (chatId === undefined || chatId !== allowedChatId) return undefined;
@@ -87,9 +87,9 @@ export function createTelegramAgentMessageRuntime<TContext, TUpdate>(
   return {
     resolveTarget,
     async route(input: {
-      sourceTarget?: TelegramTarget;
+      sourceTarget?: BaleTarget;
       sourceThreadName?: string;
-      message: TelegramBusAgentMessage;
+      message: BaleBusAgentMessage;
     }): Promise<void> {
       const target = resolveTarget(
         {
@@ -98,11 +98,11 @@ export function createTelegramAgentMessageRuntime<TContext, TUpdate>(
         },
         input.sourceTarget,
       );
-      if (!target) throw new Error("Telegram agent target is no longer live.");
+      if (!target) throw new Error("Bale agent target is no longer live.");
       const allowedChatId = deps.getAllowedChatId();
       const ctx = deps.getContext();
       if (allowedChatId === undefined || !ctx) {
-        throw new Error("Telegram agent turn routing is unavailable.");
+        throw new Error("Bale agent turn routing is unavailable.");
       }
       const sourceTitle =
         (input.sourceTarget
@@ -119,11 +119,11 @@ export function createTelegramAgentMessageRuntime<TContext, TUpdate>(
         chat: { id: target.chatId, type: "private" as const },
         from: { id: allowedChatId, is_bot: false, first_name: "Pi Agent" },
         message_thread_id: target.threadId,
-        pi_telegram_agent_source_thread: sourceLabel,
+        pi_bale_agent_source_thread: sourceLabel,
         text: input.message.text,
-      } as TelegramRoutedMessage;
+      } as BaleRoutedMessage;
       await deps.handleUpdate(
-        { message, [TELEGRAM_INTERNAL_AGENT_MESSAGE]: true } as TUpdate,
+        { message, [BALE_INTERNAL_AGENT_MESSAGE]: true } as TUpdate,
         ctx,
       );
     },

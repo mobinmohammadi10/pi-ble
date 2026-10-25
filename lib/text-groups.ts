@@ -1,25 +1,25 @@
 /**
- * Telegram text-group coalescing helpers
- * Zones: telegram inbound, queue admission, split-message recovery
- * Owns conservative delayed grouping for Telegram text messages that look like automatic long-message splits
+ * Bale text-group coalescing helpers
+ * Zones: bale inbound, queue admission, split-message recovery
+ * Owns conservative delayed grouping for Bale text messages that look like automatic long-message splits
  */
 
 import { setTimeout as waitForTimeout } from "node:timers/promises";
 
 import {
-  createTelegramPendingGroups,
-  extractTelegramMessageText,
-  type TelegramPendingGroup,
-  type TelegramMessageForwardOrigin,
-  type TelegramMessageUser,
-  type TelegramRichMessage,
+  createBalePendingGroups,
+  extractBaleMessageText,
+  type BalePendingGroup,
+  type BaleMessageForwardOrigin,
+  type BaleMessageUser,
+  type BaleRichMessage,
 } from "./media.ts";
 
-const TELEGRAM_TEXT_GROUP_DEBOUNCE_MS = 1000;
-const TELEGRAM_TEXT_GROUP_MIN_SPLIT_LENGTH = 3600;
-const TELEGRAM_TEXT_GROUP_MAX_MESSAGE_ID_GAP = 12;
+const BALE_TEXT_GROUP_DEBOUNCE_MS = 1000;
+const BALE_TEXT_GROUP_MIN_SPLIT_LENGTH = 3600;
+const BALE_TEXT_GROUP_MAX_MESSAGE_ID_GAP = 12;
 
-export interface TelegramTextGroupMessage {
+export interface BaleTextGroupMessage {
   message_id: number;
   media_group_id?: string;
   chat: { id: number };
@@ -27,22 +27,22 @@ export interface TelegramTextGroupMessage {
   from?: { id?: number; is_bot?: boolean };
   text?: string;
   caption?: string;
-  rich_message?: TelegramRichMessage;
-  forward_origin?: TelegramMessageForwardOrigin;
-  forward_from?: TelegramMessageUser;
+  rich_message?: BaleRichMessage;
+  forward_origin?: BaleMessageForwardOrigin;
+  forward_from?: BaleMessageUser;
   forward_sender_name?: string;
 }
 
-export type TelegramForwardCommentBatchPosition = "comment" | "forward";
+export type BaleForwardCommentBatchPosition = "comment" | "forward";
 
-export interface TelegramTextGroupController<TMessage, TContext = unknown> {
+export interface BaleTextGroupController<TMessage, TContext = unknown> {
   prepareUpdateBatch: (updates: readonly { message?: TMessage }[]) => void;
   getPreparedForwardingPosition: (
-    message: TelegramTextGroupMessage,
-  ) => TelegramForwardCommentBatchPosition | undefined;
+    message: BaleTextGroupMessage,
+  ) => BaleForwardCommentBatchPosition | undefined;
   prepareForwardedMessage: (
-    message: TelegramTextGroupMessage,
-    position: TelegramForwardCommentBatchPosition,
+    message: BaleTextGroupMessage,
+    position: BaleForwardCommentBatchPosition,
   ) => void;
   queueMessage: (options: {
     message: TMessage;
@@ -58,7 +58,7 @@ export interface TelegramTextGroupController<TMessage, TContext = unknown> {
   clear: () => void;
 }
 
-export interface TelegramTextGroupControllerOptions {
+export interface BaleTextGroupControllerOptions {
   debounceMs?: number;
   forwardCommentWaitMs?: number | false;
   minSplitLength?: number;
@@ -69,26 +69,26 @@ export interface TelegramTextGroupControllerOptions {
   clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
 }
 
-export interface TelegramTextGroupDispatchRuntime<
-  TMessage extends TelegramTextGroupMessage,
+export interface BaleTextGroupDispatchRuntime<
+  TMessage extends BaleTextGroupMessage,
   TContext,
 > {
   handleMessage: (message: TMessage, ctx: TContext) => Promise<void>;
 }
 
-export interface TelegramGroupedInputClearerDeps {
+export interface BaleGroupedInputClearerDeps {
   clearMediaGroups: () => void;
   clearTextGroups: () => void;
 }
 
-function extractTelegramTextGroupText(
-  message: TelegramTextGroupMessage,
+function extractBaleTextGroupText(
+  message: BaleTextGroupMessage,
 ): string {
-  return extractTelegramMessageText(message);
+  return extractBaleMessageText(message);
 }
 
-function isTelegramForwardedMessage(
-  message: TelegramTextGroupMessage,
+function isBaleForwardedMessage(
+  message: BaleTextGroupMessage,
 ): boolean {
   return (
     message.forward_origin !== undefined ||
@@ -97,17 +97,17 @@ function isTelegramForwardedMessage(
   );
 }
 
-function isTelegramTextGroupCommand(text: string): boolean {
+function isBaleTextGroupCommand(text: string): boolean {
   return text.trimStart().startsWith("/");
 }
 
-function isTelegramTextGroupClearingCommand(text: string): boolean {
+function isBaleTextGroupClearingCommand(text: string): boolean {
   const command = text.trimStart().split(/\s+/, 1)[0]?.split("@", 1)[0];
   return command === "/stop";
 }
 
-function getTelegramTextGroupMessageIdentity(
-  message: TelegramTextGroupMessage,
+function getBaleTextGroupMessageIdentity(
+  message: BaleTextGroupMessage,
 ): string {
   const threadKey =
     typeof message.message_thread_id === "number"
@@ -116,14 +116,14 @@ function getTelegramTextGroupMessageIdentity(
   return `${message.chat.id}:${threadKey}:${message.message_id}`;
 }
 
-function getTelegramTextGroupKey(
-  message: TelegramTextGroupMessage,
+function getBaleTextGroupKey(
+  message: BaleTextGroupMessage,
 ): string | undefined {
   if (message.media_group_id) return undefined;
   if (!message.from || message.from.is_bot) return undefined;
   if (
-    !extractTelegramTextGroupText(message) &&
-    !isTelegramForwardedMessage(message)
+    !extractBaleTextGroupText(message) &&
+    !isBaleForwardedMessage(message)
   ) {
     return undefined;
   }
@@ -134,43 +134,43 @@ function getTelegramTextGroupKey(
   return `${message.chat.id}:${threadKey}:${message.from.id}`;
 }
 
-function canStartTelegramTextGroup(
-  message: TelegramTextGroupMessage,
+function canStartBaleTextGroup(
+  message: BaleTextGroupMessage,
   minSplitLength: number,
 ): boolean {
-  const text = extractTelegramTextGroupText(message);
-  return text.length >= minSplitLength && !isTelegramTextGroupCommand(text);
+  const text = extractBaleTextGroupText(message);
+  return text.length >= minSplitLength && !isBaleTextGroupCommand(text);
 }
 
-function canAppendTelegramTextGroupMessage<
-  TMessage extends TelegramTextGroupMessage,
+function canAppendBaleTextGroupMessage<
+  TMessage extends BaleTextGroupMessage,
 >(
-  group: TelegramPendingGroup<TMessage, unknown, unknown>,
+  group: BalePendingGroup<TMessage, unknown, unknown>,
   message: TMessage,
 ): boolean {
-  const text = extractTelegramTextGroupText(message);
+  const text = extractBaleTextGroupText(message);
   const previous = group.messages.at(-1);
   return (
     !!previous &&
     message.message_id > previous.message_id &&
     message.message_id <=
-      previous.message_id + TELEGRAM_TEXT_GROUP_MAX_MESSAGE_ID_GAP &&
-    (text.length > 0 || isTelegramForwardedMessage(message)) &&
-    !isTelegramTextGroupCommand(text)
+      previous.message_id + BALE_TEXT_GROUP_MAX_MESSAGE_ID_GAP &&
+    (text.length > 0 || isBaleForwardedMessage(message)) &&
+    !isBaleTextGroupCommand(text)
   );
 }
 
-export function createTelegramTextGroupController<
-  TMessage extends TelegramTextGroupMessage,
+export function createBaleTextGroupController<
+  TMessage extends BaleTextGroupMessage,
   TContext = unknown,
 >(
-  options: TelegramTextGroupControllerOptions = {},
-): TelegramTextGroupController<TMessage, TContext> {
+  options: BaleTextGroupControllerOptions = {},
+): BaleTextGroupController<TMessage, TContext> {
   const plannedForwardCommentStarts = new Set<string>();
   const plannedForwardCommentEnds = new Set<string>();
-  const debounceMs = options.debounceMs ?? TELEGRAM_TEXT_GROUP_DEBOUNCE_MS;
+  const debounceMs = options.debounceMs ?? BALE_TEXT_GROUP_DEBOUNCE_MS;
   const minSplitLength =
-    options.minSplitLength ?? TELEGRAM_TEXT_GROUP_MIN_SPLIT_LENGTH;
+    options.minSplitLength ?? BALE_TEXT_GROUP_MIN_SPLIT_LENGTH;
   const forwardCommentWaitMs =
     options.forwardCommentWaitMs === undefined
       ? debounceMs
@@ -191,10 +191,10 @@ export function createTelegramTextGroupController<
       : (timer: ReturnType<typeof setTimeout>): void => {
           (timer as unknown as AbortController).abort();
         });
-  const groups = createTelegramPendingGroups<
+  const groups = createBalePendingGroups<
     TMessage,
     TContext,
-    TelegramForwardCommentBatchPosition
+    BaleForwardCommentBatchPosition
   >({ debounceMs, requireContext: true, setTimer, clearTimer });
   /** Admission policy for one message; the shared group machine owns timers, batches and dispatch. */
   const queueTextGroupMessage = (options: {
@@ -207,7 +207,7 @@ export function createTelegramTextGroupController<
     ) => unknown | Promise<unknown>;
     forceStart: boolean;
     dispatchImmediately: boolean;
-    forwardPairCandidate?: TelegramForwardCommentBatchPosition;
+    forwardPairCandidate?: BaleForwardCommentBatchPosition;
     delayMs?: number;
   }): boolean => {
     const existing = groups.get(options.key);
@@ -233,12 +233,12 @@ export function createTelegramTextGroupController<
     if (
       !existing &&
       !options.forceStart &&
-      !canStartTelegramTextGroup(options.message, minSplitLength)
+      !canStartBaleTextGroup(options.message, minSplitLength)
     )
       return false;
     if (
       existing &&
-      !canAppendTelegramTextGroupMessage(existing, options.message)
+      !canAppendBaleTextGroupMessage(existing, options.message)
     )
       return false;
     groups.queue({
@@ -256,51 +256,51 @@ export function createTelegramTextGroupController<
         const comment = updates[index]?.message;
         const forwarded = updates[index + 1]?.message;
         if (!comment || !forwarded) continue;
-        const commentText = extractTelegramTextGroupText(comment);
-        const commentKey = getTelegramTextGroupKey(comment);
-        const forwardedKey = getTelegramTextGroupKey(forwarded);
+        const commentText = extractBaleTextGroupText(comment);
+        const commentKey = getBaleTextGroupKey(comment);
+        const forwardedKey = getBaleTextGroupKey(forwarded);
         if (
           !commentKey ||
           commentKey !== forwardedKey ||
           !commentText ||
-          isTelegramTextGroupCommand(commentText) ||
-          isTelegramForwardedMessage(comment) ||
-          !isTelegramForwardedMessage(forwarded) ||
+          isBaleTextGroupCommand(commentText) ||
+          isBaleForwardedMessage(comment) ||
+          !isBaleForwardedMessage(forwarded) ||
           forwarded.message_id <= comment.message_id ||
           forwarded.message_id >
-            comment.message_id + TELEGRAM_TEXT_GROUP_MAX_MESSAGE_ID_GAP
+            comment.message_id + BALE_TEXT_GROUP_MAX_MESSAGE_ID_GAP
         ) {
           continue;
         }
         plannedForwardCommentStarts.add(
-          getTelegramTextGroupMessageIdentity(comment),
+          getBaleTextGroupMessageIdentity(comment),
         );
         plannedForwardCommentEnds.add(
-          getTelegramTextGroupMessageIdentity(forwarded),
+          getBaleTextGroupMessageIdentity(forwarded),
         );
       }
     },
     getPreparedForwardingPosition(message) {
-      const identity = getTelegramTextGroupMessageIdentity(message);
+      const identity = getBaleTextGroupMessageIdentity(message);
       if (plannedForwardCommentStarts.has(identity)) return "comment";
       if (plannedForwardCommentEnds.has(identity)) return "forward";
       return undefined;
     },
     prepareForwardedMessage(message, position) {
-      const identity = getTelegramTextGroupMessageIdentity(message);
+      const identity = getBaleTextGroupMessageIdentity(message);
       if (position === "comment") plannedForwardCommentStarts.add(identity);
       else plannedForwardCommentEnds.add(identity);
     },
     queueMessage: ({ message, context, dispatchMessages }) => {
-      const identity = getTelegramTextGroupMessageIdentity(message);
-      const key = getTelegramTextGroupKey(message);
+      const identity = getBaleTextGroupMessageIdentity(message);
+      const key = getBaleTextGroupKey(message);
       const plannedStart = plannedForwardCommentStarts.delete(identity);
-      const forwarded = isTelegramForwardedMessage(message);
+      const forwarded = isBaleForwardedMessage(message);
       const existing = key ? groups.get(key) : undefined;
-      const text = extractTelegramTextGroupText(message);
-      if (existing && isTelegramTextGroupClearingCommand(text))
+      const text = extractBaleTextGroupText(message);
+      if (existing && isBaleTextGroupClearingCommand(text))
         groups.clearKey(key!);
-      const candidatePosition: TelegramForwardCommentBatchPosition = forwarded
+      const candidatePosition: BaleForwardCommentBatchPosition = forwarded
         ? "forward"
         : "comment";
       const existingCandidate = existing?.meta;
@@ -309,7 +309,7 @@ export function createTelegramTextGroupController<
         existingCandidate !== candidatePosition;
       const separateFromCandidate =
         existingCandidate === candidatePosition &&
-        !isTelegramTextGroupCommand(text);
+        !isBaleTextGroupCommand(text);
       if (separateFromCandidate && existing) groups.closeBatch(key!);
       const forceStart =
         plannedStart ||
@@ -317,8 +317,8 @@ export function createTelegramTextGroupController<
           !!key &&
           (forwarded ||
             (typeof message.text === "string" &&
-              !isTelegramTextGroupCommand(
-                extractTelegramTextGroupText(message),
+              !isBaleTextGroupCommand(
+                extractBaleTextGroupText(message),
               ))));
       const dispatchImmediately =
         pairCompleted ||
@@ -334,11 +334,11 @@ export function createTelegramTextGroupController<
         forceStart,
         dispatchImmediately,
         forwardPairCandidate:
-          forceStart && !canStartTelegramTextGroup(message, minSplitLength)
+          forceStart && !canStartBaleTextGroup(message, minSplitLength)
             ? candidatePosition
             : undefined,
         delayMs:
-          forceStart && !canStartTelegramTextGroup(message, minSplitLength)
+          forceStart && !canStartBaleTextGroup(message, minSplitLength)
             ? forwardCommentWaitMs === false
               ? undefined
               : forwardCommentWaitMs
@@ -356,15 +356,15 @@ export function createTelegramTextGroupController<
   };
 }
 
-export function createTelegramTextGroupDispatchRuntime<
-  TMessage extends TelegramTextGroupMessage,
+export function createBaleTextGroupDispatchRuntime<
+  TMessage extends BaleTextGroupMessage,
   TContext,
 >(deps: {
-  textGroups: TelegramTextGroupController<TMessage, TContext>;
+  textGroups: BaleTextGroupController<TMessage, TContext>;
   dispatchMessages: (messages: TMessage[], ctx: TContext) => Promise<void>;
   dispatchSingleMessage: (message: TMessage, ctx: TContext) => Promise<void>;
   onDeferredMessage?: (message: TMessage) => void;
-}): TelegramTextGroupDispatchRuntime<TMessage, TContext> {
+}): BaleTextGroupDispatchRuntime<TMessage, TContext> {
   return {
     handleMessage: async (message, ctx) => {
       const queuedTextGroup = deps.textGroups.queueMessage({
@@ -382,8 +382,8 @@ export function createTelegramTextGroupDispatchRuntime<
   };
 }
 
-export function createTelegramGroupedInputClearer(
-  deps: TelegramGroupedInputClearerDeps,
+export function createBaleGroupedInputClearer(
+  deps: BaleGroupedInputClearerDeps,
 ): () => void {
   return () => {
     deps.clearMediaGroups();

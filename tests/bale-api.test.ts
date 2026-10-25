@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram API helpers
+ * Regression tests for Bale API helpers
  * Verifies direct helper behavior around missing tokens, callback-query failures, downloads, and runtime transport binding
  */
 
@@ -22,56 +22,56 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
-  answerTelegramCallbackQuery,
-  callTelegram,
-  callTelegramMultipart,
-  cleanupTelegramTempFiles,
-  createDefaultTelegramBridgeApiRuntime,
-  createTelegramAttachmentFileName,
-  createTelegramApiClient,
-  createTelegramApiTargetActivityRuntime,
-  createTelegramApiTargetTrackingClient,
-  createTelegramApiWorkspaceAdmissionClient,
-  createTelegramAssistantDraftSender,
-  createTelegramBridgeApiRuntime,
-  createTelegramChatActionSender,
-  createTelegramNativeMarkdownDraftSender,
-  downloadTelegramFile,
-  fetchTelegramBotIdentity,
-  getTelegramApiErrorRequestTarget,
-  getTelegramApiWorkspaceAdmissionScope,
-  getTelegramByteLimitFromEnv,
-  isTelegramApiCommitUnknownError,
-  isTelegramApiRequestRejected,
-  isTelegramMessageNotModifiedError,
-  setTelegramApiHttpsFetchForTesting,
-  prepareTelegramTempDir,
-  TELEGRAM_FILE_MAX_BYTES,
-  TelegramApiWorkspaceAdmissionError,
-  TelegramApiAuthorityError,
-  type TelegramApiCallOptions,
-  type TelegramApiClient,
-  type TelegramInputRichMessage,
-} from "../lib/telegram-api.ts";
-import { isTelegramTopicTargetStaleError } from "../lib/threads.ts";
-import { createTelegramWorkspaceAdmissionLedger } from "../lib/workspace-admission.ts";
-import { createTelegramAssistantPreviewRuntime } from "../lib/preview.ts";
-import { createTelegramBusAwareApiRuntime } from "../lib/bus-api.ts";
+  answerBaleCallbackQuery,
+  callBale,
+  callBaleMultipart,
+  cleanupBaleTempFiles,
+  createDefaultBaleBridgeApiRuntime,
+  createBaleAttachmentFileName,
+  createBaleApiClient,
+  createBaleApiTargetActivityRuntime,
+  createBaleApiTargetTrackingClient,
+  createBaleApiWorkspaceAdmissionClient,
+  createBaleAssistantDraftSender,
+  createBaleBridgeApiRuntime,
+  createBaleChatActionSender,
+  createBaleNativeMarkdownDraftSender,
+  downloadBaleFile,
+  fetchBaleBotIdentity,
+  getBaleApiErrorRequestTarget,
+  getBaleApiWorkspaceAdmissionScope,
+  getBaleByteLimitFromEnv,
+  isBaleApiCommitUnknownError,
+  isBaleApiRequestRejected,
+  isBaleMessageNotModifiedError,
+  setBaleApiHttpsFetchForTesting,
+  prepareBaleTempDir,
+  BALE_FILE_MAX_BYTES,
+  BaleApiWorkspaceAdmissionError,
+  BaleApiAuthorityError,
+  type BaleApiCallOptions,
+  type BaleApiClient,
+  type BaleInputRichMessage,
+} from "../lib/bale-api.ts";
+import { isBaleTopicTargetStaleError } from "../lib/threads.ts";
+import { createBaleWorkspaceAdmissionLedger } from "../lib/workspace-admission.ts";
+import { createBaleAssistantPreviewRuntime } from "../lib/preview.ts";
+import { createBaleBusAwareApiRuntime } from "../lib/bus-api.ts";
 import { createGuestMarkdownReplyEditor } from "../lib/replies.ts";
-import { handleTelegramAgentEndRuntime, type PendingTelegramTurn } from "../lib/queue.ts";
-import { deliverTelegramGuestCachedAttachment } from "../lib/outbound-attachments.ts";
+import { handleBaleAgentEndRuntime, type PendingBaleTurn } from "../lib/queue.ts";
+import { deliverBaleGuestCachedAttachment } from "../lib/outbound-attachments.ts";
 
 test("Target activity tracks exact JSON and multipart transport until settlement", async () => {
-  const activity = createTelegramApiTargetActivityRuntime();
+  const activity = createBaleApiTargetActivityRuntime();
   let release: (() => void) | undefined;
   const held = new Promise<void>((resolve) => { release = resolve; });
-  const client: TelegramApiClient = {
+  const client: BaleApiClient = {
     async call<TResponse>() { await held; return true as TResponse; },
     async callMultipart() { throw new Error("upload failed"); },
     async downloadFile() { return "/tmp/file"; },
     async answerCallbackQuery() {},
   };
-  const tracked = createTelegramApiTargetTrackingClient(client, activity);
+  const tracked = createBaleApiTargetTrackingClient(client, activity);
   const request = tracked.call("sendMessage", {
     chat_id: "-1007", message_thread_id: "42", text: "hello",
   });
@@ -101,34 +101,34 @@ test("Target activity tracks exact JSON and multipart transport until settlement
 
 test("API Workspace admission scope is exact, chat-wide, or conservatively profile-wide", () => {
   assert.deepEqual(
-    getTelegramApiWorkspaceAdmissionScope({
+    getBaleApiWorkspaceAdmissionScope({
       chat_id: "-1007",
       message_thread_id: "42",
     }),
     { kind: "target", target: { chatId: -1007, threadId: 42 } },
   );
   assert.deepEqual(
-    getTelegramApiWorkspaceAdmissionScope({ chat_id: -1007, message_id: 9 }),
+    getBaleApiWorkspaceAdmissionScope({ chat_id: -1007, message_id: 9 }),
     { kind: "chat", chatId: -1007 },
   );
   assert.deepEqual(
-    getTelegramApiWorkspaceAdmissionScope({
+    getBaleApiWorkspaceAdmissionScope({
       chat_id: -1007,
       message_thread_id: "invalid",
     }),
     { kind: "profile" },
   );
   assert.deepEqual(
-    getTelegramApiWorkspaceAdmissionScope({ chat_id: "invalid" }),
+    getBaleApiWorkspaceAdmissionScope({ chat_id: "invalid" }),
     { kind: "profile" },
   );
-  assert.equal(getTelegramApiWorkspaceAdmissionScope({ timeout: 30 }), undefined);
+  assert.equal(getBaleApiWorkspaceAdmissionScope({ timeout: 30 }), undefined);
 });
 
 test("JSON and multipart API calls hold exact Workspace admission through settlement", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-api-admission-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-api-admission-"));
   try {
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "workspace-admission.json"),
       profileKey: "profile:api",
       owner: {
@@ -139,7 +139,7 @@ test("JSON and multipart API calls hold exact Workspace admission through settle
     });
     let jsonObserved = false;
     let multipartObserved = false;
-    const client: TelegramApiClient = {
+    const client: BaleApiClient = {
       async call<TResponse>() {
         const snapshot = admission.read();
         jsonObserved =
@@ -171,7 +171,7 @@ test("JSON and multipart API calls hold exact Workspace admission through settle
       },
       async answerCallbackQuery() {},
     };
-    const admitted = createTelegramApiWorkspaceAdmissionClient(
+    const admitted = createBaleApiWorkspaceAdmissionClient(
       client,
       admission,
       { createOperationId: () => "stable-api-operation" },
@@ -204,10 +204,10 @@ test("JSON and multipart API calls hold exact Workspace admission through settle
 });
 
 test("Concurrent API calls cannot share one Workspace admission operation identity", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-api-operation-id-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-api-operation-id-"));
   let releaseTransport: (() => void) | undefined;
   try {
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "workspace-admission.json"),
       profileKey: "profile:api-duplicate",
       owner: {
@@ -220,7 +220,7 @@ test("Concurrent API calls cannot share one Workspace admission operation identi
       releaseTransport = resolve;
     });
     let transportCalls = 0;
-    const client: TelegramApiClient = {
+    const client: BaleApiClient = {
       async call<TResponse>() {
         transportCalls += 1;
         await heldTransport;
@@ -234,7 +234,7 @@ test("Concurrent API calls cannot share one Workspace admission operation identi
       },
       async answerCallbackQuery() {},
     };
-    const admitted = createTelegramApiWorkspaceAdmissionClient(
+    const admitted = createBaleApiWorkspaceAdmissionClient(
       client,
       admission,
       { createOperationId: () => "shared-live-operation" },
@@ -253,7 +253,7 @@ test("Concurrent API calls cannot share one Workspace admission operation identi
         message_thread_id: 42,
         text: "second",
       }),
-      (error) => error instanceof TelegramApiWorkspaceAdmissionError &&
+      (error) => error instanceof BaleApiWorkspaceAdmissionError &&
         error.code === "duplicate-operation",
     );
     assert.equal(transportCalls, 1);
@@ -281,9 +281,9 @@ test("Concurrent API calls cannot share one Workspace admission operation identi
 });
 
 test("API Workspace fence blocks issuance and failed requests still release leases", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-api-fence-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-api-fence-"));
   try {
-    const admission = createTelegramWorkspaceAdmissionLedger({
+    const admission = createBaleWorkspaceAdmissionLedger({
       path: join(dir, "workspace-admission.json"),
       profileKey: "profile:api",
       owner: {
@@ -303,7 +303,7 @@ test("API Workspace fence blocks issuance and failed requests still release leas
     });
     assert.equal(fenced.kind, "acquired");
     let calls = 0;
-    const client: TelegramApiClient = {
+    const client: BaleApiClient = {
       async call() {
         calls += 1;
         throw new Error("request failed");
@@ -317,14 +317,14 @@ test("API Workspace fence blocks issuance and failed requests still release leas
       },
       async answerCallbackQuery() {},
     };
-    const admitted = createTelegramApiWorkspaceAdmissionClient(client, admission);
+    const admitted = createBaleApiWorkspaceAdmissionClient(client, admission);
     await assert.rejects(
       admitted.call("sendMessage", {
         chat_id: -1007,
         message_thread_id: 42,
       }),
       (error) =>
-        error instanceof TelegramApiWorkspaceAdmissionError &&
+        error instanceof BaleApiWorkspaceAdmissionError &&
         error.code === "blocked",
     );
     assert.equal(calls, 0);
@@ -347,7 +347,7 @@ test("API Workspace fence blocks issuance and failed requests still release leas
 
 test("API admission release failure cannot turn a settled request into replay", async () => {
   const releaseErrors: unknown[] = [];
-  const admitted = createTelegramApiWorkspaceAdmissionClient(
+  const admitted = createBaleApiWorkspaceAdmissionClient(
     {
       async call<TResponse>() {
         return "sent" as TResponse;
@@ -432,7 +432,7 @@ test("Message deletion accepts only typed exact HTTP 400 already-absent evidence
   ] as const) {
     const restoreFetch = setApiTestFetch(async () => createApiErrorResponse(status, description));
     try {
-      const runtime = createDefaultTelegramBridgeApiRuntime({
+      const runtime = createDefaultBaleBridgeApiRuntime({
         getBotToken: () => "test-token",
         recordRuntimeEvent: () => {},
       });
@@ -455,7 +455,7 @@ function createMalformedApiTextResponse(text: string): Response {
 for (const fail of ["none", "capture", "sync", "async"] as const)
 test(`API drain observation follows per-target and chat counts without changing requests (${fail})`, async () => {
   let notifications = 0;
-  const activity = createTelegramApiTargetActivityRuntime({ captureDrain() {
+  const activity = createBaleApiTargetActivityRuntime({ captureDrain() {
     if (fail === "capture") throw new Error("observer");
     return () => {
       if (fail === "sync") throw new Error("observer");
@@ -491,12 +491,12 @@ function setApiTestFetch(fetchImpl: typeof fetch): () => void {
 }
 
 function setApiTestNetworkFamily(value: string | undefined): () => void {
-  const previous = process.env.PI_TELEGRAM_NETWORK_FAMILY;
-  if (value === undefined) delete process.env.PI_TELEGRAM_NETWORK_FAMILY;
-  else process.env.PI_TELEGRAM_NETWORK_FAMILY = value;
+  const previous = process.env.PI_BALE_NETWORK_FAMILY;
+  if (value === undefined) delete process.env.PI_BALE_NETWORK_FAMILY;
+  else process.env.PI_BALE_NETWORK_FAMILY = value;
   return () => {
-    if (previous === undefined) delete process.env.PI_TELEGRAM_NETWORK_FAMILY;
-    else process.env.PI_TELEGRAM_NETWORK_FAMILY = previous;
+    if (previous === undefined) delete process.env.PI_BALE_NETWORK_FAMILY;
+    else process.env.PI_BALE_NETWORK_FAMILY = previous;
   };
 }
 
@@ -523,8 +523,8 @@ function hasApiTestFamily(family: unknown): boolean {
 }
 
 function createApiRuntimeClient(
-  overrides: Partial<TelegramApiClient> = {},
-): TelegramApiClient {
+  overrides: Partial<BaleApiClient> = {},
+): BaleApiClient {
   return {
     call: async <TResponse>() => true as TResponse,
     callMultipart: async <TResponse>() => true as TResponse,
@@ -555,20 +555,20 @@ for (const rich of [false, true]) {
           ? createApiErrorResponse(429, "Too Many Requests", new Headers({ "retry-after": "2" }))
           : createApiJsonResponse(true);
       });
-      const client = createTelegramApiClient(() => token, { now: () => now });
-      const runtime = createTelegramBridgeApiRuntime({
+      const client = createBaleApiClient(() => token, { now: () => now });
+      const runtime = createBaleBridgeApiRuntime({
         tempDir: "/fixture", maxFileSizeBytes: 1, tempFileMaxAgeMs: 1, now: () => now,
         recordRuntimeEvent: () => {},
         client: createApiRuntimeClient({
-          call: <T>(method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) =>
+          call: <T>(method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) =>
             client.call<T>(method, body, { ...options, sleep: async () => { sleeps += 1; } }),
         }),
       });
-      const api = createTelegramBusAwareApiRuntime({
+      const api = createBaleBusAwareApiRuntime({
         directRuntime: runtime, ownsDirect: () => !follower,
         callFollowerApi: async (method, args) => {
           assert.equal(method, "call");
-          return runtime.call(String(args[0]), args[1] as Record<string, unknown>, args[2] as TelegramApiCallOptions | undefined);
+          return runtime.call(String(args[0]), args[1] as Record<string, unknown>, args[2] as BaleApiCallOptions | undefined);
         },
       });
       const send = (text: string, threadId = 42) => rich
@@ -614,7 +614,7 @@ for (const { status, retryAfter, delayMs } of [
         ? createApiErrorResponse(status, "Rejected draft", retryAfter ? new Headers({ "retry-after": retryAfter }) : undefined)
         : createApiJsonResponse(true);
     });
-    const client = createTelegramApiClient(() => "123:fixture", { now: () => now });
+    const client = createBaleApiClient(() => "123:fixture", { now: () => now });
     const send = (text: string) => client.call<boolean>("sendRichMessageDraft", {
       chat_id: 7, message_thread_id: 42, draft_id: 1, rich_message: { markdown: text },
     }, { sleep: async () => { sleeps += 1; } });
@@ -652,17 +652,17 @@ test("Sealed preview drains its issued request but never waits for a 429 draft r
     requests += 1; entered(); await gate;
     return createApiErrorResponse(429, "Too Many Requests", new Headers({ "retry-after": "3" }));
   });
-  const client = createTelegramApiClient(() => "123:fixture");
-  const runtime = createTelegramBridgeApiRuntime({
+  const client = createBaleApiClient(() => "123:fixture");
+  const runtime = createBaleBridgeApiRuntime({
     tempDir: "/fixture", maxFileSizeBytes: 1, tempFileMaxAgeMs: 1, recordRuntimeEvent: () => {},
     client: createApiRuntimeClient({
-      call: <T>(method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) =>
+      call: <T>(method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) =>
         client.call<T>(method, body, { ...options, sleep: async () => { sleeps += 1; } }),
     }),
   });
-  const preview = createTelegramAssistantPreviewRuntime<{ text: string }>({
+  const preview = createBaleAssistantPreviewRuntime<{ text: string }>({
     getActiveTurn: () => ({ chatId: 7 }), isAssistantMessage: () => true, getMessageText: (message) => message.text,
-    sendDraft: createTelegramNativeMarkdownDraftSender(runtime),
+    sendDraft: createBaleNativeMarkdownDraftSender(runtime),
     sendMarkdownReply: async () => { finalSent = true; return 100; },
   });
   try {
@@ -685,7 +685,7 @@ test("Sealed preview drains its issued request but never waits for a 429 draft r
 });
 
 test("Outgoing Rich Message type supports explicit structured blocks", () => {
-  const structured: TelegramInputRichMessage = {
+  const structured: BaleInputRichMessage = {
     blocks: [{ type: "pre", text: "Working" }],
   };
   assert.deepEqual(structured, {
@@ -693,49 +693,49 @@ test("Outgoing Rich Message type supports explicit structured blocks", () => {
   });
 });
 
-test("Telegram API byte-limit helpers expose the inbound file default", () => {
-  assert.equal(TELEGRAM_FILE_MAX_BYTES, 50 * 1024 * 1024);
+test("Bale API byte-limit helpers expose the inbound file default", () => {
+  assert.equal(BALE_FILE_MAX_BYTES, 50 * 1024 * 1024);
   assert.equal(
-    getTelegramByteLimitFromEnv({}, [], TELEGRAM_FILE_MAX_BYTES),
-    TELEGRAM_FILE_MAX_BYTES,
+    getBaleByteLimitFromEnv({}, [], BALE_FILE_MAX_BYTES),
+    BALE_FILE_MAX_BYTES,
   );
 });
 
-test("Telegram API byte-limit config prefers positive integer env values", () => {
+test("Bale API byte-limit config prefers positive integer env values", () => {
   assert.equal(
-    getTelegramByteLimitFromEnv(
-      { PI_TELEGRAM_INBOUND_FILE_MAX_BYTES: "12345" },
-      ["PI_TELEGRAM_INBOUND_FILE_MAX_BYTES"],
+    getBaleByteLimitFromEnv(
+      { PI_BALE_INBOUND_FILE_MAX_BYTES: "12345" },
+      ["PI_BALE_INBOUND_FILE_MAX_BYTES"],
       99,
     ),
     12345,
   );
   assert.equal(
-    getTelegramByteLimitFromEnv(
+    getBaleByteLimitFromEnv(
       {
-        PI_TELEGRAM_INBOUND_FILE_MAX_BYTES: "0",
-        TELEGRAM_MAX_FILE_SIZE_BYTES: "bad",
+        PI_BALE_INBOUND_FILE_MAX_BYTES: "0",
+        BALE_MAX_FILE_SIZE_BYTES: "bad",
       },
-      ["PI_TELEGRAM_INBOUND_FILE_MAX_BYTES", "TELEGRAM_MAX_FILE_SIZE_BYTES"],
+      ["PI_BALE_INBOUND_FILE_MAX_BYTES", "BALE_MAX_FILE_SIZE_BYTES"],
       99,
     ),
     99,
   );
 });
 
-test("Telegram API helpers detect unchanged edit errors", () => {
+test("Bale API helpers detect unchanged edit errors", () => {
   assert.equal(
-    isTelegramMessageNotModifiedError(
+    isBaleMessageNotModifiedError(
       new Error("Bad Request: message is not modified"),
     ),
     true,
   );
-  assert.equal(isTelegramMessageNotModifiedError(new Error("other")), false);
+  assert.equal(isBaleMessageNotModifiedError(new Error("other")), false);
 });
 
-test("Telegram API chat-action sender binds a fixed action", async () => {
+test("Bale API chat-action sender binds a fixed action", async () => {
   const calls: Array<[number, string, number | undefined]> = [];
-  const sendTyping = createTelegramChatActionSender(
+  const sendTyping = createBaleChatActionSender(
     async (chatId, action, options) => {
       calls.push([chatId, action, options?.message_thread_id]);
     },
@@ -745,9 +745,9 @@ test("Telegram API chat-action sender binds a fixed action", async () => {
   assert.deepEqual(calls, [[7, "typing", 42]]);
 });
 
-test("Telegram bridge API runtime includes thread target on chat actions", async () => {
+test("Bale bridge API runtime includes thread target on chat actions", async () => {
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
-  const runtime = createTelegramBridgeApiRuntime({
+  const runtime = createBaleBridgeApiRuntime({
     client: createApiRuntimeClient({
       call: async <TResponse>(
         method: string,
@@ -776,12 +776,12 @@ test("Telegram bridge API runtime includes thread target on chat actions", async
   ]);
 });
 
-test("Telegram bridge API runtime leaves caller-owned expected failures to the caller's diagnostics", async () => {
+test("Bale bridge API runtime leaves caller-owned expected failures to the caller's diagnostics", async () => {
   const logged: unknown[] = [];
-  const runtime = createTelegramBridgeApiRuntime({
+  const runtime = createBaleBridgeApiRuntime({
     client: createApiRuntimeClient({
       call: async () => {
-        throw new Error("Telegram API sendMessage failed: HTTP 400: Bad Request: message thread not found");
+        throw new Error("Bale API sendMessage failed: HTTP 400: Bad Request: message thread not found");
       },
     }),
     tempDir: "/tmp",
@@ -795,9 +795,9 @@ test("Telegram bridge API runtime leaves caller-owned expected failures to the c
   assert.equal(logged.length, 1, "an unexpected failure keeps the API diagnostic");
 });
 
-test("Telegram bridge API runtime owns reply-markup edits", async () => {
+test("Bale bridge API runtime owns reply-markup edits", async () => {
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
-  const runtime = createTelegramBridgeApiRuntime({
+  const runtime = createBaleBridgeApiRuntime({
     client: createApiRuntimeClient({
       call: async <TResponse>(
         method: string,
@@ -824,15 +824,15 @@ test("Telegram bridge API runtime owns reply-markup edits", async () => {
   ]);
 });
 
-test("Telegram bridge API runtime coalesces exact actions while different Threads send independently", async () => {
+test("Bale bridge API runtime coalesces exact actions while different Threads send independently", async () => {
   let nowMs = 1000, firstSettled = false;
   const firstResult = Promise.withResolvers<boolean>();
   const secondResult = Promise.withResolvers<boolean>();
   const calls: number[] = [];
   const callOptions: Array<{ maxAttempts?: number } | undefined> = [];
-  const runtime = createTelegramBridgeApiRuntime({
+  const runtime = createBaleBridgeApiRuntime({
     client: createApiRuntimeClient({
-      call: async <TResponse>(_method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) => {
+      call: async <TResponse>(_method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) => {
         const thread = Number(body.message_thread_id);
         calls.push(thread);
         callOptions.push(options);
@@ -879,8 +879,8 @@ test("Concurrent Thread actions retain one shared 429 cooldown through peer comp
       : body.message_thread_id === 42 ? second.promise : createApiJsonResponse(true);
   });
   try {
-    const runtime = createTelegramBridgeApiRuntime({
-      client: createTelegramApiClient(() => "123:fixture"),
+    const runtime = createBaleBridgeApiRuntime({
+      client: createBaleApiClient(() => "123:fixture"),
       tempDir: "/tmp", maxFileSizeBytes: 1, tempFileMaxAgeMs: 1,
       recordRuntimeEvent: (_kind, _error, details) => { events.push(details ?? {}); },
       now: () => nowMs, chatActionMinIntervalMs: 2000,
@@ -913,10 +913,10 @@ test("Concurrent Thread actions retain one shared 429 cooldown through peer comp
   } finally { restoreFetch(); }
 });
 
-test("Telegram bridge API runtime bounds active chat-action gates", async () => {
+test("Bale bridge API runtime bounds active chat-action gates", async () => {
   let nowMs = 1000;
   const calls: string[] = [];
-  const runtime = createTelegramBridgeApiRuntime({
+  const runtime = createBaleBridgeApiRuntime({
     client: createApiRuntimeClient({
       call: async <TResponse>(
         _method: string,
@@ -950,7 +950,7 @@ test("Telegram bridge API runtime bounds active chat-action gates", async () => 
   assert.deepEqual(calls, ["1", "2", "3"]);
 });
 
-test("Telegram bridge API runtime shares retry-after suppression across one chat", async () => {
+test("Bale bridge API runtime shares retry-after suppression across one chat", async () => {
   let nowMs = 1000;
   let calls = 0;
   const events: Array<Record<string, unknown>> = [];
@@ -965,8 +965,8 @@ test("Telegram bridge API runtime shares retry-after suppression across one chat
       : createApiJsonResponse(true);
   });
   try {
-    const runtime = createTelegramBridgeApiRuntime({
-      client: createTelegramApiClient(() => "123:abc"),
+    const runtime = createBaleBridgeApiRuntime({
+      client: createBaleApiClient(() => "123:abc"),
       tempDir: "/tmp",
       maxFileSizeBytes: 1,
       tempFileMaxAgeMs: 1,
@@ -1034,8 +1034,8 @@ for (const action of ["typing", "record_voice"] as const) test(`Chat-action retr
       : createApiJsonResponse(true);
   });
   try {
-    const runtime = createTelegramBridgeApiRuntime({
-      client: createTelegramApiClient(() => "123:abc"),
+    const runtime = createBaleBridgeApiRuntime({
+      client: createBaleApiClient(() => "123:abc"),
       tempDir: "/tmp",
       maxFileSizeBytes: 1,
       tempFileMaxAgeMs: 1,
@@ -1045,7 +1045,7 @@ for (const action of ["typing", "record_voice"] as const) test(`Chat-action retr
     const attempt = () => runtime.call<boolean>("sendChatAction", { chat_id: 7, action },
       { maxAttempts: 3, retrySafety: "safe", retryBaseDelayMs: 0, sleep: async () => {} });
     if (action === "typing") {
-      await assert.rejects(attempt(), error => isTelegramApiCommitUnknownError(error));
+      await assert.rejects(attempt(), error => isBaleApiCommitUnknownError(error));
       assert.equal(calls, 1, "Even explicit caller retry options cannot grant replay of ephemeral typing");
       assert.equal(await attempt(), true, "A fresh owner-controlled keepalive is an independent attempt");
     } else assert.equal(await attempt(), true);
@@ -1055,9 +1055,9 @@ for (const action of ["typing", "record_voice"] as const) test(`Chat-action retr
   }
 });
 
-test("Telegram bridge API runtime still rejects non-rate-limit chat-action failures", async () => {
+test("Bale bridge API runtime still rejects non-rate-limit chat-action failures", async () => {
   const events: string[] = [];
-  const runtime = createTelegramBridgeApiRuntime({
+  const runtime = createBaleBridgeApiRuntime({
     client: createApiRuntimeClient({
       call: async () => {
         throw new Error("chat action failed");
@@ -1082,10 +1082,10 @@ test("Telegram bridge API runtime still rejects non-rate-limit chat-action failu
   assert.deepEqual(events, ["api:chat action failed"]);
 });
 
-test("Telegram native Markdown draft sender permits automatic entity detection", async () => {
+test("Bale native Markdown draft sender permits automatic entity detection", async () => {
   const richBodies: Record<string, unknown>[] = [];
   const legacyCalls: unknown[] = [];
-  const sendDraft = createTelegramNativeMarkdownDraftSender({
+  const sendDraft = createBaleNativeMarkdownDraftSender({
     sendMessageDraft: async (...args) => {
       legacyCalls.push(args);
       return true;
@@ -1109,10 +1109,10 @@ test("Telegram native Markdown draft sender permits automatic entity detection",
   assert.equal(legacyCalls.length, 1);
 });
 
-test("Telegram assistant draft sender follows final rendering mode", async () => {
+test("Bale assistant draft sender follows final rendering mode", async () => {
   const richBodies: Record<string, unknown>[] = [];
   const legacyCalls: unknown[] = [];
-  const sendDraft = createTelegramAssistantDraftSender({
+  const sendDraft = createBaleAssistantDraftSender({
     getAssistantRenderingMode: () => "html",
     renderMarkdownToHtmlDraft: (markdown) => `<b>${markdown}</b>`,
     sendMessageDraft: async (...args) => {
@@ -1133,9 +1133,9 @@ test("Telegram assistant draft sender follows final rendering mode", async () =>
   ]);
 });
 
-test("Telegram API helper fetches bot identity through getMe", async () => {
-  const response = await fetchTelegramBotIdentity("123:abc", async (url) => {
-    assert.equal(String(url), "https://api.telegram.org/bot123:abc/getMe");
+test("Bale API helper fetches bot identity through getMe", async () => {
+  const response = await fetchBaleBotIdentity("123:abc", async (url) => {
+    assert.equal(String(url), "https://tapi.bale.ai/bot123:abc/getMe");
     return createApiJsonResponse({
       id: 1,
       is_bot: true,
@@ -1147,14 +1147,14 @@ test("Telegram API helper fetches bot identity through getMe", async () => {
   assert.equal(response.result?.username, "demo");
 });
 
-test("Telegram API helper fetches bot identity through IPv4 fallback", async () => {
+test("Bale API helper fetches bot identity through IPv4 fallback", async () => {
   const familySeen: boolean[] = [];
   const restoreEnv = setApiTestNetworkFamily("ipv4-fallback");
   const restoreFetch = setApiTestFetch(async () => {
     familySeen.push(false);
     throw createSyntheticFetchFailure();
   });
-  const restoreHttpsFetch = setTelegramApiHttpsFetchForTesting(
+  const restoreHttpsFetch = setBaleApiHttpsFetchForTesting(
     async (_input, _init, family) => {
       familySeen.push(hasApiTestFamily(family));
       return createApiJsonResponse({
@@ -1166,7 +1166,7 @@ test("Telegram API helper fetches bot identity through IPv4 fallback", async () 
     },
   );
   try {
-    const response = await fetchTelegramBotIdentity("123:abc");
+    const response = await fetchBaleBotIdentity("123:abc");
     assert.equal(response.ok, true);
     assert.equal(response.result?.username, "demo");
     assert.deepEqual(familySeen, [false, true]);
@@ -1177,8 +1177,8 @@ test("Telegram API helper fetches bot identity through IPv4 fallback", async () 
   }
 });
 
-test("Telegram temp cleanup removes stale attachment files by age and keeps directories", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-cleanup-"));
+test("Bale temp cleanup removes stale attachment files by age and keeps directories", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-cleanup-"));
   const oldFile = join(tempDir, "voice-mybot-1.ogg");
   const stalePart = join(tempDir, "voice-mybot-2.ogg.00000000-0000-4000-8000-000000000001.part");
   const freshFile = join(tempDir, "voice-mybot-3.ogg");
@@ -1191,7 +1191,7 @@ test("Telegram temp cleanup removes stale attachment files by age and keeps dire
   await utimes(oldFile, new Date(1_000), new Date(1_000));
   await utimes(stalePart, new Date(1_000), new Date(1_000));
   await utimes(freshFile, new Date(10_000), new Date(10_000));
-  assert.equal(await cleanupTelegramTempFiles(tempDir, 5_000, 11_000), 2);
+  assert.equal(await cleanupBaleTempFiles(tempDir, 5_000, 11_000), 2);
   assert.deepEqual((await readdir(tempDir)).sort(), ["nested", "voice-mybot-3.ogg"]);
 });
 
@@ -1206,17 +1206,17 @@ for (const [name, source, scope, expected] of [
   ["unknown chat and scope omit the segment", { kind: "voice", messageId: 8 }, undefined, "voice-8.ogg"],
 ] as const) {
   test(`Attachment names are kind-scope-messageId without UUIDs (${name})`, () => {
-    assert.equal(createTelegramAttachmentFileName(source, "generated.ogg", scope), expected);
+    assert.equal(createBaleAttachmentFileName(source, "generated.ogg", scope), expected);
     assert.doesNotMatch(expected, /--|[0-9a-f]{8}-[0-9a-f]{4}-/u);
   });
 }
 
-test("Telegram temp preparation creates the directory and removes stale scratch files", async () => {
+test("Bale temp preparation creates the directory and removes stale scratch files", async () => {
   const parentDir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-prepare-parent-"),
+    join(tmpdir(), "pi-bale-prepare-parent-"),
   );
-  const tempDir = join(parentDir, "nested", "telegram");
-  assert.equal(await prepareTelegramTempDir(tempDir, 5_000), 0);
+  const tempDir = join(parentDir, "nested", "bale");
+  assert.equal(await prepareBaleTempDir(tempDir, 5_000), 0);
   if (process.platform !== "win32") {
     assert.equal((await stat(tempDir)).mode & 0o777, 0o700);
   }
@@ -1226,37 +1226,37 @@ test("Telegram temp preparation creates the directory and removes stale scratch 
   );
   await writeFile(oldFile, "old", "utf8");
   await utimes(oldFile, new Date(1_000), new Date(1_000));
-  assert.equal(await prepareTelegramTempDir(tempDir, 5_000), 1);
+  assert.equal(await prepareBaleTempDir(tempDir, 5_000), 1);
   assert.deepEqual(await readdir(tempDir), []);
 });
 
-test("Telegram API helpers reject missing bot token for direct calls", async () => {
-  await assert.rejects(() => callTelegram(undefined, "getMe", {}), {
-    message: "Telegram bot token is not configured",
+test("Bale API helpers reject missing bot token for direct calls", async () => {
+  await assert.rejects(() => callBale(undefined, "getMe", {}), {
+    message: "Bale bot token is not configured",
   });
   await assert.rejects(
     () =>
-      downloadTelegramFile(
+      downloadBaleFile(
         undefined,
         "file-id",
         "demo.txt",
-        join(tmpdir(), "pi-telegram-missing-token"),
+        join(tmpdir(), "pi-bale-missing-token"),
       ),
     {
-      message: "Telegram bot token is not configured",
+      message: "Bale bot token is not configured",
     },
   );
 });
 
-test("Telegram API helpers include HTTP status details for failed responses", async () => {
+test("Bale API helpers include HTTP status details for failed responses", async () => {
   const restoreFetch = setApiTestFetch(async () => {
     return createApiErrorResponse(429, "Too Many Requests");
   });
   try {
     await assert.rejects(
-      () => callTelegram("123:abc", "sendMessage", {}, { maxAttempts: 1 }),
+      () => callBale("123:abc", "sendMessage", {}, { maxAttempts: 1 }),
       {
-        message: "Telegram API sendMessage failed: HTTP 429: Too Many Requests",
+        message: "Bale API sendMessage failed: HTTP 429: Too Many Requests",
       },
     );
   } finally {
@@ -1269,7 +1269,7 @@ for (const surface of ["helper", "client", "direct", "bus-direct", "default-dire
     test(`Typed callback authority ${surface} preserves its captured recipient (${boundary})`, async () => {
       let current = boundary !== "entry", calls = 0;
       const events: unknown[] = [], bodies: unknown[] = [];
-      const options: Pick<TelegramApiCallOptions, "assertAuthority"> = {
+      const options: Pick<BaleApiCallOptions, "assertAuthority"> = {
         assertAuthority() { if (!current) throw new Error("recipient replaced with secret fixture context"); },
       };
       const restoreFetch = setApiTestFetch(async (_input, init) => {
@@ -1284,24 +1284,24 @@ for (const surface of ["helper", "client", "direct", "bus-direct", "default-dire
         }
         return response;
       });
-      const client = createTelegramApiClient(() => "123:abc");
-      const direct = createTelegramBridgeApiRuntime({ client, tempDir: "/unused", maxFileSizeBytes: 1,
+      const client = createBaleApiClient(() => "123:abc");
+      const direct = createBaleBridgeApiRuntime({ client, tempDir: "/unused", maxFileSizeBytes: 1,
         tempFileMaxAgeMs: 1, recordRuntimeEvent(_kind, error) { events.push(error); } });
-      const bus = createTelegramBusAwareApiRuntime({ directRuntime: direct, ownsDirect: () => true,
+      const bus = createBaleBusAwareApiRuntime({ directRuntime: direct, ownsDirect: () => true,
         callFollowerApi: async () => assert.fail("Direct callback authority never crosses IPC") });
-      const defaultDirect = createDefaultTelegramBridgeApiRuntime({ getBotToken: () => "123:abc",
-        targetActivity: createTelegramApiTargetActivityRuntime(),
+      const defaultDirect = createDefaultBaleBridgeApiRuntime({ getBotToken: () => "123:abc",
+        targetActivity: createBaleApiTargetActivityRuntime(),
         recordRuntimeEvent(_kind, error) { events.push(error); } });
-      const defaultBus = createTelegramBusAwareApiRuntime({ directRuntime: defaultDirect, ownsDirect: () => true,
+      const defaultBus = createBaleBusAwareApiRuntime({ directRuntime: defaultDirect, ownsDirect: () => true,
         callFollowerApi: async () => assert.fail("Default direct callback authority never crosses IPC") });
       try {
-        const request = surface === "helper" ? answerTelegramCallbackQuery("123:abc", "captured-query", "✅ Saved", options)
+        const request = surface === "helper" ? answerBaleCallbackQuery("123:abc", "captured-query", "✅ Saved", options)
           : (surface === "client" ? client : surface === "direct" ? direct : surface === "bus-direct" ? bus
             : surface === "default-direct" ? defaultDirect : defaultBus)
             .answerCallbackQuery("captured-query", "✅ Saved", options);
         if (boundary === "current") await request;
         else await assert.rejects(request, (error: unknown) => {
-          assert.ok(error instanceof TelegramApiAuthorityError);
+          assert.ok(error instanceof BaleApiAuthorityError);
           assert.equal(error.requestIssued, boundary !== "entry");
           assert.doesNotMatch(error.message, /secret fixture context/);
           return true;
@@ -1311,7 +1311,7 @@ for (const surface of ["helper", "client", "direct", "bus-direct", "default-dire
           text: "✅ Saved" }], "A local closure is never part of the Bot API body");
         if (surface !== "helper" && surface !== "client" && boundary !== "current") {
           assert.equal(events.length, 1);
-          assert.ok(events[0] instanceof TelegramApiAuthorityError, "The direct owner still records the refusal");
+          assert.ok(events[0] instanceof BaleApiAuthorityError, "The direct owner still records the refusal");
         }
       } finally { restoreFetch(); }
     });
@@ -1320,14 +1320,14 @@ for (const surface of ["helper", "client", "direct", "bus-direct", "default-dire
 
 test("Typed callback authority captures its guard before the client token observation", async () => {
   let current = true, calls = 0;
-  const options: Pick<TelegramApiCallOptions, "assertAuthority"> = {
+  const options: Pick<BaleApiCallOptions, "assertAuthority"> = {
     assertAuthority() { if (!current) throw new Error("Original recipient lost"); },
   };
-  const client = createTelegramApiClient(() => { current = false; options.assertAuthority = () => {}; return "123:abc"; });
+  const client = createBaleApiClient(() => { current = false; options.assertAuthority = () => {}; return "123:abc"; });
   const restoreFetch = setApiTestFetch(async () => { calls++; return createApiJsonResponse(true); });
   try {
     await assert.rejects(client.answerCallbackQuery("captured-query", "Saved", options),
-      { name: "TelegramApiAuthorityError", requestIssued: false });
+      { name: "BaleApiAuthorityError", requestIssued: false });
     assert.equal(calls, 0);
   } finally { restoreFetch(); }
 });
@@ -1336,7 +1336,7 @@ for (const guarded of [false, true]) {
   test(`Typed callback authority retains best-effort nonauthority failure diagnostics (guarded=${guarded})`, async () => {
     let calls = 0;
     const events: unknown[] = [];
-    const runtime = createDefaultTelegramBridgeApiRuntime({ getBotToken: () => "123:abc",
+    const runtime = createDefaultBaleBridgeApiRuntime({ getBotToken: () => "123:abc",
       recordRuntimeEvent(_kind, error) { events.push(error); } });
     const restoreFetch = setApiTestFetch(async () => { calls++; return createApiErrorResponse(400, "Query expired"); });
     try {
@@ -1354,11 +1354,11 @@ for (const boundary of ["entry", "encoding"] as const) {
     let current = boundary !== "entry", calls = 0;
     const restoreFetch = setApiTestFetch(async () => { calls++; return createApiJsonResponse(true); });
     try {
-      await assert.rejects(callTelegram("123:abc", "sendMessage", {
+      await assert.rejects(callBale("123:abc", "sendMessage", {
         chat_id: 7, message_thread_id: 42,
         toJSON() { current = false; return { chat_id: 7, message_thread_id: 42 }; },
       }, { assertAuthority() { if (!current) throw createSyntheticFetchFailure(); } }),
-      { name: "TelegramApiAuthorityError", requestIssued: false });
+      { name: "BaleApiAuthorityError", requestIssued: false });
       assert.equal(calls, 0);
     } finally { restoreFetch(); }
   });
@@ -1375,15 +1375,15 @@ for (const boundary of ["transport", "parsing"] as const) {
       return response;
     });
     try {
-      const error = await callTelegram("123:abc", "editMessageText", { chat_id: 7, message_thread_id: 42 }, {
+      const error = await callBale("123:abc", "editMessageText", { chat_id: 7, message_thread_id: 42 }, {
         assertAuthority() { if (!current) throw createSyntheticFetchFailure(); },
         sleep: async () => { sleeps++; },
       }).catch((error: unknown) => error);
-      assert.ok(error instanceof TelegramApiAuthorityError);
+      assert.ok(error instanceof BaleApiAuthorityError);
       assert.equal(error.requestIssued, true);
-      assert.equal(isTelegramApiCommitUnknownError(error), false);
-      assert.equal(isTelegramApiRequestRejected(error, "editMessageText"), false);
-      assert.equal(getTelegramApiErrorRequestTarget(error), undefined, "Authority refusal is not stale-target evidence.");
+      assert.equal(isBaleApiCommitUnknownError(error), false);
+      assert.equal(isBaleApiRequestRejected(error, "editMessageText"), false);
+      assert.equal(getBaleApiErrorRequestTarget(error), undefined, "Authority refusal is not stale-target evidence.");
       assert.equal(calls, 1);
       assert.equal(sleeps, 0);
     } finally { restoreFetch(); }
@@ -1392,7 +1392,7 @@ for (const boundary of ["transport", "parsing"] as const) {
 
 test("Per-call API authority captures its guard before asynchronous response work", async () => {
   let current = true, calls = 0;
-  const options: TelegramApiCallOptions = { assertAuthority() { if (!current) throw new Error("recipient replaced"); } };
+  const options: BaleApiCallOptions = { assertAuthority() { if (!current) throw new Error("recipient replaced"); } };
   const restoreFetch = setApiTestFetch(async () => {
     calls++;
     await Promise.resolve();
@@ -1401,8 +1401,8 @@ test("Per-call API authority captures its guard before asynchronous response wor
     return createApiJsonResponse(true);
   });
   try {
-    await assert.rejects(callTelegram("123:abc", "sendMessage", {}, options),
-      { name: "TelegramApiAuthorityError", requestIssued: true });
+    await assert.rejects(callBale("123:abc", "sendMessage", {}, options),
+      { name: "BaleApiAuthorityError", requestIssued: true });
     assert.equal(calls, 1);
   } finally { restoreFetch(); }
 });
@@ -1412,10 +1412,10 @@ for (const status of [429, 503]) {
     let current = true, calls = 0, sleeps = 0;
     const restoreFetch = setApiTestFetch(async () => { calls++; return createApiErrorResponse(status, "rejected"); });
     try {
-      await assert.rejects(callTelegram("123:abc", status === 429 ? "sendMessage" : "editMessageText", {}, {
+      await assert.rejects(callBale("123:abc", status === 429 ? "sendMessage" : "editMessageText", {}, {
         assertAuthority() { if (!current) throw new Error("recipient replaced"); },
         sleep: async () => { sleeps++; await Promise.resolve(); current = false; },
-      }), { name: "TelegramApiAuthorityError", requestIssued: true });
+      }), { name: "BaleApiAuthorityError", requestIssued: true });
       assert.equal(calls, 1);
       assert.equal(sleeps, 1);
     } finally { restoreFetch(); }
@@ -1427,12 +1427,12 @@ for (const revoke of [false, true]) {
     let current = true, calls = 0, fallbackCalls = 0;
     const restoreEnv = setApiTestNetworkFamily("ipv4-fallback");
     const restoreFetch = setApiTestFetch(async () => { calls++; current = !revoke; throw createSyntheticFetchFailure(); });
-    const restoreHttpsFetch = setTelegramApiHttpsFetchForTesting(async () => { fallbackCalls++; return createApiJsonResponse(true); });
+    const restoreHttpsFetch = setBaleApiHttpsFetchForTesting(async () => { fallbackCalls++; return createApiJsonResponse(true); });
     try {
-      const request = callTelegram("123:abc", "editMessageText", {}, {
+      const request = callBale("123:abc", "editMessageText", {}, {
         maxAttempts: 1, assertAuthority() { if (!current) throw createSyntheticFetchFailure(); },
       });
-      if (revoke) await assert.rejects(request, { name: "TelegramApiAuthorityError", requestIssued: true });
+      if (revoke) await assert.rejects(request, { name: "BaleApiAuthorityError", requestIssued: true });
       else assert.equal(await request, true);
       assert.equal(calls, 1);
       assert.equal(fallbackCalls, revoke ? 0 : 1);
@@ -1444,9 +1444,9 @@ for (const boundary of ["entry", "blob", "encoding"] as const) {
   test(`Per-call API authority refuses multipart ${boundary} loss before issuance`, async () => {
     let current = boundary !== "entry", opens = 0, calls = 0;
     const originalOpen = nativeFileSystem.openAsBlob;
-    const options: TelegramApiCallOptions = { assertAuthority() { if (!current) throw createSyntheticFetchFailure(); } };
+    const options: BaleApiCallOptions = { assertAuthority() { if (!current) throw createSyntheticFetchFailure(); } };
     const restoreEnv = setApiTestNetworkFamily("ipv4");
-    const restoreHttpsFetch = setTelegramApiHttpsFetchForTesting(async () => { calls++; return createApiJsonResponse(true); });
+    const restoreHttpsFetch = setBaleApiHttpsFetchForTesting(async () => { calls++; return createApiJsonResponse(true); });
     nativeFileSystem.openAsBlob = async () => {
       opens++;
       await Promise.resolve();
@@ -1459,9 +1459,9 @@ for (const boundary of ["entry", "blob", "encoding"] as const) {
     };
     syncBuiltinESMExports();
     try {
-      await assert.rejects(callTelegramMultipart("123:abc", "sendDocument", { chat_id: "7" },
+      await assert.rejects(callBaleMultipart("123:abc", "sendDocument", { chat_id: "7" },
         "document", "/not-a-real-file", "fixture.txt", options),
-      { name: "TelegramApiAuthorityError", requestIssued: false });
+      { name: "BaleApiAuthorityError", requestIssued: false });
       assert.equal(opens, boundary === "entry" ? 0 : 1);
       assert.equal(calls, 0);
     } finally {
@@ -1474,18 +1474,18 @@ for (const boundary of ["entry", "blob", "encoding"] as const) {
 
 for (const revoke of [false, true]) {
   test(`Per-call API authority survives actual client activity/Workspace adapters with ${revoke ? "revoked" : "current"} recipient`, async () => {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-api-authority-"));
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-api-authority-"));
     let current = true, calls = 0, observedLease = false;
-    const ledger = createTelegramWorkspaceAdmissionLedger({ path: join(dir, "admission.json"), profileKey: "profile:api-authority",
+    const ledger = createBaleWorkspaceAdmissionLedger({ path: join(dir, "admission.json"), profileKey: "profile:api-authority",
       owner: { processId: process.pid, processBirthId: `${process.pid}:api-authority` }, getProcessLiveness: () => "alive" });
-    const activity = createTelegramApiTargetActivityRuntime();
+    const activity = createBaleApiTargetActivityRuntime();
     const restoreFetch = setApiTestFetch(async () => {
       calls++;
       observedLease = ledger.read().leases.length === 1;
       assert.equal(activity.hasPendingTarget({ chatId: 7, threadId: 42 }), true);
       return createApiJsonResponse({ message_id: 17 });
     });
-    const client = createTelegramApiTargetTrackingClient(createTelegramApiWorkspaceAdmissionClient(createTelegramApiClient(() => "123:abc"), {
+    const client = createBaleApiTargetTrackingClient(createBaleApiWorkspaceAdmissionClient(createBaleApiClient(() => "123:abc"), {
       acquireAdmission(input) { const result = ledger.acquireAdmission(input); current = !revoke; return result; },
       releaseAdmission: ledger.releaseAdmission,
     }), activity);
@@ -1493,7 +1493,7 @@ for (const revoke of [false, true]) {
       const request = client.call("sendMessage", { chat_id: 7, message_thread_id: 42, text: "menu" }, {
         assertAuthority() { if (!current) throw new Error("recipient replaced"); },
       });
-      if (revoke) await assert.rejects(request, { name: "TelegramApiAuthorityError", requestIssued: false });
+      if (revoke) await assert.rejects(request, { name: "BaleApiAuthorityError", requestIssued: false });
       else assert.deepEqual(await request, { message_id: 17 });
       assert.equal(calls, revoke ? 0 : 1);
       assert.equal(observedLease, !revoke);
@@ -1503,7 +1503,7 @@ for (const revoke of [false, true]) {
   });
 }
 
-test("Non-idempotent Telegram API calls retry explicit 429 but report 5xx commit unknown", async () => {
+test("Non-idempotent Bale API calls retry explicit 429 but report 5xx commit unknown", async () => {
   const sleeps: number[] = [];
   let calls = 0;
   const restoreFetch = setApiTestFetch(async () => {
@@ -1523,14 +1523,14 @@ test("Non-idempotent Telegram API calls retry explicit 429 but report 5xx commit
   try {
     await assert.rejects(
       () =>
-        callTelegram<string>("123:abc", "sendMessage", {}, {
+        callBale<string>("123:abc", "sendMessage", {}, {
           retryBaseDelayMs: 10,
           sleep: async (ms) => {
             sleeps.push(ms);
           },
         }),
       (error) =>
-        isTelegramApiCommitUnknownError(error) &&
+        isBaleApiCommitUnknownError(error) &&
         error.method === "sendMessage",
     );
     assert.equal(calls, 2);
@@ -1540,7 +1540,7 @@ test("Non-idempotent Telegram API calls retry explicit 429 but report 5xx commit
   }
 });
 
-test("Retry-safe Telegram API methods replay 5xx responses", async () => {
+test("Retry-safe Bale API methods replay 5xx responses", async () => {
   let calls = 0;
   const restoreFetch = setApiTestFetch(async () => {
     calls += 1;
@@ -1550,7 +1550,7 @@ test("Retry-safe Telegram API methods replay 5xx responses", async () => {
   });
   try {
     assert.equal(
-      await callTelegram<string>(
+      await callBale<string>(
         "123:abc",
         "editMessageText",
         {},
@@ -1582,7 +1582,7 @@ test("Rate-limit retry waits record the method and duration before the pause", a
       : createApiJsonResponse(true);
   });
   try {
-    const client = createTelegramApiClient(() => "123:abc", {
+    const client = createBaleApiClient(() => "123:abc", {
       recordRuntimeEvent: (kind, error, details) => {
         events.push({
           kind,
@@ -1602,7 +1602,7 @@ test("Rate-limit retry waits record the method and duration before the pause", a
       {
         kind: "api",
         message:
-          "Telegram API rate limit: waiting 2000 ms before retrying editMessageText",
+          "Bale API rate limit: waiting 2000 ms before retrying editMessageText",
         details: {
           phase: "retry-wait",
           method: "editMessageText",
@@ -1627,7 +1627,7 @@ test("5xx retry waits stay out of the rate-limit event stream", async () => {
       : createApiJsonResponse(true);
   });
   try {
-    const client = createTelegramApiClient(() => "123:abc", {
+    const client = createBaleApiClient(() => "123:abc", {
       recordRuntimeEvent: () => {
         events.push(true);
       },
@@ -1646,7 +1646,7 @@ test("5xx retry waits stay out of the rate-limit event stream", async () => {
   }
 });
 
-test("Telegram API retry waits settle immediately when their owner aborts", async () => {
+test("Bale API retry waits settle immediately when their owner aborts", async () => {
   const controller = new AbortController();
   const reason = { kind: "polling-request-expired" };
   let calls = 0;
@@ -1661,7 +1661,7 @@ test("Telegram API retry waits settle immediately when their owner aborts", asyn
   try {
     await assert.rejects(
       () =>
-        callTelegram<string>("123:abc", "getMe", {}, {
+        callBale<string>("123:abc", "getMe", {}, {
           signal: controller.signal,
           retryBaseDelayMs: 10_000,
         }),
@@ -1673,7 +1673,7 @@ test("Telegram API retry waits settle immediately when their owner aborts", asyn
   }
 });
 
-test("Retry-safe Telegram API transport falls back to IPv4 once", async () => {
+test("Retry-safe Bale API transport falls back to IPv4 once", async () => {
   const familySeen: boolean[] = [];
   let calls = 0;
   const restoreEnv = setApiTestNetworkFamily("ipv4-fallback");
@@ -1682,7 +1682,7 @@ test("Retry-safe Telegram API transport falls back to IPv4 once", async () => {
     familySeen.push(false);
     throw createSyntheticFetchFailure();
   });
-  const restoreHttpsFetch = setTelegramApiHttpsFetchForTesting(
+  const restoreHttpsFetch = setBaleApiHttpsFetchForTesting(
     async (_input, _init, family) => {
       calls += 1;
       familySeen.push(hasApiTestFamily(family));
@@ -1691,7 +1691,7 @@ test("Retry-safe Telegram API transport falls back to IPv4 once", async () => {
   );
   try {
     assert.equal(
-      await callTelegram<string>(
+      await callBale<string>(
         "123:abc",
         "editMessageText",
         {},
@@ -1710,12 +1710,12 @@ test("Retry-safe Telegram API transport falls back to IPv4 once", async () => {
   }
 });
 
-test("Telegram API HTTP errors retain only the exact threaded request target", async () => {
+test("Bale API HTTP errors retain only the exact threaded request target", async () => {
   const restoreFetch = setApiTestFetch(async () => {
     return createApiErrorResponse(400, "Bad Request: message thread not found");
   });
   try {
-    const error = await callTelegram(
+    const error = await callBale(
       "123:abc",
       "sendMessage",
       {
@@ -1725,7 +1725,7 @@ test("Telegram API HTTP errors retain only the exact threaded request target", a
       },
       { maxAttempts: 1 },
     ).catch((failure: unknown) => failure);
-    assert.deepEqual(getTelegramApiErrorRequestTarget(error), {
+    assert.deepEqual(getBaleApiErrorRequestTarget(error), {
       chatId: 42,
       threadId: 7,
     });
@@ -1735,19 +1735,19 @@ test("Telegram API HTTP errors retain only the exact threaded request target", a
   }
 });
 
-test("Telegram API stale-looking HTTP 500 errors remain transient", async () => {
+test("Bale API stale-looking HTTP 500 errors remain transient", async () => {
   const restoreFetch = setApiTestFetch(async () => {
     return createApiErrorResponse(500, "message thread not found");
   });
   try {
-    const error = await callTelegram(
+    const error = await callBale(
       "123:abc",
       "sendChatAction",
       { chat_id: 42, message_thread_id: 7, action: "typing" },
       { maxAttempts: 1 },
     ).catch((failure: unknown) => failure);
-    assert.equal(isTelegramTopicTargetStaleError(error), false);
-    assert.deepEqual(getTelegramApiErrorRequestTarget(error), {
+    assert.equal(isBaleTopicTargetStaleError(error), false);
+    assert.deepEqual(getBaleApiErrorRequestTarget(error), {
       chatId: 42,
       threadId: 7,
     });
@@ -1756,7 +1756,7 @@ test("Telegram API stale-looking HTTP 500 errors remain transient", async () => 
   }
 });
 
-test("Telegram API transport does not IPv4-fallback retry HTTP 400", async () => {
+test("Bale API transport does not IPv4-fallback retry HTTP 400", async () => {
   const familySeen: boolean[] = [];
   const restoreEnv = setApiTestNetworkFamily("ipv4-fallback");
   const restoreFetch = setApiTestFetch(async () => {
@@ -1765,9 +1765,9 @@ test("Telegram API transport does not IPv4-fallback retry HTTP 400", async () =>
   });
   try {
     await assert.rejects(
-      () => callTelegram("123:abc", "sendMessage", {}, { maxAttempts: 1 }),
+      () => callBale("123:abc", "sendMessage", {}, { maxAttempts: 1 }),
       {
-        message: "Telegram API sendMessage failed: HTTP 400: Bad Request",
+        message: "Bale API sendMessage failed: HTTP 400: Bad Request",
       },
     );
     assert.deepEqual(familySeen, [false]);
@@ -1777,8 +1777,8 @@ test("Telegram API transport does not IPv4-fallback retry HTTP 400", async () =>
   }
 });
 
-test("Telegram multipart transport failure reports commit unknown without fallback", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-upload-fallback-"));
+test("Bale multipart transport failure reports commit unknown without fallback", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-upload-fallback-"));
   const filePath = join(tempDir, "demo.txt");
   await writeFile(filePath, "hello", "utf8");
   const formStates: string[] = [];
@@ -1794,7 +1794,7 @@ test("Telegram multipart transport failure reports commit unknown without fallba
     );
     throw createSyntheticFetchFailure();
   });
-  const restoreHttpsFetch = setTelegramApiHttpsFetchForTesting(
+  const restoreHttpsFetch = setBaleApiHttpsFetchForTesting(
     async (_input, init, family) => {
       calls += 1;
       formStates.push(
@@ -1808,7 +1808,7 @@ test("Telegram multipart transport failure reports commit unknown without fallba
   try {
     await assert.rejects(
       () =>
-        callTelegramMultipart<boolean>(
+        callBaleMultipart<boolean>(
           "123:abc",
           "sendDocument",
           { chat_id: "1" },
@@ -1817,7 +1817,7 @@ test("Telegram multipart transport failure reports commit unknown without fallba
           "demo.txt",
           { maxAttempts: 1 },
         ),
-      (error) => isTelegramApiCommitUnknownError(error),
+      (error) => isBaleApiCommitUnknownError(error),
     );
     assert.deepEqual(formStates, ["auto:blob"]);
     assert.equal(forms.size, 1);
@@ -1829,9 +1829,9 @@ test("Telegram multipart transport failure reports commit unknown without fallba
   }
 });
 
-test("Telegram file downloads use transport fallback for file content", async () => {
+test("Bale file downloads use transport fallback for file content", async () => {
   const tempDir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-download-fallback-"),
+    join(tmpdir(), "pi-bale-download-fallback-"),
   );
   const calls: string[] = [];
   const restoreEnv = setApiTestNetworkFamily("ipv4-fallback");
@@ -1843,14 +1843,14 @@ test("Telegram file downloads use transport fallback for file content", async ()
     calls.push("auto");
     throw createSyntheticFetchFailure();
   });
-  const restoreHttpsFetch = setTelegramApiHttpsFetchForTesting(
+  const restoreHttpsFetch = setBaleApiHttpsFetchForTesting(
     async (_input, _init, family) => {
       calls.push(hasApiTestFamily(family) ? "ipv4" : "auto");
       return new Response("hello", { status: 200 });
     },
   );
   try {
-    const path = await downloadTelegramFile(
+    const path = await downloadBaleFile(
       "123:abc",
       "file-id",
       "demo.txt",
@@ -1865,10 +1865,10 @@ test("Telegram file downloads use transport fallback for file content", async ()
   }
 });
 
-test("Telegram transport diagnostics serialize nested fetch causes", async () => {
+test("Bale transport diagnostics serialize nested fetch causes", async () => {
   const events: Array<Record<string, unknown>> = [];
-  const runtime = createTelegramBridgeApiRuntime({
-    tempDir: "/tmp/telegram",
+  const runtime = createBaleBridgeApiRuntime({
+    tempDir: "/tmp/bale",
     maxFileSizeBytes: 123,
     tempFileMaxAgeMs: 60_000,
     recordRuntimeEvent: (_kind, _error, details) => {
@@ -1910,8 +1910,8 @@ test("Telegram transport diagnostics serialize nested fetch causes", async () =>
   ]);
 });
 
-test("Telegram multipart 5xx reports commit unknown without replay", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-upload-"));
+test("Bale multipart 5xx reports commit unknown without replay", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-upload-"));
   const filePath = join(tempDir, "demo.txt");
   await writeFile(filePath, "hello", "utf8");
   const contentTypes: string[] = [];
@@ -1931,7 +1931,7 @@ test("Telegram multipart 5xx reports commit unknown without replay", async () =>
   try {
     await assert.rejects(
       () =>
-        callTelegramMultipart<boolean>(
+        callBaleMultipart<boolean>(
           "123:abc",
           "sendDocument",
           { chat_id: "1" },
@@ -1940,7 +1940,7 @@ test("Telegram multipart 5xx reports commit unknown without replay", async () =>
           "demo.txt",
           { retryBaseDelayMs: 0, sleep: async () => {} },
         ),
-      (error) => isTelegramApiCommitUnknownError(error),
+      (error) => isBaleApiCommitUnknownError(error),
     );
     assert.equal(calls, 1);
     assert.deepEqual(contentTypes, ["blob"]);
@@ -1949,8 +1949,8 @@ test("Telegram multipart 5xx reports commit unknown without replay", async () =>
   }
 });
 
-test("Telegram file downloads use deterministic sanitized names published by rename", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-download-"));
+test("Bale file downloads use deterministic sanitized names published by rename", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-download-"));
   const restoreFetch = setApiTestFetch(async (input) => {
     const url = getApiTestFetchUrl(input);
     if (url.includes("/getFile")) {
@@ -1959,7 +1959,7 @@ test("Telegram file downloads use deterministic sanitized names published by ren
     return new Response("hello", { status: 200 });
   });
   try {
-    const path = await downloadTelegramFile(
+    const path = await downloadBaleFile(
       "123:abc",
       "file-id",
       "bad name?.txt",
@@ -1977,8 +1977,8 @@ test("Telegram file downloads use deterministic sanitized names published by ren
   }
 });
 
-test("Telegram file downloads reject files above configured limits", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-download-limit-"));
+test("Bale file downloads reject files above configured limits", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-download-limit-"));
   let calls = 0;
   const restoreFetch = setApiTestFetch(async (input) => {
     calls += 1;
@@ -1991,10 +1991,10 @@ test("Telegram file downloads reject files above configured limits", async () =>
   try {
     await assert.rejects(
       () =>
-        downloadTelegramFile("123:abc", "file-id", "demo.txt", tempDir, {
+        downloadBaleFile("123:abc", "file-id", "demo.txt", tempDir, {
           maxFileSizeBytes: 5,
         }),
-      { message: "Telegram file exceeds size limit (10 bytes > 5 bytes)" },
+      { message: "Bale file exceeds size limit (10 bytes > 5 bytes)" },
     );
     assert.equal(calls, 1);
     assert.deepEqual(await readdir(tempDir), []);
@@ -2007,7 +2007,7 @@ for (const method of ["sendMessage", "sendRichMessage", "sendPhoto", "sendVoice"
   test(`Threaded Bot API refuses output to All before transport (${method})`, async () => {
     let calls = 0, threaded = true;
     const restoreFetch = setApiTestFetch(async () => { calls++; return createApiJsonResponse({ message_id: 1 }); });
-    const runtime = createDefaultTelegramBridgeApiRuntime({ getBotToken: () => "123:fixture", isThreadedMode: () => threaded, recordRuntimeEvent() {} });
+    const runtime = createDefaultBaleBridgeApiRuntime({ getBotToken: () => "123:fixture", isThreadedMode: () => threaded, recordRuntimeEvent() {} });
     try {
       for (const message_thread_id of [undefined, 0, "0", "", true, -1]) await assert.rejects(
         runtime.call(method, { chat_id: "0007", message_thread_id, text: "output", action: "typing" }), /All is input-only/);
@@ -2022,10 +2022,10 @@ for (const method of ["sendMessage", "sendRichMessage", "sendPhoto", "sendVoice"
 }
 
 test("Threaded multipart refuses All before file access and fences mode change before upload", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-output-policy-")), path = join(dir, "voice.ogg");
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-output-policy-")), path = join(dir, "voice.ogg");
   let calls = 0, threaded = true;
   const restoreFetch = setApiTestFetch(async () => { calls++; return createApiJsonResponse(true); });
-  const runtime = createDefaultTelegramBridgeApiRuntime({ getBotToken: () => "123:fixture", isThreadedMode: () => threaded, recordRuntimeEvent() {} });
+  const runtime = createDefaultBaleBridgeApiRuntime({ getBotToken: () => "123:fixture", isThreadedMode: () => threaded, recordRuntimeEvent() {} });
   try {
     await assert.rejects(runtime.callMultipart("sendVoice", { chat_id: "7" }, "voice", join(dir, "missing"), "voice.ogg"), /All is input-only/);
     await writeFile(path, "voice fixture");
@@ -2041,7 +2041,7 @@ test("Threaded multipart refuses All before file access and fences mode change b
 test("Threaded policy preserves non-output operations and cannot be evaded by a reply anchor or caller guard", async () => {
   let calls = 0;
   const restoreFetch = setApiTestFetch(async () => { calls++; return createApiJsonResponse(true); });
-  const client = createTelegramApiClient(() => "123:fixture", { isThreadedMode: () => true });
+  const client = createBaleApiClient(() => "123:fixture", { isThreadedMode: () => true });
   try {
     await assert.rejects(client.call("sendMessage", { chat_id: 7, text: "All", reply_parameters: { message_id: 1, message_thread_id: 42 } }, { assertAuthority() {} }), /All is input-only/);
     for (const method of ["deleteMessage", "answerCallbackQuery", "getMe", "createForumTopic", "deleteForumTopic"]) await client.call(method, { chat_id: 7 });
@@ -2053,16 +2053,16 @@ test("Threaded policy preserves non-output operations and cannot be evaded by a 
 test("Threaded policy stops a classic output retry after mode changes", async () => {
   let threaded = false, calls = 0;
   const restoreFetch = setApiTestFetch(async () => { calls++; threaded = true; return createApiJsonResponse(true); });
-  const client = createTelegramApiClient(() => "123:fixture", { isThreadedMode: () => threaded });
+  const client = createBaleApiClient(() => "123:fixture", { isThreadedMode: () => threaded });
   try {
     await assert.rejects(client.call("sendMessage", { chat_id: 7, text: "classic" }, { maxAttempts: 3 }), /authority/i);
     assert.equal(calls, 1);
   } finally { restoreFetch(); }
 });
 
-test("Telegram streaming downloads remove partial files after limit failures", async () => {
+test("Bale streaming downloads remove partial files after limit failures", async () => {
   const tempDir = await mkdtemp(
-    join(tmpdir(), "pi-telegram-download-partial-"),
+    join(tmpdir(), "pi-bale-download-partial-"),
   );
   const restoreFetch = setApiTestFetch(async (input) => {
     const url = getApiTestFetchUrl(input);
@@ -2074,10 +2074,10 @@ test("Telegram streaming downloads remove partial files after limit failures", a
   try {
     await assert.rejects(
       () =>
-        downloadTelegramFile("123:abc", "file-id", "demo.txt", tempDir, {
+        downloadBaleFile("123:abc", "file-id", "demo.txt", tempDir, {
           maxFileSizeBytes: 5,
         }),
-      { message: "Telegram file exceeds size limit (9 bytes > 5 bytes)" },
+      { message: "Bale file exceeds size limit (9 bytes > 5 bytes)" },
     );
     assert.deepEqual(await readdir(tempDir), []);
   } finally {
@@ -2085,13 +2085,13 @@ test("Telegram streaming downloads remove partial files after limit failures", a
   }
 });
 
-test("Telegram API helpers reject malformed successful responses", async () => {
+test("Bale API helpers reject malformed successful responses", async () => {
   const restoreFetch = setApiTestFetch(async () => {
     return createMalformedApiTextResponse("not json");
   });
   try {
-    await assert.rejects(() => callTelegram("123:abc", "getMe", {}), {
-      message: "Telegram API getMe returned invalid JSON",
+    await assert.rejects(() => callBale("123:abc", "getMe", {}), {
+      message: "Bale API getMe returned invalid JSON",
     });
   } finally {
     restoreFetch();
@@ -2105,24 +2105,24 @@ test("Non-idempotent malformed success becomes commit-unknown", async () => {
   try {
     await assert.rejects(
       () =>
-        callTelegram("123:abc", "createForumTopic", {}, {
+        callBale("123:abc", "createForumTopic", {}, {
           maxAttempts: 1,
         }),
-      isTelegramApiCommitUnknownError,
+      isBaleApiCommitUnknownError,
     );
   } finally {
     restoreFetch();
   }
 });
 
-test("answerTelegramCallbackQuery records Telegram API failures without throwing", async () => {
+test("answerBaleCallbackQuery records Bale API failures without throwing", async () => {
   const events: Array<Record<string, unknown>> = [];
   const restoreFetch = setApiTestFetch(async () => {
     throw new Error("network down");
   });
   try {
     await assert.doesNotReject(() =>
-      answerTelegramCallbackQuery("123:abc", "callback-id", "ok", {
+      answerBaleCallbackQuery("123:abc", "callback-id", "ok", {
         recordRuntimeEvent: (kind, error, details) => {
           events.push({
             kind,
@@ -2144,14 +2144,14 @@ test("answerTelegramCallbackQuery records Telegram API failures without throwing
   }
 });
 
-test("Default Telegram bridge API runtime binds lazy token client and defaults", async () => {
+test("Default Bale bridge API runtime binds lazy token client and defaults", async () => {
   const calls: string[] = [];
   const restoreFetch = setApiTestFetch(async (input) => {
     calls.push(getApiTestFetchUrl(input));
     return createApiJsonResponse(true);
   });
   try {
-    const runtime = createDefaultTelegramBridgeApiRuntime({
+    const runtime = createDefaultBaleBridgeApiRuntime({
       getBotToken: () => "123:abc",
       recordRuntimeEvent: () => {},
     });
@@ -2165,8 +2165,8 @@ test("Default Telegram bridge API runtime binds lazy token client and defaults",
 test("Workspace deletion requires executor authority and never retries transport or ambiguous success", async () => {
   let requests = 0;
   let outcome: "success" | "false" | "absent" | "network" = "success";
-  const previousFamily = process.env.PI_TELEGRAM_NETWORK_FAMILY;
-  process.env.PI_TELEGRAM_NETWORK_FAMILY = "ipv4-fallback";
+  const previousFamily = process.env.PI_BALE_NETWORK_FAMILY;
+  process.env.PI_BALE_NETWORK_FAMILY = "ipv4-fallback";
   const restoreFetch = setApiTestFetch(async (input) => {
     requests++;
     assert.match(getApiTestFetchUrl(input), /deleteForumTopic$/);
@@ -2174,7 +2174,7 @@ test("Workspace deletion requires executor authority and never retries transport
     if (outcome === "absent") return createApiErrorResponse(400, "Bad Request: message thread not found");
     return createApiJsonResponse(outcome === "success");
   });
-  const runtime = createDefaultTelegramBridgeApiRuntime({
+  const runtime = createDefaultBaleBridgeApiRuntime({
     getBotToken: () => "123:abc", recordRuntimeEvent() {},
     workspaceAdmission: { acquireAdmission: () => ({ kind: "blocked", reason: "retirement-fenced" }),
       releaseAdmission: () => { throw new Error("no ordinary lease"); } },
@@ -2198,12 +2198,12 @@ test("Workspace deletion requires executor authority and never retries transport
     assert.equal(requests, 4);
   } finally {
     restoreFetch();
-    if (previousFamily === undefined) delete process.env.PI_TELEGRAM_NETWORK_FAMILY;
-    else process.env.PI_TELEGRAM_NETWORK_FAMILY = previousFamily;
+    if (previousFamily === undefined) delete process.env.PI_BALE_NETWORK_FAMILY;
+    else process.env.PI_BALE_NETWORK_FAMILY = previousFamily;
   }
 });
 
-test("Request rejection requires matching method and parsed Telegram no-effect response evidence", async () => {
+test("Request rejection requires matching method and parsed Bale no-effect response evidence", async () => {
   for (const [status, code, ok, rejected] of [
     [400, 400, false, true], [401, 401, false, true], [403, 403, false, true],
     [404, 404, false, true], [429, 429, false, true], [408, 408, false, false],
@@ -2214,21 +2214,21 @@ test("Request rejection requires matching method and parsed Telegram no-effect r
       ok, error_code: code, description: "fixture rejection",
     }), { status }));
     try {
-      const api = createDefaultTelegramBridgeApiRuntime({ getBotToken: () => "123:fixture", recordRuntimeEvent() {} });
+      const api = createDefaultBaleBridgeApiRuntime({ getBotToken: () => "123:fixture", recordRuntimeEvent() {} });
       await assert.rejects(api.deleteWorkspaceThread(() => ({ chatId: 7, threadId: 42 })), error => {
-        assert.equal(isTelegramApiRequestRejected(error, "deleteForumTopic"), rejected);
-        assert.equal(isTelegramApiRequestRejected(error, "sendMessage"), false);
-        assert.equal(isTelegramApiRequestRejected(error, undefined as unknown as string), false);
+        assert.equal(isBaleApiRequestRejected(error, "deleteForumTopic"), rejected);
+        assert.equal(isBaleApiRequestRejected(error, "sendMessage"), false);
+        assert.equal(isBaleApiRequestRejected(error, undefined as unknown as string), false);
         return true;
       });
     } finally { restore(); }
   }
-  assert.equal(isTelegramApiRequestRejected(Object.assign(new Error("rejected"), {
+  assert.equal(isBaleApiRequestRejected(Object.assign(new Error("rejected"), {
     status: 429, rejectedRequestMethod: "deleteForumTopic",
   }), "deleteForumTopic"), false);
 });
 
-test("Default Telegram bridge API runtime applies optional Workspace admission", async () => {
+test("Default Bale bridge API runtime applies optional Workspace admission", async () => {
   let activeLease:
     | {
         operationId: string;
@@ -2248,7 +2248,7 @@ test("Default Telegram bridge API runtime applies optional Workspace admission",
     return createApiJsonResponse(true);
   });
   try {
-    const runtime = createDefaultTelegramBridgeApiRuntime({
+    const runtime = createDefaultBaleBridgeApiRuntime({
       getBotToken: () => "123:abc",
       recordRuntimeEvent: () => {},
       workspaceAdmission: {
@@ -2278,13 +2278,13 @@ test("Default Telegram bridge API runtime applies optional Workspace admission",
   }
 });
 
-test("Default Telegram bridge API runtime honors PI_CODING_AGENT_DIR for temp files", async () => {
+test("Default Bale bridge API runtime honors PI_CODING_AGENT_DIR for temp files", async () => {
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-agent-dir-"));
-  const tempDir = resolve(agentDir, "tmp", "pi-telegram", "attachments");
+  const agentDir = await mkdtemp(join(tmpdir(), "pi-bale-agent-dir-"));
+  const tempDir = resolve(agentDir, "tmp", "pi-bale", "attachments");
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
-    const runtime = createDefaultTelegramBridgeApiRuntime({
+    const runtime = createDefaultBaleBridgeApiRuntime({
       getBotToken: () => "123:abc",
       recordRuntimeEvent: () => {},
     });
@@ -2296,8 +2296,8 @@ test("Default Telegram bridge API runtime honors PI_CODING_AGENT_DIR for temp fi
   }
 });
 
-test("Telegram bridge API runtime prepares its configured temp directory", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "telegram-runtime-temp-"));
+test("Bale bridge API runtime prepares its configured temp directory", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "bale-runtime-temp-"));
   const staleFile = join(
     tempDir,
     "00000000-0000-4000-8000-000000000004-stale.txt",
@@ -2305,7 +2305,7 @@ test("Telegram bridge API runtime prepares its configured temp directory", async
   await writeFile(staleFile, "old");
   const oldDate = new Date(Date.now() - 2_000);
   await utimes(staleFile, oldDate, oldDate);
-  const runtime = createTelegramBridgeApiRuntime({
+  const runtime = createBaleBridgeApiRuntime({
     tempDir,
     maxFileSizeBytes: 123,
     tempFileMaxAgeMs: 1,
@@ -2318,11 +2318,11 @@ test("Telegram bridge API runtime prepares its configured temp directory", async
   assert.deepEqual(await readdir(tempDir), []);
 });
 
-test("Telegram bridge API runtime names attachments from their source and the live bot scope", async () => {
+test("Bale bridge API runtime names attachments from their source and the live bot scope", async () => {
   const names: string[] = [];
   let scope: string | undefined = "@my_bot";
-  const runtime = createTelegramBridgeApiRuntime({
-    tempDir: "/tmp/pi-telegram/attachments",
+  const runtime = createBaleBridgeApiRuntime({
+    tempDir: "/tmp/pi-bale/attachments",
     maxFileSizeBytes: 123,
     tempFileMaxAgeMs: 60_000,
     getBotScope: () => scope,
@@ -2349,7 +2349,7 @@ test("Download publication bounds Windows sharing retries without refetching or 
     { platform: "win32", code: "EPERM", mode: "cancel", attempts: 1 },
   ] as const;
   for (const scenario of scenarios) {
-    const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-download-sharing-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-download-sharing-"));
     const targetPath = join(tempDir, "voice-bot-9.ogg");
     await writeFile(targetPath, "previous complete payload");
     const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
@@ -2376,7 +2376,7 @@ test("Download publication bounds Windows sharing retries without refetching or 
     Object.defineProperty(process, "platform", { ...platform, value: scenario.platform });
     syncBuiltinESMExports();
     try {
-      const operation = downloadTelegramFile("123:abc", "file-id", "voice-bot-9.ogg", tempDir,
+      const operation = downloadBaleFile("123:abc", "file-id", "voice-bot-9.ogg", tempDir,
         { signal: controller.signal });
       if (scenario.mode === "transient") {
         assert.equal(await operation, targetPath);
@@ -2400,14 +2400,14 @@ test("Download publication bounds Windows sharing retries without refetching or 
 });
 
 test("Concurrent downloads of one message publish one complete file", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "pi-telegram-download-race-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "pi-bale-download-race-"));
   const restoreFetch = setApiTestFetch(async (input) => {
     const url = getApiTestFetchUrl(input);
     if (url.includes("/getFile")) return createApiJsonResponse({ file_path: "files/demo" });
     return new Response("complete payload", { status: 200 });
   });
   try {
-    const paths = await Promise.all([1, 2, 3].map(() => downloadTelegramFile("123:abc", "file-id", "voice-bot-9.ogg", tempDir)));
+    const paths = await Promise.all([1, 2, 3].map(() => downloadBaleFile("123:abc", "file-id", "voice-bot-9.ogg", tempDir)));
     assert.deepEqual(new Set(paths), new Set([join(tempDir, "voice-bot-9.ogg")]));
     assert.equal(await readFile(paths[0]!, "utf8"), "complete payload");
     assert.deepEqual(await readdir(tempDir), ["voice-bot-9.ogg"], "no partial file remains");
@@ -2417,10 +2417,10 @@ test("Concurrent downloads of one message publish one complete file", async () =
   }
 });
 
-test("Telegram bridge API runtime records structured failures", async () => {
+test("Bale bridge API runtime records structured failures", async () => {
   const events: Array<Record<string, unknown>> = [];
-  const runtime = createTelegramBridgeApiRuntime({
-    tempDir: "/tmp/telegram",
+  const runtime = createBaleBridgeApiRuntime({
+    tempDir: "/tmp/bale",
     maxFileSizeBytes: 123,
     tempFileMaxAgeMs: 60_000,
     recordRuntimeEvent: (kind, error, details) => {
@@ -2469,7 +2469,7 @@ test("Telegram bridge API runtime records structured failures", async () => {
       message: "multipart failed",
       details: { method: "sendDocument", fileName: "a.txt" },
     },
-    { tempDir: "/tmp/telegram", maxFileSizeBytes: 123 },
+    { tempDir: "/tmp/bale", maxFileSizeBytes: 123 },
     {
       kind: "download",
       message: "download failed",
@@ -2502,23 +2502,23 @@ for (const outcome of ["success", "rejected", "unknown"] as const) {
       return new Response(JSON.stringify({ ok: true, result: true }));
     });
     try {
-      const api = createDefaultTelegramBridgeApiRuntime({ getBotToken: () => "123:fixture", recordRuntimeEvent() {} });
-      const turn: PendingTelegramTurn = {
+      const api = createDefaultBaleBridgeApiRuntime({ getBotToken: () => "123:fixture", recordRuntimeEvent() {} });
+      const turn: PendingBaleTurn = {
         kind: "prompt", chatId: 0, replyToMessageId: 0,
         queueOrder: 1, queueLane: "default", laneOrder: 1,
         content: [], historyText: "", sourceMessageIds: [], statusSummary: "guest",
         guestQueryId: "answered", guestInlineMessageId: "inline",
         queuedAttachments: [{ path: "photo.png", fileName: "photo.png" }],
       };
-      await handleTelegramAgentEndRuntime({
+      await handleBaleAgentEndRuntime({
         turn, assistant: { text: "done" }, foldQueuedPromptsIntoHistory: false,
         resetRuntimeState() {}, updateStatus() {}, clearPreview: async () => {},
         setPreviewPendingText() {}, finalizeMarkdownPreview: async () => false,
-        dispatchNextQueuedTelegramTurn: () => events.push("dispatch"),
+        dispatchNextQueuedBaleTurn: () => events.push("dispatch"),
         sendMarkdownReply: async () => {}, sendTextReply: async () => {}, sendQueuedAttachments: async () => {},
         stopGuestPlaceholder: async () => { events.push("stop"); },
         editGuestReply: createGuestMarkdownReplyEditor({ editGuestInlineMessage: api.editGuestInlineMessage }),
-        sendGuestAttachment: (captured, attachment, caption, options) => deliverTelegramGuestCachedAttachment({
+        sendGuestAttachment: (captured, attachment, caption, options) => deliverBaleGuestCachedAttachment({
           guestQueryId: captured.guestQueryId!, guestInlineMessageId: captured.guestInlineMessageId,
           stagingChatId: 7, stagingTarget: { chatId: 7, threadId: 9 }, attachment, caption,
           isDeliveryActive: options?.isDeliveryActive, editGuestInlineMessage: api.editGuestInlineMessage,
@@ -2537,11 +2537,11 @@ test("Guest inline media edits use cached media, exact authority and one checked
   const calls: unknown[] = [];
   let current = true;
   let response: unknown = true;
-  const runtime = createTelegramBridgeApiRuntime({
-    tempDir: "/tmp/telegram", maxFileSizeBytes: 123, tempFileMaxAgeMs: 60_000,
+  const runtime = createBaleBridgeApiRuntime({
+    tempDir: "/tmp/bale", maxFileSizeBytes: 123, tempFileMaxAgeMs: 60_000,
     recordRuntimeEvent() {},
     client: createApiRuntimeClient({
-      call: async <T>(method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) => {
+      call: async <T>(method: string, body: Record<string, unknown>, options?: BaleApiCallOptions) => {
         options?.assertAuthority?.();
         assert.equal(options?.maxAttempts, 1);
         assert.equal(options?.retryRateLimit, false);
@@ -2557,17 +2557,17 @@ test("Guest inline media edits use cached media, exact authority and one checked
     inline_message_id: "inline-1", media: content.media,
   } }]);
   current = false;
-  await assert.rejects(runtime.editGuestInlineMessage("inline-1", content, options), isTelegramApiCommitUnknownError);
+  await assert.rejects(runtime.editGuestInlineMessage("inline-1", content, options), isBaleApiCommitUnknownError);
   assert.equal(calls.length, 1);
   current = true;
   response = undefined;
-  await assert.rejects(runtime.editGuestInlineMessage("inline-1", content, options), isTelegramApiCommitUnknownError);
+  await assert.rejects(runtime.editGuestInlineMessage("inline-1", content, options), isBaleApiCommitUnknownError);
 });
 
-test("Telegram bridge API runtime captures guest inline message ids and edits them", async () => {
+test("Bale bridge API runtime captures guest inline message ids and edits them", async () => {
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
-  const runtime = createTelegramBridgeApiRuntime({
-    tempDir: "/tmp/telegram",
+  const runtime = createBaleBridgeApiRuntime({
+    tempDir: "/tmp/bale",
     maxFileSizeBytes: 123,
     tempFileMaxAgeMs: 60_000,
     recordRuntimeEvent: () => {},
@@ -2654,10 +2654,10 @@ test("Telegram bridge API runtime captures guest inline message ids and edits th
   ]);
 });
 
-test("Telegram bridge API runtime exposes typed Bot API helpers", async () => {
+test("Bale bridge API runtime exposes typed Bot API helpers", async () => {
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
-  const runtime = createTelegramBridgeApiRuntime({
-    tempDir: "/tmp/telegram",
+  const runtime = createBaleBridgeApiRuntime({
+    tempDir: "/tmp/bale",
     maxFileSizeBytes: 123,
     tempFileMaxAgeMs: 60_000,
     recordRuntimeEvent: () => {},
@@ -2901,10 +2901,10 @@ test("Telegram bridge API runtime exposes typed Bot API helpers", async () => {
   ]);
 });
 
-test("Telegram bridge API runtime edits messages and tolerates unchanged text", async () => {
+test("Bale bridge API runtime edits messages and tolerates unchanged text", async () => {
   const events: Array<Record<string, unknown>> = [];
-  const runtime = createTelegramBridgeApiRuntime({
-    tempDir: "/tmp/telegram",
+  const runtime = createBaleBridgeApiRuntime({
+    tempDir: "/tmp/bale",
     maxFileSizeBytes: 123,
     tempFileMaxAgeMs: 60_000,
     recordRuntimeEvent: (kind, error, details) => {
@@ -2937,7 +2937,7 @@ test("Telegram bridge API runtime edits messages and tolerates unchanged text", 
   assert.deepEqual(events, []);
 });
 
-test("Telegram API client resolves bot tokens lazily for wrapped calls", async () => {
+test("Bale API client resolves bot tokens lazily for wrapped calls", async () => {
   const calls: string[] = [];
   let botToken = "123:abc";
   const restoreFetch = setApiTestFetch(async (input) => {
@@ -2945,7 +2945,7 @@ test("Telegram API client resolves bot tokens lazily for wrapped calls", async (
     return createApiJsonResponse(true);
   });
   try {
-    const client = createTelegramApiClient(() => botToken);
+    const client = createBaleApiClient(() => botToken);
     await client.call("sendChatAction", { chat_id: 1, action: "typing" });
     botToken = "456:def";
     await client.answerCallbackQuery("cb-1", "ok");

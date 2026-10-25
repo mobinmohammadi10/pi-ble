@@ -1,5 +1,5 @@
 /**
- * Regression tests for Telegram setup prompt helpers
+ * Regression tests for Bale setup prompt helpers
  * Exercises bot-token prompt defaults, setup success/failure, and prompt-runtime guard cleanup
  */
 
@@ -9,44 +9,44 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createTelegramConfigStore } from "../lib/config.ts";
+import { createBaleConfigStore } from "../lib/config.ts";
 import {
-  getTelegramBotTokenDiagnostic,
-  resolveTelegramBotToken,
+  getBaleBotTokenDiagnostic,
+  resolveBaleBotToken,
 } from "../lib/config.ts";
 import {
-  TELEGRAM_BOT_TOKEN_INPUT_PLACEHOLDER,
-  createTelegramSetupPromptRuntime,
-  getTelegramBotTokenInputDefault,
-  getTelegramBotTokenPromptSpec,
-  runTelegramSetup,
-  type TelegramSetupConfig,
+  BALE_BOT_TOKEN_INPUT_PLACEHOLDER,
+  createBaleSetupPromptRuntime,
+  getBaleBotTokenInputDefault,
+  getBaleBotTokenPromptSpec,
+  runBaleSetup,
+  type BaleSetupConfig,
 } from "../lib/setup.ts";
 
 test("Setup token defaults prefer config, then env alias references, then placeholder", () => {
   assert.equal(
-    getTelegramBotTokenInputDefault(
-      { TELEGRAM_BOT_TOKEN: " env-token " },
+    getBaleBotTokenInputDefault(
+      { BALE_BOT_TOKEN: " env-token " },
       " config-token ",
     ),
     "config-token",
   );
   assert.equal(
-    getTelegramBotTokenInputDefault({ TELEGRAM_KEY: " env-key " }),
-    "$TELEGRAM_KEY",
+    getBaleBotTokenInputDefault({ BALE_KEY: " env-key " }),
+    "$BALE_KEY",
   );
   assert.equal(
-    getTelegramBotTokenInputDefault({}),
-    TELEGRAM_BOT_TOKEN_INPUT_PLACEHOLDER,
+    getBaleBotTokenInputDefault({}),
+    BALE_BOT_TOKEN_INPUT_PLACEHOLDER,
   );
 });
 
 test("Setup prefill persists the env alias and validates its resolved value", async () => {
   const calls: string[] = [];
-  let persisted: TelegramSetupConfig | undefined;
-  const result = await runTelegramSetup({
+  let persisted: BaleSetupConfig | undefined;
+  const result = await runBaleSetup({
     hasUI: true,
-    env: { TELEGRAM_BOT_TOKEN: "resolved-secret" },
+    env: { BALE_BOT_TOKEN: "resolved-secret" },
     config: {},
     promptInput: async () => undefined,
     promptEditor: async (_label, value) => {
@@ -58,10 +58,10 @@ test("Setup prefill persists the env alias and validates its resolved value", as
       return { ok: true, result: { id: 9, username: "env_bot" } };
     },
     resolveBotToken: (value) =>
-      resolveTelegramBotToken(value, { TELEGRAM_BOT_TOKEN: "resolved-secret" }),
+      resolveBaleBotToken(value, { BALE_BOT_TOKEN: "resolved-secret" }),
     describeBotToken: (value) =>
-      getTelegramBotTokenDiagnostic(value, {
-        TELEGRAM_BOT_TOKEN: "resolved-secret",
+      getBaleBotTokenDiagnostic(value, {
+        BALE_BOT_TOKEN: "resolved-secret",
       }),
     persistConfig: async (config) => {
       persisted = config;
@@ -71,13 +71,13 @@ test("Setup prefill persists the env alias and validates its resolved value", as
     updateStatus: () => calls.push("status"),
   });
 
-  assert.equal(calls[0], "editor:$TELEGRAM_BOT_TOKEN");
+  assert.equal(calls[0], "editor:$BALE_BOT_TOKEN");
   assert.equal(calls[1], "getMe:resolved-secret");
-  assert.equal(persisted?.botToken, "$TELEGRAM_BOT_TOKEN");
+  assert.equal(persisted?.botToken, "$BALE_BOT_TOKEN");
   assert.equal(result.status, "success");
   assert.equal(
     result.status === "success" && result.config.botToken,
-    "$TELEGRAM_BOT_TOKEN",
+    "$BALE_BOT_TOKEN",
   );
   assert.ok(
     !calls.some(
@@ -91,18 +91,18 @@ test("Setup prefill persists the env alias and validates its resolved value", as
 
 test("Setup rejects an unresolved token reference with a redacted diagnostic", async () => {
   const calls: string[] = [];
-  const result = await runTelegramSetup({
+  const result = await runBaleSetup({
     hasUI: true,
     env: {},
     config: {},
-    promptInput: async () => "$MISSING_TELEGRAM_TOKEN",
+    promptInput: async () => "$MISSING_BALE_TOKEN",
     promptEditor: async () => undefined,
     getMe: async () => {
       calls.push("getMe");
       return { ok: false };
     },
-    resolveBotToken: (value) => resolveTelegramBotToken(value, {}),
-    describeBotToken: (value) => getTelegramBotTokenDiagnostic(value, {}),
+    resolveBotToken: (value) => resolveBaleBotToken(value, {}),
+    describeBotToken: (value) => getBaleBotTokenDiagnostic(value, {}),
     persistConfig: async () => {
       calls.push("persist");
     },
@@ -113,13 +113,13 @@ test("Setup rejects an unresolved token reference with a redacted diagnostic", a
 
   assert.deepEqual(result, { status: "validation-failed" });
   assert.deepEqual(calls, [
-    "error:Telegram bot token environment variable MISSING_TELEGRAM_TOKEN is not set.",
+    "error:Bale bot token environment variable MISSING_BALE_TOKEN is not set.",
   ]);
 });
 
 test("Setup rejects a malformed token reference without echoing it", async () => {
   const calls: string[] = [];
-  const result = await runTelegramSetup({
+  const result = await runBaleSetup({
     hasUI: true,
     env: {},
     config: { botToken: "$not-a-valid-name" },
@@ -129,8 +129,8 @@ test("Setup rejects a malformed token reference without echoing it", async () =>
       calls.push("getMe");
       return { ok: false };
     },
-    resolveBotToken: (value) => resolveTelegramBotToken(value, {}),
-    describeBotToken: (value) => getTelegramBotTokenDiagnostic(value, {}),
+    resolveBotToken: (value) => resolveBaleBotToken(value, {}),
+    describeBotToken: (value) => getBaleBotTokenDiagnostic(value, {}),
     persistConfig: async () => {
       calls.push("persist");
     },
@@ -141,25 +141,25 @@ test("Setup rejects a malformed token reference without echoing it", async () =>
 
   assert.deepEqual(result, { status: "validation-failed" });
   assert.deepEqual(calls, [
-    "error:Telegram bot token environment reference is malformed; use $NAME or ${NAME}.",
+    "error:Bale bot token environment reference is malformed; use $NAME or ${NAME}.",
   ]);
 });
 
 test("Setup prompt spec uses editor for real tokens and input for placeholder", () => {
-  assert.deepEqual(getTelegramBotTokenPromptSpec({}, "123:abc"), {
+  assert.deepEqual(getBaleBotTokenPromptSpec({}, "123:abc"), {
     method: "editor",
     value: "123:abc",
   });
-  assert.deepEqual(getTelegramBotTokenPromptSpec({}), {
+  assert.deepEqual(getBaleBotTokenPromptSpec({}), {
     method: "input",
-    value: TELEGRAM_BOT_TOKEN_INPUT_PLACEHOLDER,
+    value: BALE_BOT_TOKEN_INPUT_PLACEHOLDER,
   });
 });
 
 test("Setup runner validates token, persists config, starts polling, and updates status", async () => {
   const calls: string[] = [];
   let persisted: unknown;
-  const nextConfig = await runTelegramSetup({
+  const nextConfig = await runBaleSetup({
     hasUI: true,
     env: {},
     config: { allowedUserId: 42 },
@@ -194,11 +194,11 @@ test("Setup runner validates token, persists config, starts polling, and updates
   });
   assert.deepEqual(persisted, nextConfig.config);
   assert.deepEqual(calls, [
-    `input:${TELEGRAM_BOT_TOKEN_INPUT_PLACEHOLDER}`,
+    `input:${BALE_BOT_TOKEN_INPUT_PLACEHOLDER}`,
     "getMe:token",
     "persist",
-    "info:Telegram bot connected: @demo_bot",
-    "info:Send /start to your bot in Telegram to pair this extension with your account.",
+    "info:Bale bot connected: @demo_bot",
+    "info:Send /start to your bot in Bale to pair this extension with your account.",
     "info:Polling started",
     "status",
   ]);
@@ -206,7 +206,7 @@ test("Setup runner validates token, persists config, starts polling, and updates
 
 test("Setup runner reports invalid tokens without persisting or starting polling", async () => {
   const calls: string[] = [];
-  const nextConfig = await runTelegramSetup({
+  const nextConfig = await runBaleSetup({
     hasUI: true,
     env: {},
     config: {},
@@ -240,7 +240,7 @@ test("Setup runner distinguishes cancellation and polling startup failure", asyn
     updateStatus: () => undefined,
   };
   assert.deepEqual(
-    await runTelegramSetup({
+    await runBaleSetup({
       ...baseDeps,
       hasUI: false,
       promptInput: async () => "token",
@@ -249,14 +249,14 @@ test("Setup runner distinguishes cancellation and polling startup failure", asyn
     { status: "unavailable" },
   );
   assert.deepEqual(
-    await runTelegramSetup({
+    await runBaleSetup({
       ...baseDeps,
       promptInput: async () => undefined,
       startPolling: () => ({ ok: true }),
     }),
     { status: "cancelled" },
   );
-  const failed = await runTelegramSetup({
+  const failed = await runBaleSetup({
     ...baseDeps,
     promptInput: async () => "token",
     startPolling: () => ({ ok: false, message: "Polling unavailable" }),
@@ -271,7 +271,7 @@ test("Setup runner distinguishes cancellation and polling startup failure", asyn
 test("Setup prompt runtime stores config before starting polling", async () => {
   const calls: string[] = [];
   let currentToken: string | undefined;
-  const runtime = createTelegramSetupPromptRuntime({
+  const runtime = createBaleSetupPromptRuntime({
     env: {},
     getConfig: () => ({}),
     setConfig: (config) => {
@@ -302,8 +302,8 @@ test("Setup prompt runtime stores config before starting polling", async () => {
   assert.deepEqual(calls, [
     "set:token",
     "persist:token",
-    "notify:Telegram bot connected: @demo_bot",
-    "notify:Send /start to your bot in Telegram to pair this extension with your account.",
+    "notify:Bale bot connected: @demo_bot",
+    "notify:Send /start to your bot in Bale to pair this extension with your account.",
     "start:token",
     "status",
     "finish",
@@ -312,8 +312,8 @@ test("Setup prompt runtime stores config before starting polling", async () => {
 
 test("Setup prompt runtime rolls memory back when persistence fails", async () => {
   const calls: string[] = [];
-  let config: TelegramSetupConfig = { botToken: "previous" };
-  const runtime = createTelegramSetupPromptRuntime({
+  let config: BaleSetupConfig = { botToken: "previous" };
+  const runtime = createBaleSetupPromptRuntime({
     env: {},
     getConfig: () => config,
     setConfig: (next) => {
@@ -357,14 +357,14 @@ test("Setup prompt runtime rolls memory back when persistence fails", async () =
 
 test("Setup prompt runtime persists the first validated config to missing or empty files", async () => {
   for (const initialFile of [undefined, "{}\n"]) {
-    const dir = await mkdtemp(join(tmpdir(), "pi-telegram-setup-first-run-"));
-    const configPath = join(dir, "telegram.json");
+    const dir = await mkdtemp(join(tmpdir(), "pi-bale-setup-first-run-"));
+    const configPath = join(dir, "bale.json");
     try {
       if (initialFile !== undefined) await writeFile(configPath, initialFile);
-      const store = createTelegramConfigStore({ agentDir: dir, configPath });
+      const store = createBaleConfigStore({ agentDir: dir, configPath });
       await store.load();
-      const runtime = createTelegramSetupPromptRuntime({
-        env: { TELEGRAM_BOT_TOKEN: "env-token" },
+      const runtime = createBaleSetupPromptRuntime({
+        env: { BALE_BOT_TOKEN: "env-token" },
         getConfig: store.get,
         setConfig: store.set,
         setupGuard: { start: () => true, finish: () => {} },
@@ -403,10 +403,10 @@ test("Setup prompt runtime persists the first validated config to missing or emp
 });
 
 test("Setup prompt runtime persists a first named profile without changing siblings", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-setup-profile-"));
-  const configPath = join(dir, "telegram.json");
+  const dir = await mkdtemp(join(tmpdir(), "pi-bale-setup-profile-"));
+  const configPath = join(dir, "bale.json");
   try {
-    const store = createTelegramConfigStore({
+    const store = createBaleConfigStore({
       agentDir: dir,
       configPath,
       initialConfig: {
@@ -419,8 +419,8 @@ test("Setup prompt runtime persists a first named profile without changing sibli
       },
     });
     assert.equal(store.activateProfile("fresh"), true);
-    const runtime = createTelegramSetupPromptRuntime({
-      env: { TELEGRAM_BOT_TOKEN: "fresh-token" },
+    const runtime = createBaleSetupPromptRuntime({
+      env: { BALE_BOT_TOKEN: "fresh-token" },
       getConfig: store.get,
       setConfig: store.set,
       setupGuard: { start: () => true, finish: () => {} },
@@ -462,7 +462,7 @@ test("Setup prompt runtime persists a first named profile without changing sibli
 test("Setup prompt runtime reports token check errors and always finishes", async () => {
   const calls: string[] = [];
   let locked = false;
-  const runtime = createTelegramSetupPromptRuntime({
+  const runtime = createBaleSetupPromptRuntime({
     env: {},
     getConfig: () => ({}),
     setConfig: () => calls.push("set-config"),
@@ -501,7 +501,7 @@ test("Setup prompt runtime reports token check errors and always finishes", asyn
 
   assert.deepEqual(calls, [
     "guard-start",
-    "notify:Telegram API check failed: network down",
+    "notify:Bale API check failed: network down",
     "guard-finish",
   ]);
   assert.equal(locked, false);

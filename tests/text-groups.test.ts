@@ -1,15 +1,15 @@
 /**
- * Regression tests for Telegram text-group coalescing
- * Exercises conservative recovery of automatically split long Telegram messages
+ * Regression tests for Bale text-group coalescing
+ * Exercises conservative recovery of automatically split long Bale messages
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { extractTelegramMessageText } from "../lib/media.ts";
+import { extractBaleMessageText } from "../lib/media.ts";
 import * as TextGroups from "../lib/text-groups.ts";
 
-type TestMessage = TextGroups.TelegramTextGroupMessage;
+type TestMessage = TextGroups.BaleTextGroupMessage;
 
 function createMessage(
   messageId: number,
@@ -31,7 +31,7 @@ function createSplitRecovery(options: {
   timers: Array<() => void>;
   dispatchMessages?: (messages: TestMessage[], ctx: string) => unknown | Promise<unknown>;
 }) {
-  const controller = TextGroups.createTelegramTextGroupController<TestMessage, string>({
+  const controller = TextGroups.createBaleTextGroupController<TestMessage, string>({
     debounceMs: 10,
     minSplitLength: options.minSplitLength ?? 8,
     forwardCommentWaitMs: false,
@@ -75,7 +75,7 @@ test("Text group controller coalesces same-batch forward comments and bounds ord
     delay: number;
   }> = [];
   const dispatched: string[] = [];
-  const controller = TextGroups.createTelegramTextGroupController<
+  const controller = TextGroups.createBaleTextGroupController<
     TestMessage,
     string
   >({
@@ -141,7 +141,7 @@ test("Text group controller coalesces a cross-batch comment with a rich forwarde
     delay: number;
   }> = [];
   const dispatched: string[] = [];
-  const controller = TextGroups.createTelegramTextGroupController<
+  const controller = TextGroups.createBaleTextGroupController<
     TestMessage,
     string
   >({
@@ -157,7 +157,7 @@ test("Text group controller coalesces a cross-batch comment with a rich forwarde
   });
   const dispatchMessages = (messages: TestMessage[]) => {
     dispatched.push(
-      messages.map((message) => extractTelegramMessageText(message)).join("|"),
+      messages.map((message) => extractBaleMessageText(message)).join("|"),
     );
   };
   const comment = createMessage(30, "Комментарий");
@@ -195,7 +195,7 @@ test("Text group controller coalesces media-only forwards and comments in either
       delay: number;
     }> = [];
     const dispatched: number[][] = [];
-    const controller = TextGroups.createTelegramTextGroupController<
+    const controller = TextGroups.createBaleTextGroupController<
       TestMessage,
       string
     >({
@@ -285,7 +285,7 @@ test("Text group keeps split messages until asynchronous dispatch succeeds", asy
 test("Text group controller clears pending timers without stale dispatch", () => {
   const dispatched: string[] = [];
   const timers: Array<{ active: boolean; callback: () => void }> = [];
-  const controller = TextGroups.createTelegramTextGroupController<
+  const controller = TextGroups.createBaleTextGroupController<
     TestMessage,
     string
   >({
@@ -321,7 +321,7 @@ test("Text group controller clears pending timers without stale dispatch", () =>
 test("Text group suspension resumes admitted input in the replacement context", async () => {
   const timers: Array<{ active: boolean; callback: () => void }> = [];
   const dispatched: string[] = [];
-  const controller = TextGroups.createTelegramTextGroupController<
+  const controller = TextGroups.createBaleTextGroupController<
     TestMessage,
     string
   >({
